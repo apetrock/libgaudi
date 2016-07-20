@@ -1,0 +1,326 @@
+//----------------------------------------------------------------
+// HeapItem.h
+// Simple class with which to build the heap demonstration.
+//
+// Author: Dr. Rick Coleman
+//----------------------------------------------------------------
+#ifndef HEAPITEM_H
+#define HEAPITEM_H
+#include <iostream>
+
+using namespace std;
+template  <typename ITEM_T>
+class HeapItem {
+private:
+  ITEM_T  m_dData;                            // Dummy data value
+  
+public:
+  int index;
+  //-----------------------------------
+  // Default constructor
+  //-----------------------------------
+  HeapItem()
+  {
+    //m_dData = 0.0;
+  }
+
+  //-----------------------------------
+  // Constructor
+  //-----------------------------------
+  HeapItem(ITEM_T data)
+  {
+    m_dData = data;
+  }
+
+  //-----------------------------------
+  // Destructor
+  //-----------------------------------
+  ~HeapItem()
+  {
+  }
+
+  //-----------------------------------
+  // Return data item
+  //-----------------------------------
+  
+  ITEM_T getData()
+  {
+    return m_dData;
+  }
+  
+};
+
+/*
+template <typename ITEM_T, typename KEY_T, typename FUNC>
+class Heap
+{
+private:
+  typedef HeapItem<ITEM_T> heap_t;
+  heap_t     *m_Elements;           // Pointer to dynamically allocated array
+  FUNC       * m_func;
+  int          m_iNumElements;              // Number of elements in the heap
+  int          m_iHeapLength;               // Size of the array
+  
+public:
+  
+  //---------------------------------------
+  // Parameterized default constructor
+  //---------------------------------------
+  Heap(int size, FUNC* func)
+  {
+    // Create heap of given size
+    m_func = func;
+    m_Elements = new heap_t[size];
+    m_iNumElements = 0;
+    m_iHeapLength = size;
+  }
+
+  //---------------------------------------
+  // Destructor
+  //---------------------------------------
+  ~Heap()
+  {
+    delete[] m_Elements;
+  }
+
+  //---------------------------------------
+  // Reheap after removing item
+  //---------------------------------------
+  void ReheapDown(int root, int bottom)
+  {
+    int maxChild;
+    int rightChild;
+    int leftChild;
+    heap_t temp;
+
+    leftChild = root * 2 + 1;          // Get index of root's left child
+    rightChild = root * 2 + 2;          // Get index of root's right child
+
+    // Check base case in recursive calls.  If leftChild's index is less
+    // than or equal to the bottom index we have not finished recursively 
+    // reheaping.
+    if(leftChild <= bottom)               
+      {
+	if(leftChild == bottom)          // If this root has no right child then 
+          {
+	    maxChild = leftChild;     //     leftChild must hold max key
+          }
+	else
+          {     // Get the one lowest in the tree (highest index in the array)
+	    //if(m_Elements[leftChild].getKey() <= m_Elements[rightChild].getKey())
+	    if((*m_func)(m_Elements[leftChild].getData(), m_Elements[rightChild].getData()))
+	  
+	      maxChild = rightChild;
+	    else
+	      maxChild = leftChild;
+          }
+	//if(m_Elements[root].getKey() < m_Elements[maxChild].getKey())
+	if((*m_func)(m_Elements[root].getData(), m_Elements[maxChild].getData()))
+	  {
+	    // Swap these two elements
+	    temp = m_Elements[root];
+	    m_Elements[root] = m_Elements[maxChild];
+	    m_Elements[maxChild] = temp;
+	    // Make recursive call till reheaping completed
+	    ReheapDown(maxChild, bottom);
+          }
+      }
+  }
+
+  //---------------------------------------
+  // Reheap after inserting item
+  //---------------------------------------
+  void ReheapUp(int root, int bottom)
+  {
+    int parent;
+    heap_t temp;
+
+    // Check base case in recursive calls.  If bottom's index is greater
+    // than the root index we have not finished recursively reheaping.
+    if(bottom > root)
+      {
+	parent = (bottom -1) / 2;
+	//if(m_Elements[parent].getKey() < m_Elements[bottom].getKey())
+	if((*m_func)(m_Elements[parent].getData(), m_Elements[bottom].getData()))
+	  
+	  {
+	    // Swap these two elements
+	    temp = m_Elements[parent];
+	    m_Elements[parent] = m_Elements[bottom];
+	    m_Elements[bottom] = temp;
+	    // Make recursive call till reheaping completed
+	    ReheapUp(root, parent);
+          }
+      }
+  }
+
+  //---------------------------------------
+  // Add an item to the heap
+  //---------------------------------------
+  bool Enqueue(heap_t *item)
+  {
+    if(m_iNumElements < m_iHeapLength)
+      {
+	m_Elements[m_iNumElements] = *item; // Copy item into array
+	ReheapUp(0, m_iNumElements);
+	m_iNumElements++;
+	return true;
+      }
+    return false;
+  }
+
+  //---------------------------------------
+  // Add an item to the heap
+  //---------------------------------------
+  bool Enqueue(ITEM_T data)
+  {
+    bool retVal;
+    heap_t *temp = new heap_t(data);
+    retVal = Enqueue(temp);
+    delete temp;  // Delete this dynamically created one
+    return retVal;
+  }
+
+  //---------------------------------------
+  // Get item at the root
+  //---------------------------------------
+  heap_t *Dequeue()
+  {
+    heap_t *temp = new heap_t(m_Elements[0].getData());
+    m_iNumElements--;
+    // Copy last item into root
+    m_Elements[0] = m_Elements[m_iNumElements];
+    // Reheap the tree
+    ReheapDown(0, m_iNumElements - 1);
+    if(m_iNumElements == 0)
+      return NULL;
+    else
+      return temp;
+  }
+
+  //---------------------------------------
+  // Return number of elements in the heap
+  //---------------------------------------
+  int getNumElements()
+  {
+    return m_iNumElements;
+  }
+
+  //---------------------------------------
+  // Print all the elements in the heap
+  //---------------------------------------
+  void printAll()
+  {
+    for(int i=0; i<m_iNumElements; i++)
+      {
+	cout << "Heap element " << i 
+	     << "  data=" << m_Elements[i].getData() << endl;
+      }
+  }
+};
+*/
+template <typename ITEM_T, typename KEY_T, typename COMPARE, typename ASSIGN>
+class Heap
+{
+private:
+  typedef HeapItem<ITEM_T> heap_t;
+  std::vector<heap_t> m_Elements;
+  COMPARE    * m_comp;
+  ASSIGN     * m_assign;
+  int          m_iNumElements;              // Number of elements in the heap
+  int          m_iHeapLength;               // Size of the array
+  
+public:
+
+  Heap(int size, COMPARE* comp, ASSIGN *assign)
+  {
+    // Create heap of given size
+    m_comp = comp;
+    m_assign = assign;
+    m_Elements.reserve(size);
+  }
+
+
+
+  int size(){
+    return m_Elements.size();
+  };
+
+  int heap(ITEM_T object) {
+    auto * newItem = new HeapItem<ITEM_T>(object);
+    m_Elements.push_back(*newItem);
+    int loc = m_Elements.size()-1;
+    this->up(newItem->index = loc);
+      
+    return m_Elements.size();
+  };
+
+  heap_t pop() {
+    heap_t & removed = m_Elements[0];
+    heap_t & object = m_Elements.back();
+    m_Elements.pop_back();
+    if (m_Elements.size()) {
+      m_Elements[object.index = 0] = object;
+      this->down(0);
+    }
+    return removed;
+  };
+
+
+  int remove(int i) {
+    auto removed = m_Elements[i];
+    auto object = m_Elements.back();
+    m_Elements.pop_back();
+    if (i != m_Elements.size()) {
+      m_Elements[object.index = i] = object;
+      if((*m_comp)(object.getData(), removed.getData()))
+	this->down(i);
+      else
+	this->up(i);
+    }
+    return i;
+  };
+
+  int remove(heap_t removed) {
+    auto i = removed.index;
+    this->remove(i);
+  };
+
+  int up(int i) {
+    auto object = m_Elements[i];
+    while (i > 0) {
+      int up = ((i + 1) >> 1) - 1;
+      auto parent = m_Elements[up];
+      if ((*m_comp)(object.getData(), parent.getData())) break;
+      (*m_assign)(parent.getData());
+      (*m_assign)(object.getData());
+      m_Elements[parent.index = i] = parent;
+      m_Elements[object.index = i = up] = object;
+    }
+  }
+
+  int down(int i) {
+    auto object = m_Elements[i];
+    while (true) {
+      int right = (i + 1) << 1;
+      int left = right - 1;
+      int down = i;
+      auto child = m_Elements[down];
+      if (left < m_Elements.size() && 
+	  !(*m_comp)(m_Elements[left].getData(), child.getData())) 
+	child = m_Elements[down = left];
+      if (right < m_Elements.size() && 
+	  !(*m_comp)(m_Elements[right].getData(), child.getData())) 
+	child = m_Elements[down = right];
+      if (down == i) break;
+      m_Elements[child.index = i] = child;
+      m_Elements[object.index = i = down] = object;
+    }
+  }
+
+};
+
+
+#endif
+
+

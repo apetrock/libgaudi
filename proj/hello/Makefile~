@@ -1,0 +1,23 @@
+include ../include.mk
+
+# calls:
+CC         = g++ -DDEBUG -std=c++0x -g -ggdb -rdynamic
+#CC         = g++
+#CC         = clang++ -DDEBUG -g -ggdb -fsanitize=address -fno-omit-frame-pointer
+CFLAGS     = ${CFLAGS_COMMON} -D GUI=$(GUI) -O0
+LDFLAGS    = ${LDFLAGS_COMMON}
+EXECUTABLE = ../../bin/gnomon
+
+SOURCES    = gnomon.cpp
+OBJECTS    = $(SOURCES:.cpp=.o)
+
+all: $(SOURCES) $(EXECUTABLE)
+
+$(EXECUTABLE): $(OBJECTS) 
+	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
+
+.cpp.o:
+	$(CC) $(CFLAGS) $< -o $@
+
+clean:
+	rm -f *.o
