@@ -1,6 +1,6 @@
 [submodule "submodules/nanogui"]
-	path = submodules/nanogui
+	path = ext/nanogui
 	url = https://github.com/wjakob/nanogui.git
 [submodule "submodules/glfw"]
-	path = submodules/glfw
+	path = ext/glfw
 	url = https://github.com/glfw/glfw.git

@@ -7,7 +7,8 @@
  *
  */
 
-#include "debugger.h"
+//#include <gl/glut.h>
+#include "manifold/debugger.h"
 
 namespace m2 {
 

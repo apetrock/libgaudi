@@ -7,7 +7,7 @@
  *
  */
 
-#include "manifold_singleton.h"
+#include "manifold/manifold_singleton.h"
 
 namespace m2 {
   bool ID::instance_flag = false;
