@@ -463,53 +463,16 @@ public:
     void initObjects(){      
       
       for(int i=0; i < 0; i++){
-	BufferObject * cube = makeCube();	
-	initCube(*cube);
-	mSceneObjects.push_back(cube);
+        BufferObject * cube = makeCube();	
+        initCube(*cube);
+        mSceneObjects.push_back(cube);
       }
     }
-
-    virtual int pickObject(const Eigen::Vector2i &p, Vec4 & hitPoint){
-      int isx = -1; Real tmin = 999;
-      Vec4 rayDir = castRay(p);
-      //mSceneObjects should get abstracted away to be a container
-      //that holds objects and can perform scene hit testing.  This way
-      //you can add an acceleration structure to speed up testing, and
-      //each object can be tested by more than just a broadphase test
-      //...if I have time
-      
-      for(int i = 0; i < mSceneObjects.size(); i++){
-	Real tn, tf;
-	Vec4 hn, hf;
-	if(mSceneObjects.at(i)->intersectBbox(mPosition, rayDir, tn, tf, hn, hf)){
-	  if(tn < tmin){
-	    hitPoint = hn;
-	    tmin = tn;
-	    isx = i;
-	  }
-	}
-      }
-      
-      //if(isx > -1){
-      //	std::cout << tmin << std::endl;
-      //}
-      return isx;
-    }
-
-    ///////////////////////////
-    //  events
-    ///////////////////////////
-  
     
     virtual bool mouseButtonEvent(const Eigen::Vector2i &p, 
-				  int button, bool down, int modifiers) {
-      ball->button(p,down);
-      
-      Vec4 hit;
-      int oldSelection = mCurrentSelect[mCurrentGroup];
-      int newSelection = pickObject(p, hit);
-      int curSelection;
-      
+      int button, bool down, int modifiers) {
+        
+      ball->button(p,down);    
       Screen::mouseButtonEvent(p, button, down,  modifiers);
       return true;
     }
@@ -519,9 +482,9 @@ public:
     virtual bool mouseMotionEvent(const Eigen::Vector2i &p, 
           const Eigen::Vector2i &rel, 
           int button, int modifiers) {
-      ball->motion(p);
+          ball->motion(p);
       
-      Screen::mouseMotionEvent(p, rel, button, modifiers);
+          Screen::mouseMotionEvent(p, rel, button, modifiers);
       return true;
     }
 
@@ -552,42 +515,9 @@ public:
       mPosition = mModelRotNew.transpose()*Vec4(0,0,4,1);
     }
 
-    /*
-      void frameBufferPick(const Eigen::Vector2i &p){
-      //color picking seems like the simplest way to go, since Ray tracing can suffer
-      //from precision errors, and color picking is quick to implement.  If I have time,
-      //I'll try both
-      mPickerBuffer.bind();
-    
-      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-      glEnable(GL_DEPTH_TEST);
-
-      cube.pickingShader().bind();
-    
-      Mat4 matrix = cube.matrix();
-      Mat4 mvp = mProject*mModelView*matrix;
-    
-      cube.pickingShader().setUniform("MVP", mvp);
-      cube.pickingShader().drawIndexed(GL_TRIANGLES, 0, 12);
-    
-      //mPickerBuffer.blit();
-    
-      std::vector<std::uint8_t> data(4*4*4);
-      glReadBuffer(GL_BACK);
-      glReadPixels(p[0], p[1], 4, 4, GL_RGBA8, GL_UNSIGNED_BYTE, &data[0]);
-      for(int i = 0; i < data.size(); i++){
-      std::cout << data[i]/255 << std::endl;
-
-      }
-    
-      mPickerBuffer.release();
-      };
-    */
-
     virtual void draw(NVGcontext *ctx) {
-      /* Draw the user interface */
-      if(false)
-	Screen::draw(ctx);
+
+    	Screen::draw(ctx);
     }
 
     virtual void drawContents() {
@@ -595,18 +525,17 @@ public:
       glfwGetTime();
 
       std::for_each(mSceneObjects.begin(), mSceneObjects.end(), 
-		    [&](BufferObject * obj) mutable {
-		      //std::cout << obj->isVisible << std::endl;
-		      if(obj->isVisible)
-			obj->draw(mProject, mModelView);
-		    });
+        [&](BufferObject * obj) mutable {
+          if(obj->isVisible)
+            obj->draw(mProject, mModelView);
+        });
 
       std::for_each(mDebug.begin(), mDebug.end(), 
-		    [&](BufferObject * obj) mutable {
-		      //std::cout << obj->isVisible << std::endl;
-		      if(obj->isVisible)
-			obj->draw(mProject, mModelView);
-		    });
+        [&](BufferObject * obj) mutable {
+          //std::cout << obj->isVisible << std::endl;
+          if(obj->isVisible)
+          obj->draw(mProject, mModelView);
+        });
     
     }
 
@@ -683,13 +612,13 @@ public:
     std::vector<BufferObject*> mDebug;
     std::vector<BufferObject*> mSceneObjects;
 
-  m2::control<space >	* _meshGraph;
-    
-  m2::Block<space, 24, std::vector<m2::vertex<space>*> >* blocks;
-  BlockTree* tree;
-  BlockTriTree* tritree;
-  //nanogui::GLFramebuffer mPickerBuffer;
-     
+    m2::control<space >	* _meshGraph;
+      
+    m2::Block<space, 24, std::vector<m2::vertex<space>*> >* blocks;
+    BlockTree* tree;
+    BlockTriTree* tritree;
+    //nanogui::GLFramebuffer mPickerBuffer;
+      
 
     //camera variables, this could be in its own class
     Vec4 mPosition;

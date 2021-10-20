@@ -141,6 +141,7 @@ public:
       tmax[i] =  std::max(ttop[i], tbot[i]);
     }
     
+
     // find the largest tmin and the smallest tmax
     Real largest_tmin  
       = std::max(std::max(tmin[0], tmin[1]), std::max(tmin[0], tmin[2]));
@@ -451,12 +452,22 @@ public:
   nanogui::GLShader& displayShader(){ return *mDispShader; }
   nanogui::GLShader& pickingShader(){ return *mPickShader; }
 
-  //make these public just to make life easy, not sure I'd do this in full production
-  //though I like public variables.  Right now, the context
-  std::function<void(Vec4 hitPoint, BufferObject & buffer, HelloApplication & context, void * data)>  onSelect;
-  std::function<void(Vec4 hitPoint, BufferObject & buffer, HelloApplication & context, void * data)>  onDeselect;
-  std::function<void(Vec4 dragStart, Vec4 dragDest, Vec4 cenStart, 
-			BufferObject & buffer, HelloApplication & context, 
+  
+  std::function<void(const Vec4 & hitPoint,
+		     BufferObject & buffer,
+		     HelloApplication & context,
+		     void * data)>  onSelect;
+
+  std::function<void(const Vec4 & hitPoint,
+		     BufferObject & buffer,
+		     HelloApplication & context,
+		     void * data)>  onDeselect;
+  
+  std::function<void(const Vec4 & dragStart,
+		     const Vec4 & dragDest,
+		     const Vec4 & cenStart, 
+		     BufferObject & buffer,
+		     HelloApplication & context, 
 			void * data)>  onDrag;
   Vec4 bbmin;
   Vec4 bbmax;

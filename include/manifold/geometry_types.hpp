@@ -56,6 +56,7 @@ struct swept_triangle{
     }
   }
 
+  /*
   void draw(){
     glBegin(GL_POLYGON);
     CTYPE norm = this->normal();
@@ -65,6 +66,7 @@ struct swept_triangle{
     glVertex3d(p[2][0],p[2][1],p[2][2]);
     glEnd();
   }
+  */
 };
 
 
@@ -101,6 +103,7 @@ struct triangle{
     }
   }
 
+  /*
   void draw(){
     glBegin(GL_POLYGON);
     CTYPE norm = this->normal();
@@ -109,7 +112,8 @@ struct triangle{
     glVertex3d(p[1][0],p[1][1],p[1][2]);
     glVertex3d(p[2][0],p[2][1],p[2][2]);
     glEnd();
-  }
+    }
+*/
 };
 
 template <typename T, typename CTYPE>
@@ -136,7 +140,7 @@ public:
       max[i] = p[i] + dt*v[i] > max[i] ? p[i] + dt*v[i] : max[i];
     }
   }
-
+  /*
   void draw(){
     glBegin(GL_LINE);
     glVertex3d(p[0],p[1],p[2]);
@@ -144,7 +148,8 @@ public:
 	       p[1] + dt*v[1],
 	       p[2] + dt*v[2]);
     glEnd();
-  }
+    }
+*/
 };
 
 template <typename T, typename CTYPE>
@@ -160,13 +165,14 @@ struct line{
   CTYPE center(){
     return 0.5*(p[0],p[1]);
   }
-
+  /*
   void draw(){
     glBegin(GL_LINE);
     glVertex3d(p[0][0],p[0][1],p[0][2]);
     glVertex3d(p[1][0],p[1][1],p[1][2]);
     glEnd();
-  }
+    }
+*/
 };
 
 
@@ -182,14 +188,16 @@ struct box{
     center = cen;
     half = h;
   };
-
+  /*
   void drawCenter(T size){
     glPointSize(size);
     glBegin(GL_POINTS);
     glVertex3d(center[0],center[1],center[2]);
     glEnd();
-  }
+    }
+*/
 
+  /*
   void draw(){
     CTYPE p = this->center;
     CTYPE h = this->half;
@@ -236,7 +244,8 @@ struct box{
     glVertex3d(p[0] - h[0],p[1] - h[1],p[2] + h[2]);
 
     glEnd();
-  } 
+  }
+  */ 
 };
 
 //template <typename T, typename CTYPE, typename PRIMITIVE>
@@ -284,7 +293,7 @@ public:
 typedef  euclidean_space<double> space3;
 
 template <typename T>
-T norm(Eigen::Matrix<T, 4,1> a){return a.mag();};
+T norm(Eigen::Matrix<T, 4,1> a){return a.norm();};
 template <typename T>
 T norm2(Eigen::Matrix<T,4,1> a){
   return a[0]*a[0] + a[1]*a[1] + a[2]*a[2];

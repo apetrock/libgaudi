@@ -75,5 +75,7 @@ include_directories("${EIGEN_INCLUDE_DIR}")
 
 add_subdirectory(src)
 # The executable code is here
-add_subdirectory(projects/hello_manifold)
+#add_subdirectory(projects/hello_manifold)
+add_subdirectory(projects/hello)
+
 

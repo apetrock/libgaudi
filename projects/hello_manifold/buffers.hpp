@@ -259,18 +259,18 @@ public:
         //std::cout << mIndices.size() << " " << mIndices(0,i) << std::endl;
         //std::cout << mPositions.col(mIndices(0,i)).transpose() << std::endl;
         Vec3 v0 = mPositions.col(mIndices(0,i));
-	Vec3 v1 = mPositions.col(mIndices(1,i));
-	Vec3 v2 = mPositions.col(mIndices(2,i));
-      
-	Vec3 N = (v1-v0).cross(v2-v0);
-	N.normalize();
-	mVertNormals.col(mIndices(0,i)) += N;
-	mVertNormals.col(mIndices(1,i)) += N;
-	mVertNormals.col(mIndices(2,i)) += N;
+        Vec3 v1 = mPositions.col(mIndices(1,i));
+        Vec3 v2 = mPositions.col(mIndices(2,i));
+            
+        Vec3 N = (v1-v0).cross(v2-v0);
+        N.normalize();
+        mVertNormals.col(mIndices(0,i)) += N;
+        mVertNormals.col(mIndices(1,i)) += N;
+        mVertNormals.col(mIndices(2,i)) += N;
       }
     
       for(int i = 0; i < mVertNormals.cols(); i++){
-	mVertNormals.col(i).normalize();
+        mVertNormals.col(i).normalize();
       }
     
     }
@@ -293,6 +293,7 @@ public:
 				"src/shaders/standard.fs");
       mDispShader->bind();
       computeNormals();
+      
       mDispShader->uploadAttrib("vertexNormal_modelspace", mVertNormals);
       mDispShader->uploadIndices(mIndices);
       mDispShader->uploadAttrib("vertexPosition_modelspace", mPositions);
@@ -425,6 +426,7 @@ public:
     this->displayShader().bind();
     Mat4 matrix = this->matrix();
     Mat4 mvp = mProject*mModelView*matrix;
+    std::cout << mvp << std::endl;
     this->displayShader().setUniform("MVP", mvp);
     this->displayShader().setUniform("V", mModelView);
     this->displayShader().setUniform("M", this->matrix());

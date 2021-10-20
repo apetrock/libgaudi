@@ -131,14 +131,15 @@ namespace m2 {
   struct colorRGB {
     double r,g,b,a;
   };
-	
+
+  /*
   inline void gl_set_color(colorRGB in){
     glColor4f(in.r, in.g, in.b, in.a);
   }
   inline void gl_set_color_opaque(colorRGB in){
     glColor4f(in.r, in.g, in.b, 1.0);
   }	
-
+  */
   /*
   template <typename T>
   ostream &operator<<( ostream &out, const al::Vec<3,T>& in ) {
@@ -313,19 +314,19 @@ namespace m2 {
     T dist(){
       coordinate_type c0 = this->v1()->coordinate();
       coordinate_type c1 = this->v2()->coordinate();	
-      return (c0 - c1).mag();
+      return (c0 - c1).norm();
     }
 
     T length(){
       coordinate_type c0 = this->v1()->coordinate();
       coordinate_type c1 = this->v2()->coordinate();	
-      return (c0 - c1).mag();
+      return (c0 - c1).norm();
     }
 		
     void draw(){
       this->draw(0.0);
     }
-		
+    /*	
     void draw(T off){
       if (fv1 && fv2) {
 	coordinate_type& vect1 = fv1->coordinate();
@@ -356,7 +357,8 @@ namespace m2 {
 	//                glPopMatrix();
 
       }
-    }
+      }
+*/
     face_vertex_ptr fv1;
     face_vertex_ptr fv2;		
   protected:
@@ -814,7 +816,7 @@ namespace m2 {
       this->draw_face(off);
       //			this->draw_face_vertices(off);		
     }
-		
+    /*
     void draw_vertex_colors(){
       if (calc_normal) {
 	this->update_normal();
@@ -867,7 +869,8 @@ namespace m2 {
       glEnable(GL_BLEND);
       glDisable(GL_LIGHTING);
     }
-    
+    */
+    /*
     void draw_face(){			
       if (calc_normal) {
 	this->update_normal();
@@ -933,7 +936,8 @@ namespace m2 {
       glEnable(GL_BLEND);
       glDisable(GL_LIGHTING);
     }
-		
+    */
+    /*
     void draw_face(T off){
 			
       if (calc_normal) {
@@ -962,7 +966,8 @@ namespace m2 {
 			
       glEnd();					
     }	
-		
+    */
+    /*
     void draw_face_vertices(T off){
       face_vertex_ptr itb = fHead;
       face_vertex_ptr ite = fHead->prev();
@@ -978,7 +983,9 @@ namespace m2 {
 			
       glEnd();					
     }
-		
+    */
+
+    /*
     void draw_normal(T off){
       
       this->update_normal();
@@ -999,7 +1006,8 @@ namespace m2 {
       glVertex3f(n1x, n1y, n1z);
       glEnd();
     }
-
+    */
+    
     bool has_vertex(vertex_ptr v){
       face_vertex_ptr itb = fbegin();
       face_vertex_ptr ite = fend();      
@@ -1011,7 +1019,7 @@ namespace m2 {
       }
       return false;
     }
-
+    
     void verify(){
       face_vertex_ptr itb = fbegin();
       face_vertex_ptr ite = fend();
@@ -1228,7 +1236,7 @@ namespace m2 {
       this->draw_vertex(off);
       this->draw_tail(off);
     }
-
+    /*
     void draw_vertex(T off){
 
       coordinate_type n1 = mFace->normal();
@@ -1246,7 +1254,8 @@ namespace m2 {
       glEnd();
       //			glPopMatrix();
     }
-		
+    */		
+    /*
     void draw_tail(T off){
 
       coordinate_type n1 = mFace->normal();			
@@ -1268,7 +1277,7 @@ namespace m2 {
       glEnd();					
       //			glPopMatrix();
     }
-		
+    */		
 		
     edge_ptr & edge()		{return	mEdge;}
     edge_ptr   edge() const     {return	mEdge;}
@@ -1702,7 +1711,7 @@ namespace m2 {
       this->draw_vertex_point();
       //this->draw_normal();
     }
-        
+    /*  
     void draw_vertex_point(){
       glPushMatrix();
       glColor3f(color.r,color.g,color.b);
@@ -1769,7 +1778,7 @@ namespace m2 {
       glVertex3f(nx, ny, nz);
       glEnd();
     }
-        
+    */  
         
   protected:
     coordinate_type mCoordinate;
@@ -2422,7 +2431,7 @@ namespace m2 {
 	  mFaces[i]->flag = k;
       }
     }
-		
+    /*	
     void draw(){            
       //glDisable(GL_BLEND);
       //glEnable(GL_DEPTH | GL_DOUBLE | GLUT_RGB);	// Enables Depth Testing			
@@ -2509,7 +2518,7 @@ namespace m2 {
 	it_b++;
       }
     }
-
+    */
         
     void reset_flags(){
       for(int i = 0; i < mFaces.size(); i++){

@@ -17,7 +17,7 @@ uniform mat4 V;
 uniform mat4 M;
 uniform vec3 LightPosition_worldspace;
 
-varying vec3 ec_pos;
+out vec3 ec_pos;
 
 void main(){
 

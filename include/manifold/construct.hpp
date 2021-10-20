@@ -1133,23 +1133,23 @@ bool delete_degenerates(control_ptr obj, vertex_ptr v){
 	return v1;
       }
 
-      if(v2->size() == 2){
-	edge_ptr e1n = fv1->next()->edge();
-	edge_ptr e2n = fv2->next()->edge();
-	this->delete_edge(obj,e);
-	this->delete_edge(obj,e1n);
-	this->delete_edge(obj,e2n);
-	// std::cout << "output 2: " << std::endl;
-	// v1->print();
-	// v2->print();
-	obj->remove_vertex(v2->position_in_set());
-	return v1;
-      }
+          if(v2->size() == 2){
+      edge_ptr e1n = fv1->next()->edge();
+      edge_ptr e2n = fv2->next()->edge();
+      this->delete_edge(obj,e);
+      this->delete_edge(obj,e1n);
+      this->delete_edge(obj,e2n);
+      // std::cout << "output 2: " << std::endl;
+      // v1->print();
+      // v2->print();
+      obj->remove_vertex(v2->position_in_set());
+      return v1;
+          }
 
       if(fv1->face()->size() == 3)
-	this->delete_edge(obj,fv1->next()->edge());
+        this->delete_edge(obj,fv1->next()->edge());
       if(fv2->face()->size() == 3)
-	this->delete_edge(obj,fv2->prev()->edge());
+        this->delete_edge(obj,fv2->prev()->edge());
 
       face_vertex_ptr v1p = fv1->prev();
       face_vertex_ptr v1n = fv1->next();
@@ -1166,7 +1166,6 @@ bool delete_degenerates(control_ptr obj, vertex_ptr v){
       bool iterating = true;
       face_vertex_ptr fvb = fv2->vnext();
       face_vertex_ptr fve = fv2->vprev();
-      std::cout << fvb << " " << fve << std::endl;
       while (iterating) {
 	iterating = fvb != fve;
 	v2->remove_face_vertex(fvb);

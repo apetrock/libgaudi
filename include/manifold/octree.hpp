@@ -43,7 +43,7 @@ public:
   ~octree_build_base(){}	
   virtual bool operator()(const Octree<T,POINT_TYPE> &o, void *data){return true;}
 };
-
+/*
 template <typename T, typename POINT_TYPE>
 class draw_leaf_node : public octree_traversal_base<T,POINT_TYPE> {
 public:	
@@ -74,7 +74,7 @@ public:
     return out;
   }
 };
-
+*/
 template <typename T, typename POINT_TYPE>
 bool get_child_points(const Octree<T,POINT_TYPE> &o, void *data){
   vector<POINT_TYPE*>& collect = *(vector<POINT_TYPE*>*)data;
@@ -88,7 +88,7 @@ bool get_child_points(const Octree<T,POINT_TYPE> &o, void *data){
     return true;
   }
 }
-
+/*
 template <typename T, typename POINT_TYPE>
 bool draw_node(const Octree<T,POINT_TYPE> &o, void *data){
   typedef typename vector<POINT_TYPE*>::iterator pl_iterator;
@@ -136,7 +136,7 @@ bool draw_node(const Octree<T,POINT_TYPE> &o, void *data){
   //	}
   return out;
 }
-
+*/
 template <typename OCT, typename PROC, typename DATA>
 const bool traverse(OCT& O, PROC& proc, DATA *data)
 {
@@ -604,7 +604,7 @@ public:
     if (_child[i]) return true;
     else		   return false;
   }	
-	
+  /*
   void draw() const{
     this->traverse(draw_node,NULL);
   }
@@ -613,7 +613,7 @@ public:
     draw_leaf_node<T,POINT_TYPE> trav;
     this->traverse(trav,NULL);
   }
-	
+  */	
 protected:
   Octree			   *_parent; 
   int					_quadrant;	

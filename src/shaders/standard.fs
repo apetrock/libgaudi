@@ -11,7 +11,7 @@ in vec3 LightDirection_cameraspace;
 // Ouput data
 out vec3 color;
 
-varying vec3 ec_pos;
+in vec3 ec_pos;
 // Values that stay constant for the whole mesh.
 uniform vec3 uColor;
 uniform mat4 MV;
