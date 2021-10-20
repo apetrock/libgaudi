@@ -1,0 +1,2505 @@
+
+/home/jdelaney/code/libgaudi/src/manifold/vec_addendum.h,2351
+#define __VECADD____VECADD__18,274
+  inline Tv linear(Tf f, const Tv& x, const Tv& y){linear24,347
+inline T dist(const Eigen::Matrix<T,3,1>& A,dist29,449
+  inline T dist(const Eigen::Matrix<T,N,1>& A,dist35,656
+  inline T dot(const Eigen::Matrix<T,N,1>& angA, const Eigen::Matrix<T,N,1>& angB){dot46,876
+  struct  vecComp{vecComp55,1080
+    bool operator()(const T& x, const T& y){return ((*x)[N] < (*y)[N]);}operator ()56,1099
+inline Eigen::Matrix<T,3,1> ray_point_intersect(const Eigen::Matrix<T,3,1>& l0,ray_point_intersect69,1519
+inline Eigen::Matrix<T,3,1> line_plane_intersect(const Eigen::Matrix<T,3,1>& r0,line_plane_intersect87,2117
+inline bool ray_triangle_intersect(Eigen::Matrix<T,3,1>& pi,ray_triangle_intersect124,3210
+inline bool ray_triangle_intersectII(Eigen::Matrix<T,3,1>& pi,ray_triangle_intersectII174,4499
+inline bool point_in_bounds(const Eigen::Matrix<T,3,1>& pt,point_in_bounds216,5590
+  inline bool box_intersection(Eigen::Matrix<T,3,1> cen,box_intersection231,6045
+inline T determinant(const Eigen::Matrix<T,3,1>& A,determinant251,6902
+inline T angle_from_vectors(const Eigen::Matrix<T,3,1>& angA,angle_from_vectors283,7601
+  inline  bool project_on_line(const Eigen::Matrix<T,N,1>& x0, project_on_line297,7890
+inline T distance_from_line(const Eigen::Matrix<T,3,1>& la, distance_from_line317,8383
+inline T distance_from_line(Eigen::Matrix<T,2,1>& x1, distance_from_line329,8718
+inline T distance_from_plane(const Eigen::Matrix<T,3,1>& v0,distance_from_plane340,8998
+inline vector<Eigen::Matrix<T,3,1> > orthogonal_project(const Eigen::Matrix<T,3,1>& norm,orthogonal_project356,9381
+inline Eigen::Matrix<T,3,1> reflect(const Eigen::Matrix<T,3,1>& norm,reflect386,10167
+inline Eigen::Matrix<T,3,1> orthogonal_project(const Eigen::Matrix<T,3,1>& N,orthogonal_project411,10707
+inline T angle_from_plane(const Eigen::Matrix<T,3,1>& norm,angle_from_plane429,11148
+inline Eigen::Matrix<T,3,1> calculate_normal(vector<Eigen::Matrix<T,3,1> > vt_list){calculate_normal459,11886
+inline Eigen::Matrix<T,3,1> calculate_average(vector<Eigen::Matrix<T,3,1> > vt_list){calculate_average476,12457
+inline void radial_test(){radial_test494,12962
+inline float Q_rsqrt( float number )Q_rsqrt521,13627
+inline Eigen::Matrix<T,3,1> fnormalize(Eigen::Matrix<T,3,1> vecin){fnormalize539,14136
+
+/home/jdelaney/code/libgaudi/src/manifold/debugger.cpp,1150
+namespace m2 {m212,182
+  bool      Debugger::instance_flag = false;instance_flag18,270
+  Debugger* Debugger::global_instance = NULL;global_instance19,315
+  Debugger& Debugger::get_instance(){get_instance21,362
+  void Debugger::add_label(float x, float y, float z, string label){add_label31,582
+  void Debugger::add_id(float x, float y, float z){add_id37,763
+  void Debugger::draw_labels(){draw_labels44,926
+  void Debugger::draw_ids(){draw_ids68,1452
+  void Debugger::draw_points(){draw_points85,1863
+  void Debugger::draw_points_0(){draw_points_099,2161
+  void Debugger::draw_mag_points(){draw_mag_points113,2461
+  void Debugger::draw_lines(){draw_lines133,2868
+  void Debugger::draw_lines_0(){draw_lines_0148,3219
+  void Debugger::draw_lines_1(){draw_lines_1163,3579
+  void Debugger::draw_triangles(){      draw_triangles178,3937
+  void Debugger::draw_triangles_0(){      draw_triangles_0196,4420
+  void Debugger::draw_cached_triangles(){      draw_cached_triangles214,4912
+  void Debugger::draw_cached_triangle_lines(){      draw_cached_triangle_lines232,5405
+  void Debugger::draw_boxes(){draw_boxes254,6015
+
+/home/jdelaney/code/libgaudi/src/manifold/m2Spring.hpp,2848
+#define __TWOMANIFOLDSPRING____TWOMANIFOLDSPRING__10,165
+namespace m2 {m220,344
+  class spring{ M2_TYPEDEFS;spring23,392
+  class spring{ M2_TYPEDEFS;M2_TYPEDEFS23,392
+  typedef coordinate_type							point_type ;point_type24,421
+    typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator25,466
+    spring(control_ptr obj_in){spring27,543
+    void initialize(){initialize37,781
+    al::Vec<3,T>& get_force(long i){get_force78,1994
+    void calculate_forces_and_stiffness(){calculate_forces_and_stiffness82,2063
+    void set_pin(int i, bool isPinned){set_pin130,3279
+    void update_pinned_positions(){update_pinned_positions135,3385
+    virtual void update_positions(){update_positions142,3599
+    virtual void solve(){			solve148,3754
+    virtual void explicite_euler(){explicite_euler155,3910
+    virtual void verlet(){verlet165,4230
+    virtual void implicite_euler(){			implicite_euler180,4671
+    virtual void mult(vector<coordinate_type>& x, vector<coordinate_type>& b){mult208,5264
+    void randomize(){randomize267,6928
+    void draw(){draw277,7202
+    void reset_t(){reset_t280,7228
+    control_ptr		 mMesh;mMesh285,7285
+    T mdt,meps,mks,mkrs;mdt286,7310
+    T mdt,meps,mks,mkrs;meps286,7310
+    T mdt,meps,mks,mkrs;mks286,7310
+    T mdt,meps,mks,mkrs;mkrs286,7310
+    vector<coordinate_type>	pos0;	//new velocity		pos0287,7335
+    vector<coordinate_type>	vel1;	//new velocityvel1288,7386
+    vector<coordinate_type>	vel0;	//old velocity			vel0289,7435
+    vector<coordinate_type>	mFext;		//external forces		mFext290,7487
+    vector<coordinate_type>	mFint;		//external forces				mFint291,7543
+    vector<coordinate_type>	mF;			//external forcesmF292,7601
+    vector<bool>			mIsPinned;mIsPinned295,7667
+    vector<long>			pinID;pinID296,7697
+    vector<coordinate_type> mP0;		mP0297,7723
+    vector<T>	mM;					//mass matrix		mM299,7761
+    vector<T>	mK;					//tangential stiffness matrix one for each edgemK300,7799
+    vector<T>	mKr;				//tangential stiffness matrix from rest positionmKr301,7869
+    vector<T>   ml0;				//initial lengthsml0302,7940
+  class spring_electric{ spring_electric308,8110
+    M2_TYPEDEFS;M2_TYPEDEFS309,8136
+    typedef coordinate_type							point_type ;point_type310,8153
+    typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator311,8200
+    spring_electric(control_ptr obj_in){spring_electric314,8278
+    virtual void update_positions(){update_positions329,8622
+    void randomize(){randomize435,11175
+    void reset_t(){reset_t447,11485
+    control_ptr		 mMesh;mMesh452,11542
+    T dt_,eps_,C_,K_;dt_453,11567
+    T dt_,eps_,C_,K_;eps_453,11567
+    T dt_,eps_,C_,K_;C_453,11567
+    T dt_,eps_,C_,K_;K_453,11567
+    list<coordinate_type>	pos1;        pos1454,11589
+
+/home/jdelaney/code/libgaudi/src/manifold/debugger.h,1561
+#define __MANIFOLD_DEBUGGER____MANIFOLD_DEBUGGER__14,232
+namespace m2 {m216,263
+  class Debugger{Debugger18,279
+    typedef Eigen::Matrix<double,4,1> coordinate_type;coordinate_type19,297
+    std::vector<coordinate_type> DebugBoxes; //center and half pointsDebugBoxes51,971
+    std::vector<string>          DebugLabels;DebugLabels53,1042
+    std::vector<coordinate_type> DebugLabelPoints;DebugLabelPoints54,1088
+    std::vector<int>              DebugIds;DebugIds55,1139
+    std::vector<coordinate_type> DebugIdPoints;DebugIdPoints56,1183
+    std::vector<coordinate_type> DebugPoints;DebugPoints57,1231
+    std::vector<coordinate_type> DebugPoints0;DebugPoints058,1277
+    std::vector<coordinate_type> DebugMagPoints;DebugMagPoints60,1325
+    std::vector<double> DebugMags;DebugMags61,1374
+    std::vector<coordinate_type> DebugLines;DebugLines63,1410
+    std::vector<coordinate_type> DebugLines0;DebugLines064,1455
+    std::vector<coordinate_type> DebugLines1;DebugLines165,1501
+    std::vector<coordinate_type> DebugTriangles;DebugTriangles66,1547
+    std::vector<coordinate_type> DebugTriangles0;DebugTriangles067,1596
+    std::vector<coordinate_type> CachedTriangles;CachedTriangles68,1646
+    int labelId;labelId69,1696
+    bool& initialized(){       return instance_flag;}initialized87,2101
+    bool  initialized() const {return instance_flag;}initialized88,2155
+    Debugger(){Debugger91,2223
+    static Debugger* global_instance;global_instance98,2356
+    static bool instance_flag;instance_flag99,2394
+
+/home/jdelaney/code/libgaudi/src/manifold/convex_hull.hpp,721
+#define __TWOMANICONVEXHULL____TWOMANICONVEXHULL__11,176
+namespace m2 {m221,363
+  class convex_hull  {convex_hull23,406
+    struct face_bundle{face_bundle29,655
+      face_ptr cface;cface30,679
+      coordinate_list clist;clist31,701
+    convex_hull(){};convex_hull34,744
+    ~convex_hull(){};~convex_hull35,765
+    control_ptr tetrahedron(coordinate_type cxu,tetrahedron37,790
+    void collect_points(face_ptr f,collect_points101,2707
+    void concave_flip(control_ptr obj){concave_flip126,3484
+    T edge_concave(edge_ptr e){edge_concave139,3843
+    void find_horizon(face_ptr&			face_in,find_horizon149,4210
+    control_ptr quick_hull(std::vector<coordinate_type> clist){quick_hull191,5411
+
+/home/jdelaney/code/libgaudi/src/manifold/construct.hpp,3219
+#define __TWOMANIFOLDFUNCTIONS____TWOMANIFOLDFUNCTIONS__11,179
+namespace m2 {	m214,237
+  class geometry_helper{geometry_helper17,282
+    M2_TYPEDEFS;M2_TYPEDEFS19,317
+    inline coordinate_type periodicTangent(vector<coordinate_type> & path, int i){periodicTangent21,335
+    inline coordinate_type tangent(vector<coordinate_type> & path, int i){tangent34,767
+    inline quat getRotation(coordinate_type t0, coordinate_type t1){getRotation56,1314
+    inline quat getRotation(vector<coordinate_type> & path, int i){getRotation72,1735
+    inline quat getPeriodicRotation(vector<coordinate_type> & path, int i){getPeriodicRotation82,1963
+    inline quat parallelTransport(vector<coordinate_type> & path, parallelTransport93,2247
+    inline quat rotorFromFrame(const coordinate_type & t,rotorFromFrame103,2529
+  class construct{construct196,4889
+    M2_TYPEDEFS;M2_TYPEDEFS197,4908
+    construct(){}construct199,4935
+    ~construct(){}~construct200,4953
+    edge_ptr insert_edge(control_ptr	obj_in,insert_edge202,4975
+    edge_ptr insert_edge(control_ptr		obj_in,insert_edge213,5251
+    edge_ptr split_face(control_ptr    obj_in,split_face240,5863
+    edge_ptr  connect_face(control_ptr      obj_in,connect_face285,6947
+    face_ptr  delete_edge(control_ptr	obj_in,delete_edge358,8499
+    face_ptr  join_face(control_ptr obj_in, edge_ptr e){join_face392,9158
+    face_ptr disconnect_face(control_ptr obj_in, edge_ptr e){disconnect_face486,11651
+    list<edge_ptr> pipe_face(control_ptr obj_in, face_ptr f1, face_ptr f2){pipe_face632,14896
+    list<edge_ptr> stitch_unlike_faces(control_ptr obj_in, face_ptr f1, face_ptr f2){stitch_unlike_faces703,16272
+    void cleanup_zero_edges(control_ptr& obj_in, vertex_ptr & v){cleanup_zero_edges774,17656
+    face_ptr delete_vertex_primitive(control_ptr obj_in, vertex_ptr v){delete_vertex_primitive799,18205
+    face_ptr delete_vertex(control_ptr obj_in, vertex_ptr  v){delete_vertex847,19341
+bool delete_degenerates(control_ptr obj, vertex_ptr v){delete_degenerates917,21376
+    vertex_ptr collapse_edge_triangle(control_ptr obj, edge_ptr e){collapse_edge_triangle953,22553
+    vertex_ptr collapse_edge(control_ptr obj, edge_ptr e){collapse_edge1111,26994
+    vertex_ptr collapse_edge_primitive(control_ptr obj, edge_ptr e){collapse_edge_primitive1191,29213
+    void flip_edge(control_ptr & obj, edge_ptr & e){flip_edge1239,30427
+    bool stitch_faces(control_ptr obj_in, face_ptr f1, face_ptr f2, T tol){stitch_faces1296,31762
+    bool stitch_faces_diff_size(control_ptr obj_in, face_ptr f1, face_ptr f2, T tol){stitch_faces_diff_size1357,33299
+    void bevel(control_ptr obj_in, bevel1418,34846
+    bool bevel_face(control_ptr  obj_in, face_ptr  f1, bevel_face1426,35082
+    bool incremental_patch_hole(face_vertex_ptr & fv,incremental_patch_hole1559,39447
+    bool patch_hole(face_vertex_ptr fv,patch_hole1631,41437
+    void fill_holes(control_ptr obj, vector<list<face_vertex_ptr> > corners){fill_holes1741,44624
+    void incremental_fill_holes(control_ptr obj){incremental_fill_holes1765,45386
+  class manage{manage1808,46548
+    manage(){}manage1812,46595
+    ~manage(){}~manage1813,46610
+
+/home/jdelaney/code/libgaudi/src/manifold/poletree.hpp,3294
+#define __POLETREE____POLETREE__13,161
+class octree_traversal_base {octree_traversal_base33,731
+  octree_traversal_base(){}octree_traversal_base35,769
+  ~octree_traversal_base(){}	~octree_traversal_base36,797
+  virtual bool operator()(const Octree<T,POINT_TYPE> &o, void *data){ return true; };operator ()37,827
+class octree_build_base {octree_build_base41,960
+  octree_build_base(){}octree_build_base43,995
+  ~octree_build_base(){}	~octree_build_base44,1019
+  virtual bool operator()(const Octree<T,POINT_TYPE> &o, void *data){return true;}operator ()45,1045
+class draw_leaf_node : public octree_traversal_base<T,POINT_TYPE> {draw_leaf_node49,1175
+  draw_leaf_node(){};draw_leaf_node51,1252
+  ~draw_leaf_node(){};~draw_leaf_node52,1274
+  bool operator()(const Octree<T,POINT_TYPE> &o, void *data){operator ()53,1297
+bool get_child_points(const Octree<T,POINT_TYPE> &o, void *data){get_child_points80,1948
+bool draw_node(const Octree<T,POINT_TYPE> &o, void *data){draw_node94,2265
+const bool traverse(OCT& O, PROC& proc, DATA *data)traverse142,3417
+class   OctreeOctree168,4092
+  typedef int            (*traverse_callback)(const Octree &o, void *data);traverse_callback174,4164
+  typedef bool			(*build_callback)(const Octree &o, build_callback175,4240
+  inline  vector<POINT_TYPE*>		points()	 const {return _points;}points179,4369
+  inline  const   unsigned int    pointCount() const {return _points.size();}pointCount180,4434
+  typedef Octree<T,POINT_TYPE> octree_node;octree_node182,4514
+  typedef typename list<POINT_TYPE*>::iterator pl_iterator;pl_iterator183,4558
+  typedef typename vector<POINT_TYPE*>::iterator pv_iterator;pv_iterator184,4618
+  Octree()Octree192,4918
+  ~Octree()~Octree203,5238
+  const   bool    build(vector<POINT_TYPE*>  points,build211,5450
+  bool is_leaf() const {is_leaf373,9966
+  const   bool    kbuild(vector<POINT_TYPE*>  points,kbuild377,10024
+  T* calculate_cubic_bounds(vector<POINT_TYPE*>& vl )calculate_cubic_bounds503,13210
+  const bool traverse(octree_traversal_base<T,POINT_TYPE>& proc, void *data) consttraverse556,14428
+  al::Vec<3,T>&	center()		{		return _center;	} center582,15119
+  al::Vec<3,T>	center() const	{		return _center;	} center583,15167
+  T&				radius()		{	return _radius;	} radius585,15221
+  T				radius() const	{	return _radius;	}	radius586,15260
+  octree_node*&			parent()			{	return _parent;	} parent587,15303
+  octree_node*			parent()	const	{	return _parent;	} 	parent588,15353
+  int						quadrant()	const	{	return _quadrant;	}quadrant589,15407
+  int&					quadrant()			{	return _quadrant;	} quadrant590,15457
+  vector<POINT_TYPE*>& get_points(){get_points592,15505
+  vector<POINT_TYPE*> get_points() const {get_points596,15568
+  Octree& child(int i){child600,15637
+  bool has_child(int i){has_child604,15690
+  void draw() const{draw609,15781
+  void draw_leaves() const{draw_leaves613,15844
+  Octree *_parent; _parent619,15959
+  int	  _quadrant;	_quadrant620,15979
+  Octree  *_child[8];_child621,15999
+  vector<POINT_TYPE*>	_points;_points622,16021
+  al::Vec<3,T>		_center;_center623,16052
+  al::Vec<3,T>		_centerOfMass;_centerOfMass624,16077
+  al::Vec<3,T>		_avgPotential;_avgPotential625,16108
+  T			_radius;_radius626,16139
+
+/home/jdelaney/code/libgaudi/src/manifold/m1Construct.hpp,304
+#define __M1COSTRUCT____M1COSTRUCT__13,236
+namespace m1 {m115,260
+  class construct {construct17,299
+    void add_moment_support(control_ptr& in){add_moment_support20,347
+    void insert_vertex(control_ptr ci, long ei){insert_vertex80,2205
+    control_ptr rand_graph(int N){rand_graph99,2712
+
+/home/jdelaney/code/libgaudi/src/manifold/edge_point_subdividers.hpp,576
+#define __M2EDGEPOINTSUBDIVIDE____M2EDGEPOINTSUBDIVIDE__11,171
+namespace m2 {m217,365
+  class epSubdivide{epSubdivide19,408
+    M2_TYPEDEFS;M2_TYPEDEFS20,429
+    void inset_vertex(control_ptr in, vertex_ptr v){inset_vertex22,456
+    void inset_vertex_triangle_collapse(control_ptr in, vertex_ptr v){inset_vertex_triangle_collapse94,2714
+    void inset_vertex_flag_collapse(control_ptr in, vertex_ptr v, vector<coordinate_type>& lc, long lcb){inset_vertex_flag_collapse199,5879
+    bool subdivide_set(control_ptr in, list<vertex_ptr>& lv){subdivide_set306,8942
+
+/home/jdelaney/code/libgaudi/src/manifold/manifold_singleton.h,729
+#define __MANIFOLD_SINGLETON____MANIFOLD_SINGLETON__13,209
+namespace m2 {m214,240
+  class ID{ID15,255
+    bool& initialized(){return instance_flag;}initialized23,450
+    bool  initialized() const {return instance_flag;}initialized24,497
+    ID(){ID27,565
+    int	get_next_face(){get_next_face38,753
+    int	get_next_edge(){get_next_edge44,850
+    int	get_next_vertex(){get_next_vertex50,947
+    int	get_next_face_vertex(){get_next_face_vertex56,1050
+    static ID* global_instance;global_instance62,1168
+    static bool instance_flag;instance_flag63,1200
+    int face_id;face_id64,1231
+    int face_vertex_id;face_vertex_id65,1248
+    int vertex_id;vertex_id66,1272
+    int edge_id;edge_id67,1291
+
+/home/jdelaney/code/libgaudi/src/manifold/m2Mod.hpp,799
+#define __TWOMANIFOLDFUNCTIONS____TWOMANIFOLDFUNCTIONS__10,177
+al::Vec<3,T> rotate_to_plane(al::Vec<3,T> normP, al::Vec<3,T> norm, al::Vec<3,T> cen, al::Vec<3,T> vec){rotate_to_plane21,401
+al::Vec<3,T> rotate_to_xy(al::Vec<3,T> norm, al::Vec<3,T> cen, al::Vec<3,T> vec){rotate_to_xy39,1028
+al::Vec<3,T> rotate_from_xy(al::Vec<3,T> norm, al::Vec<3,T> cen, al::Vec<3,T> vec){rotate_from_xy51,1415
+al::Quat<T> naive_slerp(const al::Quat<T>& input, const al::Quat<T>& target, T amt){naive_slerp64,1810
+al::Vec<3,T> blend(T t, al::Vec<3,T> p00, al::Vec<3,T> pNorm,blend113,2847
+namespace m2 {m2159,4007
+  class add_handle{add_handle161,4050
+    bool add(control_ptr ob, long i, long j, T teni, T tenj){add164,4099
+    bool slerp_face(T t, face_ptr fi, face_ptr fj){slerp_face255,7005
+
+/home/jdelaney/code/libgaudi/src/manifold/remesh.hpp,1905
+#define __REMESH____REMESH__18,292
+namespace m2 {m223,375
+  class remesh{remesh25,418
+    remesh(){}remesh29,471
+    ~remesh(){}~remesh30,486
+    void stellate(control_ref	control_in){stellate31,502
+    void stellate_face_center(control_ref	obj_in,stellate_face_center57,1180
+    vertex_ptr stellate_face_generic(control_ref		obj_in,stellate_face_generic70,1588
+    void root2(control_ref	control_in){root2218,6236
+    bool merge_adjacent_planar_faces(control_ptr obj_in,merge_adjacent_planar_faces241,6791
+    bool merge_all_adjacent_planar_faces(control_ptr obj_in, T tol){merge_all_adjacent_planar_faces273,7569
+    bool find_group_boundary(face_vertex_ptr cfv, face_ptr& tface, find_group_boundary292,8108
+    bool mark_adjacent_edges(vector<face_ptr>& faces_to_remove,mark_adjacent_edges318,8777
+    face_ptr merge_faces(control_ptr obj_in, vector<face_ptr>& faces_to_remove, int face_flag){merge_faces344,9538
+    control_ref dual(control_ref rhs){dual384,10998
+    T cotan(face_vertex_ptr fv){cotan479,13761
+    void split4(control_ptr& mMesh, face_ptr f){split4493,14218
+    void split5(control_ptr& mMesh, face_ptr f){split5504,14540
+    void split6(control_ptr& mMesh, face_ptr f){split6533,15357
+    void postSplitTriangulateFace(control_ptr& mMesh, face_ptr f){postSplitTriangulateFace551,15941
+    void triangulate_quad(control_ptr& mMesh, face_ptr f){triangulate_quad581,16555
+    void slice_and_dice_face(control_ptr& mMesh, face_ptr f){slice_and_dice_face606,17258
+    void triangulate_face(control_ptr mMesh, face_ptr f){triangulate_face641,18215
+    void triangulate(control_ptr mMesh){triangulate673,19074
+    void flip_edges(control_ptr obj){flip_edges698,19664
+    void reverse_edge(edge_ptr& in){reverse_edge737,20689
+    void reverse_face(face_ptr& in){reverse_face746,20979
+    void reverse(control_ref	rhs){reverse761,21331
+
+/home/jdelaney/code/libgaudi/src/manifold/manifold_singleton.cpp,377
+namespace m2 {m212,192
+  bool ID::instance_flag = false;instance_flag13,207
+  ID* ID::global_instance = NULL;global_instance14,241
+  ID& ID::get_instance(){get_instance16,277
+  int ID::new_face_id(){new_face_id25,433
+  int ID::new_edge_id(){new_edge_id31,547
+  int ID::new_vertex_id(){new_vertex_id37,661
+  int ID::new_face_vertex_id(){new_face_vertex_id43,779
+
+/home/jdelaney/code/libgaudi/src/manifold/surface_calculator.hpp,1848
+#define __M2SURFACE_CALCULATOR____M2SURFACE_CALCULATOR__2,33
+namespace m2 {m219,315
+  inline void calcSVD(typename SPACE::coordinate_type * vec,calcSVD22,357
+  inline void calcSVD(typename SPACE::matrix3 & mi,calcSVD40,920
+  class surface_calculator{ M2_TYPEDEFS;surface_calculator59,1471
+  class surface_calculator{ M2_TYPEDEFS;M2_TYPEDEFS59,1471
+    T baryArea(face_vertex_ptr fv){baryArea61,1522
+    T baryArea(vertex_ptr v){      baryArea82,2187
+    T cotan(coordinate_type c0,cotan100,2539
+    T cotan(face_vertex_ptr fv){cotan116,2906
+    T getEdgeWeight(edge_ptr ei){getEdgeWeight125,3153
+    T willmore(face_vertex_ptr fv){willmore132,3321
+    void calcDiffuseQuantity(m2::control<SPACE>& in,calcDiffuseQuantity146,3878
+    void calcDiffuseQuantity(m2::control<SPACE>& in,calcDiffuseQuantity187,5031
+    void calcCurveFlowNormal(m2::control<SPACE>& in,calcCurveFlowNormal227,6151
+    void calcWillmoreEnergy(m2::control<SPACE>& in,calcWillmoreEnergy282,7754
+    void calcDiffuseCurveFlowNormal(m2::control<SPACE>& in,calcDiffuseCurveFlowNormal322,8770
+    std::vector<vertex_ptr> getLocalVertices(m2::control<SPACE>& in,getLocalVertices331,9084
+    void calcCovariance(m2::control<SPACE>& in, calcCovariance369,10120
+    std::vector<edge_ptr> getEdgesNearPoint(m2::control<SPACE>& in,getEdgesNearPoint394,10821
+    std::vector<edge_ptr> getLocalEdges(m2::control<SPACE>& in,getLocalEdges461,12540
+    void calculateBiDirection(m2::control<SPACE>& in, calculateBiDirection505,13754
+    void calculateBiDirectionField(control_ref in,calculateBiDirectionField538,14665
+    void shadeVertices(control_ref mesh){shadeVertices586,16029
+    void shadeVerticesWillmore(control_ref mesh){shadeVerticesWillmore614,16809
+    void shadeVerticesWinding(control_ref mesh){shadeVerticesWinding645,17723
+
+/home/jdelaney/code/libgaudi/src/manifold/octree.hpp,2786
+#define __8TREE____8TREE__13,158
+class octree_traversal_base {octree_traversal_base32,703
+  octree_traversal_base(){}octree_traversal_base34,741
+  ~octree_traversal_base(){}	~octree_traversal_base35,769
+  virtual bool operator()(const Octree<T,POINT_TYPE> &o, void *data){ return true; };operator ()36,799
+class octree_build_base {octree_build_base40,932
+  octree_build_base(){}octree_build_base42,967
+  ~octree_build_base(){}	~octree_build_base43,991
+  virtual bool operator()(const Octree<T,POINT_TYPE> &o, void *data){return true;}operator ()44,1017
+bool get_child_points(const Octree<T,POINT_TYPE> &o, void *data){get_child_points79,1932
+const bool traverse(OCT& O, PROC& proc, DATA *data)traverse141,3413
+class   OctreeOctree167,4088
+  typedef int            (*traverse_callback)(const Octree &o, void *data);traverse_callback173,4160
+  typedef bool			(*build_callback)(const Octree &o, build_callback174,4236
+  inline  vector<POINT_TYPE*>		points()	 const {return _points;}points178,4373
+  inline  const   unsigned int    pointCount() const {return _points.size();}pointCount179,4438
+  typedef Octree<T,POINT_TYPE> octree_node;octree_node181,4518
+  typedef typename list<POINT_TYPE*>::iterator pl_iterator;pl_iterator182,4562
+  typedef typename vector<POINT_TYPE*>::iterator pv_iterator;pv_iterator183,4622
+  Octree()Octree191,4922
+  ~Octree()~Octree202,5242
+  const   bool    build(vector<POINT_TYPE*>  points,build210,5454
+  bool is_leaf() const {is_leaf372,9995
+  const   bool    kbuild(vector<POINT_TYPE*>  points,kbuild376,10053
+  T* calculate_cubic_bounds(vector<POINT_TYPE*>& vl )calculate_cubic_bounds502,13273
+  const bool traverse(octree_traversal_base<T,POINT_TYPE>& proc, void *data) consttraverse555,14491
+  Eigen::Matrix<T,3,1>&	center()		{		return _center;	} center581,15182
+  Eigen::Matrix<T,3,1>	center() const	{		return _center;	} center582,15238
+  T&				radius()		{	return _radius;	} radius584,15300
+  T				radius() const	{	return _radius;	}	radius585,15339
+  octree_node*&			parent()			{	return _parent;	} parent586,15382
+  octree_node*			parent()	const	{	return _parent;	} 	parent587,15432
+  int						quadrant()	const	{	return _quadrant;	}quadrant588,15486
+  int&					quadrant()			{	return _quadrant;	} quadrant589,15536
+  vector<POINT_TYPE*>& get_points(){get_points591,15584
+  vector<POINT_TYPE*> get_points() const {get_points595,15647
+  Octree& child(int i){child599,15716
+  bool has_child(int i){has_child603,15769
+  Octree			   *_parent; _parent618,16045
+  int					_quadrant;	_quadrant619,16070
+  Octree			   *_child[8];_child620,16092
+  vector<POINT_TYPE*>	_points;_points621,16118
+  Eigen::Matrix<T,3,1>		_center;_center622,16149
+  T					_radius;_radius623,16182
+
+/home/jdelaney/code/libgaudi/src/manifold/meshHandler.hpp,51
+#define __MESH_HANDLER_H____MESH_HANDLER_H__2,27
+
+/home/jdelaney/code/libgaudi/src/manifold/m2.hpp,19769
+#define __TWOMANIFOLDCOMMON____TWOMANIFOLDCOMMON__11,175
+#define M2_TYPEDEFS	M2_TYPEDEFS43,725
+  typedef typename SPACE::swept_point_type       swept_point_type;	\  swept_point_type47,952
+  typedef typename SPACE::swept_triangle_type    swept_triangle_type;   \swept_triangle_type48,1023
+  typedef typename SPACE::box_type         box_type;	         	\box_type49,1097
+  typedef typename SPACE::quat          quat;	         	\quat50,1162
+  typedef typename SPACE::mat3          mat3;	         	\mat351,1220
+  typedef typename SPACE::mat4          mat4;	         	\mat452,1278
+  typedef typename SPACE::double_type	 	   T;                   \T53,1336
+  typedef	m2::face<SPACE>		    face_type;                  \face_type54,1402
+  typedef	m2::edge<SPACE>             edge_type;			\edge_type55,1463
+  typedef	m2::vertex<SPACE>	    vertex_type;	        \vertex_type56,1516
+  typedef	m2::face_vertex<SPACE>      face_vertex_type;		\face_vertex_type57,1571
+  typedef	m2::control<SPACE>	    control_type;	        \control_type58,1630
+  typedef       m2::face<SPACE>*	    face_ptr;   \face_ptr59,1687
+  typedef       m2::edge<SPACE>*	    edge_ptr;   \edge_ptr60,1738
+  typedef       m2::vertex<SPACE>*      vertex_ptr;    \vertex_ptr61,1789
+  typedef       m2::face_vertex<SPACE>* face_vertex_ptr; \face_vertex_ptr62,1846
+  typedef       m2::control<SPACE>*     control_ptr;   \control_ptr63,1905
+  typedef	m2::face<SPACE>&	    face_ref;	                \face_ref65,1971
+  typedef	m2::edge<SPACE>&	    edge_ref;	                \edge_ref66,2030
+  typedef	m2::vertex<SPACE>&          vertex_ref;			\vertex_ref67,2089
+  typedef	m2::face_vertex<SPACE>&     face_vertex_ref;		\face_vertex_ref68,2143
+  typedef	m2::control<SPACE>&         control_ref;		\control_ref69,2201
+  typedef vector<coordinate_type >		coordinate_array;	\coordinate_array71,2266
+  typedef	vector<face_ptr>		face_array;             \face_array72,2322
+  typedef	vector<edge_ptr>		edge_array;             \edge_array73,2376
+  typedef	vector<vertex_ptr>		vertex_array;           \vertex_array74,2430
+  typedef	vector<face_vertex_ptr>		face_vertex_array;      \face_vertex_array75,2486
+  typedef list<coordinate_type >		coordinate_list;        \coordinate_list77,2558
+  typedef list<face_ptr>			face_list;              \face_list78,2618
+  typedef list<edge_ptr>			edge_list;              \edge_list79,2671
+  typedef list<vertex_ptr>			vertex_list;	        \vertex_list80,2724
+  typedef list<face_vertex_ptr>			face_vertex_list;	\face_vertex_list81,2776
+  typedef typename coordinate_array::iterator		ca_iterator;	\ca_iterator83,2841
+  typedef	typename vector<face_ptr>::iterator	fa_iterator;    \fa_iterator84,2903
+  typedef	typename vector<edge_ptr>::iterator	ea_iterator;    \ea_iterator85,2967
+  typedef	typename vector<vertex_ptr>::iterator	va_iterator;	\va_iterator86,3031
+  typedef typename vector<face_vertex_ptr>::iterator	fva_iterator;	\fva_iterator87,3094
+  typedef typename list<face_ptr>::iterator			fl_iterator; \fl_iterator89,3174
+  typedef typename list<edge_ptr>::iterator			el_iterator; \el_iterator90,3235
+  typedef typename list<vertex_ptr>::iterator			vl_iterator; \vl_iterator91,3296
+  typedef typename list<face_vertex_ptr>::iterator	fvl_iterator;		fvl_iterator92,3359
+namespace m2 {m296,3449
+  struct bounding_box{bounding_box121,3829
+    M2_TYPEDEFS;M2_TYPEDEFS122,3852
+    coordinate_type min;min124,3879
+    coordinate_type max;max125,3904
+    bounding_box(const coordinate_type & mn,bounding_box126,3929
+  struct colorRGB {colorRGB131,4038
+    double r,g,b,a;r132,4058
+    double r,g,b,a;g132,4058
+    double r,g,b,a;b132,4058
+    double r,g,b,a;a132,4058
+  inline	T randd(T range_) {	randd152,4479
+  class edge{		edge163,4833
+    M2_TYPEDEFS;	M2_TYPEDEFS164,4849
+    edge(){edge166,4877
+    edge(face_vertex_ref in1, face_vertex_ref in2){edge176,5084
+    edge_ref operator=(edge_ref rhs){operator =186,5300
+    ~edge(){};~edge194,5513
+    int&  position_in_set()       {return mSetPosition;}position_in_set196,5531
+    int   position_in_set() const { return mSetPosition;}position_in_set197,5588
+    int    group() const {return mGroup;}group199,5647
+    int &  group()       {return mGroup;}group200,5689
+    size_t ID() const {return this->mID;}ID202,5732
+    face_vertex_ptr& v1()       { return fv1;}	v1204,5775
+    face_vertex_ptr  v1() const { return fv1;}	v1205,5823
+    face_vertex_ptr& v2()       {return fv2;}v2206,5871
+    face_vertex_ptr  v2() const {return fv2;}v2207,5917
+    face_vertex_ptr other(const face_vertex_ptr & cv) const {other209,5966
+    face_vertex_ptr return_this(vertex_ptr cv) const {return_this232,6380
+    face_vertex_ptr this_fv(face_vertex_ptr cv) const {this_fv239,6521
+    void set(face_vertex_ptr nfv1, face_vertex_ptr nfv2){set246,6651
+    void set_this(face_vertex_ptr this_vertex, face_vertex_ptr new_vertex){set_this253,6810
+    void set_other(face_vertex_ptr this_vertex, face_vertex_ptr new_vertex){set_other259,7009
+    void set_other(face_ptr cv, face_vertex_ptr ov){set_other265,7209
+    coordinate_type normal(){normal272,7359
+    void update_vertex(face_vertex_ptr old_, face_vertex_ptr new_){update_vertex280,7575
+    face_ptr coface(face_vertex_ptr this_vert) const {coface289,7732
+    void verify(){verify298,7897
+    void update_face_vertices(){update_face_vertices303,7994
+    int vnum(face_vertex_ptr v){            vnum308,8094
+    T dist(){dist314,8238
+    T length(){length320,8396
+    void draw(){draw326,8558
+    face_vertex_ptr fv1;fv1362,9396
+    face_vertex_ptr fv2;		fv2363,9421
+    size_t mID;mID366,9462
+    int mSetPosition;mSetPosition367,9478
+    int mGroup;mGroup368,9500
+    unsigned int idata;idata371,9533
+    unsigned int flag;flag372,9557
+    unsigned int delete_flag;delete_flag373,9580
+  class face{face378,9649
+    face(){face384,9717
+    face(vertex_ref pnt){face400,10109
+    ~face(){~face431,10797
+    int & size()       { return mSize;}size435,10879
+    int   size() const { return mSize;}size436,10919
+    int& position_in_set()       {return mSetPosition;}position_in_set438,10962
+    int  position_in_set() const {return mSetPosition;}position_in_set439,11018
+    void setHead(face_vertex_ptr head){setHead441,11075
+    face_vertex_ptr& fbegin(){fbegin445,11142
+    face_vertex_ptr fbegin() const {fbegin449,11200
+    face_vertex_ptr fend(){fend453,11266
+    face_ref operator=(const face_ref rhs){operator =458,11330
+    coordinate_type calc_center(){calc_center470,11641
+    bounding_box<SPACE> calc_bbox(){calc_bbox488,12052
+    coordinate_array flagged_coordinate_trace(unsigned int flag_num){flagged_coordinate_trace510,12560
+    face_vertex_ptr get_corner_on_vertex(vertex_ptr v){get_corner_on_vertex531,13078
+    face_vertex_array face_vertex_trace(){face_vertex_trace547,13431
+    face_vertex_list vertex_trace(){vertex_trace563,13771
+    face_vertex_list flagged_vertex_trace(unsigned int flag_num){flagged_vertex_trace579,14106
+    edge_list flagged_edge_trace(unsigned int flag_num){flagged_edge_trace598,14545
+    coordinate_array coordinate_trace(){coordinate_trace617,14970
+    edge_list edge_trace(){edge_trace634,15349
+    T thinness(){thinness651,15690
+    void update_all(){update_all666,16144
+    void renumber_vertex_IDs(){renumber_vertex_IDs675,16379
+    void update_vertex_faces(){update_vertex_faces690,16767
+    void update_vertex_normals(){update_vertex_normals705,17237
+    void delete_covertices(){delete_covertices735,17936
+    T calc_area(){calc_area756,18384
+    void update_normal(){update_normal779,19007
+    void update_center(){update_center805,19792
+    void draw(){draw809,19864
+    void draw(T off){draw814,19947
+    bool has_vertex(vertex_ptr v){has_vertex1011,24575
+    void verify(){verify1023,24874
+    void print(){print1036,25188
+    T area(){area1052,25622
+    coordinate_type & normal(){return mNormal;}			normal1056,25692
+    coordinate_type & center(){return mCenter;}center1057,25743
+    size_t ID() const	{return this->mID;}ID1059,25794
+    T& x() {return mCenter[0];}x1062,25911
+    T& y() {return mCenter[1];}y1063,25943
+    T& z() {return mCenter[2];}z1064,25975
+    T  x() const {return mCenter[0];}x1066,26010
+    T  y() const {return mCenter[1];}y1067,26048
+    T  z() const {return mCenter[2];}z1068,26086
+    int    group() const {return mGroup;}group1069,26124
+    int &  group()       {return mGroup;}group1070,26166
+    int mGroup;mGroup1073,26256
+    face_vertex_ptr fHead;fHead1075,26273
+    coordinate_type mCenter;mCenter1076,26300
+    coordinate_type mNormal;mNormal1077,26329
+    T		     mArea;mArea1078,26358
+    int mID;mID1079,26377
+    int mSize;mSize1080,26390
+    int mSetPosition;mSetPosition1082,26408
+    bool calc_normal;calc_normal1084,26433
+    colorRGB	 color;color1088,26492
+    colorRGB	 ncolor;ncolor1089,26513
+    unsigned int flag;flag1090,26535
+    coordinate_type data;data1091,26558
+    coordinate_type data2;data21092,26584
+    T data3;data31093,26611
+  class face_vertex{face_vertex1097,26658
+    face_vertex(){face_vertex1103,26716
+    face_vertex(const face_vertex_ref rhs){face_vertex1115,26948
+    bool operator==(const face_vertex_ref rhs){operator ==1131,27370
+    ~face_vertex(){~face_vertex1138,27502
+    face_vertex_ref operator=(const face_vertex_ref rhs){operator =1142,27586
+    T angle(){angle1148,27776
+    face_ref coface(){coface1160,28266
+    face_vertex_ptr coedge(){coedge1164,28337
+    face_ref get_face(){get_face1168,28407
+    face_vertex_ptr add_next(){add_next1172,28462
+    face_vertex_ptr add_prev(){add_prev1191,28915
+    face_vertex_ptr & next()       {return nxt_face;}next1209,29395
+    face_vertex_ptr   next() const {return nxt_face;}		next1210,29449
+    face_vertex_ptr & prev()       {return prv_face;}prev1211,29505
+    face_vertex_ptr   prev() const {return prv_face;}prev1212,29559
+    face_vertex_ptr  vnext() {vnext1214,29616
+    face_vertex_ptr vprev() {vprev1224,29793
+    void draw(T off){draw1235,30044
+    edge_ptr & edge()		{return	mEdge;}edge1282,31104
+    edge_ptr   edge() const     {return	mEdge;}edge1283,31143
+    face_ptr & face()		{return	mFace;}face1284,31191
+    face_ptr   face()   const   {return	mFace;}face1285,31230
+    face_ptr   coface()	const   {return mEdge->other(this)->face();}coface1286,31278
+    vertex_ptr & vertex()	{return	mVertex;}vertex1287,31347
+    vertex_ptr   vertex() const {return	mVertex;}vertex1288,31391
+    int	vertex_ID()	const	{return mVertex->ID();}vertex_ID1290,31442
+    int	ID()		const	{return this->mID;}ID1291,31492
+    int	face_ID()	const	{return this->mFacePosition;}face_ID1292,31532
+    int&	face_ID()			{return this->mFacePosition;}face_ID1293,31586
+    int& position_in_face()       {return mFacePosition;}position_in_face1295,31638
+    int  position_in_face() const {return mFacePosition;}position_in_face1296,31696
+    void	set_edge(edge_ref input)	{mEdge	= &input;};set_edge1297,31754
+    void	set_face(face_ref input)	{mFace	= &input;};set_face1298,31807
+    void	set_vertex(vertex_ref input){mVertex	= &input;};set_vertex1299,31860
+    coordinate_type& coordinate(){return mVertex->coordinate();}coordinate1301,31921
+    T & x()	      {return mVertex->coordinate()[0];}x1303,31989
+    T   x()	const {return mVertex->coordinate()[0];}x1304,32042
+    T & y()	      {return mVertex->coordinate()[1];}y1305,32095
+    T   y()	const {return mVertex->coordinate()[1];}y1306,32148
+    T & z()	      {return mVertex->coordinate()[2];}z1307,32201
+    T   z()	const {return mVertex->coordinate()[2];}z1308,32254
+    int &  group()       {return mGroup;}group1309,32307
+    int    group() const {return mGroup;}group1310,32349
+    T& operator[](int i)        {return mVertex->coordinate()[i];}operator []1311,32391
+    T  operator[](int i) const  {return mVertex->coordinate()[i];}operator []1312,32458
+    int                 mGroup;mGroup1315,32539
+    int			mID;mID1316,32571
+    int			fID;fID1317,32586
+    face_vertex_ptr nxt_face;nxt_face1319,32606
+    face_vertex_ptr prv_face;prv_face1320,32636
+    edge_ptr		mEdge;mEdge1322,32667
+    face_ptr		mFace;mFace1323,32688
+    vertex_ptr		mVertex;mVertex1324,32709
+    int mFacePosition;mFacePosition1326,32735
+    unsigned int flag;flag1328,32768
+    T data;data1329,32791
+  void for_each(m2::vertex<SPACE> * v, F& func){for_each1334,32851
+  class vertex{vertex1348,33155
+    M2_TYPEDEFS;M2_TYPEDEFS1349,33171
+    int graphColor;graphColor1351,33200
+    bool smooth;smooth1352,33220
+    int isDegenerate;isDegenerate1353,33237
+    colorRGB color;color1354,33259
+    vertex(){vertex1356,33280
+    vertex(T x, T y, T z){vertex1378,33832
+    vertex(coordinate_type co){vertex1404,34456
+    void init(){init1429,35052
+    int& position_in_set(){return mSetPosition;}position_in_set1439,35314
+    T & x()	      {return mCoordinate[0];}x1441,35366
+    T   x()	const {return mCoordinate[0];}x1442,35409
+    T & y()	      {return mCoordinate[1];}y1443,35452
+    T   y()	const {return mCoordinate[1];}y1444,35495
+    T & z()	      {return mCoordinate[2];}z1445,35538
+    T   z()	const {return mCoordinate[2];}z1446,35581
+    T & operator[](int i)       {return mCoordinate[i];}operator []1447,35624
+    T   operator[](int i) const {return mCoordinate[i];}operator []1448,35681
+    int & group()       {return mGroup;}group1450,35741
+    int   group() const {return mGroup;}group1451,35782
+    int & ID()          {return mSetPosition;}ID1453,35824
+    int   ID()	const	{return mSetPosition;}ID1454,35871
+    int calc_size(){calc_size1456,35916
+    int size() {return mSize;}size1469,36179
+    coordinate_type normal() const{return mNormal;}normal1470,36210
+    coordinate_type& coordinate()       {return mCoordinate;}coordinate1471,36262
+    coordinate_type  coordinate() const	{return mCoordinate;}coordinate1472,36324
+    void add_face_vertex(face_vertex_ptr new_fv){add_face_vertex1474,36395
+    void remove_face_vertex(face_vertex_ptr fv){remove_face_vertex1484,36682
+    face_vertex_ptr & front(){return mFront;}front1511,37425
+    face_vertex_ptr fbegin() {return this->front();}fbegin1512,37471
+    face_vertex_ptr fend()   {return this->front()->vprev();}fend1513,37524
+    T thinness(){thinness1515,37591
+    bool shares_edge_with(vertex_ptr vi){shares_edge_with1532,37937
+    edge_ptr get_shared_edge(vertex_ptr vi){get_shared_edge1547,38294
+    face_vertex_ptr & get_insertion_face_vertex(vertex_ptr that){get_insertion_face_vertex1562,38661
+    face_vertex_ptr & find_insertion_face_vertex(vertex_ptr that){find_insertion_face_vertex1571,38860
+    void update_normal(){update_normal1652,41444
+    void verify(){verify1675,41939
+    void print(){print1687,42220
+    void update_center_of_mass(){update_center_of_mass1703,42748
+    void draw(){draw1709,42936
+    coordinate_type mCoordinate;mCoordinate1784,44817
+    coordinate_type mCentMass;mCentMass1785,44850
+    coordinate_type mNormal;mNormal1786,44881
+    face_vertex_ptr mFront;mFront1787,44910
+    size_t mID;mID1789,44939
+    bool calc_normal;calc_normal1790,44955
+    int mSetPosition;mSetPosition1791,44977
+    int mSize;mSize1792,44999
+    int mGroup;mGroup1793,45014
+    int pinned;pinned1795,45040
+    unsigned int flag;flag1796,45056
+    coordinate_type data;data1797,45079
+    T data2;data21798,45105
+    T winding;winding1799,45118
+  class control {				control1804,45168
+    struct faceDistFromPointSorter {faceDistFromPointSorter1809,45224
+      bool operator() (face_ptr fi, face_ptr fj) { operator ()1810,45261
+      coordinate_type mPoint;mPoint1817,45468
+    } mFaceSorter;mFaceSorter1818,45498
+    control(){control1820,45520
+    control(const control_ref rhs){control1825,45598
+    control_ref operator=(const control_ref rhs){operator =1896,47863
+    ~control(){}		~control1974,50267
+    face_ptr&	face(size_t ind)	{return mFaces[ind];}		face1980,50373
+    edge_ptr&	edge(size_t ind)	{return mEdges[ind];}		edge1981,50428
+    vertex_ptr&	vertex(size_t ind)	{return mVertices[ind];}vertex1982,50483
+    bool has_face(size_t ind){if(mFaces[ind])return true; else return false;}has_face1983,50543
+    bool has_edge(size_t ind){if(mEdges[ind])return true; else return false;}has_edge1984,50621
+    bool has_vertex(size_t ind){if(mVertices[ind])return true; else return false;}has_vertex1985,50699
+    face_array&   get_faces(){return mFaces;}get_faces1987,50785
+    edge_array&   get_edges(){return mEdges;}get_edges1988,50831
+    vertex_array& get_vertices(){return mVertices;}get_vertices1989,50877
+    vector<coordinate_type> get_coordinates(){get_coordinates1991,50930
+    vector<coordinate_type> get_normals(){get_normals2000,51191
+    void assign_coordinates(const vector<coordinate_type> & in){assign_coordinates2010,51476
+    void assign_offset_coordinates(const vector<coordinate_type> & in, T amt){assign_offset_coordinates2018,51707
+    coordinate_type calc_center(){calc_center2026,51957
+    coordinate_type calc_min(){calc_min2036,52209
+    coordinate_type calc_max(){calc_max2046,52492
+    bounding_box<SPACE> calc_bbox(){calc_bbox2056,52775
+    void sortFacesByPoint(coordinate_type c){sortFacesByPoint2072,53188
+    void merge(control_ref other){merge2082,53503
+    void push_vertex(vertex_ptr in){push_vertex2105,54060
+    void push_edge(edge_ptr  in){			push_edge2118,54371
+    void push_face(face_ptr in){push_face2131,54665
+    void remove_vertex(int i){			remove_vertex2144,54956
+    void remove_edge(int i){remove_edge2155,55282
+    void remove_face(int i){remove_face2168,55577
+    vertex_ptr insert_vertex(T x,T y,T z)insert_vertex2178,55749
+    void toggle_clean_up(){manual_clean_up ^= true;}toggle_clean_up2188,56032
+    vertex_ptr insert_vertex(coordinate_type in){insert_vertex2190,56086
+    void clean_up(){clean_up2194,56202
+    void pack(){pack2211,56736
+    void pack_vertices(){pack_vertices2256,57805
+    void validateFaceVertices(){validateFaceVertices2262,57930
+    void groupElements(){groupElements2311,59169
+    void colorVertices(){colorVertices2377,61008
+    void setFaceFlags(int k){setFaceFlags2428,62438
+    void reset_flags(){reset_flags2523,64409
+    void color_dead_pointers(){color_dead_pointers2545,64832
+    void update_all(){update_all2647,67415
+    void set_edge_delete_func(std::function<void(edge_ptr)> func){set_edge_delete_func2663,67767
+    void print(){print2667,67881
+    void print_stack(){print_stack2674,68144
+    void print_edge(){print_edge2706,69072
+    bool                manual_clean_up;manual_clean_up2725,69657
+    int                 numGroups;numGroups2726,69698
+    vector<int>         groupSizes;groupSizes2727,69733
+    face_array		mFaces;     vector<int> mFaceRecycle;mFaces2728,69769
+    face_array		mFaces;     vector<int> mFaceRecycle;mFaceRecycle2728,69769
+    edge_array		mEdges;     vector<int> mEdgeRecycle;mEdges2729,69823
+    edge_array		mEdges;     vector<int> mEdgeRecycle;mEdgeRecycle2729,69823
+    vertex_array	mVertices;  vector<int>  mVertexRecycle;mVertices2730,69877
+    vertex_array	mVertices;  vector<int>  mVertexRecycle;mVertexRecycle2730,69877
+    coordinate_array mGroupColors;mGroupColors2731,69935
+    std::function<void(edge_ptr)>  mEdgeDeleteFunc;mEdgeDeleteFunc2732,69970
+    int maxGraphColor;maxGraphColor2734,70032
+
+/home/jdelaney/code/libgaudi/src/manifold/graph_skinning.hpp,548
+#define __TWOMANIFOLDGRAPHSKIN____TWOMANIFOLDGRAPHSKIN__11,182
+namespace m2 {m221,353
+  class graph_skinning  {graph_skinning23,396
+    M2_TYPEDEFS;M2_TYPEDEFS25,511
+    T radius;radius27,540
+    graph_skinning(){};graph_skinning29,557
+    ~graph_skinning(){};~graph_skinning30,581
+    control_ptr build(m1::control<T>* graph_in){build31,606
+    bool opposing_face_match(face_ptr f1, face_ptr f2, T tol){opposing_face_match192,5278
+    bool stitch_faces(control_ptr obj_in, face_ptr f1, face_ptr f2, T tol){stitch_faces246,6547
+
+/home/jdelaney/code/libgaudi/src/manifold/objloader.hpp,1509
+#define __OBJ_LOADER____OBJ_LOADER__28,465
+namespace m2 {m230,489
+  class merge_proc {merge_proc33,597
+    M2_TYPEDEFS;M2_TYPEDEFS34,618
+    typedef Octree<T,vertex_type> Vtree;Vtree36,645
+    void merge_vertices(control_ptr obj_in, vertex_ptr v1, vertex_ptr v2, merge_vertices38,687
+    bool operator()(const Vtree &o, control_ptr data){operator ()53,1223
+    bool merge(const Vtree &o, control_ptr data){merge57,1319
+    vector<list<face_vertex_ptr> > corners;corners79,1903
+  class obj_loader{obj_loader83,1994
+    typedef typename SPACE::coordinate_type VecT;VecT87,2051
+    obj_loader(){}obj_loader88,2101
+    ~obj_loader(){}~obj_loader89,2120
+    m2::control<SPACE>& operator()(string s){operator ()90,2140
+    typedef Octree<T,vertex_type> Vtree;Vtree99,2604
+    Vtree* build_octree(control_ptr in_){build_octree100,2645
+    void merge_vertices(control_ptr in_, vector<list<face_vertex_ptr> > & corners){merge_vertices117,3098
+    coordinate_type find_min(control<T>* in){find_min125,3413
+    coordinate_type find_max(control<T>* in){find_max144,4073
+    void stitch_edges(control_ptr obj, vertex_ptr vert, list<face_vertex_ptr> & rFaceVertices){stitch_edges164,4628
+    control_ref buildObj(vector<coordinate_type> & inputVerts,buildObj191,5552
+    control_ref loadfile(string s){loadfile262,7489
+  void writeOBJ(m2::control<SPACE>& obj, string filename)writeOBJ357,9969
+  void writePBRT(m2::control<SPACE>& obj, const char* filename)writePBRT391,11112
+
+/home/jdelaney/code/libgaudi/src/manifold/m2Operators.h,37
+#define __M2OPPS____M2OPPS__10,267
+
+/home/jdelaney/code/libgaudi/src/manifold/make.hpp,530
+#define __TWOMANIFOLDMAKE____TWOMANIFOLDMAKE__10,175
+namespace m2 {m218,316
+  class make  {make20,359
+    make(){};make24,492
+    ~make(){};~make25,506
+    control_ptr cube(T x, T y, T z){cube27,530
+    control_ptr extruded_knot(vector<coordinate_type> & knot, T r){extruded_knot44,1241
+    control_ptr trefoil(T r){trefoil102,3079
+    control_ptr torus(T r0, T r1){torus126,3738
+    control_ptr cylinder(T h, T r){cylinder140,4041
+    control_ptr max_tet(std::vector<coordinate_type> clist){max_tet179,5033
+
+/home/jdelaney/code/libgaudi/src/manifold/surface_filters.hpp,1241
+#define __M2SURFACE_FILTER____M2SURFACE_FILTER__2,29
+namespace m2{m220,341
+  class surface_filter{ M2_TYPEDEFS;surface_filter22,383
+  class surface_filter{ M2_TYPEDEFS;M2_TYPEDEFS22,383
+    void filterCutoff(m2::control<SPACE>& in,filterCutoff26,432
+    static void filter(m2::control<SPACE>& in, T strength){filter80,1893
+    static void cuspFilter(m2::control<SPACE>& in, T strength){cuspFilter129,3223
+    static coordinate_type laplacianFilterVertex(vertex_ptr v){laplacianFilterVertex180,4671
+    static coordinate_type projectOntoLine(const coordinate_type& v0, projectOntoLine221,5643
+    static void mlsFilter(m2::control<SPACE>& in, T strength, T dx){mlsFilter231,5970
+    static void laplacianFilter(m2::control<SPACE>& in, T strength){laplacianFilter278,7383
+    static void taubinFilter(m2::control<SPACE>& in, T a,T b){taubinFilter300,8116
+    static void cacheTensor(m2::control<SPACE>& in, cacheTensor335,9228
+    static coordinate_type nullLaplacianFilterVertex(vertex_ptr v,nullLaplacianFilterVertex367,10108
+    static void nullLaplacianFilter(m2::control<SPACE>& in, T strength){nullLaplacianFilter407,11209
+    void flaggedFilter(m2::control<SPACE>& in, T strength){flaggedFilter443,12412
+
+/home/jdelaney/code/libgaudi/src/manifold/m1Includes.h,0
+
+/home/jdelaney/code/libgaudi/src/manifold/m1Spring.hpp,6067
+#define __M1SPRING____M1SPRING__10,156
+namespace m1 {m119,373
+  class vel_mult { M1_TYPEDEFS		vel_mult29,540
+    m1::spring<T>* As;As31,583
+    virtual void mult(vector<coordinate_type>& x, vector<coordinate_type>& b){mult32,606
+  class spring{ M1_TYPEDEFSspring82,1815
+  typedef coordinate_type							point_type ;point_type83,1843
+    typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator84,1888
+    spring(control_ptr obj_in){spring88,2025
+    void initialize(){initialize101,2283
+    al::Vec<3,T>& get_force(long i){get_force149,3712
+    al::Vec<3,T>& external_force(long i){external_force153,3781
+    size_t size(){size157,3855
+    m1::control<T>*&  graph()       {return sp_;}graph161,3910
+    m1::control<T>*   graph() const {return sp_;}		graph162,3960
+    T &M()       {return mM;}M164,4015
+    T  M() const {return mM;}M165,4045
+    T &dh()       {return mdt;}dh166,4075
+    T  dh() const {return mdt;}dh167,4107
+    coordinate_type calc_Fint(coordinate_type c1, coordinate_type c2, T l, T l0, T k){calc_Fint169,4142
+    void rhsVelocity(){rhsVelocity179,4416
+    void rhsPosition(){rhsPosition217,5348
+    void set_pin(int i, bool isPinned){set_pin262,6448
+    bool is_pinned(int i){is_pinned267,6557
+    void update_pinned_positions(){update_pinned_positions271,6620
+    virtual void update_positions(){update_positions278,6832
+    virtual void solve(){			solve284,6987
+    virtual void explicite_euler(){explicite_euler291,7143
+    virtual void verlet(){verlet302,7464
+    virtual void implicite_euler(){			implicite_euler318,7894
+    void randomize(){randomize379,9448
+    void draw(){draw389,9729
+    void reset_t(){reset_t418,10598
+    bool mbegin;mbegin423,10655
+    control_ptr		 sp_;sp_424,10672
+    T mdt,meps,mks,mkrs;mdt425,10695
+    T mdt,meps,mks,mkrs;meps425,10695
+    T mdt,meps,mks,mkrs;mks425,10695
+    T mdt,meps,mks,mkrs;mkrs425,10695
+    vector<coordinate_type>	pos0;	//new velocitypos0426,10720
+    vector<coordinate_type>	pos1;	//new velocity		pos1427,10769
+    vector<coordinate_type>	vel1;	//new velocityvel1428,10820
+    vector<coordinate_type>	vel0;	//old velocity			vel0429,10869
+    vector<coordinate_type>	mFext;		//external forces		mFext430,10921
+    vector<coordinate_type>	mFint;		//external forces				mFint431,10977
+    vector<coordinate_type>	mF;			//external forcesmF432,11035
+    vector<coordinate_type>	mF0;			//external forcesmF0433,11087
+    vector<bool>			mIsPinned;mIsPinned436,11154
+    vector<long>			pinID;pinID437,11184
+    vector<coordinate_type> mP0;		mP0438,11210
+    T			mM;					//mass matrix		mM440,11248
+    vector<T>	mK;					//tangential stiffness matrix one for each edgemK441,11280
+    vector<T>	mKr;				//tangential stiffness matrix from rest positionmKr442,11350
+    vector<T>   ml0;				//initial lengthsml0443,11421
+    vector<T>   ml;				//initial lengthsml444,11463
+  class spring_non_linear{ M1_TYPEDEFSspring_non_linear450,11631
+  typedef coordinate_type							point_type ;point_type451,11670
+    typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator452,11715
+    spring_non_linear(control_ptr obj_in){spring_non_linear454,11792
+    void initialize(){initialize464,12049
+    al::Vec<3,T>& get_force(long i){get_force505,13245
+    T &M()       {return mM;}M509,13314
+    T  M() const {return mM;}		M510,13344
+    void calculate_forces_and_stiffness(){calculate_forces_and_stiffness512,13379
+    void set_pin(int i, bool isPinned){set_pin574,14980
+    void update_pinned_positions(){update_pinned_positions579,15086
+    virtual void update_positions(){update_positions586,15298
+    virtual void solve(){			solve592,15453
+    virtual void explicite_euler(){explicite_euler599,15609
+    virtual void verlet(){verlet609,15924
+    virtual void implicite_euler(){			implicite_euler624,16360
+    virtual void mult(vector<coordinate_type>& x, vector<coordinate_type>& b){mult652,16948
+    void randomize(){randomize725,18977
+    void draw(){draw735,19258
+    void reset_t(){reset_t764,20127
+    control_ptr		 sp_;sp_769,20184
+    T mdt,meps,mks,mkrs;mdt770,20207
+    T mdt,meps,mks,mkrs;meps770,20207
+    T mdt,meps,mks,mkrs;mks770,20207
+    T mdt,meps,mks,mkrs;mkrs770,20207
+    vector<coordinate_type>	pos0;	//new velocity		pos0771,20232
+    vector<coordinate_type>	vel1;	//new velocityvel1772,20283
+    vector<coordinate_type>	vel0;	//old velocity			vel0773,20332
+    vector<coordinate_type>	mFext;	//external forces		mFext774,20384
+    vector<coordinate_type>	mFint;	//external forces				mFint775,20439
+    vector<coordinate_type>	mF;	//external forcesmF776,20496
+    vector<bool>			mIsPinned;mIsPinned779,20560
+    vector<long>			pinID;pinID780,20590
+    vector<coordinate_type> mP0;		mP0781,20616
+    T			mM;			//mass matrix		mM783,20654
+    vector<T>	mK;				//tangential stiffness matrix one for each edgemK784,20684
+    vector<T>	mKr;				//tangential stiffness matrix from rest positionmKr785,20753
+    vector<T>   ml0;				//initial lengthsml0786,20824
+  class spring_electric{ M1_TYPEDEFSspring_electric791,20902
+  typedef coordinate_type							point_type ;point_type792,20939
+    typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator793,20984
+    spring_electric(control_ptr obj_in){spring_electric795,21061
+    virtual void update_positions(){update_positions814,21465
+    void update_t(){update_t887,23369
+    void randomize(){randomize903,23572
+    void reset_t(){reset_t915,23889
+    control_ptr		 sp_;sp_920,23946
+    T dt_,eps_,C_,K_, energy0, energy;dt_921,23969
+    T dt_,eps_,C_,K_, energy0, energy;eps_921,23969
+    T dt_,eps_,C_,K_, energy0, energy;C_921,23969
+    T dt_,eps_,C_,K_, energy0, energy;K_921,23969
+    T dt_,eps_,C_,K_, energy0, energy;energy0921,23969
+    T dt_,eps_,C_,K_, energy0, energy;energy921,23969
+    int progress;progress922,24008
+    vector<coordinate_type>	pos1;  pos1923,24026
+
+/home/jdelaney/code/libgaudi/src/manifold/geometry_types.hpp,3500
+#define __GEOMETRY_TYPES____GEOMETRY_TYPES__11,176
+struct swept_triangle{swept_triangle19,316
+  static const int size = 3;size20,339
+  CTYPE p[3];p21,368
+  CTYPE v[3];v22,382
+  T dt;dt23,396
+  swept_triangle(){swept_triangle24,404
+  swept_triangle( CTYPE p0,  CTYPE p1,  CTYPE p2,swept_triangle27,430
+  CTYPE & operator[](int i)       {return p[i];}operator []33,606
+  CTYPE   operator[](int i) const {return p[i];}operator []34,655
+  CTYPE normal(){normal36,705
+  CTYPE center(){center40,781
+  void getExtents(CTYPE & min, CTYPE & max){getExtents44,841
+struct triangle{triangle74,1603
+  static const int size = 3;size75,1620
+  CTYPE p[3];p76,1649
+  triangle(){triangle77,1663
+  triangle( CTYPE p0,  CTYPE p1,  CTYPE p2){triangle80,1683
+  CTYPE & operator[](int i)       {return p[i];}operator []84,1772
+  CTYPE   operator[](int i) const {return p[i];}operator []85,1821
+  CTYPE normal(){normal87,1871
+  CTYPE center(){center91,1947
+  void getExtents(CTYPE & min, CTYPE & max){getExtents95,2007
+struct swept_point{swept_point120,2580
+  CTYPE p;p122,2608
+  CTYPE v;v123,2619
+  T dt;dt124,2630
+  swept_point( CTYPE p0,  CTYPE vi){swept_point125,2638
+  CTYPE center(){center129,2701
+  void getExtents(CTYPE & min, CTYPE & max){getExtents133,2748
+struct line{line156,3324
+  CTYPE p[2];p157,3337
+  line( CTYPE p0,  CTYPE p1){line158,3351
+  CTYPE & operator[](int i)       {return p[i];}operator []162,3413
+  CTYPE   operator[](int i) const {return p[i];}operator []163,3462
+  CTYPE center(){center165,3514
+struct box{box180,3753
+  CTYPE center;center181,3765
+  CTYPE half;half182,3781
+  box(){box184,3796
+  box( CTYPE cen,  CTYPE h){box187,3811
+class euclidean_space{euclidean_space258,5707
+  typedef T							double_type;double_type260,5738
+  typedef T							real;real261,5769
+  typedef Eigen::Matrix< T, 4, 1 > 			coordinate_type;coordinate_type263,5864
+  typedef line<T,coordinate_type>		                line_type;	line_type266,5925
+  typedef triangle<T,coordinate_type>		        triangle_type;triangle_type267,5988
+  typedef swept_point<T,coordinate_type>		        swept_point_type;swept_point_type268,6050
+  typedef swept_triangle<T,coordinate_type>		        swept_triangle_type;	swept_triangle_type269,6118
+  typedef box<T,coordinate_type>		                box_type;	box_type270,6193
+  typedef Eigen::Matrix< T, 3, 3>                          mat3; mat3271,6254
+  typedef Eigen::Matrix< T, 4, 4>                          mat4; mat4272,6320
+  typedef unsigned short	ushort;ushort273,6386
+  typedef unsigned int		uint;uint274,6419
+  typedef unsigned long		ulong;ulong275,6449
+  typedef double		double_t;double_t277,6483
+  typedef float			float_t;float_t278,6511
+  typedef Eigen::Quaternion<T>  quat;	quat280,6539
+  typedef Eigen::Matrix<T,2,1>	vec2;vec2281,6578
+  typedef Eigen::Matrix<T,3,1>	vec3;vec3282,6615
+  typedef Eigen::Matrix<T,4,1>	vec4;vec4283,6652
+  typedef Eigen::Matrix<uint, 2,1>	uint2;uint2285,6691
+  typedef Eigen::Matrix<uint, 2,1>	uint4;uint4286,6733
+  typedef Eigen::Matrix<T,2,1>	int2;int2288,6777
+  typedef Eigen::Matrix<T,4,1>	int3;int3289,6814
+  typedef Eigen::Matrix<T,4,1>	int4;int4290,6851
+typedef  euclidean_space<double> space3;space3293,6892
+T norm(Eigen::Matrix<T, 4,1> a){return a.mag();};norm296,6956
+T norm2(Eigen::Matrix<T,4,1> a){norm2298,7028
+inline Eigen::Matrix<T,4,1> cross(const Eigen::Matrix<T,4,1>& vecA, cross303,7131
+
+/home/jdelaney/code/libgaudi/src/manifold/moving_mesh.hpp,12064
+#define __M2MOVING____M2MOVING__2,21
+namespace m2 {m223,380
+  class set_operations{ M2_TYPEDEFS;set_operations26,424
+  class set_operations{ M2_TYPEDEFS;M2_TYPEDEFS26,424
+    static bool flip_edges(control_ptr obj){flip_edges28,471
+  class join_mesh { M2_TYPEDEFS;join_mesh129,3245
+  class join_mesh { M2_TYPEDEFS;M2_TYPEDEFS129,3245
+    struct contact_manifold{contact_manifold135,3484
+      int p1,p2;p1138,3532
+      int p1,p2;p2138,3532
+      int p1type, p2type; //means that we can querie the collision typep1type139,3549
+      int p1type, p2type; //means that we can querie the collision typep2type139,3549
+      control_ptr mMesh;mMesh140,3621
+      T length(){length141,3646
+    struct contact_manifold_sort {contact_manifold_sort150,3855
+      bool operator() (contact_manifold c0, contact_manifold c1) { operator ()152,3902
+      control_ptr mMesh;mMesh169,4374
+    } mContactSorter;mContactSorter170,4399
+    join_mesh(){join_mesh173,4458
+    join_mesh(control_ptr mesh, T tolerance){join_mesh176,4483
+    void init(){init185,4775
+    inline void dimPolynomial(coordinate_type a, coordinate_type va, dimPolynomial197,5184
+    void buildPolynomial(coordinate_type a, coordinate_type va, buildPolynomial209,5684
+    T fRand(){fRand237,6786
+    T qRand(){qRand242,6859
+    void testCollision(){testCollision247,6942
+    void firstImpulse(vector<coordinate_type> &  vels, T eps){firstImpulse312,9371
+    vector<contact_manifold> getCollisions(const vector<coordinate_type> &  vels){getCollisions395,12208
+    vector<contact_manifold> getCollisions(){getCollisions480,15337
+    bool checkEdgeInSet(face_vertex_ptr fv0,checkEdgeInSet587,18791
+    triangle_type makeTriangle(face_vertex_ptr v0,makeTriangle601,19194
+    face_ptr makeFace(vertex_ptr v0,makeFace610,19479
+    void stitchFaces(control_ptr control, face_ptr f1, face_ptr f2){stitchFaces632,20190
+    void pipeEdge(edge_ptr e0, edge_ptr e1,pipeEdge883,28672
+    bool join(){join1076,35742
+    T tol;tol1147,38124
+    control_ptr		 mMesh;mMesh1148,38135
+    dynamic_octree<SPACE,triangle_type> exteriorTree;exteriorTree1149,38160
+    dynamic_octree<SPACE,triangle_type> interiorTree;interiorTree1150,38214
+    vector<triangle_type> oldFaces;oldFaces1151,38268
+    vector<triangle_type> newFaces;newFaces1152,38304
+    vector<coordinate_type> velocities;velocities1153,38340
+    T dt;dt1154,38380
+    T minLength;minLength1155,38390
+  class calc_sdf { M2_TYPEDEFScalc_sdf1159,38454
+    typedef aabb_tree<SPACE,triangle_type> triangle_tree;triangle_tree1161,38495
+    typedef typename triangle_tree::node_type edge_node_type;edge_node_type1162,38553
+    control_ptr mMesh;mMesh1163,38615
+    vector<coordinate_type> normals;normals1165,38639
+    vector<coordinate_type> vertices;vertices1166,38676
+    vector<triangle_type>  tris;tris1167,38714
+    vector<int>            triIndices;      triIndices1168,38747
+    triangle_tree tree =   triangle_tree(this->tris);tree1169,38792
+    calc_sdf(control_ptr targetMesh){calc_sdf1171,38847
+    void initialize(){initialize1175,38925
+    vector<triangle_type> getTris(control_ptr targetMesh){getTris1186,39262
+    vector<int> getTriIndices(control_ptr targetMesh){getTriIndices1198,39742
+    inline T clamp(T x, T a, T b){clamp1210,40247
+    inline void  distanceFromTriangle(coordinate_type p, int tri,distanceFromTriangle1214,40334
+    vector<pair<T,coordinate_type> > getSdf(vector<coordinate_type> & coordinates){getSdf1269,41934
+  class moving_mesh{ M2_TYPEDEFS;moving_mesh1296,42701
+  class moving_mesh{ M2_TYPEDEFS;M2_TYPEDEFS1296,42701
+    typedef coordinate_type	point_type;point_type1298,42736
+    typedef typename SPACE::triangle_type	        triangle;triangle1299,42776
+    typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator1300,42836
+    typedef typename m2::Debugger Debugger;Debugger1301,42903
+    moving_mesh(control_ptr obj_in){moving_mesh1304,42958
+    face_bin<SPACE> & getHash(){return mFaceHash;}getHash1331,43868
+    void pin_half(){pin_half1333,43920
+    void drawField(){drawField1352,44356
+    coordinate_type getSvdNormal(vertex_ptr v){getSvdNormal1387,45445
+    vector<coordinate_type> getFaceOffsets(m2::control<SPACE>& in){getFaceOffsets1425,46399
+    coordinate_type getButterflyVertexWeight(face_vertex_ptr v){getButterflyVertexWeight1443,46943
+    coordinate_type getButterflyWeight(edge_ptr e){getButterflyWeight1480,48028
+    coordinate_type getAverageWeight(edge_ptr e){getAverageWeight1488,48301
+    void checkEdge(int edgeNum){checkEdge1496,48548
+    void relax_mesh(){relax_mesh1509,48936
+    void cache_mesh(){cache_mesh1543,49817
+    void relax_mesh_no_collapse(){relax_mesh_no_collapse1553,50254
+    bool join(vector<coordinate_type> velocities, T dt){join1633,52388
+    bool join(){join1650,52834
+    edge_ptr subdivideFace(face_vertex_ptr fv){subdivideFace1663,53108
+    void split_edge(edge_ptr e){split_edge1676,53548
+    bool insert_edges(){insert_edges1694,54139
+    bool collapse_edges(){collapse_edges1737,55348
+    bool collapse_low_curve(){collapse_low_curve1794,56836
+    bool prune_edges(){prune_edges1854,58568
+    bool delete_degenerate(){delete_degenerate1935,61237
+    bool checkCompatibility(edge_ptr ei, edge_ptr ej){checkCompatibility2040,63791
+    struct edge_sort {edge_sort2067,64870
+      bool operator() (edge_ptr ei, edge_ptr ej) { return (ei->length() < ej->length());}operator ()2068,64893
+    } mEdgeSorter;mEdgeSorter2069,64983
+    vector<T> calcAvgSdf(vector<coordinate_type> & coordinates,calcAvgSdf2072,65004
+    vector<coordinate_type> integrateChargesBarnesHut(vector<coordinate_type> & coordinates){integrateChargesBarnesHut2246,69904
+    vector<coordinate_type> integrateOrientedChargesBarnesHut(vector<coordinate_type> & coordinates){integrateOrientedChargesBarnesHut2352,72754
+    vector<coordinate_type> integrateNormalsBarnesHut(const vector<coordinate_type> & coordinates){integrateNormalsBarnesHut2364,73199
+    vector<coordinate_type> integrateNormalDerivativeBarnesHut(vector<coordinate_type> & coordinates){integrateNormalDerivativeBarnesHut2490,76711
+    void integrateNormalsRK2(T dt){integrateNormalsRK22635,80598
+    vector<coordinate_type>  integrateNormals(T dt, vector<coordinate_type> & coordinates){integrateNormals2671,81752
+    vector<coordinate_type>  integrateNormals(vector<T> dt, vector<coordinate_type> & coordinates){integrateNormals2687,82330
+    vector<coordinate_type>  integrateCharges(T dt, vector<coordinate_type> & coordinates){integrateCharges2703,82919
+    vector<coordinate_type>  integrateMorphing(T dt,integrateMorphing2719,83505
+    vector<coordinate_type> integrateNormalsRK2(T dt, vector<coordinate_type> & coordinates){integrateNormalsRK22740,84279
+    void hashFaces(){hashFaces2768,85219
+    void randomize(){randomize2780,85567
+    face_bin<SPACE> & faceHash(){return mFaceHash;}faceHash2795,85938
+    face_bin<SPACE> mFaceHash;mFaceHash2796,85990
+    vector<coordinate_type> mDirectionWeights;mDirectionWeights2798,86053
+    vector<coordinate_type> mDebug;mDebug2799,86100
+    vector<coordinate_type*> mDirectionField;mDirectionField2800,86136
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength;maxCurvature2801,86182
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength;minCurvature2801,86182
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength;minLength2801,86182
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength;minCollapseLength2801,86182
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength;maxLength2801,86182
+    control_ptr		 mMesh;mMesh2802,86257
+  class vortex_sheet{vortex_sheet2807,86317
+    M2_TYPEDEFS;M2_TYPEDEFS2808,86339
+    vortex_sheet(control_ptr obj_in){vortex_sheet2810,86366
+    coordinate_type getButterflyVertexWeight(face_vertex_ptr v){getButterflyVertexWeight2856,87729
+    coordinate_type getButterflyWeight(edge_ptr e){getButterflyWeight2893,88814
+    void flip_edges(){flip_edges2902,89088
+    void remesh(){      remesh2911,89277
+    pole_tree<SPACE> & octree(){return mOctree;}octree2959,90454
+    vertex_bin<SPACE> & vertexHash(){return mVertexHash;}vertexHash2961,90552
+    edge_bin<SPACE> & edgeHash(){return mEdgeHash;}edgeHash2962,90610
+    face_bin<SPACE> & faceHash(){return mFaceHash;}faceHash2963,90662
+    void hashVertices(){hashVertices2966,90716
+    void hashEdges(){hashEdges2971,90833
+    void hashFaces(){hashFaces2976,90943
+    void pin_half(){pin_half2981,91053
+    void pin_bottom(){pin_bottom2999,91563
+    void pin_bottom_facing(){pin_bottom_facing3017,92075
+    void addCurveVorticity(T c, int dim){addCurveVorticity3038,92732
+    void updateVorticity(){updateVorticity3068,94056
+    void updateCirculation(){updateCirculation3084,94525
+    void integrateBaroclinity(vector<coordinate_type> g,integrateBaroclinity3099,94982
+    void integrateBaroclinity(T dt){integrateBaroclinity3125,95880
+    void integrateBaroclinity(T dt,T C){integrateBaroclinity3151,96746
+    void integrateVelocityEuler(T dt){integrateVelocityEuler3176,97611
+    void integrateVelocityRK2(T dt){integrateVelocityRK23190,98131
+    vector<coordinate_type> integrateHeat(T dt){integrateHeat3237,99790
+    vector<coordinate_type> integrateVelocityBruteForce(T dt){integrateVelocityBruteForce3270,100630
+    vector<coordinate_type> integrateVelocityBarnesHut(){integrateVelocityBarnesHut3318,102091
+    vector<coordinate_type> integrateVelocity(T dt){integrateVelocity3432,105319
+    void circulationToVorticity(face_ptr f){circulationToVorticity3536,108686
+    void vorticityToCirculation(face_ptr f){vorticityToCirculation3561,109401
+    edge_ptr subdivideFace(face_vertex_ptr fv){subdivideFace3616,110845
+    void split_edge(edge_ptr e){split_edge3673,112891
+    struct edge_sort {edge_sort3694,113535
+      bool operator() (edge_ptr ei, edge_ptr ej) { return (ei->length() < ej->length());}operator ()3695,113558
+    } mEdgeSorter;mEdgeSorter3696,113648
+    bool insert_edges_curve(){insert_edges_curve3698,113668
+    bool collapse_edges(){collapse_edges3794,116261
+    bool delete_degenerate(){delete_degenerate3841,117655
+    bool checkCompatibility(edge_ptr ei, edge_ptr ej){checkCompatibility3980,121104
+    vector<edge_ptr> getPairList(){getPairList4003,121994
+    void pipeFace(face_ptr f0, pipeFace4135,126279
+    bool joinEdges(){joinEdges4203,128097
+    void drawVorticity(){drawVorticity4255,129577
+    void drawVelocity(){drawVelocity4272,129986
+    edge_bin<SPACE>   mEdgeHash;mEdgeHash4289,130412
+    pole_tree<SPACE>  mOctree;mOctree4290,130445
+    face_bin<SPACE>   mFaceHash;mFaceHash4292,130509
+    vertex_bin<SPACE> mVertexHash;mVertexHash4293,130542
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength, regLength, edgeJoinThresh;maxCurvature4294,130577
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength, regLength, edgeJoinThresh;minCurvature4294,130577
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength, regLength, edgeJoinThresh;minLength4294,130577
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength, regLength, edgeJoinThresh;minCollapseLength4294,130577
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength, regLength, edgeJoinThresh;maxLength4294,130577
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength, regLength, edgeJoinThresh;regLength4294,130577
+    T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength, regLength, edgeJoinThresh;edgeJoinThresh4294,130577
+    vector<coordinate_type> mEdgeCirculation;mEdgeCirculation4295,130679
+    vector<coordinate_type> mFaceVorticity;mFaceVorticity4296,130725
+    control_ptr mMesh;mMesh4297,130769
+
+/home/jdelaney/code/libgaudi/src/manifold/conj_grad.hpp,108
+#define __CONJ_GRAD____CONJ_GRAD__11,166
+void	cgsolve(MAT& A, vector<T>& x, vector<T>& b){cgsolve23,324
+
+/home/jdelaney/code/libgaudi/src/manifold/m2Includes.h,87
+#define __M2INCLUDES____M2INCLUDES__10,271
+#define QUAT_EPSILON QUAT_EPSILON21,423
+
+/home/jdelaney/code/libgaudi/src/manifold/m2Dense.h,258
+class m2Dense {m2Dense9,135
+    m2Dense(){}m2Dense10,151
+    ~m2Dense(){}~m2Dense11,167
+    m2Control*          mControlMesh;mControlMesh13,192
+    vector<int>         mSubHash;mSubHash14,230
+    vector<Vec<3,T> >   mVertexPool;mVertexPool15,264
+
+/home/jdelaney/code/libgaudi/src/manifold/bezier.hpp,2471
+#define __BEZIER____BEZIER__20,425
+class slerp_interpolator{slerp_interpolator24,476
+  virtual inline Tv operator()(Tf t, const Tv& p0, const Tv& p1){operator ()26,510
+class lerp_interpolator{lerp_interpolator32,641
+  virtual inline Tv operator()(Tf t, const Tv& p0, const Tv& p1){operator ()34,674
+class point_space {point_space40,816
+  typedef T										double_t;double_t42,844
+  typedef Eigen::Matrix<T,N,1>						point_t;point_t43,875
+  typedef lerp_interpolator<double_t,point_t>	interpolator_t;interpolator_t44,920
+  typedef unsigned int							uint;uint45,982
+  typedef unsigned long							ulong;ulong46,1017
+class rotor_space {rotor_space50,1087
+  typedef T										double_t;double_t52,1116
+  typedef Eigen::Quaternion<T>								point_t;point_t53,1147
+  typedef slerp_interpolator<double_t,point_t>	interpolator_t;interpolator_t54,1194
+  typedef unsigned int							uint;uint55,1257
+  typedef unsigned long							ulong;ulong56,1292
+class bezier_curve{bezier_curve60,1359
+  typedef typename SPACE::double_t		double_t;double_t63,1389
+  typedef typename SPACE::point_t		point_t;point_t64,1435
+  typedef typename SPACE::interpolator_t	interpolator_t;interpolator_t65,1479
+  typedef typename SPACE::uint			uint;uint66,1536
+  typedef typename SPACE::ulong			ulong;ulong67,1575
+  bezier_curve(int chordsize){bezier_curve69,1618
+  ~bezier_curve(){~bezier_curve73,1710
+  int push_point(point_t& P){push_point76,1735
+  void delete_point(ulong id){delete_point81,1828
+  void update_knot_vector(){update_knot_vector91,2039
+  void calc_knot(vector<point_t>& P, vector<point_t>& U){calc_knot97,2140
+  void calc_chord(vector<point_t>& P, vector<point_t>& U){calc_chord111,2469
+  void calc_cubic_knot(vector<point_t>& P, vector<point_t>& U){calc_cubic_knot127,2867
+  void calc_cubic_chord(uint beg, vector<point_t>& P, vector<point_t>& U){calc_cubic_chord134,3051
+  point_t find_nearest(point_t pi, double_t& t, int& knot){find_nearest155,3678
+  point_t find_nearest_chord(point_t Pi, point_t *P, double_t&dist, double_t& t){find_nearest_chord178,4283
+  void insert(int knot, double_t t){insert183,4460
+  void subdivide_knot(vector<point_t >& Po, double_t t){subdivide_knot219,5511
+  int mChordSize;mChordSize242,6039
+  int mBaseKnotOrder;mBaseKnotOrder243,6057
+  vector<point_t>		mKnots;	mKnots244,6079
+  vector<point_t>		mControl;mControl245,6107
+  vector<double_t>	mDistTree;		mDistTree246,6136
+
+/home/jdelaney/code/libgaudi/src/manifold/m1.hpp,10461
+#define __M1FORWARDS____M1FORWARDS__10,176
+#define M1_TYPEDEFS	M1_TYPEDEFS16,257
+namespace m1 {m141,1226
+  class control {control52,1390
+    control(){}control56,1495
+    control(m2::control<T>& in){control57,1511
+    void reset_flags(){reset_flags84,2317
+    size_t size_edge(){return mEdges.size();}size_edge91,2458
+    size_t size_vertex(){return mVertices.size();}size_vertex92,2504
+    bool  is_sorted() const {return is_sorted_;}is_sorted94,2558
+    bool& is_sorted() {return is_sorted_;}is_sorted95,2607
+    vertex_array& get_vertices() {return mVertices;}get_vertices97,2653
+    edge_array& get_edges() {return mEdges;}get_edges98,2706
+    vertex_array get_vertices()const {return mVertices;}get_vertices100,2754
+    edge_array get_edges()const {return mEdges;}get_edges101,2811
+    vertex_ptr N(size_t index_){return mVertices[index_];}N103,2863
+    edge_ptr   E(size_t index_){return mEdges[index_];}E104,2922
+    vertex_ptr vertex(size_t index_){return mVertices[index_];}vertex105,2978
+    edge_ptr   edge(size_t index_)  {return mEdges[index_];}		edge106,3042
+    void update_edges(){update_edges108,3108
+    void remove_vertex(size_t vert_num){remove_vertex115,3258
+    void remove_edge(size_t edge_num){remove_edge122,3448
+    void collapse_edge(size_t edge_num){collapse_edge145,3968
+    void merge_vertices(size_t i0, size_t i1){      merge_vertices191,5162
+    void delete_vertex(long i){			delete_vertex230,6221
+    void delete_edge(long i){delete_edge239,6391
+    void push_edge(edge_ptr edge_in){push_edge250,6639
+    void push_vertex(vertex_ptr vert_in){push_vertex256,6834
+    void pack(){            pack262,7043
+    virtual edge_ref  connect(long i1, long i2){connect290,7703
+    virtual edge_ref  non_redundant_connect(long i1, long i2){non_redundant_connect305,8154
+    void update_placement(){update_placement328,8718
+    void clear_color(){clear_color353,9277
+    void remove_duplicate_edges(){remove_duplicate_edges374,9748
+    void draw(){	draw407,10504
+    edge_array		mEdges;     vector<int> mEdgeRecycle;mEdges480,12451
+    edge_array		mEdges;     vector<int> mEdgeRecycle;mEdgeRecycle480,12451
+    vertex_array	mVertices;  vector<int>  mVertexRecycle;mVertices481,12505
+    vertex_array	mVertices;  vector<int>  mVertexRecycle;mVertexRecycle481,12505
+    bool is_sorted_;is_sorted_482,12563
+    void clear_edges(){clear_edges484,12587
+  class edge{edge490,12673
+    bool tagForRemoval;tagForRemoval493,12713
+    edge(){edge494,12737
+    edge(vertex_ref o_vertex, vertex_ref d_vertex,edge498,12787
+    ~edge(){~edge513,13157
+    virtual vertex_ptr  v0() const {return mV0;}v0518,13237
+    virtual vertex_ptr  v1() const {return mV1;}v1519,13286
+    virtual vertex_ptr& v0()       {return mV0;}v0520,13335
+    virtual vertex_ptr& v1()       {return mV1;}		v1521,13384
+    bool incoming(const vertex_ptr cur_vertex){incoming523,13438
+    bool outgoing(const vertex_ptr cur_vertex){outgoing533,13607
+    vertex_ptr get_other(const vertex_ptr cur_vertex){get_other543,13775
+    vertex_ptr& other(const vertex_ptr cur_vertex){other553,13953
+    vertex_ptr other(vertex_ptr cur_vertex) const {other563,14111
+    vertex_ptr& this_v(vertex_ptr cur_vertex) {this_v573,14268
+    size_t other_socket(vertex_ptr cur_vertex) const {other_socket583,14421
+    size_t this_socket(vertex_ptr cur_vertex) const {this_socket593,14619
+    size_t stack_place() const{stack_place603,14816
+    size_t& stack_place(){stack_place607,14890
+    virtual int		color() const	{return mColor;}color611,14959
+    virtual int&	color()			{return mColor;}color612,15007
+    bool check_null(){check_null614,15054
+    virtual size_t  v0_socket() const {return placement_in_v0;}v0_socket632,15533
+    virtual size_t& v0_socket()       {return placement_in_v0;}v0_socket633,15597
+    virtual size_t  v1_socket() const {return placement_in_v1;}v1_socket634,15661
+    virtual size_t& v1_socket()       {return placement_in_v1;}v1_socket635,15725
+    virtual size_t  position_in_set() const {return placement_in_stack;}position_in_set637,15792
+    virtual size_t& position_in_set()       {return placement_in_stack;}position_in_set638,15865
+    T k;k640,15941
+    long flag;flag641,15950
+    int mColor;mColor643,15976
+    quat mOrient;mOrient645,15995
+    vertex_ptr mV0;mV0646,16013
+    vertex_ptr mV1;mV1647,16033
+    size_t placement_in_stack;placement_in_stack649,16056
+    size_t mID;mID650,16087
+    size_t placement_in_v0;placement_in_v0652,16106
+    size_t placement_in_v1;placement_in_v1653,16134
+  class vertex_iterator {vertex_iterator658,16199
+    vertex_iterator(vertex_ptr in){cur_vertex = in; vert_index = 0;}vertex_iterator661,16253
+    vertex_ptr& operator*()       { return cur_vertex->get_edge(vert_index)->other(cur_vertex);}		operator *662,16322
+    vertex_ptr  operator*() const { return cur_vertex->get_edge(vert_index)->other(cur_vertex);}		operator *663,16421
+    vertex_iterator& operator++()   {vert_index++; return *this;}operator ++664,16520
+    vertex_iterator  operator++(int){vert_index++; return *this;}		operator ++665,16586
+    vertex_iterator& operator--()   {vert_index--; return *this;}operator --666,16654
+    vertex_iterator  operator--(int){vert_index--; return *this;}		operator --667,16720
+    bool operator==(vertex_iterator& other){ bool out = this->vert_index == other.vert_index; return out;}operator ==668,16788
+    bool operator!=(vertex_iterator& other){ bool out = this->vert_index != other.vert_index; return out;}operator !=669,16895
+    bool operator<=(vertex_iterator& other){ bool out = this->vert_index <= other.vert_index; return out;}operator <=670,17002
+    bool operator< (vertex_iterator& other){ bool out = this->vert_index <  other.vert_index; return out;}operator <671,17109
+    bool operator>=(vertex_iterator& other){ bool out = this->vert_index >= other.vert_index; return out;}operator >=672,17216
+    bool operator> (vertex_iterator& other){ bool out = this->vert_index >  other.vert_index; return out;}operator >673,17323
+    edge_ptr  edge() const { return cur_vertex->get_edge(vert_index);}edge674,17430
+    void set_end(){vert_index = cur_vertex->get_edges().size();}set_end675,17501
+    void set_begin(){vert_index = 0;}	set_begin676,17566
+    vertex_ptr cur_vertex;cur_vertex678,17616
+    long vert_index;vert_index679,17643
+  class vertex{vertex683,17695
+    typedef std::vector<edge_ptr> edge_container;edge_container687,17740
+    typedef typename std::vector<edge_ptr>::iterator edge_iterator;edge_iterator688,17790
+    typedef std::vector<bool> bool_container;bool_container689,17858
+    vertex(){vertex691,17907
+    vertex(T in_){vertex699,18048
+    ~vertex(){~vertex705,18166
+    void allocate(size_t cap_){allocate709,18212
+    void reserve(size_t cap_){reserve716,18335
+    void pack(){            pack720,18406
+    vertex_iterator<T>& end()  { vertex_iterator<T>* out = new vertex_iterator<T>(this); out->set_end()  ; return *out;}end740,18846
+    vertex_iterator<T>& begin(){ vertex_iterator<T>* out = new vertex_iterator<T>(this); out->set_begin(); return *out;}		begin741,18967
+    virtual void do_stuff(){}do_stuff743,19093
+    virtual int		color() const	{return mColor;}color745,19126
+    virtual int&	color()			{return mColor;}color746,19174
+    T& val(){return *item_in_vertex;}val747,19218
+    T	  val() const {return *item_in_vertex;}val748,19256
+    virtual void set_current_socket(size_t sock_in){set_current_socket750,19305
+    virtual bool is_incoming(size_t in_){is_incoming754,19395
+    virtual bool is_outgoing(size_t in_){is_outgoing759,19502
+    virtual bool has_incoming(){has_incoming770,19760
+    virtual bool has_outgoing(){has_outgoing792,20212
+    virtual void push_edge(edge_ptr new_edge){push_edge820,20776
+    virtual void set_edge(edge_ptr new_edge, long i1){set_edge837,21215
+    edge_ptr get_edge(int ei){get_edge842,21343
+    virtual void push_singular_edge(edge_ptr new_edge){push_singular_edge855,21616
+    virtual void update_edge_sockets(){						update_edge_sockets874,22173
+    bool has_connection(edge_ptr check){has_connection893,22576
+    bool has_edge(int i) const {return mBEdges[i];}has_edge908,22916
+    virtual void remove_edge(size_t edge_num){			remove_edge910,22971
+    virtual bool  is_connected(size_t socket) const { is_connected931,23545
+    virtual size_t num_edges(){return  mNumEdges;};num_edges939,23858
+    virtual size_t size_edge(){return  mNumEdges;};size_edge940,23910
+    virtual edge_ptr E(size_t index){return get_edge(index);}E942,24033
+    virtual vertex_ref N(size_t index){return get_connected(index);}	N943,24095
+    virtual edge_ptr get_edge(size_t index){get_edge945,24168
+    virtual edge_array& get_edges(){return mEdges;}get_edges952,24316
+    virtual edge_ref get_last(){get_last954,24371
+    virtual vertex_ref get_connected(size_t sock_num){get_connected962,24514
+    virtual size_t get_connected_socket(size_t sock_num){get_connected_socket974,24810
+    size_t& position_in_set()       {return placement_in_stack;}position_in_set992,25273
+    size_t  position_in_set() const {return placement_in_stack;}				position_in_set993,25338
+    coordinate_type & coordinate()       {return mCoordinate;}coordinate995,25410
+    coordinate_type   coordinate() const {return mCoordinate;}coordinate996,25473
+    T flag;flag998,25545
+    coordinate_type mCovarianceVal;mCovarianceVal999,25557
+    coordinate_type mCovarianceVec[3];mCovarianceVec1000,25593
+    coordinate_type mAvgLoc;mAvgLoc1001,25632
+    int             clusterId;clusterId1002,25661
+    int isBiFurcation;isBiFurcation1003,25692
+    coordinate_type drawColor;drawColor1004,25715
+    bool visited;visited1005,25746
+    int hasIn;hasIn1006,25764
+    int hasOut;hasOut1007,25779
+    T*	 item_in_vertex;item_in_vertex1010,25807
+    int mColor;mColor1012,25834
+    size_t mID;mID1014,25853
+    size_t mNumEdges;mNumEdges1015,25869
+    size_t cur_socket;cur_socket1016,25891
+    coordinate_type  mCoordinate;mCoordinate1018,25923
+    edge_container	mEdges;mEdges1019,25957
+    vector<bool>	mBEdges;mBEdges1020,25984
+    std::vector<size_t> deallocated;deallocated1021,26010
+    size_t placement_in_stack;placement_in_stack1022,26047
+
+/home/jdelaney/code/libgaudi/src/manifold/bins.hpp,13709
+#define __M2BINS____M2BINS__2,19
+bool boxOverlap(space3::triangle_type& tri, boxOverlap16,237
+namespace m2 {m223,450
+  struct line_tests{line_tests25,493
+    M2_TYPEDEFS;M2_TYPEDEFS26,514
+    inline bool ray_triangle_intersect(const coordinate_type& r0,ray_triangle_intersect28,532
+    inline bool lineTriangle(coordinate_type e0, coordinate_type e1, lineTriangle73,1951
+    bool rayIntersectBox(coordinate_type ro, coordinate_type rd, 			rayIntersectBox95,2561
+    inline bool lineBox(coordinate_type L1, coordinate_type L2, lineBox117,3437
+  class geometry_calculator{geometry_calculator141,4275
+    M2_TYPEDEFS;M2_TYPEDEFS143,4314
+    coordinate_type center(coordinate_type p){center144,4331
+    coordinate_type center(line_type p){center148,4401
+    coordinate_type center(triangle_type p){center152,4479
+    void getExtents(coordinate_type p,coordinate_type & min, coordinate_type & max){getExtents156,4570
+    void getExtents(line_type p,coordinate_type & min, coordinate_type & max){getExtents161,4692
+    void getExtents(swept_point_type p,coordinate_type & min, coordinate_type & max){getExtents173,4997
+    void getExtents(triangle_type p,coordinate_type & min, coordinate_type & max){getExtents185,5423
+  class distance_calculator{distance_calculator198,5764
+    M2_TYPEDEFS;M2_TYPEDEFS200,5803
+    inline T distanceFromLine(const coordinate_type& v0, distanceFromLine201,5820
+    inline T distanceLineLine(const coordinate_type& x0, distanceLineLine214,6172
+    inline T distanceSegmentSegment(const coordinate_type& s00,distanceSegmentSegment225,6521
+    inline T distanceFromTriangle(const coordinate_type* tri,distanceFromTriangle299,8730
+    T calcEdgeEdgeDistance(edge_ptr e0, edge_ptr e1){      calcEdgeEdgeDistance337,9627
+    T distance(line_type e0, line_type e1){distance345,9956
+    T distance(triangle_type t, coordinate_type c){distance349,10069
+    inline void dimPolynomial(coordinate_type a, coordinate_type va, dimPolynomial354,10175
+    void buildPolynomial(coordinate_type a, coordinate_type va, buildPolynomial367,10676
+    T distance(swept_triangle_type t, swept_point_type c){distance394,11778
+  inline void drawBox(typename SPACE::coordinate_type  p,drawBox474,14670
+  inline void drawBox(typename SPACE::coordinate_typ p, double dx){drawBox522,16204
+  struct face_bin{ face_bin569,17547
+    M2_TYPEDEFS;M2_TYPEDEFS570,17567
+    face_bin(){}face_bin572,17585
+    face_bin(face_bin & other){face_bin574,17603
+    face_bin(control_ref mesh, T dx){face_bin578,17663
+    ~face_bin(){}~face_bin582,17741
+    face_bin & operator=(face_bin & rhs){operator =584,17760
+    void binTriangles(control_ref mesh, T dx){binTriangles602,18212
+    void binCenters(control_ref mesh, T dx){binCenters755,22875
+    void clear(){clear815,24559
+    int xRes() {return _xRes;}xRes823,24710
+    int yRes() {return _yRes;}yRes824,24741
+    int zRes() {return _zRes;}zRes825,24772
+    T dx()  {return _dx;}dx826,24803
+    coordinate_type center() {return  _center;}center827,24829
+    coordinate_type lengths(){return _lengths;}lengths828,24877
+    coordinate_type center(int x, int y, int z){center830,24926
+    void nearestBin(coordinate_type pos, int* bini){nearestBin836,25125
+    void drawBoundingBox(){drawBoundingBox844,25389
+    void draw(){draw849,25506
+    vector<face_ptr> & faces() {return _faces;}faces871,25992
+    vector<int> & binStart()    {return _binStart;}binStart873,26041
+    vector<int> & faceLoc() {return _faceLoc;}faceLoc874,26093
+    vector<int> & binnedFaces()  {return _binnedFaces;}binnedFaces875,26140
+    vector<int> & binnedCounter()  {return _binCounter;}binnedCounter876,26196
+    vector<face_ptr>               _faces;_faces877,26253
+    vector<int>    _binnedFaces;_binnedFaces880,26321
+    vector<int>    _binStart;_binStart881,26354
+    vector<int>    _binCounter;_binCounter882,26384
+    vector<int>    _faceLoc;_faceLoc883,26416
+    int _numGroups;_numGroups886,26471
+    int _xRes;_xRes888,26492
+    int _yRes;_yRes889,26507
+    int _zRes;_zRes890,26522
+    T _dx;_dx891,26537
+    coordinate_type _center;_center892,26548
+    coordinate_type _lengths;_lengths893,26577
+  struct edge_bin{ edge_bin897,26641
+    M2_TYPEDEFS;M2_TYPEDEFS898,26661
+    edge_bin(){}edge_bin900,26679
+    edge_bin(edge_bin & other){edge_bin902,26697
+    edge_bin(control_ref mesh, T dx){edge_bin906,26757
+    ~edge_bin(){}~edge_bin910,26833
+    edge_bin & operator=(edge_bin & rhs){operator =912,26852
+    inline void incrementDDA(T & tMaxX, T & tMaxY, T & tMaxZ,incrementDDA929,27253
+    void DDA_3D(int ei,DDA_3D958,27767
+    void binEdges(control_ref mesh, T dx){binEdges1036,29835
+    void clear(){clear1091,31451
+    int xRes() {return _xRes;}xRes1099,31602
+    int yRes() {return _yRes;}yRes1100,31633
+    int zRes() {return _zRes;}zRes1101,31664
+    T dx()  {return _dx;}dx1102,31695
+    coordinate_type center() {return  _center;}center1103,31721
+    coordinate_type lengths(){return _lengths;}lengths1104,31769
+    coordinate_type center(int x, int y, int z){center1106,31818
+    void nearestBin(coordinate_type pos, int* bini){nearestBin1112,32017
+    void drawBoundingBox(){drawBoundingBox1120,32281
+    void draw(){draw1125,32398
+    vector<edge_ptr> & edges() {return _edges;}edges1147,32884
+    vector<int> & binStart()    {return _binStart;}binStart1149,32933
+    vector<int> & edgeLoc() {return _edgeLoc;}edgeLoc1150,32985
+    vector<int> & binnedEdges()  {return _binnedEdges;}binnedEdges1151,33032
+    vector<int> & binnedCounter()  {return _binCounter;}binnedCounter1152,33088
+    vector<edge_ptr>               _edges;_edges1153,33145
+    vector<int>    _binnedEdges;_binnedEdges1156,33213
+    vector<int>    _binStart;_binStart1157,33246
+    vector<int>    _binCounter;_binCounter1158,33276
+    vector<int>    _edgeLoc;_edgeLoc1159,33308
+    int _numGroups;_numGroups1162,33363
+    int _xRes;_xRes1164,33384
+    int _yRes;_yRes1165,33399
+    int _zRes;_zRes1166,33414
+    T _dx;_dx1167,33429
+    coordinate_type _center;_center1168,33440
+    coordinate_type _lengths;_lengths1169,33469
+  struct vertex_bin{ vertex_bin1173,33533
+    M2_TYPEDEFS;M2_TYPEDEFS1174,33555
+    vertex_bin(){}vertex_bin1176,33573
+    vertex_bin(vertex_bin & other){vertex_bin1178,33593
+    vertex_bin(control_ref mesh, T dx){vertex_bin1182,33657
+    ~vertex_bin(){}~vertex_bin1186,33736
+    vertex_bin & operator=(vertex_bin & rhs){operator =1188,33757
+    void binPoints(control_ref mesh, T dx){binPoints1206,34141
+    void clear(){clear1264,35802
+    int xRes() {return _xRes;}xRes1271,35929
+    int yRes() {return _yRes;}yRes1272,35960
+    int zRes() {return _zRes;}zRes1273,35991
+    T dx()  {return _dx;}dx1274,36022
+    coordinate_type center() {return  _center;}center1275,36048
+    coordinate_type lengths(){return _lengths;}lengths1276,36096
+    coordinate_type center(int x, int y, int z){center1278,36145
+    void nearestBin(coordinate_type pos, int* bini){nearestBin1284,36344
+    void drawBoundingBox(){drawBoundingBox1292,36629
+    void draw(){draw1297,36746
+    vector<vertex_ptr> & vertices() {return _verts;}vertices1318,37231
+    vector<int> & binStart()    {return _binStart;}binStart1320,37285
+    vector<int> & binnedVerts()  {return _binnedVerts;}binnedVerts1321,37337
+    vector<int> & binnedCounter()  {return _binCounter;}binnedCounter1322,37393
+    vector<vertex_ptr> _verts;_verts1323,37450
+    vector<int>    _binnedVerts;_binnedVerts1326,37506
+    vector<int>    _binStart;_binStart1327,37539
+    vector<int>    _binCounter;_binCounter1328,37569
+    int _numGroups;_numGroups1331,37627
+    int _xRes;_xRes1333,37648
+    int _yRes;_yRes1334,37663
+    int _zRes;_zRes1335,37678
+    T _dx;_dx1336,37693
+    coordinate_type _center;_center1337,37704
+    coordinate_type _lengths;_lengths1338,37733
+  struct pole_node{pole_node1342,37798
+    M2_TYPEDEFS;M2_TYPEDEFS1344,37828
+    int id;id1345,37845
+    int begin;begin1346,37857
+    int size;size1347,37872
+    int level;level1348,37886
+    int parent;parent1349,37901
+    coordinate_type center;center1350,37917
+    coordinate_type centerOfMass;centerOfMass1351,37945
+    coordinate_type half;half1352,37979
+    int* children;children1353,38005
+    pole_node(){pole_node1356,38073
+    ~pole_node(){~pole_node1366,38268
+    pole_node(const pole_node & rhs){pole_node1370,38316
+    pole_node & operator=(const pole_node & rhs){operator =1383,38696
+  struct pole_tree{pole_tree1403,39158
+    M2_TYPEDEFS;M2_TYPEDEFS1405,39259
+    typedef pole_node<SPACE> node_type;node_type1407,39286
+    pole_tree(){}pole_tree1409,39327
+    ~pole_tree(){}~pole_tree1410,39345
+    pole_tree(const pole_tree & other){pole_tree1412,39365
+    pole_tree(vector<coordinate_type> & points){pole_tree1416,39433
+    pole_tree & operator=(const pole_tree & rhs){operator =1420,39520
+    void calcHalfCenter(coordinate_type & half, calcHalfCenter1429,39720
+    int getBin(const coordinate_type & p, const coordinate_type & c){getBin1450,40419
+    void build(vector<coordinate_type> & points,build1458,40637
+    void draw(){draw1554,42989
+    void drawLeafConnectivity(){drawLeafConnectivity1572,43453
+    vector<node_type> nodes;nodes1582,43734
+    vector<int>      leafNodes;leafNodes1583,43763
+    vector<int>      leafIds;leafIds1584,43795
+    vector<int>      permutation;permutation1585,43825
+  struct aabb_node{aabb_node1589,43894
+    M2_TYPEDEFS;M2_TYPEDEFS1591,43924
+    int dim;dim1592,43941
+    int id;id1593,43954
+    int begin;begin1594,43966
+    int size;size1595,43981
+    int level;level1596,43995
+    int parent;parent1597,44010
+    int children[2];children1598,44026
+    box_type bbox;bbox1599,44047
+    aabb_node(){aabb_node1603,44151
+    ~aabb_node(){~aabb_node1614,44329
+    aabb_node(const aabb_node & rhs){aabb_node1617,44354
+    aabb_node & operator=(const aabb_node & rhs){operator =1632,44716
+  struct aabb_tree{aabb_tree1653,45155
+    M2_TYPEDEFS;M2_TYPEDEFS1655,45176
+    typedef aabb_node<SPACE> node_type;node_type1657,45203
+    aabb_tree(){}aabb_tree1659,45244
+    ~aabb_tree(){}~aabb_tree1660,45262
+    aabb_tree(const aabb_tree & other){aabb_tree1662,45282
+    aabb_tree(vector<PRIMITIVE> & points){aabb_tree1666,45350
+    aabb_tree & operator=(const aabb_tree & rhs){operator =1670,45431
+    void calcHalfCenter(coordinate_type & half, calcHalfCenter1680,45632
+    void build(vector<PRIMITIVE> & points,build1705,46362
+    void draw(){draw1808,48975
+    void drawLeafNodes(){drawLeafNodes1829,49565
+    void drawLeafConnectivity(){drawLeafConnectivity1839,49810
+    vector<node_type> nodes;nodes1850,50092
+    vector<int>       leafIds;leafIds1851,50121
+    vector<int>       leafNodes;leafNodes1852,50152
+    vector<int>       permutation;permutation1853,50185
+  struct dynamic_octnode{dynamic_octnode1857,50275
+    M2_TYPEDEFS;M2_TYPEDEFS1859,50311
+    int id;id1860,50328
+    int level;level1861,50340
+    int parent;parent1862,50355
+    bool isLeaf;isLeaf1863,50371
+    box_type bbox;bbox1864,50388
+    int* children;children1865,50407
+    list<int> data; //index into the global primitive arraydata1866,50426
+    dynamic_octnode(){dynamic_octnode1869,50535
+    ~dynamic_octnode(){~dynamic_octnode1878,50722
+    dynamic_octnode(const dynamic_octnode & rhs){dynamic_octnode1882,50776
+    dynamic_octnode & operator=(const dynamic_octnode & rhs){operator =1893,51084
+  struct dynamic_octree{dynamic_octree1911,51510
+    M2_TYPEDEFS;M2_TYPEDEFS1913,51572
+    typedef dynamic_octnode<SPACE,PRIMITIVE> node_type;node_type1918,51670
+    typedef list<int>           data_list;data_list1919,51726
+    typedef typename data_list::iterator data_iterator;data_iterator1920,51769
+    dynamic_octree(){ this->maxLeafSize = 8; }dynamic_octree1925,51912
+    ~dynamic_octree(){}~dynamic_octree1926,51959
+    dynamic_octree(const dynamic_octree & other){dynamic_octree1928,51984
+    dynamic_octree(vector<coordinate_type> & points){dynamic_octree1932,52062
+    dynamic_octree & operator=(const dynamic_octree & rhs){operator =1939,52226
+    void insert(vector<PRIMITIVE> & primitives, int p,insert1947,52404
+    void build(vector<PRIMITIVE> & prims,build2047,55549
+    void draw(){draw2055,55749
+    int               maxLeafSize;maxLeafSize2069,56069
+    box_type          bbox;bbox2070,56104
+    vector<node_type> nodes;nodes2071,56132
+    vector<int>       leafNodes;leafNodes2072,56161
+    vector<int>       leafIds;leafIds2073,56194
+  inline bool intersectLineTest(typename SPACE::coordinate_type e0, typename SPACE::coordinate_type e1, intersectLineTest2078,56280
+  inline void getAllNearest(PRIMITIVE_B                  & primB,getAllNearest2132,57880
+  inline void getAllNearestTriPoint(typename SPACE::coordinate_type & p,getAllNearestTriPoint2201,60264
+  inline int getNearestInRange(typename SPACE::coordinate_type  & p,getNearestInRange2285,63011
+  typename SPACE::double_type getNearestRange(typename SPACE::coordinate_type & p,getNearestRange2363,65482
+  inline int getNearest(typename SPACE:: coordinate_type              & p,getNearest2444,68227
+  struct ccd{ccd2454,68625
+    M2_TYPEDEFS;M2_TYPEDEFS2455,68639
+    T edgeEdge(line_type e12, edgeEdge2457,68657
+    T pointTriangle(coordinate_type p, pointTriangle2477,69228
+    T timeToCollision(coordinate_type x1, coordinate_type v1,timeToCollision2498,69831
+
+/home/jdelaney/code/libgaudi/src/manifold/tribox_test.hpp,928
+#define __TRIBOXX_TEST____TRIBOXX_TEST__15,793
+class tri_box{tri_box24,962
+#define X X26,978
+#define Y Y27,990
+#define Z Z28,1002
+#define FINDMINMAX(FINDMINMAX30,1015
+  int planeBoxOverlap(CTYPE normal,CTYPE vert, CTYPE maxbox)planeBoxOverlap37,1185
+#define AXISTEST_X01(AXISTEST_X0167,1865
+#define AXISTEST_X2(AXISTEST_X274,2115
+#define AXISTEST_Y02(AXISTEST_Y0282,2428
+#define AXISTEST_Y1(AXISTEST_Y189,2680
+#define AXISTEST_Z12(AXISTEST_Z1298,2996
+#define AXISTEST_Z0(AXISTEST_Z0105,3246
+  bool triBoxOverlap(const CTYPE boxcenter,triBoxOverlap112,3495
+#undef XX191,6395
+#undef YY192,6404
+#undef ZZ193,6413
+#undef FINDMINMAXFINDMINMAX194,6422
+#undef AXISTEST_X01AXISTEST_X01195,6440
+#undef AXISTEST_X2AXISTEST_X2196,6460
+#undef AXISTEST_Y02AXISTEST_Y02197,6479
+#undef AXISTEST_Y1AXISTEST_Y1198,6499
+#undef AXISTEST_Z12AXISTEST_Z12199,6518
+#undef AXISTEST_Z0AXISTEST_Z0200,6538
+
+/home/jdelaney/code/libgaudi/src/manifold/heap.hpp,1083
+#define HEAPITEM_HHEAPITEM_H8,258
+class HeapItem {HeapItem13,347
+  ITEM_T  m_dData;                            // Dummy data valuem_dData15,373
+  int index;index18,451
+  bool inHeap;inHeap19,464
+  HeapItem()HeapItem23,584
+  HeapItem(ITEM_T data)HeapItem31,724
+  ~HeapItem()~HeapItem39,873
+  ITEM_T getData()getData47,1001
+class HeapHeap55,1133
+  typedef HeapItem<ITEM_T> heap_t;heap_t58,1154
+  std::vector<heap_t> m_Elements;m_Elements59,1189
+  COMPARE    * m_comp;m_comp60,1223
+  ASSIGN     * m_assign;m_assign61,1246
+  int          m_iNumElements;              // Number of elements in the heapm_iNumElements62,1271
+  int          m_iHeapLength;               // Size of the arraym_iHeapLength63,1349
+  Heap(int size, COMPARE* comp, ASSIGN *assign)Heap66,1418
+  int size(){size74,1580
+  int heap(ITEM_T object) {heap78,1630
+  heap_t getItem(int i){getItem91,1932
+  heap_t pop() {pop95,1988
+  int remove(int i) {remove112,2316
+  int remove(heap_t removed) {remove131,2725
+  int up(int i) {up136,2811
+  int down(int i) {down153,3230
+
+/home/jdelaney/code/libgaudi/src/manifold/subdivide.hpp,793
+#define __SUBDIVIDE____SUBDIVIDE__10,159
+namespace m2 {m215,245
+  class subdivide{subdivide17,288
+    subdivide(){}subdivide21,344
+    ~subdivide(){}~subdivide22,362
+    void subdivide_catmull_clark(control_ptr& obj_in){subdivide_catmull_clark24,390
+    int calc_vertex(vertex_ptr& vertex_in,calc_vertex52,1284
+    coordinate_type calc_edge(edge_ptr& edge_in){calc_edge89,2306
+    coordinate_type calc_center(face_ptr& face_in){calc_center112,3035
+    coordinate_type calc_normal(coordinate_type& c0,coordinate_type& c1,calc_normal134,3595
+    control_ref subdivide_control(control_ref	control_in){subdivide_control159,4536
+    void subdivide_edges(control_ptr obj_in){subdivide_edges381,12869
+    vertex_ptr subdivide_edge(control_ptr	obj_in,subdivide_edge390,13092
+
+/home/jdelaney/code/libgaudi/src/manifold/nearest_point.hpp,1113
+#define __BEZIER_NEAREST_POINT____BEZIER_NEAREST_POINT__12,219
+#define MIN(MIN18,305
+#define MAX(MAX21,374
+#define SWAP(SWAP24,452
+#define LERP(LERP28,585
+#define CLAMP(CLAMP31,673
+#define	EPSILON	EPSILON33,733
+#define	DEGREE	DEGREE34,802
+#define	W_DEGREE W_DEGREE35,848
+inline T distSqr(Eigen::Matrix<T,2,1> p0,distSqr38,930
+class bezier_nearest_point{bezier_nearest_point44,1054
+	typedef Eigen::Matrix<T,2,1> ctype;ctype46,1084
+	bezier_nearest_point(){bezier_nearest_point48,1129
+	ctype NearestPointOnCurve(ctype P, ctype * V, T& dist, T& t)NearestPointOnCurve59,1400
+	ctype *ConvertToBezierForm(ctype P, ctype  *V)ConvertToBezierForm118,2993
+	int FindRoots(ctype  *w,FindRoots187,4895
+	int CrossingCount(ctype	*V,int degree)CrossingCount250,6550
+	int ControlPolygonFlatEnough(ctype	*V, int degree)ControlPolygonFlatEnough315,9099
+	T ComputeXIntercept(ctype 	*V, int		degree)ComputeXIntercept399,11065
+	static ctype Bezier(ctype 	*V, Bezier435,11794
+	ctype V2ScaleII(ctype	v, T	s)V2ScaleII479,12790
+	int		MAXDEPTH;	/*  Maximum depth for recursion */MAXDEPTH489,12924
+
+/home/jdelaney/code/libgaudi/src/manifold/add_handle.hpp,744
+Eigen::Matrix<T,4,1> rotate_to_plane(Eigen::Matrix<T,4,1> normP, rotate_to_plane16,288
+Eigen::Matrix<T,4,1> rotate_to_xy(Eigen::Matrix<T,4,1> norm, rotate_to_xy37,1046
+Eigen::Matrix<T,4,1> rotate_from_xy(Eigen::Matrix<T,4,1> norm, rotate_from_xy51,1512
+Eigen::Quaternion<T> naive_slerp(const Eigen::Quaternion<T>& input, const Eigen::Quaternion<T>& target, T amt){naive_slerp66,1990
+Eigen::Matrix<T,4,1> blend(T t, Eigen::Matrix<T,4,1> p00, Eigen::Matrix<T,4,1> pNorm,blend115,3063
+namespace m2 {m2161,4357
+  class add_handle{add_handle163,4400
+    M2_TYPEDEFS;M2_TYPEDEFS164,4420
+    bool add(control_ptr ob, long i, long j, T teni, T tenj){add166,4447
+    bool slerp_face(T t, face_ptr fi, face_ptr fj){slerp_face257,7483
+
+/home/jdelaney/code/libgaudi/src/manifold/modify.hpp,742
+#define __M2MODIFY____M2MODIFY__11,159
+namespace m2 {m217,245
+  class modify{modify19,288
+    M2_TYPEDEFS;M2_TYPEDEFS20,304
+    modify(){}modify22,333
+    ~modify(){}~modify23,348
+    void translate(control_ptr obj, T x, T y, T z){translate25,377
+    void move_to(control_ptr obj, coordinate_type newCenter){move_to37,670
+    void scale(control_ptr obj, T x, T y, T z){scale51,1115
+    void rotate(control_ptr obj, mat4 R){rotate63,1404
+    void center(control_ref in){center74,1741
+    void scale_face(face_ptr f1, T scale){scale_face113,3121
+    void translate_face_along_vector(face_ptr f1, coordinate_type c1, T offset){translate_face_along_vector129,3513
+    edge_ptr flip_edge(edge_ptr e1){flip_edge144,3840
+
+/home/jdelaney/code/libgaudi/src/manifold/fdt.hpp,3604
+#define __FDTBIN____FDTBIN__2,19
+namespace m2 {m219,298
+  struct LeafBlock{ LeafBlock23,361
+    M2_TYPEDEFS;M2_TYPEDEFS24,382
+    LeafBlock(){}LeafBlock26,404
+    LeafBlock(coordinate_type cen){}LeafBlock27,422
+  coordinate_type mCen;mCen28,459
+  BLOCK_T data;data29,483
+  struct Block{ Block33,556
+    M2_TYPEDEFS;M2_TYPEDEFS34,573
+    Block(T length, coordinate_type cen)Block36,595
+    Block()Block51,893
+    Block(Block & other){Block63,1061
+    ~Block(){}~Block67,1113
+    Block & operator=(Block & rhs){operator =69,1129
+    Block & copy(Block & rhs){copy74,1210
+    void setCenter(coordinate_type cen){setCenter89,1510
+    void setLength(T length){setLength93,1579
+    void clear(){clear98,1708
+    int xRes() {return mxRes;}xRes101,1733
+    int yRes() {return myRes;}yRes102,1764
+    int zRes() {return mzRes;}zRes103,1795
+    int size() {return mnumBlocks;}size104,1826
+    T dx()  {return mdx;}dx106,1863
+    coordinate_type center() {return  mcenter;}center108,1890
+    coordinate_type center(int x, int y, int z){center110,1939
+    coordinate_type center(int index){center116,2142
+    bool mask(int x, int y, int z){mask125,2470
+    virtual BLOCK_T * allocate(int x, int y, int z){allocate130,2590
+    virtual BLOCK_T * get(int x, int y, int z){get146,3095
+    virtual bool get(int x, int y, int z, get155,3312
+    virtual void nearestBin(coordinate_type pos, int* bini){nearestBin172,3836
+    vector<int> intersectingBins(bounding_box<SPACE> & bbox){intersectingBins180,4113
+    BLOCK_T*           mblocks[N*N*N]; //these can be null;mblocks184,4208
+    std::bitset<N*N*N> mchildMask;mchildMask185,4268
+    int msize;msize186,4303
+    int mRes;mRes187,4318
+    int mxRes;mxRes188,4332
+    int myRes;myRes189,4347
+    int mzRes;mzRes190,4362
+    int mnumBlocks;mnumBlocks191,4377
+    T mdx;mdx192,4397
+    coordinate_type mcenter;mcenter194,4413
+    coordinate_type mlengths;mlengths195,4442
+  void testBins(){    testBins206,4678
+  makeBlock(m2::control<SPACE> *  mesh){makeBlock244,5695
+  class BlockTree : public Block<SPACE, L0, Block<SPACE, L1, Block<SPACE,L2, LeafBlock<SPACE, BLOCK_T> > > >{BlockTree269,6530
+    M2_TYPEDEFS;M2_TYPEDEFS271,6641
+    typedef Block<SPACE, L0, Block<SPACE, L1, Block<SPACE,L2, LeafBlock<SPACE,BLOCK_T> > > >  Root;Root274,6674
+    typedef Block<SPACE, L1, Block<SPACE, L2, LeafBlock<SPACE,BLOCK_T> > >  Block1;Block1275,6774
+    typedef Block<SPACE, L2, LeafBlock<SPACE,BLOCK_T> >  Block2;Block2276,6858
+    typedef LeafBlock<SPACE, BLOCK_T>  Leaf;Leaf277,6923
+    typedef Eigen::Vector2i Vec2i;Vec2i278,6968
+    typedef Eigen::Vector3i Vec3i;Vec3i279,7003
+    BlockTree(T length, coordinate_type cen)BlockTree281,7043
+    Vec3i getLevels(const int & xi){getLevels289,7253
+    virtual Leaf * topGet(int x, int y, int z){topGet298,7474
+    virtual bool topGet(int x, int y, int z, Leaf *& leaf, topGet319,8207
+    coordinate_type decFloor(coordinate_type c, T dx ){decFloor353,9586
+    coordinate_type decCeil(coordinate_type c, T dx ){decCeil360,9892
+    void boundingIndices(bounding_box<SPACE> bb, int* binb, int* bine ){boundingIndices367,10173
+    void nearestBin(coordinate_type pos, int* bini){nearestBin395,11232
+    T msdx;msdx405,11541
+    int msSize;msSize406,11553
+    int mLN0, mLN1, mLN2;mLN0407,11569
+    int mLN0, mLN1, mLN2;mLN1407,11569
+    int mLN0, mLN1, mLN2;mLN2407,11569
+    makeTree(m2::control<SPACE> *  mesh){makeTree413,11720
+    makeTriTree(m2::control<SPACE> *  mesh){makeTriTree441,12792
+
+/home/jdelaney/code/libgaudi/src/manifold/attic/m2Control.hpp,2827
+#define __TWOMANIFOLDCONTROL____TWOMANIFOLDCONTROL__10,178
+namespace m2 {	m217,330
+  class control {				control19,374
+    control(){control23,427
+    control(control* rhs){control27,482
+    ~control(){}		~control96,2711
+    face_ptr&	face(size_t ind)	{return mFaces[ind];}		face102,2815
+    edge_ptr&	edge(size_t ind)	{return mEdges[ind];}		edge103,2870
+    vertex_ptr&	vertex(size_t ind)	{return mVertices[ind];}vertex104,2925
+    bool has_face(size_t ind){if(mFaces[ind])return true; else return false;}has_face105,2985
+    bool has_edge(size_t ind){if(mEdges[ind])return true; else return false;}has_edge106,3063
+    bool has_vertex(size_t ind){if(mVertices[ind])return true; else return false;}has_vertex107,3141
+    face_array&   get_faces(){return mFaces;}get_faces109,3227
+    edge_array&   get_edges(){return mEdges;}get_edges110,3273
+    vertex_array& get_vertices(){return mVertices;}get_vertices111,3319
+    void operator=(control& rhs){operator =112,3371
+    void merge(control_ref other){merge134,3875
+    void push_vertex(vertex_ptr& in){push_vertex157,4435
+    void push_edge(edge_ptr& in){			push_edge170,4748
+    void push_face(face_ptr& in){push_face183,5045
+    void remove_vertex(long i){			remove_vertex196,5338
+    void remove_edge(long i){remove_edge205,5523
+    void remove_face(long i){remove_face214,5693
+    void toggle_clean_up(){manual_clean_up ^= true;}toggle_clean_up223,5865
+    vertex_ptr insert_vertex(coordinate_type in){insert_vertex225,5919
+    vertex_ptr insert_vertex(T x,T y,T z)insert_vertex231,6037
+    void clean_up(){clean_up241,6320
+    void pack(){pack258,6854
+    void pack_vertices(){pack_vertices303,7929
+    void draw(){            draw309,8053
+    bool draw(T off){draw317,8317
+    void draw_faces(){draw_faces324,8463
+    void draw_faces(T off){draw_faces335,8672
+    void draw_edges(T off){draw_edges348,8910
+    void draw_vertex_colors(){draw_vertex_colors363,9211
+    void draw_vertices(T off){draw_vertices374,9428
+    void reset_flags(){reset_flags385,9679
+    void color_dead_pointers(){color_dead_pointers405,10047
+    void update_all(){update_all508,12600
+    void print(){print537,13325
+    void print_stack(){print_stack546,13614
+    void print_edge(){print_edge578,14542
+    bool manual_clean_up;manual_clean_up597,15135
+    face_array		mFaces;     vector<int> mFaceRecycle;mFaces598,15161
+    face_array		mFaces;     vector<int> mFaceRecycle;mFaceRecycle598,15161
+    edge_array		mEdges;     vector<int> mEdgeRecycle;mEdges599,15215
+    edge_array		mEdges;     vector<int> mEdgeRecycle;mEdgeRecycle599,15215
+    vertex_array	mVertices;  vector<int>  mVertexRecycle;mVertices600,15269
+    vertex_array	mVertices;  vector<int>  mVertexRecycle;mVertexRecycle600,15269
+
+/home/jdelaney/code/libgaudi/src/manifold/attic/m2Common.hpp,639
+#define __TWOMANIFOLDCOMMON____TWOMANIFOLDCOMMON__11,175
+#define M2_TYPEDEFS	M2_TYPEDEFS29,558
+namespace m2 {m277,2872
+  struct colorRGB {colorRGB109,3659
+    double r,g,b,a;r110,3679
+    double r,g,b,a;g110,3679
+    double r,g,b,a;b110,3679
+    double r,g,b,a;a110,3679
+  inline void gl_set_color(colorRGB in){gl_set_color113,3706
+  inline void gl_set_color_opaque(colorRGB in){gl_set_color_opaque116,3790
+  inline ostream &operator<<( ostream &out, const al::Vec<3,T>& in ) {operator <<121,3906
+  inline	T randd(T range_) {	randd127,4089
+  inline al::Vec<4,T> cross(al::Vec<4,T> a,al::Vec<4,T> b){cross132,4221
+
+/home/jdelaney/code/libgaudi/src/manifold/attic/m2FaceVertex.hpp,3355
+#define __TWOMANIFOLDFACEVERTEX____TWOMANIFOLDFACEVERTEX__11,183
+namespace m2 {m218,335
+  class face_vertex{face_vertex20,378
+    face_vertex(){face_vertex26,436
+    face_vertex(const face_vertex_ref rhs){face_vertex37,655
+    bool operator==(const face_vertex_ref rhs){operator ==52,1052
+    ~face_vertex(){~face_vertex59,1184
+    face_vertex_ref operator=(const face_vertex_ref rhs){operator =63,1268
+    T angle(){angle69,1458
+    face_ref get_coface(){get_coface81,1948
+    face_ref get_face(){get_face84,2018
+    face_vertex_ptr add_next(){add_next88,2073
+    face_vertex_ptr add_prev(){add_prev106,2419
+    face_vertex_ptr add_next(vertex_ptr& pt){add_next123,2761
+    face_vertex_ptr add_prev(vertex_ptr& pt){add_prev142,3148
+    void insert_next(face_vertex_ptr& aft){insert_next160,3531
+    void insert_previous(face_vertex_ptr& bef){insert_previous171,3742
+    void delete_next(){delete_next182,3956
+    face_vertex_ptr delete_this(){delete_this190,4144
+    void remove_next(){}remove_next199,4352
+    face_vertex_ptr & next() {return nxt_face;}		next200,4377
+    face_vertex_ptr & prev() {return prv_face;}prev201,4427
+    face_vertex_ptr  vnext() {vnext203,4478
+    face_vertex_ptr vprev()	{vprev215,4697
+    void draw(T off){draw228,4964
+    void draw_vertex(T off){draw_vertex233,5051
+    void draw_tail(T off){draw_tail251,5427
+    edge_ptr & edge()		{return		mEdge;}edge274,5999
+    face_ptr & face()		{return		mFace;}face275,6039
+    face_ptr & coface()	{return		mEdge->other(this)->face();}coface276,6079
+    vertex_ptr & vertex()	{return		mVertex;}vertex277,6141
+    long	vertex_ID()	const	{return mVertex->ID();}vertex_ID282,6344
+    long	ID()		const	{return this->mID;}ID283,6395
+    long	face_ID()	const	{return this->mFacePosition;}face_ID284,6436
+    long&	face_ID()			{return this->mFacePosition;}face_ID285,6491
+    fvl_iterator & position_in_vertex()  {return mVertexPosition;}position_in_vertex286,6543
+    long& position_in_face()    {return mFacePosition;}position_in_face288,6611
+    void	set_edge(edge_ref input)	{mEdge	= &input;};set_edge289,6667
+    void	set_face(face_ref input)	{mFace	= &input;};set_face290,6720
+    void	set_vertex(vertex_ref input){mVertex	= &input;};set_vertex291,6773
+    coordinate_type& coordinate(){return mVertex->coordinate();}coordinate293,6834
+    T & x()	      {return mVertex->coordinate()[0];}x295,6902
+    T   x()	const {return mVertex->coordinate()[0];}x296,6955
+    T & y()	      {return mVertex->coordinate()[1];}y297,7008
+    T   y()	const {return mVertex->coordinate()[1];}y298,7061
+    T & z()	      {return mVertex->coordinate()[2];}z299,7114
+    T   z()	const {return mVertex->coordinate()[2];}z300,7167
+    T& operator[](int i)		{return mVertex->coordinate()[i];}operator []301,7220
+    T  operator[](int i) const  {return mVertex->coordinate()[i];}operator []302,7281
+    long			mID;mID306,7365
+    long			fID;fID307,7381
+    face_vertex_ptr nxt_face;nxt_face309,7400
+    face_vertex_ptr prv_face;prv_face310,7430
+    fvl_iterator mVertexPosition;mVertexPosition312,7461
+    edge_ptr		mEdge;mEdge314,7496
+    face_ptr		mFace;mFace315,7517
+    vertex_ptr		mVertex;mVertex316,7538
+    long mFacePosition;mFacePosition318,7591
+    unsigned int flag;flag320,7625
+
+/home/jdelaney/code/libgaudi/src/manifold/attic/m2Edge.hpp,1759
+#define __TWOMANIFOLDEDGE____TWOMANIFOLDEDGE__10,172
+namespace m2 {m218,325
+  class edge{edge20,368
+    edge(){edge25,418
+    edge(face_vertex_ref in1, face_vertex_ref in2){edge33,577
+    edge_ref operator=(edge_ref rhs){operator =41,745
+    ~edge(){~edge49,958
+    long&  position_in_set(){position_in_set52,981
+    size_t	ID()		const	{return this->mID;}ID56,1049
+    face_vertex_ptr	&	vertex_1(){	return fv1;}vertex_157,1092
+    face_vertex_ptr	&	vertex_2(){	return fv2;}	vertex_258,1139
+    face_vertex_ptr& v1(){		v159,1187
+    face_vertex_ptr& v2(){v263,1244
+    face_vertex_ptr	&	other(face_vertex_ptr cv){other67,1298
+    face_vertex_ptr	&	other(face_ptr cv){other74,1423
+    face_vertex_ptr	&	other(vertex_ptr cv){other81,1557
+    face_vertex_ptr	&	return_this(vertex_ptr cv){return_this88,1687
+    face_vertex_ptr	&	this_fv(face_vertex_ptr cv){this_fv95,1823
+    void	set_this(face_vertex_ptr this_vertex, face_vertex_ptr new_vertex){set_this102,1950
+    void	set_other(face_vertex_ptr this_vertex, face_vertex_ptr new_vertex){set_other108,2149
+    void	set_other(face_ptr cv, face_vertex_ptr ov){set_other114,2349
+    void update_vertex(face_vertex_ptr old_, face_vertex_ptr new_){update_vertex121,2501
+    face_ptr coface(face_vertex_ptr this_vert){coface130,2658
+    void update_face_vertices(){update_face_vertices139,2816
+    int vnum(face_vertex_ptr v){            vnum144,2916
+    T dist(){dist150,3060
+    T length(){length156,3218
+    void draw(){draw162,3380
+    void draw(T off){draw166,3429
+    face_vertex_ptr fv1;fv1197,4209
+    face_vertex_ptr fv2;		fv2198,4234
+    size_t mID;mID201,4275
+    long mSetPosition;mSetPosition202,4291
+    unsigned int flag;flag206,4328
+
+/home/jdelaney/code/libgaudi/src/manifold/attic/m2Vertex.hpp,3557
+#define __TWOMANIFOLDVERTEX____TWOMANIFOLDVERTEX__10,174
+namespace m2 {m218,342
+  class vertex{vertex20,385
+    colorRGB color;color23,429
+    vertex(){vertex25,450
+    vertex(T x, T y, T z){vertex39,797
+    vertex(coordinate_type co){vertex56,1232
+    void init(){init74,1696
+    long& position_in_set(){return mSetPosition;}position_in_set85,1987
+    T & x()		  {return mCoordinate[0];}x87,2040
+    T   x()	const {return mCoordinate[0];}x88,2080
+    T & y()		  {return mCoordinate[1];}y89,2123
+    T   y()	const {return mCoordinate[1];}y90,2163
+    T & z()		  {return mCoordinate[2];}z91,2206
+    T   z()	const {return mCoordinate[2];}z92,2246
+    T & operator[](int i)		{return mCoordinate[i];}operator []93,2289
+    T   operator[](int i) const {return mCoordinate[i];}operator []94,2341
+    long	&	ID()			{	return mSetPosition;}ID96,2401
+    long		ID()	const	{	return mSetPosition;}ID97,2443
+    size_t size()	{	return mFaceVertices.size();	}size99,2491
+    coordinate_type	normal() const	{	return mNormal;}normal101,2545
+    coordinate_type&	coordinate()		{	return mCoordinate;}coordinate103,2602
+    coordinate_type		coordinate() const	{	return mCoordinate;}coordinate104,2660
+    void add_face_vertex(face_vertex_ptr& new_fv){add_face_vertex106,2732
+    void remove_face_vertex(fvl_iterator & it){remove_face_vertex125,3358
+    face_vertex_ptr & front(){front161,4350
+    face_vertex_ptr fbegin(){return this->front();}fbegin165,4411
+    face_vertex_ptr fend()  {return this->front()->vprev();}fend166,4463
+    list<face_vertex_ptr>& get_face_vertices(){ return mFaceVertices;}get_face_vertices168,4533
+    face_vertex_ptr get_insertion_face_vertex(vertex_ptr& that){get_insertion_face_vertex170,4613
+    face_vertex_ptr find_insertion_face_vertex(vertex_ptr& that){find_insertion_face_vertex180,4846
+    coordinate_array normal_trace(){normal_trace211,5810
+    coordinate_array vertex_trace(){vertex_trace230,6244
+    coordinate_array rel_vertex_trace(){rel_vertex_trace245,6685
+    coordinate_array ordered_normal_trace(){ordered_normal_trace260,7130
+    void update_normal(){update_normal275,7584
+    void update_center_of_mass(){update_center_of_mass284,7839
+    void draw(){draw290,8027
+    void draw_vertex_point(){draw_vertex_point296,8134
+    void draw_vertex(){draw_vertex306,8387
+    void draw_label(){draw_label336,9156
+    void draw_normal(){draw_normal348,9435
+    coordinate_type mCoordinate;mCoordinate367,9961
+    coordinate_type mCentMass;mCentMass368,9994
+    coordinate_type mNormal;mNormal369,10025
+    face_vertex_ptr mFront;mFront370,10054
+    std::list<face_vertex_ptr> mFaceVertices;mFaceVertices371,10082
+    vector<long> mRecycle;mRecycle372,10128
+    size_t mID;mID373,10155
+    bool calc_normal;calc_normal374,10171
+    long mSetPosition;mSetPosition375,10193
+    int pinned;pinned378,10231
+    unsigned int flag;flag379,10247
+    void blank_iteration_block(){blank_iteration_block381,10279
+    bool find_rotation_point_by_angle(fvl_iterator& itb, coordinate_type new_v, T& angle_diff){find_rotation_point_by_angle389,10473
+    void find_rotation_point_by_turn(fvl_iterator& it,coordinate_type new_v){find_rotation_point_by_turn425,11741
+    bool find_rotation_point_by_pointer(fvl_iterator& it,face_vertex_ptr& new_fv){find_rotation_point_by_pointer446,12522
+    bool pointer_insert(face_vertex_ptr& new_fv){pointer_insert461,12955
+    bool radial_insert(face_vertex_ptr& new_fv){radial_insert468,13179
+
+/home/jdelaney/code/libgaudi/src/manifold/attic/m2Face.hpp,2812
+#define __TWOMANIFOLDFACE____TWOMANIFOLDFACE__10,172
+namespace m2 {m220,376
+  class face{face22,419
+    face(){face28,487
+    face(vertex_ref pnt){face38,736
+    ~face(){~face64,1312
+    size_t& size()		 { return mSize;}size68,1394
+    size_t  size() const { return mSize;}size69,1432
+    long& position_in_set(){position_in_set71,1477
+    face_vertex_ptr& fbegin(){fbegin75,1542
+    face_vertex_ptr& fend(){fend79,1602
+    face_ref operator=(const face_ref rhs){operator =83,1668
+    coordinate_array flagged_coordinate_trace(unsigned long flag_num){flagged_coordinate_trace94,1976
+    face_vertex_list vertex_trace(){vertex_trace115,2496
+    face_vertex_list flagged_vertex_trace(unsigned long flag_num){flagged_vertex_trace131,2831
+    edge_list flagged_edge_trace(unsigned long flag_num){flagged_edge_trace150,3271
+    coordinate_array coordinate_trace(){coordinate_trace169,3697
+    edge_list edge_trace(){edge_trace186,4076
+    void update_all(){update_all203,4419
+    void renumber_vertex_IDs(){renumber_vertex_IDs212,4654
+    void update_vertex_faces(){update_vertex_faces226,5003
+    void update_vertex_normals(){update_vertex_normals238,5271
+    coordinate_type calculate_center(){calculate_center252,5557
+    void delete_covertices(){delete_covertices267,5891
+    T calc_area(){calc_area288,6339
+    void update_normal(){update_normal309,6915
+    void update_center(){update_center337,7710
+    void draw(){draw342,7814
+    void draw(T off){draw347,7897
+    void draw_vertex_colors(){draw_vertex_colors353,8035
+    void draw_face(){			draw_face406,9400
+    void draw_face(T off){draw_face472,10988
+    void draw_face_vertices(T off){draw_face_vertices500,11589
+    void draw_normal(T off){draw_normal516,11879
+    void print(){print541,12484
+    T area(){area559,12914
+    coordinate_type & normal(){return mNormal;}			normal563,12984
+    coordinate_type & center(){return mCenter;}center564,13035
+    size_t ID() const	{return this->mID;}ID566,13086
+    T& x() {return mCenter[0];}x569,13203
+    T& y() {return mCenter[1];}y570,13235
+    T& z() {return mCenter[2];}z571,13267
+    T  x() const {return mCenter[0];}x573,13302
+    T  y() const {return mCenter[1];}y574,13340
+    T  z() const {return mCenter[2];}z575,13378
+    face_vertex_ptr		fHead;fHead580,13470
+    coordinate_type		mCenter;mCenter581,13498
+    coordinate_type		mNormal;mNormal582,13528
+    T					mArea;mArea583,13558
+    size_t				mID;mID584,13575
+    size_t				mSize;mSize585,13594
+    long mSetPosition;mSetPosition587,13618
+    bool calc_normal;calc_normal589,13644
+    bool calc_center;calc_center590,13666
+    colorRGB		color;color593,13701
+    colorRGB		ncolor;ncolor594,13722
+    unsigned int flag;flag595,13744
+
+/home/jdelaney/code/libgaudi/src/GaudiMath/typedefs.h,513
+#define __GAUDI_MATH_DEFS____GAUDI_MATH_DEFS__2,28
+namespace GaudiMath{GaudiMath9,142
+  Vec3f xyz(Vec4f in){xyz51,1179
+  Vec3d xyz(Vec4d in){xyz55,1245
+  Vec4 xyzw(Vec3 in){xyzw59,1311
+  Vec4 normalize(Vec4 in){normalize63,1378
+  Vec4 hnormalize(Vec4 in){hnormalize69,1467
+  Vec4 rayPlaneIntersect(Vec4d l0, rayPlaneIntersect79,1700
+  Vec4d projectToPlane(Vec4d  pt, projectToPlane93,2125
+  Vec4d  projectToLine(Vec4d  p, projectToLine103,2441
+  Mat4 RandomRotation(){RandomRotation115,2767
+
+/home/jdelaney/code/libgaudi/src/zither/graph.hpp,3118
+#define __NET_GRAPH____NET_GRAPH__9,130
+namespace zither {zither11,153
+  class Buffer{Buffer13,200
+    int mRead;mRead14,216
+    int mWrite;mWrite15,231
+    std::array<T,S> mArray;mArray17,252
+  class Process {Process21,286
+    Process(){};Process23,314
+    virtual std::vector<std::string> & getPorts() {return mPorts;}getPorts24,331
+    virtual void process(){localProcess();}process25,398
+    std::vector<std::string> mPorts;mPorts27,479
+class SinProc : public Process {SinProc35,582
+  SinProc() : SinProc37,623
+  virtual void localProcess(){std::cout << "sin proc" << std::endl;};localProcess46,830
+  double freq, phase;freq47,900
+  double freq, phase;phase47,900
+class OutProc : public Process {OutProc50,926
+  OutProc() :OutProc52,967
+  virtual void localProcess(){std::cout << "out proc" << std::endl;};localProcess58,1075
+  class node{node74,1459
+    node(){node77,1486
+    node(std::shared_ptr<Process> proc) : mData(proc){node90,1720
+    void addEdge(EdgePtr e){addEdge103,2001
+    void setId(int id){mId = id;};setId107,2068
+    int id() const {return mId;};id108,2103
+    int portId(std::string port) {return mPortIds[port];};portId110,2142
+    bool visited() const {return bits[0];} visited112,2206
+    void setVisited(bool v) {bits[0] = v;} setVisited113,2250
+    std::shared_ptr<Process> data() {return mData;} data115,2299
+    void setData(std::shared_ptr<Process> data) {setData117,2357
+    std::vector<EdgePtr> & getEdges(){return mEdges;}getEdges121,2435
+    int mId;mId124,2507
+    std::vector<EdgePtr>       mEdges;mEdges125,2520
+    std::map<std::string, int> mPortIds;mPortIds126,2559
+    std::vector<std::string>   mPorts;mPorts127,2600
+    std::bitset<32> bits;bits128,2639
+    std::shared_ptr<Process> mData;mData130,2666
+  class ProcNode : public node {ProcNode135,2738
+    ProcNode(){ProcNode137,2781
+    std::shared_ptr<PROC> getProc(){getProc149,3147
+    std::shared_ptr<Process> getBaseProc(){getBaseProc153,3262
+    std::shared_ptr<PROC>  mProcess;mProcess158,3351
+  getBaseNode(std::shared_ptr<ProcNode<PROC>>pn){getBaseNode163,3447
+  class edge{edge169,3552
+    edge(){};edge172,3581
+    edge(size_t n0, size_t p0,edge173,3595
+    bool outgoing(int id){outgoing181,3733
+    bool incoming(int id){incoming185,3797
+    bool other(int id){other189,3861
+    size_t node0, node1;node0193,3936
+    size_t node0, node1;node1193,3936
+    size_t port0, port1;port0194,3961
+    size_t port0, port1;port1194,3961
+  class network_graph{network_graph199,3994
+    network_graph(){}network_graph202,4028
+    NodePtr addNode(NodePtr n){addNode204,4055
+    std::shared_ptr<ProcNode<PROC>> addNode(){addNode213,4223
+    EdgePtr connectNode(size_t n0, size_t p0, connectNode221,4455
+    EdgePtr connectNode(NodePtr n0, std::string p0, connectNode233,4808
+    std::vector<NodePtr> & nodes(){return mNodes;}nodes244,5143
+    std::vector<EdgePtr> & edges(){return mEdges;}edges245,5194
+    std::vector<NodePtr> mNodes;mNodes247,5256
+    std::vector<EdgePtr> mEdges;mEdges248,5289
+
+/home/jdelaney/code/libgaudi/src/zither/buffer.hpp,517
+#define __BUFFER____BUFFER__12,164
+namespace zither{zither20,439
+  class buffer {	buffer23,486
+    std::array<T,S> mArray;mArray25,517
+    buffer(){}buffer28,557
+    buffer(const buffer & in) : buffer30,573
+    ~buffer(){~buffer35,644
+    size_t size(){return S;}size38,670
+    T& operator[](const int i){  return mArray[i];}	operator []40,704
+    T operator[](const int i) const{ return mArray[i];}operator []41,757
+    T operator()(T x){operator ()42,813
+    void print() const{print53,1053
+
+/home/jdelaney/code/libgaudi/src/GaudiGraphics/viewer.hpp,1324
+#define __APP_VIEWER____APP_VIEWER__2,23
+namespace GaudiGraphics{GaudiGraphics11,165
+  class Viewer {Viewer16,281
+    static ViewerPtr  create(Vec2i sz){returncreate18,308
+    Viewer(){Viewer22,390
+    Viewer(Vec2i sz){Viewer26,431
+    ~Viewer(){}~Viewer30,480
+    Mat4 makeProjectionMatrix(Real fovY, Real aspectRatio, makeProjectionMatrix33,498
+    void init(Vec2i size){init47,952
+    void updateFrame(){updateFrame65,1345
+    void updatePosition(){updatePosition71,1507
+    virtual bool onMouseButton(const Eigen::Vector2i &p, onMouseButton87,2237
+    virtual bool onMouseMotion(const Eigen::Vector2i &p, onMouseMotion97,2463
+    Eigen::Matrix4d & getModelView(){ return mModelView;}getModelView107,2756
+  Eigen::Matrix4d & getProjection(){ return mProject;}getProjection108,2814
+    Eigen::Vector4d mPosition;mPosition112,2938
+    Eigen::Matrix4d mProject;mProject113,2969
+    Eigen::Matrix4d mModelView;mModelView114,2999
+    Eigen::Matrix4d mModelRotNew;mModelRotNew115,3031
+    Eigen::Matrix4d mModelRotOld;mModelRotOld116,3065
+    Eigen::Matrix4d mModelViewOld;mModelViewOld117,3099
+    bool mDragging;mDragging121,3257
+    Eigen::Vector4d mObjCenCache;mObjCenCache122,3277
+    Eigen::Vector4d mDragStart;mDragStart123,3311
+    nanogui::Arcball * ball;ball125,3344
+
+/home/jdelaney/code/libgaudi/src/GaudiGraphics/buffers.hpp,4566
+#define __BUFFEROBJECT____BUFFEROBJECT__2,25
+namespace GaudiGraphics {GaudiGraphics11,187
+  std::string realToString(float f){realToString13,242
+  class Drawable {Drawable22,568
+    Drawable(){}Drawable26,751
+    ~Drawable(){}~Drawable27,768
+    static DrawablePtr create(){return std::make_shared<Drawable>();}create29,787
+    virtual void draw(){}draw31,862
+    virtual bool intersectBbox(Vec4 r0, Vec4 r1, Real & tnear, Real & tfar ){return true;};intersectBbox32,888
+    virtual bool rayBoxIntersect(Vec4 r_o, Vec4 r_d, Vec4 boxmin, Vec4 boxmax,rayBoxIntersect34,983
+  class BufferObject : public Drawable{BufferObject67,1985
+    static BufferObjectPtr create(){return std::make_shared<BufferObject>();}create70,2036
+    BufferObject(){BufferObject72,2119
+    ~BufferObject(){~BufferObject74,2146
+    void buildBuffer(int nInd, int nVerts, buildBuffer81,2265
+    virtual bool intersectBbox(Vec4 r0, Vec4 r1, intersectBbox104,2944
+    void calcBbox(){calcBbox146,4471
+    void computeNormals(){computeNormals163,5016
+    virtual void initDisplayShader(){initDisplayShader194,6061
+    virtual void initPickingShader(){initPickingShader217,7057
+    virtual void updateModel(){updateModel252,8127
+    void bind(){bind271,8620
+    virtual void highlightColor(){highlightColor275,8673
+    virtual void selectColor(){selectColor281,8845
+    virtual void resetColor(){resetColor287,8988
+    virtual void setColor(Vec3 s){setColor292,9102
+    virtual void setScale(Vec4 t){setScale298,9238
+    virtual void translate(Vec4 t){translate304,9370
+    virtual void setOffset(Vec4 nOff){setOffset318,9675
+    virtual void setCenter(Vec4 nCen){setCenter323,9766
+    virtual void applyRotation(Mat4 r){applyRotation328,9854
+    virtual void setRotation(Mat4 r){setRotation333,9943
+    virtual void draw(Mat4 & mProject, Mat4 & mModelView){draw339,10026
+    virtual int   ID() const {return mId;}ID354,10709
+    virtual int & ID()       {return mId;}ID355,10752
+    virtual Mat4   matrix() const {return mMatrix;}matrix356,10795
+    virtual Mat4 & matrix()       {return mMatrix;}matrix357,10847
+    virtual Mat4   rmatrix() const {return mRot;}rmatrix359,10902
+    virtual Mat4 & rmatrix()       {return mRot;}rmatrix360,10952
+    virtual Vec4   center() const {return mCen;} center362,11003
+    virtual Vec4   scale()  const {return mScale;} scale363,11053
+    virtual Vec4   offset()  const {return mOffset;} offset364,11105
+    nanogui::GLShader& displayShader(){ return *mDispShader; }displayShader366,11164
+    nanogui::GLShader& pickingShader(){ return *mPickShader; }pickingShader367,11227
+    void onFrame(const int & frame,onFrame377,11495
+		       void * data)>  onSelect;onSelect391,11857
+		       void * data)>  onDeselect;onDeselect396,11997
+		       void * data)>  onDrag;onDrag403,12208
+    Vec4 bbmin;bbmin404,12240
+    Vec4 bbmax;bbmax405,12256
+    int selectionGroup;selectionGroup406,12272
+    bool isVisible;isVisible407,12296
+    int mId; //this is the color we use for pickingmId409,12329
+    Vec3 mColor; //this is the color we use for pickingmColor410,12381
+    nanogui::MatrixXu mIndices;mIndices411,12437
+    nanogui::MatrixXf mPositions;mPositions412,12469
+    nanogui::MatrixXf mVertNormals;mVertNormals413,12503
+    nanogui::GLShader * mDispShader;mDispShader415,12540
+    nanogui::GLShader * mPickShader;mPickShader416,12577
+    bool isHovered;isHovered418,12617
+    bool isSelected;isSelected419,12637
+    Vec4 mScale;mScale420,12658
+    Vec4 mCen;mCen421,12675
+    Mat4 mRot;mRot422,12690
+    Vec4 mOffset;mOffset423,12705
+    Mat4 mMatrix;mMatrix424,12723
+  class MeshObject : public BufferObject {MeshObject428,12748
+  class ImmediateLines : public BufferObject{ImmediateLines436,12894
+    static ImmediateLinesPtr create(){return std::make_shared<ImmediateLines>();}create439,12951
+    ImmediateLines(){ImmediateLines441,13034
+    ~ImmediateLines(){~ImmediateLines443,13063
+    void buildBuffer(){buildBuffer448,13126
+    void initDisplayShader(){initDisplayShader498,14510
+    void pushBox(Vec3 cen, Vec3 h){pushBox529,15278
+    void pushLine(Vec3 c0, Vec3 c1){pushLine562,16372
+    virtual void draw(Mat4 & mProject, Mat4 & mModelView){draw575,16715
+    std::vector<nanogui::MatrixXf> mImPositions;mImPositions587,17110
+    std::vector<nanogui::MatrixXu> mImIndices;mImIndices588,17159
+  BufferObject * makeCube(){  makeCube593,17214
+  BufferObject * makeCone(){  makeCone671,19144
+
+/home/jdelaney/code/libgaudi/src/SIMPLE_PARSER.h,174
+#define SIMPLE_PARSER_HSIMPLE_PARSER_H12,276
+class SIMPLE_PARSER  SIMPLE_PARSER24,479
+		map<string, string> mVals;mVals45,1136
+		map<string, bool> mUsed;mUsed47,1198
+
+/home/jdelaney/code/libgaudi/src/SIMPLE_PARSER.cpp,929
+static string removeWhitespace(string in) {removeWhitespace15,394
+static void forceLower(string& input) {forceLower26,784
+SIMPLE_PARSER::SIMPLE_PARSER(std::string file)SIMPLE_PARSER35,1106
+SIMPLE_PARSER::~SIMPLE_PARSER()~SIMPLE_PARSER95,2401
+bool SIMPLE_PARSER::defined(string name)defined102,2630
+template<class T> T SIMPLE_PARSER::getScalarValue(string name, T defaultValue, bool needed)getScalarValue113,2951
+int SIMPLE_PARSER::getInt(string name,    int defaultValue,    bool needed)getInt132,3498
+bool SIMPLE_PARSER::getBool(string name, bool defaultValue, bool needed)getBool141,3827
+double SIMPLE_PARSER::getFloat(string name,  double defaultValue, bool needed)getFloat150,4168
+string SIMPLE_PARSER::getString(string name, string defaultValue, bool needed)getString159,4505
+bool SIMPLE_PARSER::haveUnusedValues()haveUnusedValues182,5096
+string SIMPLE_PARSER::printAllUnused()printAllUnused198,5509
+
+/home/jdelaney/code/libgaudi/src/TIMER.h,659
+#define TIMER_HTIMER_H2,17
+class TIMERTIMER20,422
+  const double elapsed() { return _elapsed; };elapsed29,603
+  static double timing(timeval& begin = _tick, timeval& end  = _tock) {timing31,653
+  static int hours(int seconds) { return seconds / (60 * 60); };hours36,897
+  static int minutes(int seconds) {minutes37,963
+  static int seconds(int seconds) {seconds41,1062
+  static timeval _tick;_tick51,1312
+  static timeval _tock;_tock52,1337
+  static std::map<std::string, double> _timings;_timings55,1396
+  static std::stack<std::string> _callStack;_callStack58,1465
+  bool _stopped;_stopped60,1513
+  double _elapsed;_elapsed61,1531
+
+/home/jdelaney/code/libgaudi/src/TIMER.cpp,411
+timeval TIMER::_tock;_tock8,107
+std::map<std::string, double> TIMER::_timings;_timings9,130
+std::stack<std::string> TIMER::_callStack;_callStack10,178
+TIMER::TIMER(string blockName) : _stopped(false) TIMER14,370
+TIMER::~TIMER()~TIMER37,990
+void TIMER::stop()stop57,1431
+void TIMER::printTimings()printTimings84,2147
+void TIMER::printTimingsPerFrame(const int frames)printTimingsPerFrame134,4209
+
+/home/jdelaney/code/libgaudi/src/tribox3.h,1038
+#define __TRIBOXX3_TEST____TRIBOXX3_TEST__15,810
+#define X X20,880
+#define Y Y21,893
+#define Z Z22,906
+#define CROSS(CROSS24,921
+#define DOT(DOT29,1089
+#define SUB(SUB31,1149
+#define FINDMINMAX(FINDMINMAX36,1279
+int planeBoxOverlap(double normal[3], double vert[3], double maxbox[3])	// -NJMP-planeBoxOverlap43,1435
+#define AXISTEST_X01(AXISTEST_X0169,2033
+#define AXISTEST_X2(AXISTEST_X276,2313
+#define AXISTEST_Y02(AXISTEST_Y0284,2655
+#define AXISTEST_Y1(AXISTEST_Y191,2941
+#define AXISTEST_Z12(AXISTEST_Z12100,3289
+#define AXISTEST_Z0(AXISTEST_Z0107,3569
+int triBoxOverlap(double boxcenter[3],double boxhalfsize[3],double triverts[3][3])triBoxOverlap114,3841
+#undef XX191,6578
+#undef YY192,6588
+#undef ZZ193,6598
+#undef FINDMINMAXFINDMINMAX194,6608
+#undef AXISTEST_X01AXISTEST_X01195,6627
+#undef AXISTEST_X2AXISTEST_X2196,6648
+#undef AXISTEST_Y02AXISTEST_Y02197,6668
+#undef AXISTEST_Y1AXISTEST_Y1198,6689
+#undef AXISTEST_Z12AXISTEST_Z12199,6709
+#undef AXISTEST_Z0AXISTEST_Z0200,6730
+
+/home/jdelaney/code/libgaudi/src/nanoguihelpers/buffers.hpp,5132
+#define __BUFFEROBJECT____BUFFEROBJECT__2,25
+Eigen::Vector3f xyz(Eigen::Vector4d in){xyz13,340
+Eigen::Vector3f xyz(Eigen::Vector4f in){xyz17,430
+Eigen::Vector4f xyzw(Eigen::Vector3f in){xyzw21,520
+Eigen::Vector4f normalize(Eigen::Vector4f in){normalize25,614
+Eigen::Vector4f hnormalize(Eigen::Vector4f in){hnormalize31,726
+Eigen::Vector4f rayPlaneIntersect(Eigen::Vector4f l0, rayPlaneIntersect41,963
+Eigen::Vector4f projectToPlane(Eigen::Vector4f pt, projectToPlane55,1441
+Eigen::Vector4f projectToLine(Eigen::Vector4f p, projectToLine65,1802
+Eigen::Matrix4f RandomRotation(){RandomRotation77,2190
+std::string realToString(float f){realToString94,2676
+class Drawable {Drawable105,3056
+  typedef double Real;Real109,3231
+  typedef Eigen::Matrix3f Mat3;Mat3111,3257
+  typedef Eigen::Matrix4f Mat4;Mat4112,3289
+  typedef Eigen::Vector2i Vec2i;Vec2i113,3321
+  typedef Eigen::Vector3i Vec3i;Vec3i114,3354
+  typedef Eigen::Vector3f Vec3;Vec3116,3390
+  typedef Eigen::Vector4f Vec4;Vec4117,3422
+  typedef Eigen::Quaternion<float> Quat;Quat118,3454
+  typedef nanogui::MatrixXu MatrixXu;MatrixXu119,3495
+  typedef nanogui::MatrixXf MatrixXf;MatrixXf120,3533
+  Drawable(){}Drawable122,3574
+  ~Drawable(){}~Drawable123,3589
+  virtual void draw(){}draw124,3605
+  virtual bool intersectBbox(Vec4 r0, Vec4 r1, Real & tnear, Real & tfar ){return true;};intersectBbox125,3629
+  virtual bool rayBoxIntersect(Vec4 r_o, Vec4 r_d, Vec4 boxmin, Vec4 boxmax,rayBoxIntersect127,3722
+class BufferObject : public Drawable{BufferObject158,4644
+  BufferObject(){BufferObject160,4690
+  ~BufferObject(){~BufferObject162,4713
+    void buildBuffer(int nInd, int nVerts, buildBuffer169,4822
+  virtual bool intersectBbox(Vec4 r0, Vec4 r1, intersectBbox192,5501
+    void calcBbox(){calcBbox234,6962
+    void computeNormals(){computeNormals251,7498
+    virtual void initDisplayShader(){initDisplayShader280,8532
+  virtual void initPickingShader(){initPickingShader303,9506
+  virtual void updateModel(){updateModel338,10676
+  void bind(){bind357,11157
+  virtual void highlightColor(){highlightColor361,11206
+  virtual void selectColor(){selectColor367,11368
+  virtual void resetColor(){resetColor373,11501
+  virtual void setColor(Vec3 s){setColor378,11607
+  virtual void setScale(Vec4 t){setScale384,11733
+  virtual void translate(Vec4 t){translate390,11855
+  virtual void setOffset(Vec4 nOff){setOffset404,12138
+  virtual void setCenter(Vec4 nCen){setCenter409,12221
+  virtual void applyRotation(Mat4 r){applyRotation414,12301
+  virtual void setRotation(Mat4 r){setRotation419,12382
+  virtual void draw(Mat4 & mProject, Mat4 & mModelView){draw425,12457
+  virtual int   ID() const {return mId;}ID441,13156
+  virtual int & ID()       {return mId;}ID442,13197
+  virtual Mat4   matrix() const {return mMatrix;}matrix443,13238
+  virtual Mat4 & matrix()       {return mMatrix;}matrix444,13288
+  virtual Mat4   rmatrix() const {return mRot;}rmatrix446,13341
+  virtual Mat4 & rmatrix()       {return mRot;}rmatrix447,13389
+  virtual Vec4   center() const {return mCen;} center449,13438
+  virtual Vec4   scale()  const {return mScale;} scale450,13486
+  virtual Vec4   offset()  const {return mOffset;} offset451,13536
+  nanogui::GLShader& displayShader(){ return *mDispShader; }displayShader453,13593
+  nanogui::GLShader& pickingShader(){ return *mPickShader; }pickingShader454,13654
+		     void * data)>  onSelect;onSelect460,13828
+		     void * data)>  onDeselect;onDeselect465,13970
+			void * data)>  onDrag;onDrag472,14179
+  Vec4 bbmin;bbmin473,14205
+  Vec4 bbmax;bbmax474,14219
+  int selectionGroup;selectionGroup475,14233
+  bool isVisible;isVisible476,14255
+  int mId; //this is the color we use for pickingmId478,14284
+  Vec3 mColor; //this is the color we use for pickingmColor479,14334
+  nanogui::MatrixXu mIndices;mIndices480,14388
+  nanogui::MatrixXf mPositions;mPositions481,14418
+  nanogui::MatrixXf mVertNormals;mVertNormals482,14450
+  nanogui::GLShader * mDispShader;mDispShader484,14485
+  nanogui::GLShader * mPickShader;mPickShader485,14520
+  bool isHovered;isHovered487,14558
+  bool isSelected;isSelected488,14576
+  Vec4 mScale;mScale489,14595
+  Vec4 mCen;mCen490,14610
+  Mat4 mRot;mRot491,14623
+  Vec4 mOffset;mOffset492,14636
+  Mat4 mMatrix;mMatrix493,14652
+class MeshObject : public BufferObject {MeshObject497,14673
+class ImmediateLines : public BufferObject{ImmediateLines502,14727
+  ImmediateLines(){ImmediateLines504,14779
+  ~ImmediateLines(){~ImmediateLines506,14804
+  void buildBuffer(){buildBuffer511,14861
+    void initDisplayShader(){initDisplayShader561,16228
+  void pushBox(Vec3 cen, Vec3 h){pushBox592,16996
+  void pushLine(Vec3 c0, Vec3 c1){pushLine625,18038
+  virtual void draw(Mat4 & mProject, Mat4 & mModelView){draw638,18363
+  std::vector<nanogui::MatrixXf> mImPositions;mImPositions650,18738
+  std::vector<nanogui::MatrixXu> mImIndices;mImIndices651,18785
+BufferObject * makeCube(){  makeCube656,18836
+BufferObject * makeCone(){  makeCone734,20870
+
+/home/jdelaney/code/libgaudi/src/nanoguiincludes.h,49
+#define __NANO_INCLUDES____NANO_INCLUDES__3,27
