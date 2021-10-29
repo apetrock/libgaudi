@@ -10,7 +10,8 @@
 #define __SUBDIVIDE__
 
 #include "m2Includes.h"
-#include "octree.hpp"
+#include "construct.hpp"
+
 #include <cmath>
 namespace m2 {
   template <typename SPACE>
@@ -377,66 +378,18 @@ namespace m2 {
       out.get_vertices() = nverts;
       out.update_all();
       return out;
-    }		
+    }
+
     void subdivide_edges(control_ptr obj_in){
       obj_in->pack();
       edge_array& E = obj_in->get_edges();
       long sz = E.size();
       for (long i = 0; i < sz; i++) {
-	subdivide_edge(obj_in, E[i]);
+        m2::construct<SPACE> cons;
+        cons.subdivide_edge(obj_in, E[i]);
       }
     }
-		
-    vertex_ptr subdivide_edge(control_ptr	obj_in,
-			      edge_ptr		edge_in){
 
-      face_vertex_ptr fv1 =  edge_in->v1();
-      face_vertex_ptr fv2 =  edge_in->v2();
-      
-      coordinate_type c1 = fv1->coordinate();
-      coordinate_type c2 = fv2->coordinate();			
-      coordinate_type cn = 0.5*(c1 + c2);
-            
-      vertex_ptr v1 = fv1->vertex();
-      vertex_ptr v2 = fv2->vertex();
-            
-      vertex_ptr vn = new vertex_type(cn);
-            
-      edge_ptr e1 = edge_in;
-      edge_ptr e2 = new edge_type();
-      face_vertex_ptr fv1n = fv1->add_next();
-      face_vertex_ptr fv2n = fv2->add_next();
-
-      fv1->vertex()->front() = fv1;
-      fv2->vertex()->front() = fv2;
-
-      v1->remove_face_vertex(fv1n);
-      v2->remove_face_vertex(fv2n);
-            
-      fv1n->face() = fv1->face();
-      fv2n->face() = fv2->face();
-
-      vn->add_face_vertex(fv1n);
-      vn->add_face_vertex(fv2n);
-      vn->front() = fv1n;
-
-      e1->set(fv1,fv2n);
-      e2->set(fv1n,fv2);
-
-      e1->flag = 1; e2->flag = 1; vn->flag = 1;
-            
-      obj_in->push_vertex(vn);
-      obj_in->push_edge(e2);
-
-      fv1n->flag = 1;
-      fv2n->flag = 1;
-      if(v1->pinned ==true && v2->pinned == true){ 
-      	vn->pinned = true;
-      }
-      else vn->pinned = false;
-
-      return vn;
-    }
   }; //class subdivide
 }  //namespace M2
 #endif

@@ -14,7 +14,6 @@
 #include "bezier.hpp"
 #include "geometry_types.hpp"
 #include "m2Includes.hpp"
-#include "Octree.hpp"
 #include <cmath>
 
 template <typename T>

@@ -10,7 +10,6 @@
 #ifndef __M2EDGEPOINTSUBDIVIDE__
 #define __M2EDGEPOINTSUBDIVIDE__
 #include "m2Includes.h"
-#include "octree.hpp"
 #include <cmath>
 
 //oh man, 350 lines of code and nary a comment, I'll have to comment my way through this, blech!

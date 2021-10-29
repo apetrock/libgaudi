@@ -260,16 +260,15 @@ public:
   typedef T							double_type;
   typedef T							real;
   //always use homogeneous coordinates, provides decent error checking
-  typedef Eigen::Matrix< T, 4, 1 > 			coordinate_type;
-  
-  
-  typedef line<T,coordinate_type>		                line_type;	
+  typedef Eigen::Matrix< T, 4, 1 > 			        coordinate_type;
+
+  typedef line<T,coordinate_type>		            line_type;	
   typedef triangle<T,coordinate_type>		        triangle_type;
-  typedef swept_point<T,coordinate_type>		        swept_point_type;
-  typedef swept_triangle<T,coordinate_type>		        swept_triangle_type;	
-  typedef box<T,coordinate_type>		                box_type;	
-  typedef Eigen::Matrix< T, 3, 3>                          mat3; 
-  typedef Eigen::Matrix< T, 4, 4>                          mat4; 
+  typedef swept_point<T,coordinate_type>		    swept_point_type;
+  typedef swept_triangle<T,coordinate_type>		  swept_triangle_type;	
+  typedef box<T,coordinate_type>		            box_type;	
+  typedef Eigen::Matrix< T, 3, 3>               mat3; 
+  typedef Eigen::Matrix< T, 4, 4>               mat4; 
   typedef unsigned short	ushort;
   typedef unsigned int		uint;
   typedef unsigned long		ulong;

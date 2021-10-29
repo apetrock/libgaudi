@@ -13,8 +13,6 @@
 
 #include "manifold_singleton.h"
 #include "m2.hpp"
-
-#include "octree.hpp"
 #include "bezier.hpp"
 #include "geometry_types.hpp"
 

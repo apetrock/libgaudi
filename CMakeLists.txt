@@ -77,5 +77,5 @@ add_subdirectory(src)
 # The executable code is here
 #add_subdirectory(projects/hello_manifold)
 add_subdirectory(projects/hello)
-
+add_subdirectory(projects/sdftest)
 

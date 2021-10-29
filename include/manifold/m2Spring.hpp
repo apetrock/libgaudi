@@ -14,7 +14,6 @@
 #include "m2Includes.h"
 #include "conj_grad.hpp"
 #include "modify.hpp"
-#include "Octree.hpp"
 #include <cmath>
 
 namespace m2 {

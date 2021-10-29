@@ -1063,13 +1063,13 @@ struct edge_bin
   {
 
     //puts this in voxel coordinates 0:N
-    coordinate_type Nf(_xRes, _yRes, _zRes);
+    coordinate_type Nf(_xRes, _yRes, _zRes, 1);
     coordinate_type dbox = bmax - bmin;
-    coordinate_type r_op = (r0 - bmin) * Nf / dbox;
-    coordinate_type r_dp = (r1 - r0) * Nf / dbox;
+    coordinate_type r_op = ((r0 - bmin).array() * Nf.array()) / dbox.array();
+    coordinate_type r_dp = ((r1 - r0).array() * Nf.array()) / dbox.array();
 
-    coordinate_type r0p = (r0 - bmin) * Nf / dbox;
-    coordinate_type r1p = (r1 - bmin) * Nf / dbox;
+    coordinate_type r0p = ((r0 - bmin).array() * Nf.array()) / dbox.array();
+    coordinate_type r1p = ((r1 - bmin).array() * Nf.array()) / dbox.array();
 
     T eps = 1e-12;
     r_dp[0] = fabs(r_dp[0]) < eps ? eps : r_dp[0];
@@ -1081,7 +1081,7 @@ struct edge_bin
         stepY = r_dp[1] > 0 ? 1 : -1,
         stepZ = r_dp[2] > 0 ? 1 : -1;
 
-    coordinate_type tDelta(stepX / r_dp[0], stepY / r_dp[1], stepZ / r_dp[2]);
+    coordinate_type tDelta(stepX / r_dp[0], stepY / r_dp[1], stepZ / r_dp[2], 0);
 
     int x = floor(r0p[0]);
     int y = floor(r0p[1]);
@@ -1096,9 +1096,9 @@ struct edge_bin
 
     coordinate_type voxmax(x + (stepX > 0 ? 1 : 0),
                            y + (stepY > 0 ? 1 : 0),
-                           z + (stepZ > 0 ? 1 : 0));
+                           z + (stepZ > 0 ? 1 : 0), 0);
 
-    coordinate_type vtMax = (voxmax - r_op) / r_dp;
+    coordinate_type vtMax = (voxmax - r_op).array() / r_dp.array();
     T
         tMaxX = vtMax[0],
         tMaxY = vtMax[1],
@@ -1152,10 +1152,10 @@ struct edge_bin
     //maxl = maxl > lengths[1] ? maxl : glengths[1];
     //maxl = maxl > lengths[2] ? maxl : glengths[2];
 
-    _xRes = ceil(glengths[0] / _dx);
-    _yRes = ceil(glengths[1] / _dx);
-    _zRes = ceil(glengths[2] / _dx);
-    _lengths = coordinate_type(_xRes * _dx, _yRes * _dx, _zRes * _dx);
+    _xRes = ceil(0.25 * glengths[0] / _dx);
+    _yRes = ceil(0.25 * glengths[1] / _dx);
+    _zRes = ceil(0.25 * glengths[2] / _dx);
+    _lengths = coordinate_type(_xRes * _dx, _yRes * _dx, _zRes * _dx, 0);
 
     _binStart.resize(_xRes * _yRes * _zRes + 1, 0);
     _binCounter.resize(_xRes * _yRes * _zRes, 0);
@@ -1163,14 +1163,14 @@ struct edge_bin
     for (int c = 0; c < edges.size(); c++)
     {
       edge_ptr e = edges[c];
-      if (e)
-      {
-        face_vertex_ptr fv1 = e->v1();
-        face_vertex_ptr fv2 = e->v2();
-        coordinate_type p1 = fv1->coordinate();
-        coordinate_type p2 = fv2->coordinate();
-        DDA_3D(c, p1, p2, gmin, gmax, 0);
-      }
+      if (!e) continue;
+      
+      face_vertex_ptr fv1 = e->v1();
+      face_vertex_ptr fv2 = e->v2();
+      coordinate_type p1 = fv1->coordinate();
+      coordinate_type p2 = fv2->coordinate();
+      DDA_3D(c, p1, p2, gmin, gmax, 0);
+      
     }
 
     _binStart[0] = 0;
@@ -1185,14 +1185,13 @@ struct edge_bin
     for (int c = 0; c < edges.size(); c++)
     {
       edge_ptr e = edges[c];
-      if (e)
-      {
-        face_vertex_ptr fv1 = e->v1();
-        face_vertex_ptr fv2 = e->v2();
-        coordinate_type p1 = fv1->coordinate();
-        coordinate_type p2 = fv2->coordinate();
-        DDA_3D(c, p1, p2, gmin, gmax, 1);
-      }
+      if (!e) continue;
+      
+      face_vertex_ptr fv1 = e->v1();
+      face_vertex_ptr fv2 = e->v2();
+      coordinate_type p1 = fv1->coordinate();
+      coordinate_type p2 = fv2->coordinate();
+      DDA_3D(c, p1, p2, gmin, gmax, 1);      
     }
   }
 
@@ -1623,7 +1622,7 @@ public:
     leafIds.resize(points.size());
     // nodes.reserve(points.size()*points.size());
     // permutation.reserve(points.size());
-
+    
     for (int i = 0; i < permutation.size(); i++)
       permutation[i] = i;
     node_type root;
@@ -1639,8 +1638,14 @@ public:
     stack<int> stack;
 
     stack.push(nodes.size());
-    nodes.push_back(root);
 
+    int size = points.size();
+    size *= log(8 * size);
+    nodes.reserve(size);
+
+    nodes.push_back(root);
+    
+    
     while (stack.size() > 0)
     {
       int pNodeId = stack.top();
@@ -2167,6 +2172,12 @@ public:
     return *this;
   }
 
+  void remove(vector<PRIMITIVE> &primitives, int p,
+              int maxLevel)
+  {
+
+  }
+  
   void insert(vector<PRIMITIVE> &primitives, int p,
               int maxLevel)
   {
