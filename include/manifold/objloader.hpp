@@ -296,7 +296,7 @@ namespace m2 {
 	    string fvs = line.substr(2);
 	    float vx,vy,vz;
 	    sscanf(fvs.c_str(), "%f %f %f", &vx, &vy, &vz);
-	    coordinate_type v(vx,vy,vz,1);
+	    coordinate_type v(vx,vy,vz);
 	    
 	    inputVerts.push_back(v);
 

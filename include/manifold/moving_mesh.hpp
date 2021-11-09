@@ -93,10 +93,10 @@ public:
       T eFlip = cFlip * cFlip;
       T eSame = cSame * cSame;
 #if 0
-	T sin0 = cross(c1-c0,c3-c0).norm();
-	T sin1 = cross(c0-c1,c2-c1).norm();
-	T sin2 = cross(c1-c2,c3-c2).norm();
-	T sin3 = cross(c0-c3,c2-c3).norm();
+	T sin0 = va::cross(c1-c0,c3-c0).norm();
+	T sin1 = va::cross(c0-c1,c2-c1).norm();
+	T sin2 = va::cross(c1-c2,c3-c2).norm();
+	T sin3 = va::cross(c0-c3,c2-c3).norm();
 	bool div0 = (sin0 < 1e-12 || sin1 < 1e-12 || sin2 < 1e-12 || sin3 < 1e-12);
 	if(!div0){
 	  //curvature penalty
@@ -395,7 +395,7 @@ public:
         avgNormal /= accumWeight;
         avgVelocity /= accumWeight;
 
-        T J = (eps - d) / dt - dot(avgNormal, avgVelocity - veli);
+        T J = (eps - d) / dt - va::dot(avgNormal, avgVelocity - veli);
         std::cout << accumWeight << " " << avgVelocity << " " << dt << " " << J
                   << std::endl;
         vels[i] += J * avgNormal;
@@ -603,7 +603,7 @@ public:
       coordinate_type dc = ci - cmin;
       dc.normalize();
 
-      if (minDist < 999 && abs(dot(dc, N)) > 0.0) {
+      if (minDist < 999 && abs(va::dot(dc, N)) > 0.0) {
         contact_manifold cm;
         cm.mMesh = mMesh;
         cm.p1 = i;
@@ -738,13 +738,13 @@ public:
         if (!checkEdgeInSet(fva0[k], fva1[j], fva0) &&
             !checkEdgeInSet(fva0[k], fva1[j], fva1)) {
           coordinate_type dc = cik - cjk;
-          E += dot(dc, dc);
+          E += va::dot(dc, dc);
         }
 #if 1
         if (!checkEdgeInSet(fva0[km], fva1[j], fva0) &&
             !checkEdgeInSet(fva0[km], fva1[j], fva1)) {
           coordinate_type dcm = cimk - cjk;
-          E += dot(dcm, dcm);
+          E += va::dot(dcm, dcm);
         }
 #endif
       }
@@ -1006,29 +1006,29 @@ public:
 
     coordinate_type u = v1 - v0;
     coordinate_type v = v2 - v0;
-    coordinate_type N = cross(u, v);
-    T iN2 = 1.0 / (dot(N, N));
+    coordinate_type N = va::cross(u, v);
+    T iN2 = 1.0 / (va::dot(N, N));
     coordinate_type w = p - v0;
-    T b10 = dot(cross(u, w), N) * iN2;
-    T b20 = dot(cross(w, v), N) * iN2;
+    T b10 = va::dot(va::cross(u, w), N) * iN2;
+    T b20 = va::dot(va::cross(w, v), N) * iN2;
     T b12 = 1.0 - b10 - b20;
 
     if (b10 <= 0) {
       // line - v0, v1
-      b20 = dot((p - v0), u) / (dot(u, u));
+      b20 = va::dot((p - v0), u) / (va::dot(u, u));
       b20 = clamp(b20, 0.0, 1.0);
       b12 = 1.0 - b20;
       b10 = 0;
     } else if (b20 <= 0) {
       // line - v0, v2
-      b10 = dot((p - v0), v) / (dot(v, v));
+      b10 = va::dot((p - v0), v) / (va::dot(v, v));
       b10 = clamp(b10, 0.0, 1.0);
       b12 = 1.0 - b10;
       b20 = 0;
     } else if (b12 <= 0) {
       // line - v1, v2
       coordinate_type x = v2 - v1;
-      b10 = dot((p - v1), x) / (dot(x, x));
+      b10 = va::dot((p - v1), x) / (va::dot(x, x));
       b10 = clamp(b10, 0.0, 1.0);
       b20 = 1.0 - b10;
       b12 = 0;
@@ -1044,7 +1044,7 @@ public:
     Ni = b12 * this->normals[i0] + b20 * this->normals[i1] +
          b10 * this->normals[i2];
     Ni.normalize();
-    d = dot(p - c, Ni);
+    d = va::dot(p - c, Ni);
   }
 
   vector<pair<T, coordinate_type>>
@@ -1199,7 +1199,7 @@ public:
       calcSVD<SPACE>(cov, w);
       coordinate_type Nv = v->normal();
       coordinate_type N = cov[0];
-      if (dot(Nv, N) < 0.0)
+      if (va::dot(Nv, N) < 0.0)
         return -N;
       else
         return N;
@@ -1938,7 +1938,7 @@ public:
           // debug.DebugLines.push_back(pj);
 
           T dist = norm(dp);
-          T Px = dot(dp, Nj);
+          T Px = va::dot(dp, Nj);
 
           T i4pi = 0.25 / M_PI;
           // T regLength = 2.0*minLength;
@@ -2088,7 +2088,7 @@ std::cout << i << " " << sdfWeightsi << " " << sdfi << std::endl;
     vector<coordinate_type> u = integrateChargesBarnesHut(coordinates);
     vector<coordinate_type> N = integrateNormalsBarnesHut(coordinates);
     for (int i = 0; i < u.size(); i++) {
-      T dotU = dot(u[i], N[i]);
+      T dotU = va::dot(u[i], N[i]);
       if (dotU < 0)
         u[i] *= -1.0;
       // u[i] *= 1.0/uSum[i];
@@ -2206,9 +2206,9 @@ std::cout << i << " " << sdfWeightsi << " " << sdfi << std::endl;
           ci.normalize();
           // coordinate_type pj = pNode.centerOfMass;
           // coordinate_type ndp = dp; ndp.normalize();
-          // if(dot(ci,ndp) < 0.0) continue;
+          // if(va::dot(ci,ndp) < 0.0) continue;
           // coordinate_type ciN = ci; ciN.normalize();
-          // coordinate_type dpp = dot(dp,ciN)/dot(dp,dp)*dp;
+          // coordinate_type dpp = va::dot(dp,ciN)/va::dot(dp,dp)*dp;
           T dist = norm(dp);
 
           T i4pi = 0.25 / M_PI;
@@ -2333,7 +2333,7 @@ std::cout << i << " " << sdfWeightsi << " " << sdfi << std::endl;
           if (norm(dpi) < 1e-16)
             continue;
           // coordinate_type ciN = ci; ciN.normalize();
-          // coordinate_type dpp = dot(dp,ciN)/dot(dp,dp)*dp;
+          // coordinate_type dpp = va::dot(dp,ciN)/va::dot(dp,dp)*dp;
           T dist = norm(dpi);
 
           T i4pi = 0.25 / M_PI;
@@ -2412,7 +2412,7 @@ std::cout << i << " " << sdfWeightsi << " " << sdfi << std::endl;
         continue;
 
       y1[i] += 0.5 * dt * u0[i];
-      norm2 += dot(u0[i], u0[i]);
+      norm2 += va::dot(u0[i], u0[i]);
     }
     std::cout << " first stage norm: " << sqrt(norm2) << std::endl;
     vector<coordinate_type> u1 = integrateNormalsBarnesHut(y1);
@@ -2423,7 +2423,7 @@ std::cout << i << " " << sdfWeightsi << " " << sdfi << std::endl;
       if (verts[i]->pinned)
         continue;
       verts[i]->coordinate() += dt * u1[i];
-      norm2 += dot(u1[i], u1[i]);
+      norm2 += va::dot(u1[i], u1[i]);
     }
     std::cout << " second stage norm: " << sqrt(norm2) << std::endl;
   }
@@ -2441,7 +2441,7 @@ std::cout << i << " " << sdfWeightsi << " " << sdfi << std::endl;
     T norm2 = 0;
     for (int i = 0; i < u0.size(); i++) {
       y0[i] += dt * u0[i];
-      norm2 += dot(u0[i], u0[i]);
+      norm2 += va::dot(u0[i], u0[i]);
     }
     std::cout << " first stage norm: " << sqrt(norm2) << std::endl;
     return y0;
@@ -2460,7 +2460,7 @@ std::cout << i << " " << sdfWeightsi << " " << sdfi << std::endl;
     T norm2 = 0;
     for (int i = 0; i < u0.size(); i++) {
       y0[i] += dt[i] * u0[i];
-      norm2 += dot(u0[i], u0[i]);
+      norm2 += va::dot(u0[i], u0[i]);
     }
     std::cout << " first stage norm: " << sqrt(norm2) << std::endl;
     return y0;
@@ -2479,7 +2479,7 @@ std::cout << i << " " << sdfWeightsi << " " << sdfi << std::endl;
     T norm2 = 0;
     for (int i = 0; i < u0.size(); i++) {
       y0[i] += dt * u0[i];
-      norm2 += dot(u0[i], u0[i]);
+      norm2 += va::dot(u0[i], u0[i]);
     }
     std::cout << " first stage norm: " << sqrt(norm2) << std::endl;
     return y0;
@@ -2502,7 +2502,7 @@ std::cout << i << " " << sdfWeightsi << " " << sdfi << std::endl;
     T norm2 = 0;
     for (int i = 0; i < u0.size(); i++) {
       y0[i] += dt * u0[i];
-      norm2 += dot(u0[i], u0[i]);
+      norm2 += va::dot(u0[i], u0[i]);
     }
     std::cout << " first stage norm: " << sqrt(norm2) << std::endl;
     return y0;
@@ -2527,14 +2527,14 @@ std::cout << i << " " << sdfWeightsi << " " << sdfi << std::endl;
         continue;
 
       y0[i] += 0.5 * dt * u0[i];
-      norm2 += dot(u0[i], u0[i]);
+      norm2 += va::dot(u0[i], u0[i]);
     }
     std::cout << " first stage norm: " << sqrt(norm2) << std::endl;
     vector<coordinate_type> u1 = integrateNormalsBarnesHut(y0);
     norm2 = 0;
     for (int i = 0; i < coordinates.size(); i++) {
       y1[i] += dt * u1[i];
-      norm2 += dot(u1[i], u1[i]);
+      norm2 += va::dot(u1[i], u1[i]);
     }
     std::cout << " second stage norm: " << sqrt(norm2) << std::endl;
     return y1;
@@ -2613,8 +2613,8 @@ public:
 
     vector<face_ptr> &faces = mMesh->get_faces();
     for (int i = 0; i < faces.size(); i++) {
-      faces[i]->data = coordinate_type(0, 0, 0, 0);
-      faces[i]->data2 = coordinate_type(0, 0, 0, 0);
+      faces[i]->data = coordinate_type(0, 0, 0);
+      faces[i]->data2 = coordinate_type(0, 0, 0);
     }
 
     // pin_bottom();
@@ -2715,17 +2715,17 @@ public:
     while (relaxing) {
       relaxing = delete_degenerate();
     }
-    surface_filter<SPACE> filter;
-    for (int i = 0; i < 5; i++) {
-      mMesh->update_all();
-      surface_filter<SPACE>::filter(*mMesh, 0.001);
-    }
+    // surface_filter<SPACE> filter;
+    // for (int i = 0; i < 5; i++) {
+    //  mMesh->update_all();
+    //  surface_filter<SPACE>::filter(*mMesh, 0.01);
+    //}
 
     // for (int i = 0; i < 1; i++)
     //	surface_filter<SPACE>::filter(*mMesh, 0.01);
 
     // this->joinEdges();
-
+    this->flip_edges();
     // this->hashFaces();
     surface_calculator<SPACE> calc;
     // calc.shadeVerticesWinding(*mMesh);
@@ -2804,7 +2804,7 @@ public:
     std::cout << " cen: " << cen << std::endl;
     for (int j = 0; j < vl.size(); j++) {
       coordinate_type N = vl[j]->normal();
-      T downAngle = dot(N, coordinate_type(0, -1.0, 0));
+      T downAngle = va::dot(N, coordinate_type(0, -1.0, 0));
       T bottomThresh = min[1] + 0.2 * (max[1] - min[1]);
       if (vl[j]->coordinate()[1] < bottomThresh && downAngle > -0.5) {
         vl[j]->pinned = true;
@@ -2813,24 +2813,21 @@ public:
   }
 
   void updateVorticity() {
-    T normd = 0;
-    T maxMag = 0;
+    T normt = 0;
+    T normx = 0;
     vector<face_ptr> &faces = mMesh->get_faces();
 
     for (int i = 0; i < faces.size(); i++) {
       if (!faces[i])
         continue;
       circulationToVorticity(faces[i]);
-      normd += dot(faces[i]->data, faces[i]->data);
-      if (isnan(sqrt(normd)))
-        std::cout << faces[i]->data << std::endl;
-      assert(!isnan(sqrt(normd)));
-      T mag = norm(faces[i]->data);
-      maxMag = maxMag > mag ? maxMag : mag;
+      T mag = va::norm2(faces[i]->data);
+      normt += mag;
+      normx = max(normx, sqrt(mag));
     }
     mMesh->verify();
-    std::cout << " vorticity update norm: " << sqrt(normd)
-              << " max magnitude: " << maxMag << std::endl;
+    std::cout << " vorticity 1 norm: " << sqrt(normt)
+              << " max magnitude: " << normx << std::endl;
   }
 
   void updateCirculation() {
@@ -2842,7 +2839,7 @@ public:
     //#endif
     for (int i = 0; i < faces.size(); i++) {
       vorticityToCirculation(faces[i]);
-      norm += dot(faces[i]->data, faces[i]->data);
+      norm += va::dot(faces[i]->data, faces[i]->data);
     }
     std::cout << " circulation update norm: " << sqrt(norm) << std::endl;
   }
@@ -2851,8 +2848,9 @@ public:
     // TIMER function//TIMER(__FUNCTION__);
     mMesh->update_all();
     vector<face_ptr> &faces = mMesh->get_faces();
-    T norm = 0;
-    coordinate_type g(0, -9.8, 0, 1.0);
+    T normt = 0;
+    T normx = 0;
+    coordinate_type g(0, -9.8, 0);
     for (int i = 0; i < faces.size(); i++) {
       if (!faces[i])
         continue;
@@ -2868,13 +2866,16 @@ public:
         T Ba = 2.0 * C;
         faces[i]->update_normal();
         coordinate_type normal = faces[i]->normal();
-        coordinate_type dB = -dt * Ba * cross(g, normal);
+        coordinate_type dB = -dt * Ba * va::cross(g, normal);
         faces[i]->data += dB;
         faces[i]->data2 = dB;
-        norm += dot(faces[i]->data, faces[i]->data);
+        T mag = va::norm2(faces[i]->data);
+        normx = max(mag, sqrt(mag));
+        normt += mag;
       }
     }
-    std::cout << " vorticity norm: " << norm << " " << sqrt(norm) << std::endl;
+    std::cout << " vorticity 0 norm: " << sqrt(normt)
+              << " max magnitude: " << normx << std::endl;
   }
 
   void integrateVelocityEuler(T dt) {
@@ -2913,20 +2914,9 @@ public:
     // vector<coordinate_type> uheat = integrateHeat(0.5*dt);
 
     vector<coordinate_type> u0 = integrateVelocityTreeCode();
-    std::cout << " ----- " << std::endl;
-    // vector<coordinate_type> ut = integrateVelocityBarnesHut();
-    coordinate_type un0;
-    // coordinate_type unt;
-    for (int i = 0; i < u0.size(); i++) {
-      un0 += u0[i];
-      // unt += ut[i];
-      // std::cout << u0[i].transpose() << "  ---  " << ut[i].transpose()
-      //          << std::endl;
-    }
-    std::cout << "bn norm 0: " << un0.norm() << std::endl;
-    // std::cout << "bn norm t: " << unt.norm() << std::endl;
 
-    T norm2 = 0;
+    T normt = 0;
+    T normx = 0;
     for (int i = 0; i < verts.size(); i++) {
       if (!verts[i])
         continue;
@@ -2936,16 +2926,18 @@ public:
       verts[i]->coordinate() += 0.5 * dt * (u0[i]);
       verts[i]->verify();
       // verts[i]->data = u0[i] + uheat[i];
-
-      norm2 += dot(u0[i], u0[i]);
-      coordinate_type un;
+      T mag = va::norm2(u0[i]);
+      normx = max(normx, sqrt(mag));
+      normt += mag;
     }
-    std::cout << " first stage norm: " << sqrt(norm2) << std::endl;
-    norm2 = 0;
+    std::cout << " velocityRK2 0 norm: " << sqrt(normt)
+              << " max velocity mag: " << normx << std::endl;
+    normt = 0;
+    normx = 0;
     vector<coordinate_type> u1 = integrateVelocityTreeCode();
     // vector<coordinate_type> u1 = integrateVelocityBarnesHut();
     // vector<coordinate_type> u1 = integrateVelocityBruteForce(0.5*dt);
-    T maxMag = 0;
+
     for (int i = 0; i < verts.size(); i++) {
       if (!verts[i])
         continue;
@@ -2956,12 +2948,12 @@ public:
       verts[i]->coordinate() = y0[i] + du;
       verts[i]->verify();
       // verts[i]->data = u1[i] + uheat[i];
-      norm2 += dot(u1[i], u1[i]);
-      T mag = norm(u1[i]);
-      maxMag = maxMag > mag ? maxMag : mag;
+      T mag = va::norm2(u1[i]);
+      normx = max(normx, sqrt(mag));
+      normt += mag;
     }
-    std::cout << " second stage velocity norm: " << sqrt(norm2)
-              << " max velocity mag: " << maxMag << std::endl;
+    std::cout << " velocityRK2 1 norm: " << sqrt(normt)
+              << " max velocity mag: " << normx << std::endl;
   }
 
   vector<coordinate_type> integrateVelocityBruteForce(T dt) {
@@ -3006,7 +2998,7 @@ public:
         T denom = powf((dist * dist + l2), 1.5);
         coordinate_type fR = dp / denom;
         // coordinate_type fR = dp*kappa;
-        coordinate_type ui = i4pi * cross(ci, fR);
+        coordinate_type ui = i4pi * va::cross(ci, fR);
         // std::cout << ui << std::endl;
         u[i] += ui;
       }
@@ -3021,8 +3013,8 @@ public:
                   const vector<coordinate_type> &points, int begin, int N,
                   const vector<int> &permutation, coordinate_type &netCharge,
                   coordinate_type &avgPoint) -> void {
-      avgPoint = coordinate_type(0, 0, 0, 0.0);
-      netCharge = coordinate_type(0, 0, 0, 0.0);
+      avgPoint = coordinate_type(0, 0, 0);
+      netCharge = coordinate_type(0, 0, 0);
 
       T netWeight = 0;
 
@@ -3044,20 +3036,25 @@ public:
                           const coordinate_type &chargePoint,
                           const coordinate_type &evalPoint) -> coordinate_type {
       coordinate_type dp = evalPoint - chargePoint;
+      T dist = va::norm(dp);
 
-      T dist = dp.norm();
+      if (dist < regLength)
+        return coordinate_type(0.0, 0.0, 0.0);
+      T i4pi = 0.25 / M_PI;
+#if 1
       T dist3 = dist * dist * dist;
       T l3 = regLength * regLength * regLength;
       T kappa = (1.0 - exp(-dist3 / l3)) / dist3;
-      T i4pi = 0.25 / M_PI;
-
-      if (kappa * dist * norm(charge) < 1e-16)
-        return coordinate_type(0.0, 0.0, 0.0, 1.0);
-
       coordinate_type fR = dp * kappa;
-      coordinate_type u = i4pi * cross(charge, fR);
+#else
+      T dist2 = dist * dist;
+      T l2 = regLength * regLength;
+      T denom = powf((dist2 + l2), 1.5);
+      coordinate_type fR = dp / denom;
+#endif
+      coordinate_type u = i4pi * va::cross(charge, fR);
 
-      return dist3 > 0 ? u : coordinate_type(0, 0, 0, 1);
+      return dist3 > 0 ? u : coordinate_type(0, 0, 0);
     };
 
     vector<face_ptr> &faces = mMesh->get_faces();
@@ -3072,7 +3069,7 @@ public:
       coordinate_type charge = area * vort;
       vorticityPositions.push_back(faces[i]->center());
       vorticity.push_back(charge);
-      weights.push_back(norm(charge));
+      weights.push_back(va::norm(charge));
     }
     vector<coordinate_type> vertexCoordinates = mMesh->get_coordinates();
     Simple_BarnesHutt<SPACE, coordinate_type, coordinate_type> integrator;
@@ -3092,23 +3089,20 @@ public:
       face_vertex_ptr fv2 = fv1->next();
       face_vertex_ptr fv3 = fv2->next();
 
-      coordinate_type e13 = fv1->edge()->v1()->vertex()->coordinate() -
-                            fv1->edge()->v2()->vertex()->coordinate();
-      coordinate_type e21 = fv2->edge()->v1()->vertex()->coordinate() -
-                            fv2->edge()->v2()->vertex()->coordinate();
-      coordinate_type e32 = fv3->edge()->v1()->vertex()->coordinate() -
-                            fv3->edge()->v2()->vertex()->coordinate();
+      coordinate_type e13 = fv1->edge()->vec();
+      coordinate_type e21 = fv2->edge()->vec();
+      coordinate_type e32 = fv3->edge()->vec();
 
       T e1 = fv1->data;
       T e2 = fv2->data;
       T e3 = fv3->data;
       f->data = 1.0 / a * (e1 * e13 + e2 * e21 + e3 * e32);
       // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision,
-      // Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";"); std::cout <<
-      // f->data.format(CommaInitFmt) << std::endl;
+      // Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";"); std::cout
+      // << f->data.format(CommaInitFmt) << std::endl;
       assert(a > 0);
     } else {
-      f->data = coordinate_type(0, 0, 0, 0);
+      f->data = coordinate_type(0, 0, 0);
     }
   }
 
@@ -3120,15 +3114,13 @@ public:
       face_vertex_ptr fv2 = fv1->next();
       face_vertex_ptr fv3 = fv2->next();
 
-      coordinate_type e13 = fv1->edge()->v1()->vertex()->coordinate() -
-                            fv1->edge()->v2()->vertex()->coordinate();
-      coordinate_type e21 = fv2->edge()->v1()->vertex()->coordinate() -
-                            fv2->edge()->v2()->vertex()->coordinate();
-      coordinate_type e32 = fv3->edge()->v1()->vertex()->coordinate() -
-                            fv3->edge()->v2()->vertex()->coordinate();
+      coordinate_type e13 = fv1->edge()->vec();
+      coordinate_type e21 = fv2->edge()->vec();
+      coordinate_type e32 = fv3->edge()->vec();
 
       coordinate_type gamma = a * f->data2;
-      if (norm(e13) < 1e-12 || norm(e21) < 1e-12 || norm(e32) < 1e-12) {
+      if (va::norm(e13) < 1e-12 || va::norm(e21) < 1e-12 ||
+          va::norm(e32) < 1e-12) {
         fv1->data = 0.0;
         fv2->data = 0.0;
         fv3->data = 0.0;
@@ -3145,17 +3137,28 @@ public:
       E(3, 0) = 1;
       E(3, 1) = 1;
       E(3, 2) = 1;
-      Eigen::MatrixXd EtE(3, 3);
-      EtE = E.transpose() * E;
+      // Eigen::MatrixXd EtE(3, 3);
+      // EtE = E.transpose() * E;
       Eigen::VectorXd b(4);
       b(0) = gamma[0];
       b(1) = gamma[1];
       b(2) = gamma[2];
       b(3) = 0;
-      b = E.transpose() * b;
-      Eigen::VectorXd c = EtE.ldlt().solve(b);
-      // Eigen::VectorXd c = E.jacobiSvd(ComputeThinU |
-      // ComputeThinV).solve(b);
+      // b = E.transpose() * b;
+
+      // Eigen::VectorXd c = EtE.ldlt().solve(b);
+      Eigen::VectorXd c =
+          E.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(b);
+      /*
+     if(c.norm() > 0.01){
+       std::cout << " a: " << a << std::endl;
+       std::cout << " b: " << b.transpose() << std::endl;
+       std::cout << " e: " << std::endl;
+       std::cout << E << std::endl;
+       std::cout << " c: " << c.norm() << std::endl;
+       std::cout << " =======" << std::endl;
+     }
+     */
       m2::construct<SPACE> cons;
       if (c.squaredNorm() > 100.00) {
         fv1->data = 0.0;
@@ -3182,56 +3185,72 @@ public:
     face_vertex_ptr fv2 = fv->next();
     face_vertex_ptr fv3 = fv2->next();
     face_vertex_ptr fv4 = fv3->next();
-#if 0
-      coordinate_type e21 = fv2->vertex()->coordinate() - fv1->vertex()->coordinate();
-      coordinate_type e32 = fv3->vertex()->coordinate() - fv2->vertex()->coordinate();
-      coordinate_type e43 = fv4->vertex()->coordinate() - fv3->vertex()->coordinate();
-      coordinate_type e14 = fv1->vertex()->coordinate() - fv4->vertex()->coordinate();
-      coordinate_type e13 = fv1->vertex()->coordinate() - fv3->vertex()->coordinate();
+#if 1
+    coordinate_type e21 =
+        fv2->vertex()->coordinate() - fv1->vertex()->coordinate();
+    coordinate_type e32 =
+        fv3->vertex()->coordinate() - fv2->vertex()->coordinate();
+    coordinate_type e43 =
+        fv4->vertex()->coordinate() - fv3->vertex()->coordinate();
+    coordinate_type e14 =
+        fv1->vertex()->coordinate() - fv4->vertex()->coordinate();
+    coordinate_type e13 =
+        fv1->vertex()->coordinate() - fv3->vertex()->coordinate();
 
-      T e1 = fv1->data;      
-      T e2 = fv2->data;
-      T e3 = fv3->data;
-      T e4 = fv4->data;
-      coordinate_type gamma0 = e2*e21 + e3*e32 + e4*e43 + e1*e14; 
-      Eigen::MatrixXd E(5,6);  E = Eigen::MatrixXd::Zero(5,6);
-      for(int i = 0; i < 3; i++){
-	E(i,0) = e21[i]; E(i,1) = e13[i]; E(i,2) = e32[i];
-	E(i,3) = e14[i]; E(i,4) = e43[i]; E(i,5) = -e13[i];
-      }
-      E(3,0) = 1;  E(3,1) = 1; E(3,2) = 1;
-      E(4,3) = 1;  E(4,4) = 1; E(4,5) = 1;
-      Eigen::VectorXd b(5);
-      b(0) = gamma0[0];
-      b(1) = gamma0[1];
-      b(2) = gamma0[2];
-      b(3) = 0;
-      b(4) = 0;
-      b = E.transpose()*b;
-      Eigen::MatrixXd EtE(3,3);
-      EtE = E.transpose()*E;
-      Eigen::VectorXd g = EtE.ldlt().solve(b);
+    T e1 = fv1->data;
+    T e2 = fv2->data;
+    T e3 = fv3->data;
+    T e4 = fv4->data;
+    coordinate_type gamma0 = e2 * e21 + e3 * e32 + e4 * e43 + e1 * e14;
+    Eigen::MatrixXd E(5, 6);
+    E = Eigen::MatrixXd::Zero(5, 6);
+    for (int i = 0; i < 3; i++) {
+      E(i, 0) = e21[i];
+      E(i, 1) = e13[i];
+      E(i, 2) = e32[i];
+      E(i, 3) = e14[i];
+      E(i, 4) = e43[i];
+      E(i, 5) = -e13[i];
+    }
+    E(3, 0) = 1;
+    E(3, 1) = 1;
+    E(3, 2) = 1;
+    E(4, 3) = 1;
+    E(4, 4) = 1;
+    E(4, 5) = 1;
+    Eigen::VectorXd b(5);
+    b(0) = gamma0[0];
+    b(1) = gamma0[1];
+    b(2) = gamma0[2];
+    b(3) = 0;
+    b(4) = 0;
+    // b = E.transpose()*b;
+    // Eigen::MatrixXd EtE(3,3);
+    // EtE = E.transpose()*E;
+    // Eigen::VectorXd g = EtE.ldlt().solve(b);
+    Eigen::VectorXd g =
+        E.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(b);
 
-      m2::construct<SPACE> cons;
-      edge_ptr enew = cons.inser_edge(mMesh, fv1, fv3);
-      enew->v1()->data = g(1);
-      enew->v2()->data = g(5);
-      fv3->data = g(0);
-      fv2->data = g(2);
-      fv1->data = g(3);
-      fv4->data = g(4);
-#endif
+    m2::construct<SPACE> cons;
+    edge_ptr enew = cons.insert_edge(mMesh, fv1, fv3);
+    enew->v1()->data = g(1);
+    enew->v2()->data = g(5);
+    fv3->data = g(0);
+    fv2->data = g(2);
+    fv1->data = g(3);
+    fv4->data = g(4);
+#else
     m2::construct<SPACE> cons;
     edge_ptr enew = cons.insert_edge(mMesh, fv1, fv3);
 
-    enew->v1()->face()->data3 = data3;
-    enew->v2()->face()->data3 = data3;
+    // enew->v1()->face()->data = e1;
+    // enew->v2()->face()->data = e2;
 
-    enew->v1()->face()->data3 = data3;
-    enew->v2()->face()->data3 = data3;
+    // enew->v1()->face()->data = e3;
+    // enew->v2()->face()->data = e4;
     enew->v1()->data = 0.0;
     enew->v2()->data = 0.0;
-
+#endif
     return enew;
   }
 
@@ -3686,7 +3705,7 @@ public:
                                        0.5 * ej->v2()->face()->normal();
                   Ni.normalize();
                   Nj.normalize();
-                  T dNij = dot(Ni, Nj);
+                  T dNij = va::dot(Ni, Nj);
                   coordinate_type Vi = 0.5 * ei->v1()->face()->data +
                                        0.5 * ei->v2()->face()->data;
                   coordinate_type Vj = 0.5 * ej->v1()->face()->data +

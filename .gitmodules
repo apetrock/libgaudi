@@ -4,3 +4,6 @@
 [submodule "submodules/glfw"]
 	path = ext/glfw
 	url = https://github.com/glfw/glfw.git
+[submodule "ext/spectra"]
+	path = ext/spectra
+	url = https://github.com/yixuan/spectra.git

@@ -43,9 +43,7 @@
   typedef typename SPACE::coordinate_type coordinate_type;                     \
   typedef typename SPACE::line_type line_type;                                 \
   typedef typename SPACE::triangle_type triangle_type;                         \
-  \  
   typedef typename SPACE::swept_point_type swept_point_type;                   \
-  \  
   typedef typename SPACE::swept_triangle_type swept_triangle_type;             \
   typedef typename SPACE::box_type box_type;                                   \
   typedef typename SPACE::quat quat;                                           \
@@ -319,6 +317,12 @@ public:
       return 0;
   }
 
+  coordinate_type vec() {
+    coordinate_type c0 = this->v1()->coordinate();
+    coordinate_type c1 = this->v2()->coordinate();
+    return c0 - c1;
+  }
+
   T dist() {
     coordinate_type c0 = this->v1()->coordinate();
     coordinate_type c1 = this->v2()->coordinate();
@@ -331,40 +335,6 @@ public:
     return (c0 - c1).norm();
   }
 
-  void draw() { this->draw(0.0); }
-  /*
-  void draw(T off){
-    if (fv1 && fv2) {
-      coordinate_type& vect1 = fv1->coordinate();
-      coordinate_type& vect2 = fv2->coordinate();
-
-      face_ptr f1 = fv1->face();
-      face_ptr f2 = fv2->face();
-
-      //if(f1)f1->update_normal();
-      //if(f2)f2->update_normal();
-
-      //               glPushMatrix();
-      glLineWidth(4.0f);
-      glBegin(GL_LINES);
-      coordinate_type& n1 = f1->normal();
-      coordinate_type& n2 = f2->normal();
-      gl_set_color_opaque(f1->color);
-      glVertex3f(vect1[0] + off*n1[0],
-                 vect1[1] + off*n1[1],
-                 vect1[2] + off*n1[2]);
-
-      gl_set_color_opaque(f2->color);
-      glVertex3f(vect2[0] + off*n2[0],
-                 vect2[1] + off*n2[1],
-                 vect2[2] + off*n2[2]);
-      glEnd();
-
-      //                glPopMatrix();
-
-    }
-    }
-*/
   face_vertex_ptr fv1;
   face_vertex_ptr fv2;
 
@@ -398,7 +368,13 @@ public:
     mSetPosition = -1;
     mSize = 0;
     data3 = 1.0;
-    mNormal = coordinate_type(0, 0, 0, 1);
+    mNormal = coordinate_type(0, 0, 0);
+    mCenter = coordinate_type(0, 0, 0);
+    flag = 0;
+
+    data = coordinate_type(0, 0, 0);
+    data2 = coordinate_type(0, 0, 0);
+    data3 = 1.0;
   }
 
   face(vertex_ref pnt) {
@@ -427,7 +403,10 @@ public:
     color.a = 1.0;
     mSetPosition = -1;
 
-    mNormal = coordinate_type(0, 0, 0, 1);
+    mNormal = coordinate_type(0, 0, 0);
+
+    data = coordinate_type(0, 0, 0);
+    data2 = coordinate_type(0, 0, 0);
     data3 = 1.0;
   }
 
@@ -463,7 +442,7 @@ public:
   coordinate_type calc_center() {
     face_vertex_ptr itb = fHead;
     face_vertex_ptr ite = fHead->prev();
-    coordinate_type cen = coordinate_type(0.0, 0.0, 0.0, 0.0);
+    coordinate_type cen = coordinate_type(0.0, 0.0, 0.0);
     float n = 0.0;
     bool at_head = false;
 
@@ -767,7 +746,7 @@ public:
       coordinate_type c2 = it2->coordinate();
       coordinate_type c10 = c1 - c0;
       coordinate_type c20 = c2 - c0;
-      coordinate_type n = cross(c10, c20);
+      coordinate_type n = va::cross(c10, c20);
       out += n.norm() * 0.5;
       it1 = it1->next();
       it2 = it2->next();
@@ -779,7 +758,7 @@ public:
 
     face_vertex_ptr itb = fHead;
     face_vertex_ptr ite = fHead->prev();
-    mNormal = coordinate_type(0, 0, 0, 0);
+    mNormal = coordinate_type(0, 0, 0);
     bool iterating = true;
 
     while (iterating) {
@@ -812,6 +791,37 @@ public:
     //			this->draw_normal(off);
     this->draw_face(off);
     //			this->draw_face_vertices(off);
+  }
+
+  std::vector<triangle_type> get_tris() {
+    std::vector<triangle_type> tris;
+
+    face_vertex_ptr itb = fHead;
+    face_vertex_ptr c0 = fHead;
+    face_vertex_ptr c1 = c0->next();
+    face_vertex_ptr c2 = c1->next();
+    face_vertex_ptr ite = fHead;
+
+    coordinate_type &v0 = c0->coordinate();
+
+    //std::cout << "face size: " << mSize << std::endl;
+    bool at_head;
+    while (!at_head) {
+      at_head = ite == c2;
+      coordinate_type &v1 = c1->coordinate();
+      coordinate_type &v2 = c2->coordinate();
+      
+      if ((v1 - v0).norm() == 0)
+        continue;
+      if ((v2 - v0).norm() == 0)
+        continue;
+
+      tris.push_back(triangle_type(v0, v1, v2));
+      c1 = c2;
+      c2 = c2->next();
+    }
+    //std::cout << "tri size: " << tris.size() << std::endl;
+    return tris;
   }
   /*
   void draw_vertex_colors(){
@@ -1055,7 +1065,7 @@ public:
 
   size_t ID() const { return this->mID; }
   //		size_t	size()		const	{return
-  //this->fHead->prev()->face_ID() + 1;}
+  // this->fHead->prev()->face_ID() + 1;}
 
   T &x() { return mCenter[0]; }
   T &y() { return mCenter[1]; }
@@ -1125,16 +1135,16 @@ public:
     flag = 0;
   }
 
+  ~face_vertex(){
+      // mVertex->remove_face_vertex(mVertexPosition);
+  };
+
   bool operator==(const face_vertex_ref rhs) {
     if (mID == rhs.mID) {
       return true;
     } else
       return false;
   }
-
-  ~face_vertex(){
-      // mVertex->remove_face_vertex(mVertexPosition);
-  };
 
   face_vertex_ref operator=(const face_vertex_ref rhs) {
     face_vertex_ptr out = new face_vertex_type(rhs);
@@ -1154,7 +1164,19 @@ public:
     return acos(dotab / (maga * magb));
   }
 
-  face_ref coface() { return mEdge->return_coface(); }
+  T cotan() {
+    // assumes triangls
+    coordinate_type c0 = this->prev()->coordinate();
+    coordinate_type c1 = this->coordinate();
+    coordinate_type c2 = this->next()->coordinate();
+    return va::cotan(c0, c1, c2);
+  }
+
+  coordinate_type directed_vector() {
+    coordinate_type c0 = this->coordinate();
+    coordinate_type c1 = this->coedge()->coordinate();
+    return c0 - c1;
+  }
 
   face_vertex_ptr coedge() { return mEdge->other(this); }
 
@@ -1345,8 +1367,8 @@ public:
   vertex() {
     int graphColor = -1;
     // mNormal.zero();
-    mNormal = coordinate_type(0.0, 0.0, 0.0, 1.0);
-    mCoordinate = coordinate_type(0.0, 0.0, 0.0, 1.0);
+    mNormal = coordinate_type(0.0, 0.0, 0.0);
+    mCoordinate = coordinate_type(0.0, 0.0, 0.0);
     m2::ID &manager = m2::ID::get_instance();
     mID = manager.new_vertex_id();
 
@@ -1367,11 +1389,11 @@ public:
   vertex(T x, T y, T z) {
     int graphColor = -1;
 
-    mCoordinate = coordinate_type(0.0, 0.0, 0.0, 1.0);
+    mCoordinate = coordinate_type(0.0, 0.0, 0.0);
     mCoordinate[0] = x;
     mCoordinate[1] = y;
     mCoordinate[2] = z;
-    mNormal = coordinate_type(0.0, 0.0, 0.0, 1.0);
+    mNormal = coordinate_type(0.0, 0.0, 0.0);
 
     m2::ID &manager = m2::ID::get_instance();
     mID = manager.new_vertex_id();
@@ -1395,7 +1417,6 @@ public:
     mCoordinate[0] = co[0];
     mCoordinate[1] = co[1];
     mCoordinate[2] = co[2];
-    mCoordinate[3] = co[3];
     mNormal.setZero();
 
     m2::ID &manager = m2::ID::get_instance();
@@ -1471,7 +1492,7 @@ public:
   }
 
   void remove_face_vertex(face_vertex_ptr fv) {
-    //mFront = fv->vnext();
+    // mFront = fv->vnext();
     mSize--;
     // mFaceVertices.erase(it);
 
@@ -1577,18 +1598,18 @@ public:
     size_t sz = size();
     coordinate_type dp = that_point - this_point;
     coordinate_type dnp = ite->next()->coordinate() - this_point;
-    xp = cross(dp, dnp);
+    xp = va::cross(dp, dnp);
     next_pt = itb->next()->coordinate();
-    T dt = dist(that_point, next_pt);
+    T dt = va::dist(that_point, next_pt);
     d = dt;
     while (itb != ite) {
       next_pt = itb->next()->coordinate();
       // coordinate_type dp  = that_point - this_point;
       coordinate_type dnp = next_pt - this_point;
-      xc = cross(dp, dnp);
+      xc = va::cross(dp, dnp);
       T s = xc[0] * xp[0] + xc[1] * xp[1] + xc[2] * xp[2];
 
-      T dt = dist(that_point, next_pt);
+      T dt = va::dist(that_point, next_pt);
       if (s < 0) {
         if (dt < d) {
           d = dt;
@@ -1649,7 +1670,7 @@ public:
   void update_normal() {
     if (mSize == 0)
       return;
-    coordinate_type N(0, 0, 0, 0);
+    coordinate_type N(0, 0, 0);
     int n = 0;
     face_vertex_ptr itb = mFront;
     face_vertex_ptr ite = mFront->vprev();
@@ -1687,7 +1708,6 @@ public:
     assert(!isnan(c[0]));
     assert(!isnan(c[1]));
     assert(!isnan(c[2]));
-    assert(!isnan(c[3]));
   }
 
   void print() {
@@ -2012,7 +2032,7 @@ public:
     else
       return false;
   }
-  
+
   bool has_vertex(size_t ind) {
     if (mVertices[ind])
       return true;
@@ -2068,7 +2088,7 @@ public:
   }
 
   coordinate_type calc_center() {
-    coordinate_type avg(0, 0, 0, 0);
+    coordinate_type avg(0, 0, 0);
     for (int i = 0; i < mVertices.size(); i++) {
       if (!mVertices[i])
         continue;

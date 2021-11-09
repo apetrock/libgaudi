@@ -492,20 +492,6 @@ public:
     return *out;
   }
 
-  T cotan(face_vertex_ptr fv) {
-    // assumes triangels
-    coordinate_type c0 = fv->coordinate();
-    coordinate_type c1 = fv->next()->coordinate();
-    coordinate_type c2 = fv->prev()->coordinate();
-    coordinate_type dc10 = c1 - c0;
-    coordinate_type dc20 = c2 - c0;
-    // Real denom = abs(dc10)*abs(dc20);
-    T cosP = dot(dc10, dc20);
-    T sinP = cross(dc10, dc20).norm();
-    T cotP = cosP / sinP;
-    return cotP;
-  }
-
   void split4(control_ptr &mMesh, face_ptr f) {
     face_vertex_ptr itb = f->fbegin();
     face_vertex_ptr ite = f->fend();
@@ -606,8 +592,8 @@ public:
     face_vertex_ptr v3 = v2->next();
 
     face_vertex_ptr fvEdge = NULL;
-    T cot13 = cotan(v0) + cotan(v2); // corresponds to e13
-    T cot02 = cotan(v1) + cotan(v3);
+    T cot13 = v0->cotan() + v0->cotan(); // corresponds to e13
+    T cot02 = v0->cotan() + v0->cotan();
     if (cot13 * cot13 < cot02 * cot02) {
       m2::construct<SPACE> cons;
       edge_ptr ne = cons.insert_edge(mMesh, v1, v3);

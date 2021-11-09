@@ -50,7 +50,7 @@ inline void calcSVD(typename SPACE::mat3 &mi,
 
   const Eigen::Matrix3d U = svd.matrixU();
   const Eigen::VectorXd S = svd.singularValues();
-  val = coordinate_type(S[0], S[1], S[2], 0);
+  val = coordinate_type(S[0], S[1], S[2]);
 
   for (int i = 0; i < 3; i++)
     for (int j = 0; j < 3; j++)
@@ -75,8 +75,8 @@ public:
     coordinate_type dc10 = c1h - c0;
     coordinate_type dc20n = c2nh - c0;
     coordinate_type dc20p = c2ph - c0;
-    T an = 0.5 * cross(dc10, dc20n).norm();
-    T ap = 0.5 * cross(dc10, dc20p).norm();
+    T an = 0.5 * va::norm(va::cross(dc10, dc20n));
+    T ap = 0.5 * va::norm(va::cross(dc10, dc20p));
 
     return an + ap;
   }
@@ -98,33 +98,10 @@ public:
     return aTotal;
   }
 
-  T cotan(coordinate_type c0, coordinate_type c1, coordinate_type c2) {
-    ;
-
-    coordinate_type dc10 = c1 - c0;
-    coordinate_type dc20 = c2 - c0;
-    // T denom = abs(dc10)*abs(dc20);
-    T cosP = dot(dc10, dc20);
-    T sinP = cross(dc10, dc20).norm();
-    T cotP = cosP / sinP;
-    if (sinP > 1e-12)
-      return cotP;
-    else
-      return 1.0;
-  }
-
-  T cotan(face_vertex_ptr fv) {
-    // assumes triangls
-    coordinate_type c0 = fv->prev()->coordinate();
-    coordinate_type c1 = fv->coordinate();
-    coordinate_type c2 = fv->next()->coordinate();
-    return cotan(c0, c1, c2);
-  }
-
   T getEdgeWeight(edge_ptr ei) {
     face_vertex_ptr fv1 = ei->v1();
     face_vertex_ptr fv2 = ei->v2();
-    return cotan(fv1) + cotan(fv2);
+    return fv1->cotan() + fv1->cotan();
   }
 
   T willmore(face_vertex_ptr fv) {
@@ -141,8 +118,8 @@ public:
     B.normalize();
     coordinate_type D = ci - ck;
     B.normalize();
-    return dot(A, C) * dot(B, D) - dot(A, B) * dot(C, D) -
-           dot(B, C) * dot(D, A);
+    return va::dot(A, C) * va::dot(B, D) - va::dot(A, B) * va::dot(C, D) -
+           va::dot(B, C) * va::dot(D, A);
   }
 
   template <typename TYPE>
@@ -253,7 +230,7 @@ public:
         face_vertex_ptr itb = v->fbegin();
         face_vertex_ptr ite = v->fend();
         bool at_head = false;
-        coordinate_type kA(0, 0, 0, 0.0);
+        coordinate_type kA(0, 0, 0);
         T wTotal = 0;
         T aTotal = 0;
         int i = 0;

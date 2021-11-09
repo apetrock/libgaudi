@@ -69,8 +69,8 @@ void fillBuffer(m2::control<SPACE> *mesh, gg::BufferObjectPtr obj,
 };
 
 template <typename SPACE>
-void insertPoints(std::vector<GaudiMath::Vec4> &points,
-                  std::vector<GaudiMath::Vec4> &p_colors,
+void insertPoints(std::vector<typename SPACE::vec3> &points,
+                  std::vector<typename SPACE::vec3> &p_colors,
                   gg::PointBufferPtr &obj) {
   using namespace nanogui;
   M2_TYPEDEFS;
@@ -90,7 +90,7 @@ void insertPoints(std::vector<GaudiMath::Vec4> &points,
       for (int j = 0; j < 3; j++) {
         positions.col(i)[j] = points[i][j];
       }
-      
+
       colors.col(i)[0] = p_colors[i][0];
       colors.col(i)[1] = p_colors[i][1];
       colors.col(i)[2] = p_colors[i][2];
@@ -98,41 +98,6 @@ void insertPoints(std::vector<GaudiMath::Vec4> &points,
   });
 };
 
-template <typename SPACE>
-void insertDebugTri(m2::control<SPACE> &mesh, int i,
-                    gg::ImmediateLines *buffer) {
-  using namespace nanogui;
-  typedef Eigen::Vector3f Vec3;
-  typedef Eigen::Vector3f Vec4;
-  M2_TYPEDEFS;
-
-  std::vector<face_ptr> faces = mesh.get_faces();
-  std::vector<vertex_ptr> verts = mesh.get_vertices();
-  face_ptr fi = faces[i];
-  coordinate_type c0 = fi->fbegin()->coordinate();
-  coordinate_type c1 = fi->fbegin()->next()->coordinate();
-  coordinate_type c2 = fi->fbegin()->prev()->coordinate();
-  buffer->pushLine(xyz(c0), xyz(c1));
-  buffer->pushLine(xyz(c1), xyz(c2));
-  buffer->pushLine(xyz(c2), xyz(c0));
-};
-
-template <typename SPACE>
-void fillDebugLines(m2::control<SPACE> &mesh, gg::ImmediateLines *buffer) {
-  using namespace nanogui;
-  typedef Eigen::Vector3f Vec3;
-  typedef Eigen::Vector3f Vec4;
-  M2_TYPEDEFS;
-
-  std::vector<edge_ptr> edges = mesh.get_edges();
-  std::vector<vertex_ptr> verts = mesh.get_vertices();
-  for (int i = 0; i < edges.size(); i++) {
-    edge_ptr e = edges[i];
-    coordinate_type c1 = e->v1()->coordinate();
-    coordinate_type c2 = e->v2()->coordinate();
-    buffer->pushLine(xyz(c1), xyz(c2));
-  }
-};
 } // namespace gg
 
 #endif

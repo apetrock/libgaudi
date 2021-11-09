@@ -10,48 +10,49 @@
 #ifndef __GEOMETRY_TYPES__
 #define __GEOMETRY_TYPES__
 
-#include <iostream>
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 
+#include "vec_addendum.h"
+#include <iostream>
 
-template <typename T, typename CTYPE>
-struct swept_triangle{
+template <typename T, typename CTYPE> struct swept_triangle {
   static const int size = 3;
   CTYPE p[3];
   CTYPE v[3];
   T dt;
-  swept_triangle(){
+  swept_triangle(){};
+
+  swept_triangle(CTYPE p0, CTYPE p1, CTYPE p2, CTYPE v0, CTYPE v1, CTYPE v2,
+                 T Dt) {
+    p[0] = p0;
+    p[1] = p1;
+    p[2] = p2;
+    v[0] = v0;
+    v[1] = v1;
+    v[2] = v2;
   };
 
-  swept_triangle( CTYPE p0,  CTYPE p1,  CTYPE p2,
-	    CTYPE v0,  CTYPE v1,  CTYPE v2, T Dt){
-    p[0] = p0; p[1] = p1; p[2] = p2;
-    v[0] = v0; v[1] = v1; v[2] = v2;
-  };
-  
-  CTYPE & operator[](int i)       {return p[i];}
-  CTYPE   operator[](int i) const {return p[i];}
+  CTYPE &operator[](int i) { return p[i]; }
+  CTYPE operator[](int i) const { return p[i]; }
 
-  CTYPE normal(){
-    return cross(p[1]-p[0],p[2]-p[0]).normalize();
-  }
-  
-  CTYPE center(){
-    return 0.33333*(p[0]+p[1]+p[2]);
-  }
+  CTYPE normal() { return cross(p[1] - p[0], p[2] - p[0]).normalize(); }
 
-  void getExtents(CTYPE & min, CTYPE & max){
+  CTYPE center() { return 0.33333 * (p[0] + p[1] + p[2]); }
+
+  void getExtents(CTYPE &min, CTYPE &max) {
     min = this->center();
     max = min;
-    for(int i = 0; i < 3; i++){
-      for(int j = 0; j < 3; j++){
-	min[i] = p[j][i] < min[i] ? p[j][i] : min[i];
-	max[i] = p[j][i] > max[i] ? p[j][i] : max[i];
+    for (int i = 0; i < 3; i++) {
+      for (int j = 0; j < 3; j++) {
+        min[i] = p[j][i] < min[i] ? p[j][i] : min[i];
+        max[i] = p[j][i] > max[i] ? p[j][i] : max[i];
       }
-      for(int j = 0; j < 3; j++){
-	min[i] = p[j][i] + dt*v[j][i] < min[i] ? p[j][i] + dt*v[j][i] : min[i];
-	max[i] = p[j][i] + dt*v[j][i] > max[i] ? p[j][i] + dt*v[j][i] : max[i];
+      for (int j = 0; j < 3; j++) {
+        min[i] =
+            p[j][i] + dt * v[j][i] < min[i] ? p[j][i] + dt * v[j][i] : min[i];
+        max[i] =
+            p[j][i] + dt * v[j][i] > max[i] ? p[j][i] + dt * v[j][i] : max[i];
       }
     }
   }
@@ -69,37 +70,87 @@ struct swept_triangle{
   */
 };
 
-
-template <typename T, typename CTYPE>
-struct triangle{
+template <typename T, typename CTYPE> struct triangle {
   static const int size = 3;
   CTYPE p[3];
-  triangle(){
+  triangle(){};
+
+  triangle(CTYPE p0, CTYPE p1, CTYPE p2) {
+    p[0] = p0;
+    p[1] = p1;
+    p[2] = p2;
   };
 
-  triangle( CTYPE p0,  CTYPE p1,  CTYPE p2){
-    p[0] = p0; p[1] = p1;p[2] = p2;
-  };
-  
-  CTYPE & operator[](int i)       {return p[i];}
-  CTYPE   operator[](int i) const {return p[i];}
+  CTYPE &operator[](int i) { return p[i]; }
+  CTYPE operator[](int i) const { return p[i]; }
 
-  CTYPE normal(){
-    return cross(p[1]-p[0],p[2]-p[0]).normalize();
-  }
-  
-  CTYPE center(){
-    return 0.33333*(p[0]+p[1]+p[2]);
+  CTYPE normal() {
+    CTYPE e1 = p[1] - p[0];
+    CTYPE e2 = p[2] - p[0];
+    CTYPE N = m2::va::cross(e1, e2);
+    N.normalize();
+    return N;
   }
 
-  void getExtents(CTYPE & min, CTYPE & max){
+  CTYPE center() { return 0.33333 * (p[0] + p[1] + p[2]); }
+
+  T area() {
+    T out = 0;
+    CTYPE c0 = p[0];
+    CTYPE c1 = p[1];
+    CTYPE c2 = p[2];
+    CTYPE c10 = c1 - c0;
+    CTYPE c20 = c2 - c0;
+    CTYPE n = m2::va::cross(c10, c20);
+    out += n.norm() * 0.5;
+    return out;
+  }
+
+  T solidAngle(CTYPE pi) {
+    CTYPE A = p[0] - pi;
+    CTYPE B = p[1] - pi;
+    CTYPE C = p[2] - pi;
+    T a = m2::va::norm(A);
+    T b = m2::va::norm(B);
+    T c = m2::va::norm(C);
+    
+    A /= a;
+    B /= b;
+    C /= c;
+
+    T divisor = m2::va::dot(A, B) +
+                m2::va::dot(B, C) +
+                m2::va::dot(C, A) + T(1);
+
+    T det = m2::va::determinant(A, B, C);
+    
+    if (det == 0)
+      return T(0);
+    /*
+    std::cout << "p: " << pi.transpose() << std::endl;
+
+   std::cout << "t0: " << p[0].transpose() << std::endl;
+   std::cout << "t1: " << p[1].transpose() << std::endl;
+   std::cout << "t2: " << p[2].transpose() << std::endl;
+
+   std::cout << "A: " << A.transpose() << std::endl;
+   std::cout << "B: " << B.transpose() << std::endl;
+   std::cout << "C: " << C.transpose() << std::endl;
+   std::cout << "abc: " << a << " " << b << " " << c << " " << std::endl;
+   std::cout << "det" << det << std::endl;
+   std::cout << "div" << divisor << std::endl;
+   */
+    return T(2) * atan2(det, divisor);
+  }
+
+  T distanceFrom(CTYPE point) { return distance_from_triangle(p, point); }
+
+  void getExtents(CTYPE &min, CTYPE &max) {
     min = this->center();
     max = min;
-    for(int i = 0; i < 3; i++){
-      for(int j = 0; j < 3; j++){
-	min[i] = p[j][i] < min[i] ? p[j][i] : min[i];
-	max[i] = p[j][i] > max[i] ? p[j][i] : max[i];
-      }
+    for (int i = 0; i < 3; i++) {
+      min = min.array().min(p[i].array());
+      max = min.array().max(p[i].array());
     }
   }
 
@@ -116,28 +167,26 @@ struct triangle{
 */
 };
 
-template <typename T, typename CTYPE>
-struct swept_point{
+template <typename T, typename CTYPE> struct swept_point {
 public:
   CTYPE p;
   CTYPE v;
   T dt;
-  swept_point( CTYPE p0,  CTYPE vi){
-    p = p0; v = vi;
+  swept_point(CTYPE p0, CTYPE vi) {
+    p = p0;
+    v = vi;
   };
 
-  CTYPE center(){
-    return 0.5*(p + v);
-  }
+  CTYPE center() { return 0.5 * (p + v); }
 
-  void getExtents(CTYPE & min, CTYPE & max){
+  void getExtents(CTYPE &min, CTYPE &max) {
     min = this->center();
     max = min;
-    for(int i = 0; i < 3; i++){
+    for (int i = 0; i < 3; i++) {
       min[i] = p[i] < min[i] ? p[i] : min[i];
-      max[i] = p[i] > max[i] ? p[i] : max[i];      
-      min[i] = p[i] + dt*v[i] < min[i] ? p[i] + dt*v[i] : min[i];
-      max[i] = p[i] + dt*v[i] > max[i] ? p[i] + dt*v[i] : max[i];
+      max[i] = p[i] > max[i] ? p[i] : max[i];
+      min[i] = p[i] + dt * v[i] < min[i] ? p[i] + dt * v[i] : min[i];
+      max[i] = p[i] + dt * v[i] > max[i] ? p[i] + dt * v[i] : max[i];
     }
   }
   /*
@@ -145,26 +194,24 @@ public:
     glBegin(GL_LINE);
     glVertex3d(p[0],p[1],p[2]);
     glVertex3d(p[0] + dt*v[0],
-	       p[1] + dt*v[1],
-	       p[2] + dt*v[2]);
+               p[1] + dt*v[1],
+               p[2] + dt*v[2]);
     glEnd();
     }
 */
 };
 
-template <typename T, typename CTYPE>
-struct line{
+template <typename T, typename CTYPE> struct line {
   CTYPE p[2];
-  line( CTYPE p0,  CTYPE p1){
-    p[0] = p0; p[1] = p1;
+  line(CTYPE p0, CTYPE p1) {
+    p[0] = p0;
+    p[1] = p1;
   };
 
-  CTYPE & operator[](int i)       {return p[i];}
-  CTYPE   operator[](int i) const {return p[i];}
-  
-  CTYPE center(){
-    return 0.5*(p[0],p[1]);
-  }
+  CTYPE &operator[](int i) { return p[i]; }
+  CTYPE operator[](int i) const { return p[i]; }
+
+  CTYPE center() { return 0.5 * (p[0], p[1]); }
   /*
   void draw(){
     glBegin(GL_LINE);
@@ -175,16 +222,13 @@ struct line{
 */
 };
 
-
-template <typename T, typename CTYPE>
-struct box{
+template <typename T, typename CTYPE> struct box {
   CTYPE center;
   CTYPE half;
 
-  box(){
-  };
+  box(){};
 
-  box( CTYPE cen,  CTYPE h){
+  box(CTYPE cen, CTYPE h) {
     center = cen;
     half = h;
   };
@@ -245,70 +289,49 @@ struct box{
 
     glEnd();
   }
-  */ 
+  */
 };
 
-//template <typename T, typename CTYPE, typename PRIMITIVE>
-//bool boxIntersect(PRIMITIVE& prim, box<T,CTYPE> & b);
+// template <typename T, typename CTYPE, typename PRIMITIVE>
+// bool boxIntersect(PRIMITIVE& prim, box<T,CTYPE> & b);
 
-//template<typename T, typename vectype>
-//class ray{};
+// template<typename T, typename vectype>
+// class ray{};
 
-template <typename T>
-class euclidean_space{
+template <typename T> class euclidean_space {
 public:
-  typedef T							double_type;
-  typedef T							real;
-  //always use homogeneous coordinates, provides decent error checking
-  typedef Eigen::Matrix< T, 4, 1 > 			        coordinate_type;
+  typedef T double_type;
+  typedef T real;
+  // always use homogeneous coordinates, provides decent error checking
+  typedef Eigen::Matrix<T, 3, 1> coordinate_type;
 
-  typedef line<T,coordinate_type>		            line_type;	
-  typedef triangle<T,coordinate_type>		        triangle_type;
-  typedef swept_point<T,coordinate_type>		    swept_point_type;
-  typedef swept_triangle<T,coordinate_type>		  swept_triangle_type;	
-  typedef box<T,coordinate_type>		            box_type;	
-  typedef Eigen::Matrix< T, 3, 3>               mat3; 
-  typedef Eigen::Matrix< T, 4, 4>               mat4; 
-  typedef unsigned short	ushort;
-  typedef unsigned int		uint;
-  typedef unsigned long		ulong;
-	
-  typedef double		double_t;
-  typedef float			float_t;
+  typedef line<T, coordinate_type> line_type;
+  typedef triangle<T, coordinate_type> triangle_type;
+  typedef swept_point<T, coordinate_type> swept_point_type;
+  typedef swept_triangle<T, coordinate_type> swept_triangle_type;
+  typedef box<T, coordinate_type> box_type;
+  typedef Eigen::Matrix<T, 3, 3> mat3;
+  typedef Eigen::Matrix<T, 4, 4> mat4;
+  typedef unsigned short ushort;
+  typedef unsigned int uint;
+  typedef unsigned long ulong;
 
-  typedef Eigen::Quaternion<T>  quat;	
-  typedef Eigen::Matrix<T,2,1>	vec2;
-  typedef Eigen::Matrix<T,3,1>	vec3;
-  typedef Eigen::Matrix<T,4,1>	vec4;
-	
-  typedef Eigen::Matrix<uint, 2,1>	uint2;
-  typedef Eigen::Matrix<uint, 2,1>	uint4;
-	
-  typedef Eigen::Matrix<T,2,1>	int2;
-  typedef Eigen::Matrix<T,4,1>	int3;
-  typedef Eigen::Matrix<T,4,1>	int4;
+  typedef double double_t;
+  typedef float float_t;
+
+  typedef Eigen::Quaternion<T> quat;
+  typedef Eigen::Matrix<T, 2, 1> vec2;
+  typedef Eigen::Matrix<T, 3, 1> vec3;
+  typedef Eigen::Matrix<T, 4, 1> vec4;
+
+  typedef Eigen::Matrix<uint, 2, 1> uint2;
+  typedef Eigen::Matrix<uint, 2, 1> uint4;
+
+  typedef Eigen::Matrix<T, 2, 1> int2;
+  typedef Eigen::Matrix<T, 4, 1> int3;
+  typedef Eigen::Matrix<T, 4, 1> int4;
 };
 
-typedef  euclidean_space<double> space3;
-
-template <typename T>
-T norm(Eigen::Matrix<T, 4,1> a){return a.norm();};
-template <typename T>
-T norm2(Eigen::Matrix<T,4,1> a){
-  return a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
-};
-
-template <typename T>
-inline Eigen::Matrix<T,4,1> cross(const Eigen::Matrix<T,4,1>& vecA, 
-				  const Eigen::Matrix<T,4,1>& vecB){
-  Eigen::Matrix<T,4,1> out;
-  out[0] = vecA[1]*vecB[2] - vecA[2]*vecB[1];
-  out[1] = vecA[2]*vecB[0] - vecA[0]*vecB[2];
-  out[2] = vecA[0]*vecB[1] - vecA[1]*vecB[0];
-  out[3] = 0.0;
-  return out;
-}
-
-
+typedef euclidean_space<double> space3;
 
 #endif

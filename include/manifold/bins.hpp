@@ -16,7 +16,7 @@
 bool boxOverlap(space3::triangle_type &tri,
                 space3::box_type &b)
 {
-  tri_box<space3::double_type, space3::coordinate_type> tribox;
+  m2::va::tri_box<space3::double_type, space3::coordinate_type> tribox;
   bool inBox = tribox.triBoxOverlap(b.center, b.half, tri.p);
   return inBox;
 };
@@ -850,7 +850,7 @@ struct face_bin
     _xRes = ceil(glengths[0] / _dx);
     _yRes = ceil(glengths[1] / _dx);
     _zRes = ceil(glengths[2] / _dx);
-    _lengths = coordinate_type(_xRes * _dx, _yRes * _dx, _zRes * _dx, 0.0);
+    _lengths = coordinate_type(_xRes * _dx, _yRes * _dx, _zRes * _dx);
 
     _binStart.resize(_xRes * _yRes * _zRes + 1, 0);
     _binCounter.resize(_xRes * _yRes * _zRes, 0);
@@ -921,7 +921,7 @@ struct face_bin
   void nearestBin(coordinate_type pos, int *bini)
   {
     coordinate_type binf =
-        pos - (_center - 0.5 * _lengths + 0.5 * coordinate_type(_dx, _dx, _dx, 0.0));
+        pos - (_center - 0.5 * _lengths + 0.5 * coordinate_type(_dx, _dx, _dx));
     bini[0] = binf[0] / _dx + 0.5;
     bini[1] = binf[1] / _dx + 0.5;
     bini[2] = binf[2] / _dx + 0.5;
@@ -1486,12 +1486,11 @@ public:
   coordinate_type center;
   coordinate_type centerOfMass;
   coordinate_type half;
-  int *children;
+  int children[8];
   //int neighbors[6]; to be implemented later
 
   pole_node()
   {
-    children = new int[8];
     id = -1;
     begin = -1;
     size = -1;
@@ -1503,7 +1502,6 @@ public:
 
   ~pole_node()
   {
-    delete children;
   }
 
   pole_node(const pole_node &rhs)
@@ -1516,7 +1514,6 @@ public:
     begin = rhs.begin;
     parent = rhs.parent;
     level = rhs.level;
-    children = new int[8];
     for (int i = 0; i < 8; i++)
       children[i] = rhs.children[i];
   }
@@ -1583,7 +1580,7 @@ public:
                       int beg, int N)
   {
 
-    com = coordinate_type(0, 0, 0, 0.0);
+    com = coordinate_type(0, 0, 0);
     for (int i = beg; i < beg + N; i++)
       com += points[permutation[i]];
     com /= (T)N;
@@ -1721,44 +1718,10 @@ public:
           leafNodes.push_back(cNodeId);
         } //leafIds.push_back(cNodeId);
       }
-      delete lPerm;
+      //delete lPerm;
     }
   }
 
-  void draw()
-  {
-    //std::cout << " number of bins: " << nodes.size() << std::endl;
-    for (int i = 0; i < nodes.size(); i++)
-    {
-      node_type &node = nodes[i];
-      if (node.size > 0)
-      {
-        glColor3f(0.5, 0.5, 0.5);
-        drawBox<SPACE>(node.center, node.half);
-        if (norm(node.half) < 1e-16)
-        {
-          glPointSize(3.0);
-          glBegin(GL_POINTS);
-          glColor3f(0.75, 0.75, 0.75);
-          glVertex3d(node.center[0], node.center[1], node.center[2]);
-          glEnd();
-        }
-      }
-    }
-  }
-
-  void drawLeafConnectivity()
-  {
-    glBegin(GL_LINE_STRIP);
-    for (int i = 0; i < leafNodes.size(); i++)
-    {
-      node_type &node = nodes[leafNodes[i]];
-      coordinate_type cen = node.center;
-      glColor3f(0.75, 0.75, 0.75);
-      glVertex3d(cen[0], cen[1], cen[2]);
-    }
-    glEnd();
-  }
   vector<node_type> nodes;
   vector<int> leafNodes;
   vector<int> leafIds;
@@ -1833,6 +1796,14 @@ public:
     }
     return *this;
   }
+
+  int getNumChildren(){
+    return 2;
+  }
+
+  bool isLeaf(){
+    return children[0] < 0 && children[1] < 0;
+  }
 };
 
 template <typename SPACE, typename PRIMITIVE>
@@ -1854,7 +1825,7 @@ public:
 
   aabb_tree(vector<PRIMITIVE> &points)
   {
-    this->build(points, 20);
+    this->build(points, 12);
   }
 
   aabb_tree &operator=(const aabb_tree &rhs)
@@ -1886,11 +1857,8 @@ public:
       PRIMITIVE p = points[permutation[i]];
       coordinate_type minp, maxp;
       p.getExtents(minp, maxp);
-      for (int j = 0; j < 3; j++)
-      {
-        min[j] = min[j] < minp[j] ? min[j] : minp[j];
-        max[j] = max[j] > maxp[j] ? max[j] : maxp[j];
-      }
+      min = min.array().min(minp.array());
+      max = max.array().max(maxp.array());
     }
 
     half = 0.5 * (max - min);
@@ -1910,6 +1878,7 @@ public:
 
     for (int i = 0; i < permutation.size(); i++)
       permutation[i] = i;
+
     node_type root;
     root.begin = 0;
     root.level = 0;
@@ -1921,10 +1890,9 @@ public:
                    points, permutation, root.begin, root.size);
 
     stack<int> stack;
-
+    nodes.reserve(log(points.size()) * points.size());
     stack.push(nodes.size());
     nodes.push_back(root);
-
     while (stack.size() > 0)
     {
       int pNodeId = stack.top();
@@ -1937,20 +1905,14 @@ public:
 
       coordinate_type center = pNode.bbox.center;
 
-      int cN[2], cCounter[2], cAccum[2];
+      int cN[2] = {0, 0}, cCounter[2] = {0, 0}, cAccum[2] = {0, 0};
       int *lPerm = new int[N];
-
-      for (int j = 0; j < 2; j++)
-      {
-        cN[j] = 0;
-        cCounter[j] = 0;
-        cAccum[0] = 0;
-      }
 
       for (int i = beg; i < beg + N; i++)
       {
         PRIMITIVE p = points[permutation[i]];
-        int bin = (p.center()[dim] < center[dim]) ? 0 : 1;
+        int bin =
+            (p.center()[dim] < center[dim]) ? 0 : 1;
         cN[bin]++;
       }
 
@@ -1973,6 +1935,7 @@ public:
         permutation[i] = lPerm[ii];
         ii++;
       }
+
 
       for (int j = 0; j < 2; j++)
       {

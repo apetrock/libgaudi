@@ -29,14 +29,42 @@
 #include "manifold/objloader.hpp"
 
 #include "manifold/moving_mesh.hpp"
+
+#include "manifold/vec_addendum.h"
+
 //#include "m2Operators.h"
 
 #define TRACKBALLSIZE (0.8f)
 #define RENORMCOUNT 97
 
-using std::cerr;
+    using std::cerr;
 using std::cout;
 using std::endl;
+
+template <typename SPACE>
+void debugVorticity(m2::control<SPACE> *mesh, gg::DebugBufferPtr debug) {
+  using namespace nanogui;
+  M2_TYPEDEFS;
+  std::cout << "  rendering vorticity" << std::endl;
+
+  for (auto f : mesh->get_faces()) {
+    coordinate_type v = 0.1 * f->data;
+    coordinate_type cen = f->calc_center();
+
+    coordinate_type l0 = cen - 1.0 * v;
+    coordinate_type l1 = cen + 1.0 * v;
+    T mag = m2::va::norm(v);
+    T pi = M_PI;
+    gg::Vec4 col(0.5 + 0.5 * cos(2.0 * pi * mag + 0.000 * pi),
+             0.5 + 0.5 * cos(2.0 * pi * mag + 0.666 * pi),
+             0.5 + 0.5 * cos(2.0 * pi * mag + 1.333 * pi), mag);
+    //gg::Vec4 col(0.5, 0.5, 0.5, 1.0);
+    debug->pushLine(gg::Vec4(l0[0], l0[1], l0[2], 1.0),
+                    gg::Vec4(l1[0], l1[1], l1[2], 1.0), col);
+  }
+
+  debug->renderLines();
+};
 
 class VortexScene;
 using VortexScenePtr = std::shared_ptr<VortexScene>;
@@ -66,13 +94,8 @@ public:
 
     _meshGraph = &sub.subdivide_control(*_meshGraph);
     _meshGraph = &sub.subdivide_control(*_meshGraph);
+    _meshGraph = &sub.subdivide_control(*_meshGraph);
     //_meshGraph = &sub.subdivide_control(*_meshGraph);
-    //_meshGraph = &sub.subdivide_control(*_meshGraph);
-    //_meshGraph = &sub.subdivide_control(*_meshGraph);
-    //_meshGraph =  &sub.subdivide_control(*_meshGraph);
-    //_meshGraph =  &sub.subdivide_control(*_meshGraph);
-
-    //_meshGraph->print_stack();
 
     std::cout << "--center" << std::endl;
     std::cout << "--update_all" << std::endl;
@@ -84,13 +107,14 @@ public:
 
     mod.centerGeometry(*_meshGraph);
     std::cout << "creating buffer" << std::endl;
+
     _obj = gg::BufferObject::create();
-    _obj->initBuffer();
-    std::cout << _obj->matrix() << std::endl;
-
-    std::cout << _obj->scale() << std::endl;
-
+    _obj->init();
     mSceneObjects.push_back(_obj);
+
+    _debugLines = gg::DebugBuffer::create();
+    _debugLines->init();
+    mSceneObjects.push_back(_debugLines);
   }
 
   virtual void onAnimate() {
@@ -102,14 +126,14 @@ public:
     std::cout << " faces: " << _meshGraph->get_faces().size() << std::endl;
 
     m2::modify<space3> mod;
-    double max = 0.05;
-    double min = max / 5.0;
+    double max = 0.025;
+    double min = max / 10.0;
     double dt = 0.1;
 
     _vortex->minLength = max;
     _vortex->minCollapseLength = min;
     _vortex->edgeJoinThresh = 0.25 * min;
-    _vortex->regLength = 1.5 * min;
+    _vortex->regLength = max;
 
     _vortex->integrateBaroclinity(dt, 0.004);
     //_vortex->addCurveVorticity(0.2, 1);
@@ -125,6 +149,7 @@ public:
     _vortex->updateVorticity();
     m2::remesh<space3> rem;
     rem.triangulate(_meshGraph);
+    debugVorticity(_meshGraph, _debugLines);
 
     _meshGraph->update_all();
     _meshGraph->pack();
@@ -135,17 +160,18 @@ public:
 
   virtual void onDraw(gg::Viewer &viewer) {
     std::for_each(mSceneObjects.begin(), mSceneObjects.end(),
-                  [&](gg::BufferObjectPtr obj) mutable {
+                  [&](gg::DrawablePtr obj) mutable {
                     if (obj->isVisible)
                       obj->draw(viewer.getProjection(), viewer.getModelView());
                   });
+    _debugLines->clear();
   }
 
 private:
-  std::vector<gg::BufferObjectPtr> mDebug;
-  std::vector<gg::BufferObjectPtr> mSceneObjects;
+  gg::DebugBufferPtr _debugLines = NULL;
+  std::vector<gg::DrawablePtr> mSceneObjects;
 
-  gg::BufferObjectPtr _obj;
+  gg::BufferObjectPtr _obj = NULL;
   m2::control<space3> *_meshGraph;
   m2::vortex_sheet<space3> *_vortex;
 };

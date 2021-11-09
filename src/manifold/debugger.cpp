@@ -32,7 +32,7 @@ namespace m2 {
   void Debugger::add_label(float x, float y, float z, string label){
     DebugLabels.push_back(label);
     labelId++;
-    DebugLabelPoints.push_back(coordinate_type(x,y,z,1));
+    DebugLabelPoints.push_back(coordinate_type(x,y,z));
   }
 
   void Debugger::draw_labels(){
@@ -59,7 +59,7 @@ namespace m2 {
 
   void Debugger::add_id(float x, float y, float z){
     DebugIds.push_back(labelId);
-    DebugIdPoints.push_back(coordinate_type(x,y,z,1));
+    DebugIdPoints.push_back(coordinate_type(x,y,z));
     labelId++;
   }
 

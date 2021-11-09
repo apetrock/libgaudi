@@ -9,7 +9,6 @@
 #include "m2Includes.h"
 #include "modify.hpp"
 #include "quartic/cubic.hpp"
-#include "tribox3.h"
 #include "tribox_test.hpp"
 
 #include "TIMER.h"
@@ -448,7 +447,7 @@ makeTriTree(m2::control<SPACE> *mesh) {
 
   auto tribox = [&](coordinate_type cen, T half, void *data) {
     coordinate_type *tri = static_cast<coordinate_type *>(data);
-    tri_box<T, coordinate_type> tribox;
+    m2::va::tri_box<T, coordinate_type> tribox;
 
     coordinate_type halfc = 0.5 * coordinate_type(half, half, half, 0.0);
 

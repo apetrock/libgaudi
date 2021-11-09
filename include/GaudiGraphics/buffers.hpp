@@ -28,7 +28,9 @@ public:
 
   static DrawablePtr create() { return std::make_shared<Drawable>(); }
 
-  virtual void draw() {}
+  virtual void draw(Mat4 &mProject, Mat4 &mModelView) {}
+  virtual void init() {}
+
   virtual bool intersectBbox(Vec4 r0, Vec4 r1, Real &tnear, Real &tfar) {
     return true;
   };
@@ -61,6 +63,8 @@ public:
 
     return (smallest_tmax > largest_tmin);
   }
+
+  bool isVisible = true;
 };
 
 class BufferObject;
@@ -75,13 +79,13 @@ public:
     // free everything here
 
     mDispShader->free();
-    mPickShader->free();
   };
 
-  void initBuffer() {
+  virtual void init() { this->initBuffer(); }
+
+  virtual void initBuffer() {
 
     mDispShader = new nanogui::GLShader;
-    mPickShader = new nanogui::GLShader;
 
     mIndices = nanogui::MatrixXu(3, 0);
     mPositions = nanogui::MatrixXf(3, 0);
@@ -97,7 +101,7 @@ public:
     this->initDisplayShader();
   };
 
-  void allocateVerts(int nInd, int nVerts) {
+  virtual void allocateVerts(int nInd, int nVerts) {
     mIndices.resize(3, nInd);
     mPositions.resize(3, nVerts);
     mColors.resize(3, nVerts);
@@ -107,7 +111,6 @@ public:
     buildFunc(*this);
     calcBbox();
     computeNormals();
-    updateShaderAttributes();
   };
 
   virtual bool intersectBbox(Vec4 r0, Vec4 r1, Real &tnear, Real &tfar,
@@ -150,18 +153,14 @@ public:
   }
 
   void calcBbox() {
-    mVertNormals = nanogui::MatrixXf(mPositions.rows(), mPositions.cols());
-    mVertNormals.setZero();
-    // in order to calculate the vertex normals to send to the shader
-    // the face normals have to be calculated
     bbmin = Vec4(99999, 99999, 99999, 1);
     bbmax = Vec4(-99999, -99999, -99999, 1);
     for (int i = 0; i < mPositions.cols(); i++) {
       Vec3 v = mPositions.col(i);
-      for (int j = 0; j < 3; j++) {
-        bbmin[j] = std::min(bbmin[j], v[j]);
-        bbmax[j] = std::max(bbmax[j], v[j]);
-      }
+      bbmin(Eigen::seq(0, 2), 0) =
+          bbmin(Eigen::seq(0, 2), 0).array().min(v.array());
+      bbmax(Eigen::seq(0, 2), 0) =
+          bbmax(Eigen::seq(0, 2), 0).array().min(v.array());
     }
   }
 
@@ -170,17 +169,8 @@ public:
     // per fragment on the shader
     mVertNormals = nanogui::MatrixXf(mPositions.rows(), mPositions.cols());
     mVertNormals.setZero();
-    // in order to calculate the vertex normals to send to the shader
-    // the face normals have to be calculated
-    // std::cout << mIndices.transpose() << std::endl;
-    // std::cout << "indices" << std::endl;
-    // std::cout << mIndices  << std::endl;
-    // std::cout << "positions" << std::endl;
-    // std::cout << mPositions  << std::endl;
 
     for (int i = 0; i < mIndices.cols(); i++) {
-      // std::cout << mIndices.size() << " " << mIndices(0,i) << std::endl;
-      // std::cout << mPositions.col(mIndices(0,i)).transpose() << std::endl;
 
       Vec3 v0 = mPositions.col(mIndices(0, i));
       Vec3 v1 = mPositions.col(mIndices(1, i));
@@ -203,7 +193,6 @@ public:
     mDispShader->uploadIndices(mIndices);
     mDispShader->uploadAttrib("vertexPosition_modelspace", mPositions);
     mDispShader->uploadAttrib("vertexColor_modelspace", mColors);
-    mDispShader->setUniform("uColor", mColor);
   }
 
   virtual void initDisplayShader() {
@@ -221,9 +210,6 @@ public:
     mDispShader->initFromFiles(
         /* An identifying name */
         convert.str(), "src/shaders/standard.vs", "src/shaders/standard.fs");
-
-    std::cout << ".. binding .." << std::endl;
-    mDispShader->bind();
   };
 
   virtual void updateModel() {
@@ -246,29 +232,6 @@ public:
   }
 
   void bind() { mDispShader->bind(); }
-
-  virtual void highlightColor() {
-    Vec3 hColor = mColor + Vec3(0.25, 0.25, 0.25);
-    mDispShader->bind();
-    mDispShader->setUniform("uColor", hColor);
-  }
-
-  virtual void selectColor() {
-    Vec3 hColor(1.0, 0, 0);
-    mDispShader->setUniform("uColor", hColor);
-    mDispShader->bind();
-  }
-
-  virtual void resetColor() {
-    mDispShader->bind();
-    mDispShader->setUniform("uColor", mColor);
-  }
-
-  virtual void setColor(Vec3 s) {
-    mColor = s;
-    mDispShader->bind();
-    mDispShader->setUniform("uColor", mColor);
-  }
 
   virtual void setScale(Vec4 t) {
     mScale = t;
@@ -311,7 +274,7 @@ public:
   }
 
   virtual void draw(Mat4 &mProject, Mat4 &mModelView) {
-    this->displayShader().bind();
+    bind();
     Mat4 matrix = this->matrix();
     Mat4 mvp = mProject * mModelView * matrix;
     this->displayShader().setUniform("MVP", mvp);
@@ -319,8 +282,8 @@ public:
     this->displayShader().setUniform("M", this->matrix());
     this->displayShader().setUniform("LightPosition_worldspace",
                                      Vec3(3, 3., 5.));
-
-    /* Draw 2 triangles starting at index 0 */
+    updateShaderAttributes();
+        /* Draw 2 triangles starting at index 0 */
     this->displayShader().drawIndexed(GL_TRIANGLES, 0, mIndices.cols());
   }
 
@@ -346,7 +309,6 @@ public:
   Vec4 bbmin;
   Vec4 bbmax;
   int selectionGroup;
-  bool isVisible;
 
 protected:
   int mId;     // this is the color we use for picking
@@ -357,7 +319,6 @@ protected:
   nanogui::MatrixXf mVertNormals;
 
   nanogui::GLShader *mDispShader;
-  nanogui::GLShader *mPickShader;
 
   bool isHovered;
   bool isSelected;
@@ -380,8 +341,8 @@ public:
       // free everything here
   };
 
-  void allocateVerts(int nInd, int nVerts) {
-    mIndices.resize(3, 1);
+  virtual void allocateVerts(int nInd, int nVerts) {
+    mIndices.resize(1, nInd);
     mPositions.resize(3, nVerts);
     mColors.resize(3, nVerts);
   };
@@ -439,10 +400,11 @@ public:
   }
 
   virtual void draw(Mat4 &mProject, Mat4 &mModelView) {
-    this->displayShader().bind();
+    bind();
     Mat4 matrix = this->matrix();
     Mat4 mvp = mProject * mModelView * matrix;
     this->displayShader().setUniform("MVP", mvp);
+    updateShaderAttributes();
 
     glPointSize(1.5);
     this->displayShader().drawIndexed(GL_POINTS, 0, mIndices.cols());
@@ -452,7 +414,7 @@ public:
 class LineBuffer;
 using LineBufferPtr = std::shared_ptr<LineBuffer>;
 
-class LineBuffer : public BufferObject {
+class LineBuffer : public PointBuffer {
 public:
   static LineBufferPtr create() { return std::make_shared<LineBuffer>(); }
 
@@ -461,51 +423,10 @@ public:
       // free everything here
   };
 
-  void allocateVerts(int nInd, int nVerts) {
-    mIndices.resize(3, 1);
+  virtual void allocateVerts(int nInd, int nVerts) {
+    mIndices.resize(2, nInd);
     mPositions.resize(3, nVerts);
     mColors.resize(3, nVerts);
-  };
-
-  void initDisplayShader() {
-    // std::cout << " system: ";
-    // system("less src/shaders/standard.vs");
-    mDispShader->init(
-        /* An identifying name */
-        "a_point_shader",
-
-        /* Vertex shader */
-
-        "#version 330\n"
-        "layout(location = 0) in vec3 vertexPosition_modelspace;\n"
-        "layout(location = 1) in vec2 vertexUV;\n"
-        "layout(location = 3) in vec3 vertexColor_modelspace;\n"
-        "out vec2 UV;\n"
-        "out vec3 Color_cameraspace;\n"
-        "uniform mat4 V;\n"
-        "uniform mat4 M;\n"
-        "uniform mat4 MVP;\n"
-
-        "void main() {\n"
-
-        "    Color_cameraspace = vertexColor_modelspace;\n"
-        "    UV = vertexUV;\n"
-        "    gl_Position = MVP * vec4(vertexPosition_modelspace, 1.0);\n"
-        "}",
-
-        /* Fragment shader */
-        "#version 330\n"
-        "in vec2 UV;\n"
-        "in vec3 Color_cameraspace;\n"
-
-        "out vec4 color;\n"
-        "void main() {\n"
-        "    color = vec4(Color_cameraspace, 1.0);\n"
-        "}");
-
-    mDispShader->bind();
-    mDispShader->uploadIndices(mIndices);
-    mDispShader->uploadAttrib("vertexPosition_modelspace", mPositions);
   };
 
   void fillBuffer(std::function<void(BufferObject &)> buildFunc) {
@@ -514,123 +435,83 @@ public:
     updateShaderAttributes();
   };
 
-  virtual void updateShaderAttributes() {
-    mDispShader->uploadIndices(mIndices);
-    mDispShader->uploadAttrib("vertexPosition_modelspace", mPositions);
-    mDispShader->uploadAttrib("vertexColor_modelspace", mColors);
-  }
-
   virtual void draw(Mat4 &mProject, Mat4 &mModelView) {
-    this->displayShader().bind();
+    bind();
     Mat4 matrix = this->matrix();
     Mat4 mvp = mProject * mModelView * matrix;
     this->displayShader().setUniform("MVP", mvp);
-    this->displayShader().setUniform("V", mModelView);
-    this->displayShader().setUniform("M", this->matrix());
+    updateShaderAttributes();
 
-    glPointSize(1.5);
-    this->displayShader().drawIndexed(GL_POINTS, 0, mIndices.cols());
+    this->displayShader().drawIndexed(GL_LINES, 0, mIndices.cols());
+    
   }
+
 }; // LineBuffer;
 
-class ImmediateLines;
-using ImmediateLinesPtr = std::shared_ptr<ImmediateLines>;
+class DebugBuffer;
+using DebugBufferPtr = std::shared_ptr<DebugBuffer>;
 
-class ImmediateLines : public BufferObject {
+class DebugBuffer : public Drawable {
 public:
-  static ImmediateLinesPtr create() {
-    return std::make_shared<ImmediateLines>();
-  }
+  static DebugBufferPtr create() { return std::make_shared<DebugBuffer>(); }
 
-  ImmediateLines(){};
-  ~ImmediateLines(){
+  DebugBuffer(){};
+  ~DebugBuffer(){
       // free everything here
   };
 
-  void buildBuffer() {
-    // don't need to override default buildBuffer, since we do all our counting
-    // internally
-    mDispShader = new nanogui::GLShader;
+  virtual void init() {
+    if (!_lines) {
+      _lines = gg::LineBuffer::create();
+      _lines->initBuffer();
+    }
+  }
 
-    int ni = 0, nv = 0;
-    for (int i = 0; i < mImIndices.size(); i++) {
-      ni += mImIndices[i].cols();
+  void renderLines() {
+    using namespace nanogui;
+
+    int numVerts = 0, numIndices = 0;
+    for (int i = 0; i < mLineIndices.size(); i++) {
+      numIndices += mLineIndices[i].cols();
     }
 
-    for (int i = 0; i < mImPositions.size(); i++) {
-      nv += mImPositions[i].cols();
+    for (int i = 0; i < mLinePositions.size(); i++) {
+      numVerts += mLinePositions[i].cols();
     }
+    _lines->fillBuffer([&](gg::BufferObject &o) -> void {
+      o.allocateVerts(numIndices, numVerts);
 
-    mIndices = nanogui::MatrixXu(2, ni);
-    mPositions = nanogui::MatrixXf(3, nv);
+      auto &indices = o.indices();
+      auto &positions = o.positions();
+      auto &colors = o.colors();
 
-    int iI = 0;
-    int iP = 0;
-    for (int i = 0; i < mImIndices.size(); i++) {
-      for (int j = 0; j < mImIndices[i].cols(); j++) {
+      int iI = 0;
+      int iP = 0;
+      for (int i = 0; i < mLineIndices.size(); i++) {
+        for (int j = 0; j < mLineIndices[i].cols(); j++) {
 
-        mIndices.col(iI + j)
-            << (Vec2i(iP, iP).cast<unsigned int>() + mImIndices[i].col(j));
+          indices.col(iI + j)
+              << (Vec2i(iP, iP).cast<unsigned int>() + mLineIndices[i].col(j));
+        }
+        iP += mLinePositions[i].cols();
+        iI += mLineIndices[i].cols();
       }
-      iP += mImPositions[i].cols();
-      iI += mImIndices[i].cols();
-    }
 
-    iP = 0;
-    for (int i = 0; i < mImPositions.size(); i++) {
-      for (int j = 0; j < mImPositions[i].cols(); j++) {
-        mPositions.col(iP + j) << mImPositions[i].col(j);
+      iP = 0;
+      for (int i = 0; i < mLinePositions.size(); i++) {
+        for (int j = 0; j < mLinePositions[i].cols(); j++) {
+          positions.col(iP + j) << mLinePositions[i].col(j);
+          colors.col(iP + j) = mLineColors[i](Eigen::seq(0, 2), 0);
+        }
+        iP += mLinePositions[i].cols();
       }
-      iP += mImPositions[i].cols();
-    }
-
-    // std::cout << mIndices << std::endl;
-    // std::cout << mPositions << std::endl;
-    calcBbox();
-
-    mMatrix.setIdentity();
-    mRot.setIdentity();
-    mColor = Vec3(1.00, 0.0, 0.0);
-    mCen = Vec4(0.0, 0.0, 0.0, 1.0); // add the homogeneous 1
-    mScale = Vec4(1.0, 1.0, 1.0, 1.0);
-    mOffset = Vec4(0.0, 0.0, 0.0, 1.0);
-    selectionGroup = 0;
-    isVisible = true;
+    });
   };
 
-  void initDisplayShader() {
-    // std::cout << " system: ";
-    // system("less src/shaders/standard.vs");
-    mDispShader->init(
-        /* An identifying name */
-        "a_line_shader",
-
-        /* Vertex shader */
-        "#version 330\n"
-        "uniform mat4 MVP;\n"
-        "in vec3 vertexPosition_modelspace;\n"
-        "void main() {\n"
-        "    gl_Position = MVP * vec4(vertexPosition_modelspace, 1.0);\n"
-        "}",
-
-        /* Fragment shader */
-        "#version 330\n"
-        "out vec4 color;\n"
-        "uniform vec3 uColor;\n"
-        "void main() {\n"
-        "    color = vec4(uColor, 1.0);\n"
-        "}");
-
-    mDispShader->bind();
-    mDispShader->uploadIndices(mIndices);
-    mDispShader->uploadAttrib("vertexPosition_modelspace", mPositions);
-    mDispShader->setUniform("uColor", mColor);
-  };
-
-  void pushBox(Vec3 cen, Vec3 h) {
+  void pushBox(Vec4 cen4, Vec4 h, Vec4 col) {
     nanogui::MatrixXu indices = nanogui::MatrixXu(2, 12);
     nanogui::MatrixXf positions = nanogui::MatrixXf(3, 8);
-
+    Vec3 cen = cen4(Eigen::seq(0, 2), 0);
     indices.col(0) << 0, 1;
     indices.col(1) << 1, 2;
     indices.col(2) << 2, 3;
@@ -656,36 +537,41 @@ public:
     positions.col(6) << cen + Vec3(-h[0], h[1], -h[2]);
     positions.col(7) << cen + Vec3(-h[0], -h[1], -h[2]);
 
-    mImPositions.push_back(positions);
-    mImIndices.push_back(indices);
+    mLinePositions.push_back(positions);
+    mLineIndices.push_back(indices);
+    mLineColors.push_back(col);
   };
 
-  void pushLine(Vec3 c0, Vec3 c1) {
+  void pushLine(Vec4 c0, Vec4 c1, Vec4 col) {
     nanogui::MatrixXu indices = nanogui::MatrixXu(2, 1);
     nanogui::MatrixXf positions = nanogui::MatrixXf(3, 2);
 
     indices.col(0) << 0, 1;
 
-    positions.col(0) << c0;
-    positions.col(1) << c1;
-    mImPositions.push_back(positions);
-    mImIndices.push_back(indices);
+    positions.col(0) << c0(Eigen::seq(0, 2), 0);
+    positions.col(1) << c1(Eigen::seq(0, 2), 0);
+    mLinePositions.push_back(positions);
+    mLineIndices.push_back(indices);
+    mLineColors.push_back(col);
   };
 
   virtual void draw(Mat4 &mProject, Mat4 &mModelView) {
-    this->displayShader().bind();
-    Mat4 matrix = this->matrix();
-    Mat4 mvp = mProject * mModelView * matrix;
-    this->displayShader().setUniform("MVP", mvp);
+    _lines->draw(mProject, mModelView);
+  }
 
-    /* Draw 2 triangles starting at index 0 */
-    glLineWidth(5.0);
-    this->displayShader().drawIndexed(GL_LINES, 0, mIndices.cols());
+  void clear() {
+    //_lines->clear();
+    mLineColors.clear();
+    mLinePositions.clear();
+    mLineIndices.clear();
   }
 
 private:
-  std::vector<nanogui::MatrixXf> mImPositions;
-  std::vector<nanogui::MatrixXu> mImIndices;
+  LineBufferPtr _lines;
+
+  std::vector<Vec4> mLineColors;
+  std::vector<nanogui::MatrixXf> mLinePositions;
+  std::vector<nanogui::MatrixXu> mLineIndices;
 };
 
 BufferObject *makeCube() {

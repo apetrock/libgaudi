@@ -53,6 +53,7 @@ FetchContent_MakeAvailable(fmtlib)
 
 
 set(EIGEN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen-3.4.0")
+set(SPECTRA_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/spectra/include")
 
 # Disable building extras we won't need (pure C++ project)
 set(NANOGUI_BUILD_SHARED OFF CACHE BOOL " " FORCE)
@@ -65,17 +66,21 @@ set(NANOGUI_EIGEN_INCLUDE_DIR "${EIGEN_INCLUDE_DIR}" CACHE FILEPATH " " FORCE)
 # Add the configurations from nanogui
 add_subdirectory(ext/nanogui)
 
+
 # For reliability of parallel build, make the NanoGUI targets dependencies
 set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 
 include_directories("${NANOGUI_EXTRA_INCS}")
 add_definitions("${NANOGUI_EXTRA_DEFS}")
 
-include_directories("${EIGEN_INCLUDE_DIR}")
+#set(SPECTRA_EIGEN_INCLUDE_DIR "${EIGEN_INCLUDE_DIR}" CACHE FILEPATH " " FORCE)
+#add_subdirectory(ext/spectra)
 
+include_directories("${EIGEN_INCLUDE_DIR}" "${SPECTRA_INCLUDE_DIR}" )
 add_subdirectory(src)
 # The executable code is here
 #add_subdirectory(projects/hello_manifold)
 add_subdirectory(projects/hello)
 add_subdirectory(projects/sdftest)
+add_subdirectory(projects/spectratest)
 

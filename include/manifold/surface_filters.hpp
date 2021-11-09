@@ -64,7 +64,7 @@ public:
       if (wTotal > 1e-6 && kT < cutoff)
         filteredCoordinates[i] = kA / wTotal;
       else
-        filteredCoordinates[i] = coordinate_type(0, 0, 0, 0);
+        filteredCoordinates[i] = coordinate_type(0, 0, 0);
     }
 
     for (long i = 0; i < tverts.size(); i++) {
@@ -94,7 +94,7 @@ public:
       face_vertex_ptr ite = v->fend();
       bool at_head = false;
 
-      coordinate_type kA(0, 0, 0, 0);
+      coordinate_type kA(0, 0, 0);
       T wTotal = 0, aTotal = 0;
       coordinate_type c0 = tverts[i]->coordinate();
       int k = 0;
@@ -118,7 +118,7 @@ public:
       if (wTotal > 1e-10)
         filteredCoordinates[i] = kA / wTotal;
       else
-        filteredCoordinates[i] = coordinate_type(0, 0, 0, 0);
+        filteredCoordinates[i] = coordinate_type(0, 0, 0);
     }
 
     for (long i = 0; i < tverts.size(); i++) {
@@ -397,7 +397,7 @@ public:
                                                    coordinate_type cov[3],
                                                    coordinate_type w) {
     if (v->size() == 0)
-      return coordinate_type(0, 0, 0, 0);
+      return coordinate_type(0, 0, 0);
     face_vertex_ptr itb = v->fbegin();
     face_vertex_ptr ite = v->fend();
     bool at_head = false;
@@ -432,9 +432,9 @@ public:
       else if (w[2] < 1e-3)
         return outv;
       else
-        return coordinate_type(0, 0, 0, 0);
+        return coordinate_type(0, 0, 0);
     } else
-      return coordinate_type(0, 0, 0, 0);
+      return coordinate_type(0, 0, 0);
   }
 
   static void nullLaplacianFilter(m2::control<SPACE> &in, T strength) {
