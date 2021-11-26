@@ -17,7 +17,7 @@ namespace m1 {
   class construct {
     M1_TYPEDEFS
     public:
-    void add_moment_support(control_ptr& in){
+    void add_moment_support(surf_ptr& in){
       vertex_array& V = in->get_vertices();
       edge_array& E = in->get_edges();			
       vector<edge_ptr> collector;
@@ -77,7 +77,7 @@ namespace m1 {
 			
     }
 		
-    void insert_vertex(control_ptr ci, long ei){
+    void insert_vertex(surf_ptr ci, long ei){
       edge_ptr eo = ci->edge(ei);
       vertex_ptr v1 = eo->v1();
       vertex_ptr v2 = eo->v2();
@@ -96,8 +96,8 @@ namespace m1 {
       ci->push_vertex(vn);
     }
 		
-    control_ptr rand_graph(int N){
-      control_ptr out = new control_type();
+    surf_ptr rand_graph(int N){
+      surf_ptr out = new surf_type();
   
       for (int i = 0; i < N; i++){
 	coordinate_type c;

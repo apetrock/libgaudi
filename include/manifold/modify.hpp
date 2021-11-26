@@ -19,7 +19,7 @@ public:
   modify() {}
   ~modify() {}
 
-  void translate(control_ptr obj, T x, T y, T z) {
+  void translate(surf_ptr obj, T x, T y, T z) {
     vertex_array &verts = obj->get_vertices();
     long sz = verts.size();
     for (long i = 0; i < sz; i++) {
@@ -31,7 +31,7 @@ public:
     obj->update_all();
   }
 
-  void move_to(control_ptr obj, coordinate_type newCenter) {
+  void move_to(surf_ptr obj, coordinate_type newCenter) {
     vertex_array &verts = obj->get_vertices();
 
     coordinate_type oldCenter = obj->calc_center();
@@ -45,7 +45,7 @@ public:
     obj->update_all();
   }
 
-  void scale(control_ptr obj, T x, T y, T z) {
+  void scale(surf_ptr obj, T x, T y, T z) {
     vertex_array &verts = obj->get_vertices();
     long sz = verts.size();
     for (long i = 0; i < sz; i++) {
@@ -57,7 +57,7 @@ public:
     obj->update_all();
   }
 
-  void rotate(control_ptr obj, mat4 R) {
+  void rotate(surf_ptr obj, mat4 R) {
     vertex_array &verts = obj->get_vertices();
     long sz = verts.size();
     for (long i = 0; i < sz; i++) {
@@ -68,7 +68,7 @@ public:
     obj->update_all();
   }
 
-  void center(control_ref in) {
+  void center(surf_ref in) {
 
     vertex_array &tVerts = in.get_vertices();
     int fc = 0;
@@ -105,14 +105,14 @@ public:
     mod.scale(&in, s, s, s);
   }
 
-  void centerGeometry(control_ref in) {
+  void centerGeometry(surf_ref in) {
     M2_TYPEDEFS
     vector<vertex_ptr> &tVerts = in.get_vertices();
     int fc = 0;
     coordinate_type cen = in.calc_center();
-    m2::bounding_box<SPACE> bb = in.calc_bbox();
+    box_type bb = in.calc_bbox();
 
-    coordinate_type dl = bb.max - bb.min;
+    coordinate_type dl = 2.0 * bb.half;
     T maxl = dl[0];
     maxl = maxl > dl[1] ? maxl : dl[1];
     maxl = maxl > dl[2] ? maxl : dl[2];

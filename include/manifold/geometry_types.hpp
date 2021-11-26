@@ -69,10 +69,74 @@ template <typename T, typename CTYPE> struct swept_triangle {
   }
   */
 };
+template <typename T, typename CTYPE> struct bounding_box {
+public:
+  CTYPE center;
+  CTYPE half;
+  bounding_box(){};
+  bounding_box(const CTYPE &cen, const CTYPE &h) : center(cen), half(h){};
+
+  void setBounds(const CTYPE &min, const CTYPE &max) {
+    // should probably assert that min < max
+    center = 0.5 * (min + max);
+    half = 0.5 * (max - min);
+  }
+
+  void inflate(const CTYPE &tol) { half += tol; }
+
+  void expandBy(const T &r) { half = m2::va::max(half, r); }
+
+  void expandBy(const bounding_box<T, CTYPE> &other) {
+    CTYPE omin = other.center - other.half;
+    CTYPE omax = other.center + other.half;
+    CTYPE tmin = this->center - this->half;
+    CTYPE tmax = this->center + this->half;
+
+    tmin = m2::va::min(tmin, omin);
+    tmax = m2::va::max(tmax, omax);
+
+    this->setBounds(tmin, tmax);
+  }
+
+  bool overlap(const bounding_box<T, CTYPE> &other) {
+    CTYPE omin = other.center - other.half;
+    CTYPE omax = other.center + other.half;
+
+    CTYPE tmin = this->center - this->half;
+    CTYPE tmax = this->center + this->half;
+
+    if (omin[0] > tmax[0])
+      return false;
+    else if (omax[0] < tmin[0])
+      return false;
+
+    else if (omin[1] > tmax[1])
+      return false;
+    else if (omax[1] < tmin[1])
+      return false;
+
+    else if (omin[2] > tmax[2])
+      return false;
+    else if (omax[2] < tmin[2])
+      return false;
+
+    return true;
+  }
+};
+
+template <typename T, typename CTYPE>
+bounding_box<T, CTYPE> makeBoxMinMax(const CTYPE &min, const CTYPE &max) {
+  bounding_box<T, CTYPE> bb;
+  bb.setBounds(min, max);
+  return bb;
+}
 
 template <typename T, typename CTYPE> struct triangle {
+
+public:
   static const int size = 3;
   CTYPE p[3];
+
   triangle(){};
 
   triangle(CTYPE p0, CTYPE p1, CTYPE p2) {
@@ -113,58 +177,60 @@ template <typename T, typename CTYPE> struct triangle {
     T a = m2::va::norm(A);
     T b = m2::va::norm(B);
     T c = m2::va::norm(C);
-    
+
     A /= a;
     B /= b;
     C /= c;
 
-    T divisor = m2::va::dot(A, B) +
-                m2::va::dot(B, C) +
-                m2::va::dot(C, A) + T(1);
+    T divisor =
+        m2::va::dot(A, B) + m2::va::dot(B, C) + m2::va::dot(C, A) + T(1);
 
     T det = m2::va::determinant(A, B, C);
-    
+
     if (det == 0)
       return T(0);
-    /*
-    std::cout << "p: " << pi.transpose() << std::endl;
-
-   std::cout << "t0: " << p[0].transpose() << std::endl;
-   std::cout << "t1: " << p[1].transpose() << std::endl;
-   std::cout << "t2: " << p[2].transpose() << std::endl;
-
-   std::cout << "A: " << A.transpose() << std::endl;
-   std::cout << "B: " << B.transpose() << std::endl;
-   std::cout << "C: " << C.transpose() << std::endl;
-   std::cout << "abc: " << a << " " << b << " " << c << " " << std::endl;
-   std::cout << "det" << det << std::endl;
-   std::cout << "div" << divisor << std::endl;
-   */
     return T(2) * atan2(det, divisor);
   }
 
   T distanceFrom(CTYPE point) { return distance_from_triangle(p, point); }
 
-  void getExtents(CTYPE &min, CTYPE &max) {
-    min = this->center();
-    max = min;
-    for (int i = 0; i < 3; i++) {
-      min = min.array().min(p[i].array());
-      max = min.array().max(p[i].array());
-    }
+  T avgSqdDist(const triangle &B) const {
+
+    const CTYPE &ca0 = this->p[0];
+    const CTYPE &ca1 = this->p[1];
+    const CTYPE &ca2 = this->p[2];
+    // assume the other coordinate rotates in opposite direction since they
+    // are facing opposite directions
+    const CTYPE &cb0 = B.p[2];
+    const CTYPE &cb1 = B.p[1];
+    const CTYPE &cb2 = B.p[0];
+    T d0 = 1.0 / 3.0 *
+           ((cb0 - ca0).squaredNorm() + (cb1 - ca1).squaredNorm() +
+            (cb2 - ca2).squaredNorm());
+    T d1 = 1.0 / 3.0 *
+           ((cb0 - ca1).squaredNorm() + (cb1 - ca2).squaredNorm() +
+            (cb2 - ca0).norm());
+    T d2 = 1.0 / 3.0 *
+           ((cb0 - ca2).squaredNorm() + (cb1 - ca0).squaredNorm() +
+            (cb2 - ca1).squaredNorm());
+
+    T dmin = min(min(d0, d1), d2);
+    return dmin;
+  };
+
+  bounding_box<T, CTYPE> bbox() {
+    CTYPE min, max;
+    this->getExtents(min, max);
+    return makeBoxMinMax<T, CTYPE>(min, max);
   }
 
-  /*
-  void draw(){
-    glBegin(GL_POLYGON);
-    CTYPE norm = this->normal();
-    glNormal3f(norm[0], norm[1], norm[2]);
-    glVertex3d(p[0][0],p[0][1],p[0][2]);
-    glVertex3d(p[1][0],p[1][1],p[1][2]);
-    glVertex3d(p[2][0],p[2][1],p[2][2]);
-    glEnd();
-    }
-*/
+  void getExtents(CTYPE &min, CTYPE &max) {
+    min = p[0], max = p[0];
+    min = m2::va::min(min, p[1]);
+    min = m2::va::min(min, p[2]);
+    max = m2::va::max(max, p[1]);
+    max = m2::va::max(max, p[2]);
+  }
 };
 
 template <typename T, typename CTYPE> struct swept_point {
@@ -232,64 +298,6 @@ template <typename T, typename CTYPE> struct box {
     center = cen;
     half = h;
   };
-  /*
-  void drawCenter(T size){
-    glPointSize(size);
-    glBegin(GL_POINTS);
-    glVertex3d(center[0],center[1],center[2]);
-    glEnd();
-    }
-*/
-
-  /*
-  void draw(){
-    CTYPE p = this->center;
-    CTYPE h = this->half;
-    glBegin(GL_LINES);
-    glVertex3d(p[0] - h[0],p[1] - h[1],p[2]-h[2]);
-    glVertex3d(p[0] + h[0],p[1] - h[1],p[2]-h[2]);
-
-    glVertex3d(p[0] + h[0],p[1] - h[1],p[2]-h[2]);
-    glVertex3d(p[0] + h[0],p[1] + h[1],p[2]-h[2]);
-
-    glVertex3d(p[0] + h[0],p[1] + h[1],p[2]-h[2]);
-    glVertex3d(p[0] - h[0],p[1] + h[1],p[2]-h[2]);
-
-    glVertex3d(p[0] - h[0],p[1] + h[1],p[2]-h[2]);
-    glVertex3d(p[0] - h[0],p[1] - h[1],p[2]-h[2]);
-
-
-    glVertex3d(p[0] - h[0],p[1] - h[1],p[2]+h[2]);
-    glVertex3d(p[0] + h[0],p[1] - h[1],p[2]+h[2]);
-
-    glVertex3d(p[0] + h[0],p[1] - h[1],p[2]+h[2]);
-    glVertex3d(p[0] + h[0],p[1] + h[1],p[2]+h[2]);
-
-    glVertex3d(p[0] + h[0],p[1] + h[1],p[2]+h[2]);
-    glVertex3d(p[0] - h[0],p[1] + h[1],p[2]+h[2]);
-
-    glVertex3d(p[0] - h[0],p[1] + h[1],p[2]+h[2]);
-    glVertex3d(p[0] - h[0],p[1] - h[1],p[2]+h[2]);
-
-
-    glVertex3d(p[0] - h[0],p[1] - h[1],p[2] - h[2]);
-    glVertex3d(p[0] - h[0],p[1] - h[1],p[2] + h[2]);
-
-    glVertex3d(p[0] + h[0],p[1] - h[1],p[2] - h[2]);
-    glVertex3d(p[0] + h[0],p[1] - h[1],p[2] + h[2]);
-
-    glVertex3d(p[0] + h[0],p[1] + h[1],p[2] - h[2]);
-    glVertex3d(p[0] + h[0],p[1] + h[1],p[2] + h[2]);
-
-    glVertex3d(p[0] - h[0],p[1] + h[1],p[2] - h[2]);
-    glVertex3d(p[0] - h[0],p[1] + h[1],p[2] + h[2]);
-
-    glVertex3d(p[0] - h[0],p[1] - h[1],p[2] - h[2]);
-    glVertex3d(p[0] - h[0],p[1] - h[1],p[2] + h[2]);
-
-    glEnd();
-  }
-  */
 };
 
 // template <typename T, typename CTYPE, typename PRIMITIVE>
@@ -302,6 +310,7 @@ template <typename T> class euclidean_space {
 public:
   typedef T double_type;
   typedef T real;
+
   // always use homogeneous coordinates, provides decent error checking
   typedef Eigen::Matrix<T, 3, 1> coordinate_type;
 
@@ -309,7 +318,7 @@ public:
   typedef triangle<T, coordinate_type> triangle_type;
   typedef swept_point<T, coordinate_type> swept_point_type;
   typedef swept_triangle<T, coordinate_type> swept_triangle_type;
-  typedef box<T, coordinate_type> box_type;
+  typedef bounding_box<T, coordinate_type> box_type;
   typedef Eigen::Matrix<T, 3, 3> mat3;
   typedef Eigen::Matrix<T, 4, 4> mat4;
   typedef unsigned short ushort;
@@ -330,6 +339,22 @@ public:
   typedef Eigen::Matrix<T, 2, 1> int2;
   typedef Eigen::Matrix<T, 4, 1> int3;
   typedef Eigen::Matrix<T, 4, 1> int4;
+
+  enum class edge_index { 
+    MAXINDEX = 0
+   };
+
+  enum class vertex_index {
+    COORDINATE = 0,
+    MAXINDEX = 1
+  };
+
+  enum class face_index {
+    NORMAL = 0,
+    AREA = 1,
+    MAXINDEX = 2
+
+  };
 };
 
 typedef euclidean_space<double> space3;

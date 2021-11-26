@@ -23,7 +23,6 @@
 #include "GaudiGraphics/viewer.hpp"
 
 #include "manifold/bins.hpp"
-#include "manifold/fdt.hpp"
 #include "manifold/m2Includes.h"
 #include "manifold/m2Operators.h"
 #include "manifold/make.hpp"
@@ -44,8 +43,8 @@ using std::endl;
 using namespace GaudiMath;
 
 template <typename SPACE>
-m2::aabb_tree<SPACE, typename SPACE::triangle_type>
-build_tree(m2::control<SPACE> *mesh) {
+m2::aabb_tree<SPACE, typename m2::face_triangle<SPACE>>
+build_tree(m2::surf<SPACE> *mesh) {
   using namespace nanogui;
   M2_TYPEDEFS;
   std::cout << "  building tree" << std::endl;
@@ -84,8 +83,8 @@ public:
 
     createGeometry();
     //testTree();
-    //testDistance();
-    testAvg();
+    testDistance();
+    //testAvg();
     //testNormals();
     _debugLines->renderLines();
   }
@@ -181,11 +180,11 @@ public:
     std::vector<space3::vec3> positions = createPoints(N);
 
     std::cout << "creating vecs" << std::endl;
-    std::vector<space3::triangle_type> triangles;
+    std::vector<m2::face_triangle<space3>> triangles;
 
     auto &faces = _meshGraph->get_faces();
     for (int i = 0; i < faces.size(); i++) {
-      std::vector<space3::triangle_type> tris = faces[i]->get_tris();
+      std::vector<m2::face_triangle<space3>> tris = faces[i]->get_tris();
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
 
@@ -236,12 +235,12 @@ public:
     std::vector<space3::vec3> positions = createPoints(N);
 
     std::cout << "creating vecs" << std::endl;
-    std::vector<space3::triangle_type> triangles;
+    std::vector<m2::face_triangle<space3>> triangles;
     auto &faces = _meshGraph->get_faces();
     std::vector<space3::vec3> normals;
 
     for (int i = 0; i < faces.size(); i++) {
-      std::vector<space3::triangle_type> tris = faces[i]->get_tris();
+      std::vector<m2::face_triangle<space3>> tris = faces[i]->get_tris();
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
 
@@ -313,7 +312,7 @@ private:
   gg::PointBufferPtr _points;
   gg::DebugBufferPtr _debugLines;
 
-  m2::control<space3> *_meshGraph;
+  m2::surf<space3> *_meshGraph;
 };
 
 std::string GetCurrentWorkingDir(void) {

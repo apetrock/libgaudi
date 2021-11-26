@@ -85,7 +85,7 @@ namespace m1 {
     friend class vel_mult<T>;
     friend class pos_mult<T>;
   public:
-    spring(control_ptr obj_in){
+    spring(surf_ptr obj_in){
 
       mbegin = true;
       obj_in->pack();
@@ -421,7 +421,7 @@ namespace m1 {
 		
   private:
     bool mbegin;
-    control_ptr		 sp_;
+    surf_ptr		 sp_;
     T mdt,meps,mks,mkrs;
     vector<coordinate_type>	pos0;	//new velocity
     vector<coordinate_type>	pos1;	//new velocity		
@@ -451,7 +451,7 @@ namespace m1 {
   typedef coordinate_type							point_type ;
     typedef typename list<coordinate_type >::iterator	pl_iterator;
   public:
-    spring_non_linear(control_ptr obj_in){
+    spring_non_linear(surf_ptr obj_in){
       obj_in->pack();
       mks	= 500.0;//for now uniform k spring_non_linear
       mdt	= 0.1;
@@ -766,7 +766,7 @@ namespace m1 {
     }
 		
   private:
-    control_ptr		 sp_;
+    surf_ptr		 sp_;
     T mdt,meps,mks,mkrs;
     vector<coordinate_type>	pos0;	//new velocity		
     vector<coordinate_type>	vel1;	//new velocity
@@ -792,7 +792,7 @@ namespace m1 {
   typedef coordinate_type							point_type ;
     typedef typename list<coordinate_type >::iterator	pl_iterator;
   public:
-    spring_electric(control_ptr obj_in){
+    spring_electric(surf_ptr obj_in){
       K_	= 0.1;
       C_	= 0.5;
       eps_= 0.01;
@@ -917,7 +917,7 @@ namespace m1 {
     }
 		
   private:
-    control_ptr		 sp_;
+    surf_ptr		 sp_;
     T dt_,eps_,C_,K_, energy0, energy;
     int progress;
     vector<coordinate_type>	pos1;  

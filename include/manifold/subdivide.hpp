@@ -22,7 +22,7 @@ public:
   subdivide() {}
   ~subdivide() {}
 
-  void subdivide_catmull_clark(control_ptr &obj_in) {
+  void subdivide_catmull_clark(surf_ptr &obj_in) {
     coordinate_array control;
     coordinate_array edges;
     coordinate_array centers;
@@ -51,20 +51,21 @@ public:
   }
 
   int calc_vertex(vertex_ptr &vertex_in, coordinate_type &out) {
-    size_t k = vertex_in->size(); // calculate the valence
-    T B = 3. / 2. / (T)k;
-    T G = 1. / 4. / (T)k;
+
+    T B = 3.0 / 2.0;
+    T G = 1.0 / 4.0;
     face_vertex_ptr fvb = vertex_in->fbegin();
     face_vertex_ptr fve = vertex_in->fend();
 
     coordinate_type cc = vertex_in->coordinate();
 
-    out = cc * (1. - B - G);
+    //out = cc * (1. - B - G);
     bool iterating = true;
     if (fvb == NULL)
       iterating == false;
     int i = 0;
     int maxIt = 100;
+    T k = 0.0;
     while (iterating && i < maxIt) {
       iterating = fvb != fve;
       iterating &= fvb != NULL;
@@ -72,11 +73,16 @@ public:
         face_vertex_ptr fvn = fvb->prev();
         coordinate_type adj = fvn->coordinate();
         coordinate_type opp = fvn->prev()->coordinate();
-        out += adj * B / (T)k + opp * G / (T)k;
+        out += (B*adj + G*opp);
         fvb = fvb->vnext();
+        k += 1.0;
         i++;
       }
     }
+    out /= k * k;
+    out +=  (1.0 - B / k - G / k) * cc;
+
+
     if (i == maxIt) {
       return 0;
       fvb->face()->color.r = 1.0;
@@ -153,7 +159,7 @@ public:
     return out;
   }
 
-  control_ref subdivide_control(control_ref control_in) {
+  surf_ref subdivide_control(surf_ref control_in) {
     std::cout << " ===subdividing=== " << std::endl;
     // now we make a new face for each edge, and look to the parent to see if
     // the edge has been cracked or not we've preallocated our new arrays, so we
@@ -383,8 +389,8 @@ public:
       }
     }
 
-    control_ptr outptr = new control_type();
-    control_ref out = *outptr;
+    surf_ptr outptr = new surf_type();
+    surf_ref out = *outptr;
     //			cfaces.clear();
     //			cedges.clear();
     //			cverts.clear();
@@ -404,7 +410,7 @@ public:
     return out;
   }
 
-  void subdivide_edges(control_ptr obj_in) {
+  void subdivide_edges(surf_ptr obj_in) {
     obj_in->pack();
     edge_array &E = obj_in->get_edges();
     long sz = E.size();

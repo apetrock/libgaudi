@@ -163,7 +163,7 @@ namespace m2 {
   class add_handle{
     M2_TYPEDEFS;
   public:
-    bool add(control_ptr ob, long i, long j, T teni, T tenj){
+    bool add(surf_ptr ob, long i, long j, T teni, T tenj){
       //	m2::subdivide<T> sub;
       //	m2Ch = sub.subdivide_control(m2Ch);
       //bezier_curve<point_space<3,T> > mCurve(3);

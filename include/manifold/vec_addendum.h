@@ -41,8 +41,8 @@ template <int N, typename T> struct vecComp {
 //}
 
 template <typename T>
-inline VEC3<T> ray_point_intersect(const VEC3<T> &l0, const VEC3<T> &l1, const VEC3<T> &p0,
-                                T &dist) {
+inline VEC3<T> ray_point_intersect(const VEC3<T> &l0, const VEC3<T> &l1,
+                                   const VEC3<T> &p0, T &dist) {
   // calculate the intersection of a ray through to a perpendicular plane
   // passing through a point This is for detecting if a point lies in a box or
   // not.
@@ -58,8 +58,9 @@ inline VEC3<T> ray_point_intersect(const VEC3<T> &l0, const VEC3<T> &l1, const V
 
 // functions-------------------------------
 template <typename T>
-inline VEC3<T> line_plane_intersect(const VEC3<T> &r0, const VEC3<T> &r1, const VEC3<T> &v0,
-                                 const VEC3<T> &v1, const VEC3<T> &v2) {
+inline VEC3<T> line_plane_intersect(const VEC3<T> &r0, const VEC3<T> &r1,
+                                    const VEC3<T> &v0, const VEC3<T> &v1,
+                                    const VEC3<T> &v2) {
   // calculate the intersection between a line and a plane
   VEC3<T> N = cross((v1 - v0), (v2 - v0));
   VEC3<T> n = N.normalize();
@@ -98,6 +99,26 @@ inline T dist(const VEC<N, T> &A, const VEC<N, T> &B) {
 }
 
 template <int N, typename T>
+inline VEC<N, T> max(const VEC<N, T> &A, const VEC<N, T> &B) {
+  return A.cwiseMax(B);
+}
+
+template <int N, typename T>
+inline VEC<N, T> min(const VEC<N, T> &A, const VEC<N, T> &B) {
+  return A.cwiseMin(B);
+}
+
+template <int N, typename T>
+inline VEC<N, T> max(const VEC<N, T> &A, const T &s) {
+  return A.cwiseMax(s);
+}
+
+template <int N, typename T>
+inline VEC<N, T> min(const VEC<N, T> &A, const T &s) {
+  return A.cwiseMin(s);
+}
+
+template <int N, typename T>
 inline T dot(const VEC<N, T> &A, const VEC<N, T> &B) {
   return A.dot(B);
 }
@@ -110,19 +131,17 @@ template <typename T> T norm2(VEC3<T> a) {
   return a[0] * a[0] + a[1] * a[1] + a[2] * a[2];
 };
 
-template <typename T> VEC3<T> normalize(VEC3<T> a) { 
-  return a / norm(a);
-};
+template <typename T> VEC3<T> normalize(VEC3<T> a) { return a / norm(a); };
 template <typename T> VEC4<T> normalize(VEC4<T> a) { return a / norm(a); };
 
-template <typename T> inline VEC3<T> cross(const VEC3<T> &vecA, const VEC3<T> &vecB) {
+template <typename T>
+inline VEC3<T> cross(const VEC3<T> &vecA, const VEC3<T> &vecB) {
   VEC3<T> out;
   out[0] = vecA[1] * vecB[2] - vecA[2] * vecB[1];
   out[1] = vecA[2] * vecB[0] - vecA[0] * vecB[2];
   out[2] = vecA[0] * vecB[1] - vecA[1] * vecB[0];
   return out;
 }
-
 
 template <typename T>
 inline T cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
@@ -140,9 +159,10 @@ inline T cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
 }
 
 template <typename T>
-inline bool ray_triangle_intersect(VEC3<T> &pi, const VEC3<T> &r0, const VEC3<T> &r1,
-                                   const VEC3<T> &v0, const VEC3<T> &v1,
-                                   const VEC3<T> &v2, T &dist) {
+inline bool ray_triangle_intersect(VEC3<T> &pi, const VEC3<T> &r0,
+                                   const VEC3<T> &r1, const VEC3<T> &v0,
+                                   const VEC3<T> &v1, const VEC3<T> &v2,
+                                   T &dist) {
   // Adapted from:
   // Copyright 2001, softSurfer (www.softsurfer.com)
   // using paramatric coordinates, V(s,t) = v0 + su +tv
@@ -184,9 +204,10 @@ inline bool ray_triangle_intersect(VEC3<T> &pi, const VEC3<T> &r0, const VEC3<T>
 }
 
 template <typename T>
-inline bool ray_triangle_intersectII(VEC3<T> &pi, const VEC3<T> &r0, const VEC3<T> &r1,
-                                     const VEC3<T> &v0, const VEC3<T> &v1,
-                                     const VEC3<T> &v2, T &dist) {
+inline bool ray_triangle_intersectII(VEC3<T> &pi, const VEC3<T> &r0,
+                                     const VEC3<T> &r1, const VEC3<T> &v0,
+                                     const VEC3<T> &v1, const VEC3<T> &v2,
+                                     T &dist) {
   // Fast Minimum Storage RayTriangle Intersection
   //	Tomas Moller
   //	Ben Trumbore
@@ -321,7 +342,8 @@ inline bool project_on_line(const Eigen::Matrix<T, N, 1> &x0,
 }
 
 template <typename T>
-inline T distance_from_line(const VEC3<T> &v0, const VEC3<T> &v1, const VEC3<T> &pt) {
+inline T distance_from_line(const VEC3<T> &v0, const VEC3<T> &v1,
+                            const VEC3<T> &pt) {
   VEC3<T> dx = v1 - v0;
   T s = dot((pt - v0), dx) / (dot(dx, dx));
   if (s >= 1)
@@ -335,8 +357,8 @@ inline T distance_from_line(const VEC3<T> &v0, const VEC3<T> &v1, const VEC3<T> 
 }
 
 template <typename T>
-inline T distance_line_line(const VEC3<T> &x0, const VEC3<T> &x1, const VEC3<T> &x2,
-                            const VEC3<T> &x3) {
+inline T distance_line_line(const VEC3<T> &x0, const VEC3<T> &x1,
+                            const VEC3<T> &x2, const VEC3<T> &x3) {
   VEC3<T> a = x1 - x0;
   VEC3<T> b = x3 - x2;
   VEC3<T> c = x2 - x0;
@@ -358,8 +380,8 @@ inline T distance_from_line(Eigen::Matrix<T, 2, 1> &x1,
 }
 
 template <typename T>
-inline T distance_from_plane(const VEC3<T> &v0, const VEC3<T> &v1, const VEC3<T> &v2,
-                             const VEC3<T> &r0) {
+inline T distance_from_plane(const VEC3<T> &v0, const VEC3<T> &v1,
+                             const VEC3<T> &v2, const VEC3<T> &r0) {
   VEC3<T> u = v1 - v0;
   VEC3<T> v = v2 - v0;
   VEC3<T> n = cross(u, v);
@@ -367,6 +389,76 @@ inline T distance_from_plane(const VEC3<T> &v0, const VEC3<T> &v1, const VEC3<T>
   T d = num / sqrt(dot(n, n));
 
   return d;
+}
+
+template <typename T>
+inline T distance_Segment_Segment(const VEC3<T> &s00, const VEC3<T> &s01,
+                                  const VEC3<T> &s10, const VEC3<T> &s11) {
+  // http://geomalgorithms.com/a07-_distance.html#dist3D_Segment_to_Segment()
+  //    Input:  two 3D line segments S1 and S2
+  //    Return: the shortest distance between S1 and S2
+  VEC3<T> u = s01 - s00;
+  VEC3<T> v = s11 - s10;
+  VEC3<T> w = s00 - s10;
+  T a = dot(u, u); // always >= 0
+  T b = dot(u, v);
+  T c = dot(v, v); // always >= 0
+  T d = dot(u, w);
+  T e = dot(v, w);
+  T D = a * c - b * b; // always >= 0
+  T sc, sN, sD = D;    // sc = sN / sD, default sD = D >= 0
+  T tc, tN, tD = D;    // tc = tN / tD, default tD = D >= 0
+
+  // compute the line parameters of the two closest points
+  if (D < 1e-12) { // the lines are almost parallel
+    sN = 0.0;      // force using point P0 on segment S1
+    sD = 1.0;      // to prevent possible division by 0.0 later
+    tN = e;
+    tD = c;
+  } else { // get the closest points on the infinite lines
+    sN = (b * e - c * d);
+    tN = (a * e - b * d);
+    if (sN < 0.0) { // sc < 0 => the s=0 edge is visible
+      sN = 0.0;
+      tN = e;
+      tD = c;
+    } else if (sN > sD) { // sc > 1  => the s=1 edge is visible
+      sN = sD;
+      tN = e + b;
+      tD = c;
+    }
+  }
+
+  if (tN < 0.0) { // tc < 0 => the t=0 edge is visible
+    tN = 0.0;
+    // recompute sc for this edge
+    if (-d < 0.0)
+      sN = 0.0;
+    else if (-d > a)
+      sN = sD;
+    else {
+      sN = -d;
+      sD = a;
+    }
+  } else if (tN > tD) { // tc > 1  => the t=1 edge is visible
+    tN = tD;
+    // recompute sc for this edge
+    if ((-d + b) < 0.0)
+      sN = 0;
+    else if ((-d + b) > a)
+      sN = sD;
+    else {
+      sN = (-d + b);
+      sD = a;
+    }
+  }
+  // finally do the division to get sc and tc
+  sc = (abs(sN) < 1e-12 ? 0.0 : sN / sD);
+  tc = (abs(tN) < 1e-12 ? 0.0 : tN / tD);
+
+  // get the difference of the two closest points
+  VEC3<T> dP = w + (sc * u) - (tc * v); // =  S1(sc) - S2(tc)
+  return norm2(dP);                     // return the closest distance
 }
 
 template <typename T>
@@ -403,7 +495,7 @@ inline T distance_from_triangle(const VEC3<T> *tri, VEC3<T> r0) {
 
 template <typename T>
 inline vector<VEC3<T>> orthogonal_project(const VEC3<T> &norm,
-                                       const vector<VEC3<T>> &verts) {
+                                          const vector<VEC3<T>> &verts) {
 
   T Nxx, Nxy, Nxz, Nyy, Nyz, Nzz;
 
@@ -428,7 +520,8 @@ inline vector<VEC3<T>> orthogonal_project(const VEC3<T> &norm,
   return out;
 }
 
-template <typename T> inline VEC3<T> reflect(const VEC3<T> &norm, const VEC3<T> &x) {
+template <typename T>
+inline VEC3<T> reflect(const VEC3<T> &norm, const VEC3<T> &x) {
 
   T Nxx, Nxy, Nxz, Nyy, Nyz, Nzz;
   VEC3<T> rx;
@@ -506,7 +599,8 @@ template <typename T> inline VEC3<T> calculate_normal(vector<VEC3<T>> vt_list) {
   return tNormal;
 }
 
-template <typename T> inline VEC3<T> calculate_average(vector<VEC3<T>> vt_list) {
+template <typename T>
+inline VEC3<T> calculate_average(vector<VEC3<T>> vt_list) {
   VEC3<T> tCenter;
   tCenter.zero();
   T size = (T)vt_list.size();
@@ -570,6 +664,7 @@ template <typename T> inline VEC3<T> fnormalize(VEC3<T> vecin) {
   T imag = Q_rsqrt(mag);
   return vecin * imag;
 }
+
 } // namespace va
 } // namespace m2
 #endif

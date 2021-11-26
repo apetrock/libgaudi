@@ -18,7 +18,7 @@ namespace m2 {
   class epSubdivide{
     M2_TYPEDEFS;
   public:
-    void inset_vertex(control_ptr in, vertex_ptr v){
+    void inset_vertex(surf_ptr in, vertex_ptr v){
       face_ptr nf = new face_type();
       face_vertex_ptr fvb = v->fbegin();
       face_vertex_ptr fve = v->fend();
@@ -90,7 +90,7 @@ namespace m2 {
       //in->update_all();			
     }
 		
-    void inset_vertex_triangle_collapse(control_ptr in, vertex_ptr v){
+    void inset_vertex_triangle_collapse(surf_ptr in, vertex_ptr v){
       face_ptr nf = new face_type();
       face_vertex_ptr fvb = v->fbegin();
       face_vertex_ptr fve = v->fend();
@@ -195,7 +195,7 @@ namespace m2 {
       //in->update_all();			
     }
 		
-    void inset_vertex_flag_collapse(control_ptr in, vertex_ptr v, vector<coordinate_type>& lc, long lcb){
+    void inset_vertex_flag_collapse(surf_ptr in, vertex_ptr v, vector<coordinate_type>& lc, long lcb){
       face_ptr nf = new face_type();
       face_vertex_ptr fvb = v->fbegin();
       face_vertex_ptr fve = v->fend();
@@ -302,7 +302,7 @@ namespace m2 {
       //in->update_all();			
     }
 		
-    bool subdivide_set(control_ptr in, list<vertex_ptr>& lv){
+    bool subdivide_set(surf_ptr in, list<vertex_ptr>& lv){
       vector<coordinate_type> cvlist;
       vector<long> cvbegin;			
       typename list<vertex_ptr>::iterator vi = lv.begin();

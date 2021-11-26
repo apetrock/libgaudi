@@ -23,7 +23,7 @@ namespace m2 {
   typedef coordinate_type							point_type ;
     typedef typename list<coordinate_type >::iterator	pl_iterator;
   public:
-    spring(control_ptr obj_in){
+    spring(surf_ptr obj_in){
       obj_in->pack();
       mks	= 15.0;//for now uniform k spring
       mdt	= 0.1;
@@ -281,7 +281,7 @@ namespace m2 {
     }
 		
   private:
-    control_ptr		 mMesh;
+    surf_ptr		 mMesh;
     T mdt,meps,mks,mkrs;
     vector<coordinate_type>	pos0;	//new velocity		
     vector<coordinate_type>	vel1;	//new velocity
@@ -310,7 +310,7 @@ namespace m2 {
     typedef typename list<coordinate_type >::iterator	pl_iterator;
 
   public:
-    spring_electric(control_ptr obj_in){
+    spring_electric(surf_ptr obj_in){
       K_	= 1.0;
       C_	= 1.0;
       eps_= 0.1;
@@ -448,7 +448,7 @@ namespace m2 {
     }
 		
   private:
-    control_ptr		 mMesh;
+    surf_ptr		 mMesh;
     T dt_,eps_,C_,K_;
     list<coordinate_type>	pos1;        
   };

@@ -101,12 +101,12 @@ namespace m2 21,363
     struct face_bundle{m2::convex_hull::face_bundle29,655
     convex_hull(m2::convex_hull::convex_hull34,744
     ~convex_hull(m2::convex_hull::~convex_hull35,765
-    control_ptr tetrahedron(m2::convex_hull::tetrahedron37,790
+    surf_ptr tetrahedron(m2::convex_hull::tetrahedron37,790
     void collect_points(m2::convex_hull::collect_points101,2707
     void concave_flip(m2::convex_hull::concave_flip126,3484
     T edge_concave(m2::convex_hull::edge_concave139,3843
     void find_horizon(m2::convex_hull::find_horizon149,4210
-    control_ptr quick_hull(m2::convex_hull::quick_hull191,5411
+    surf_ptr quick_hull(m2::convex_hull::quick_hull191,5411
 
 edge_point_subdividers.hpp,416
 #define __M2EDGEPOINTSUBDIVIDE__11,171
@@ -175,7 +175,7 @@ namespace m2 21,353
   class graph_skinning m2::graph_skinning23,396
     graph_skinning(m2::graph_skinning::graph_skinning29,557
     ~graph_skinning(m2::graph_skinning::~graph_skinning30,581
-    control_ptr build(m2::graph_skinning::build31,606
+    surf_ptr build(m2::graph_skinning::build31,606
     bool opposing_face_match(m2::graph_skinning::opposing_face_match192,5296
     bool stitch_faces(m2::graph_skinning::stitch_faces246,6565
 
@@ -311,7 +311,7 @@ namespace m1 15,260
   class construct m1::construct17,299
     void add_moment_support(m1::construct::add_moment_support20,347
     void insert_vertex(m1::construct::insert_vertex80,2205
-    control_ptr rand_graph(m1::construct::rand_graph99,2712
+    surf_ptr rand_graph(m1::construct::rand_graph99,2712
 
 m1Spring.hpp,3675
 #define __M1SPRING__10,156
@@ -652,9 +652,9 @@ namespace m2 m2::m218,316
   class make m2::make20,359
     make(m2::make::make24,492
     ~make(m2::make::~make25,506
-    control_ptr cube(m2::make::cube27,530
-    control_ptr cylinder(m2::make::cylinder44,1237
-    control_ptr max_tet(m2::make::max_tet86,2387
+    surf_ptr cube(m2::make::cube27,530
+    surf_ptr cylinder(m2::make::cylinder44,1237
+    surf_ptr max_tet(m2::make::max_tet86,2387
 
 manifold_singleton.cpp,298
 namespace m2 12,192
@@ -831,8 +831,8 @@ namespace m2 31,524
     typedef typename SPACE::coordinate_type VecT;m2::obj_loader::VecT37,624
     obj_loader(m2::obj_loader::obj_loader38,674
     ~obj_loader(m2::obj_loader::~obj_loader39,693
-    m2::control<SPACE>& operator()(m2::obj_loader::operator()40,713
-    control_ref loadfile(m2::obj_loader::loadfile50,1186
+    m2::surf<SPACE>& operator()(m2::obj_loader::operator()40,713
+    surf_ref loadfile(m2::obj_loader::loadfile50,1186
 
 octree.hpp,2698
 #define __8TREE__13,158
@@ -906,7 +906,7 @@ namespace m2 23,375
     bool find_group_boundary(m2::remesh::find_group_boundary292,8108
     bool mark_adjacent_edges(m2::remesh::mark_adjacent_edges318,8777
     face_ptr merge_faces(m2::remesh::merge_faces344,9538
-    control_ref dual(m2::remesh::dual384,10998
+    surf_ref dual(m2::remesh::dual384,10998
     T cotan(m2::remesh::cotan479,13761
     void triangulate_quad(m2::remesh::triangulate_quad493,14217
     void slice_and_dice_face(m2::remesh::slice_and_dice_face518,14920
@@ -928,7 +928,7 @@ namespace m2 15,245
     coordinate_type calc_edge(m2::subdivide::calc_edge87,2295
     coordinate_type calc_center(m2::subdivide::calc_center109,3006
     coordinate_type calc_normal(m2::subdivide::calc_normal127,3492
-    control_ref subdivide_control(m2::subdivide::subdivide_control152,4433
+    surf_ref subdivide_control(m2::subdivide::subdivide_control152,4433
     void subdivide_edges(m2::subdivide::subdivide_edges373,12590
     vertex_ptr subdivide_edge(m2::subdivide::subdivide_edge382,12814
 

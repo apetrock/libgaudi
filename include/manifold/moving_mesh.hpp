@@ -29,7 +29,7 @@ template <typename SPACE> class set_operations {
   M2_TYPEDEFS;
 
 public:
-  static bool flip_edges(control_ptr obj) {
+  static bool flip_edges(surf_ptr obj) {
     // TIMER function//TIMER(__FUNCTION__);
     edge_array &edges = obj->get_edges();
     m2::construct<SPACE> cons;
@@ -140,7 +140,7 @@ public:
   public:
     int p1, p2;
     int p1type, p2type; // means that we can querie the collision type
-    control_ptr mMesh;
+    surf_ptr mMesh;
     T length() {
       if (p1type == p2type) {
         vector<vertex_ptr> &verts = this->mMesh->get_vertices();
@@ -169,13 +169,13 @@ public:
       return (d0 < d1);
     }
 
-    control_ptr mMesh;
+    surf_ptr mMesh;
   } mContactSorter;
 
   // in order to run unit test
   join_mesh(){};
 
-  join_mesh(control_ptr mesh, T tolerance) {
+  join_mesh(surf_ptr mesh, T tolerance) {
     tol = tolerance;
     mMesh = mesh;
   };
@@ -931,7 +931,7 @@ public:
   }
 
   T tol;
-  control_ptr mMesh;
+  surf_ptr mMesh;
   dynamic_octree<SPACE, triangle_type> exteriorTree;
   dynamic_octree<SPACE, triangle_type> interiorTree;
   vector<triangle_type> oldFaces;
@@ -946,7 +946,7 @@ template <typename SPACE> class calc_sdf {
 public:
   typedef aabb_tree<SPACE, triangle_type> triangle_tree;
   typedef typename triangle_tree::node_type edge_node_type;
-  control_ptr mMesh;
+  surf_ptr mMesh;
 
   vector<coordinate_type> normals;
   vector<coordinate_type> vertices;
@@ -954,7 +954,7 @@ public:
   vector<int> triIndices;
   triangle_tree tree = triangle_tree(this->tris);
 
-  calc_sdf(control_ptr targetMesh) { this->mMesh = targetMesh; };
+  calc_sdf(surf_ptr targetMesh) { this->mMesh = targetMesh; };
 
   void initialize() {
     std::cout << " in init sequence" << std::endl;
@@ -966,7 +966,7 @@ public:
     this->tree = triangle_tree(this->tris);
   }
 
-  vector<triangle_type> getTris(control_ptr targetMesh) {
+  vector<triangle_type> getTris(surf_ptr targetMesh) {
     vector<face_ptr> &faces = targetMesh->get_faces();
     vector<triangle_type> ltris;
     ltris.resize(faces.size());
@@ -979,7 +979,7 @@ public:
     return ltris;
   }
 
-  vector<int> getTriIndices(control_ptr targetMesh) {
+  vector<int> getTriIndices(surf_ptr targetMesh) {
     vector<face_ptr> &faces = targetMesh->get_faces();
     vector<int> ltriIndex;
     ltriIndex.resize(3 * faces.size());
@@ -1083,7 +1083,7 @@ template <typename SPACE> class moving_mesh {
   typedef typename m2::Debugger Debugger;
 
 public:
-  moving_mesh(control_ptr obj_in) {
+  moving_mesh(surf_ptr obj_in) {
     mMesh = obj_in;
     maxCurvature = 3.0;
     minCurvature = 0.001;
@@ -1207,7 +1207,7 @@ public:
       return v->normal();
   }
 
-  vector<coordinate_type> getFaceOffsets(m2::control<SPACE> &in) {
+  vector<coordinate_type> getFaceOffsets(m2::surf<SPACE> &in) {
     // TIMER function//TIMER(__FUNCTION__);
     vector<T> vertexWeights;
     vector<T> edgeWeights;
@@ -2574,14 +2574,14 @@ public:
   vector<coordinate_type> mDebug;
   vector<coordinate_type *> mDirectionField;
   T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength;
-  control_ptr mMesh;
+  surf_ptr mMesh;
 };
 
 template <typename SPACE> class vortex_sheet {
   M2_TYPEDEFS;
 
 public:
-  vortex_sheet(control_ptr obj_in) {
+  vortex_sheet(surf_ptr obj_in) {
 
     mMesh = obj_in;
     maxCurvature = 3.0;
@@ -3566,21 +3566,10 @@ public:
 
   bool checkCompatibility(edge_ptr ei, edge_ptr ej) {
     int vertIds[4];
-    vertIds[0] = ei->v1()->face()->fbegin()->vertex()->position_in_set();
-    // vertIds[2] =
-    // ei->v1()->face()->fbegin()->prev()->vertex()->position_in_set();
-
-    vertIds[1] = ei->v2()->face()->fbegin()->vertex()->position_in_set();
-    // vertIds[5] =
-    // ei->v2()->face()->fbegin()->prev()->vertex()->position_in_set();
-
-    vertIds[2] = ej->v1()->face()->fbegin()->vertex()->position_in_set();
-    // vertIds[8] =
-    // ej->v1()->face()->fbegin()->prev()->vertex()->position_in_set();
-
-    vertIds[3] = ej->v2()->face()->fbegin()->vertex()->position_in_set();
-    // vertIds[11] =
-    // ej->v2()->face()->fbegin()->prev()->vertex()->position_in_set();
+    vertIds[0] = ei->v1()->face()->position_in_set();
+    vertIds[1] = ei->v2()->face()->position_in_set();
+    vertIds[2] = ej->v1()->face()->position_in_set();
+    vertIds[3] = ej->v2()->face()->position_in_set();
 
     for (int i = 0; i < 4; i++)
       for (int j = 0; j < 4; j++) {
@@ -3591,8 +3580,9 @@ public:
 
     return true;
   };
+  
 
-  vector<edge_ptr> getPairList() {
+  vector<edge_ptr> getEdgePairList() {
     // TIMER function//TIMER(__FUNCTION__);
 
     mMesh->reset_flags();
@@ -3824,7 +3814,7 @@ public:
     bool topology_change = false;
 
     std::cout << " - join edges " << std::endl;
-    vector<edge_ptr> edgePairs = this->getPairList();
+    vector<edge_ptr> edgePairs = this->getEdgePairList();
     if (edgePairs.size() > 0)
       topology_change = true;
 
@@ -3877,6 +3867,17 @@ public:
     return topology_change;
   }
 
+  vector<face_ptr> getFacePairList() { 
+    vector<face_ptr> pairs;
+    
+    return pairs;
+  }
+
+  bool joinFaces() {
+    bool topology_change = false;
+    return topology_change;
+  }
+
   void drawVorticity() {
     face_array faces = mMesh->get_faces();
     for (int i = 0; i < faces.size(); i++) {
@@ -3921,7 +3922,7 @@ public:
       regLength, edgeJoinThresh;
   vector<coordinate_type> mEdgeCirculation;
   vector<coordinate_type> mFaceVorticity;
-  control_ptr mMesh;
+  surf_ptr mMesh;
 };
 } // namespace m2
 #endif

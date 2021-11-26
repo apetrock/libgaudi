@@ -81,6 +81,8 @@ add_subdirectory(src)
 # The executable code is here
 #add_subdirectory(projects/hello_manifold)
 add_subdirectory(projects/hello)
+add_subdirectory(projects/facemergetest)
+add_subdirectory(projects/vortextest)
 add_subdirectory(projects/sdftest)
 add_subdirectory(projects/spectratest)
-
+add_subdirectory(projects/zithertest)

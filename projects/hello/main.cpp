@@ -22,7 +22,6 @@
 #include "GaudiGraphics/viewer.hpp"
 
 #include "manifold/bins.hpp"
-#include "manifold/fdt.hpp"
 #include "manifold/m2Includes.h"
 #include "manifold/m2Operators.h"
 #include "manifold/make.hpp"
@@ -42,7 +41,7 @@ using std::cout;
 using std::endl;
 
 template <typename SPACE>
-void debugVorticity(m2::control<SPACE> *mesh, gg::DebugBufferPtr debug) {
+void debugVorticity(m2::surf<SPACE> *mesh, gg::DebugBufferPtr debug) {
   using namespace nanogui;
   M2_TYPEDEFS;
   std::cout << "  rendering vorticity" << std::endl;
@@ -172,7 +171,7 @@ private:
   std::vector<gg::DrawablePtr> mSceneObjects;
 
   gg::BufferObjectPtr _obj = NULL;
-  m2::control<space3> *_meshGraph;
+  m2::surf<space3> *_meshGraph;
   m2::vortex_sheet<space3> *_vortex;
 };
 

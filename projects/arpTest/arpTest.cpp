@@ -49,7 +49,7 @@ struct CSC {
 };
 
 template<typename SPACE>
-void buildSymMatrix(m2::control<SPACE>& in, CSC& m){
+void buildSymMatrix(m2::surf<SPACE>& in, CSC& m){
   M2_TYPEDEFS;
   
   vector<vertex_ptr>& tverts = in.get_vertices();
@@ -131,7 +131,7 @@ void buildSymMatrix(m2::control<SPACE>& in, CSC& m){
 };
 
 template<typename SPACE>
-void centerGeometry(m2::control<SPACE>& in){
+void centerGeometry(m2::surf<SPACE>& in){
   M2_TYPEDEFS;
   vector<vertex_ptr>& tVerts = in.get_vertices();
   int fc = 0;
@@ -153,7 +153,7 @@ void centerGeometry(m2::control<SPACE>& in){
 
 
 template <typename SPACE>
-void insertDebugTri(m2::control<SPACE > & mesh, int i, ImmediateLines * buffer){  
+void insertDebugTri(m2::surf<SPACE > & mesh, int i, ImmediateLines * buffer){  
   using namespace nanogui;
   typedef Eigen::Vector3f Vec3;
   typedef Eigen::Vector3f Vec4;
@@ -171,7 +171,7 @@ void insertDebugTri(m2::control<SPACE > & mesh, int i, ImmediateLines * buffer){
 };
 
 template <typename SPACE>
-void fillDebugLines(m2::control<SPACE > & mesh, ImmediateLines * buffer){  
+void fillDebugLines(m2::surf<SPACE > & mesh, ImmediateLines * buffer){  
   using namespace nanogui;
   typedef Eigen::Vector3f Vec3;
   typedef Eigen::Vector3f Vec4;
@@ -188,7 +188,7 @@ void fillDebugLines(m2::control<SPACE > & mesh, ImmediateLines * buffer){
 };
 
 template <typename SPACE>
-BufferObject * fillBuffer(m2::control<SPACE > & mesh){  
+BufferObject * fillBuffer(m2::surf<SPACE > & mesh){  
   using namespace nanogui;
   M2_TYPEDEFS;
   std::vector<face_ptr>   faces = mesh.get_faces();
@@ -993,7 +993,7 @@ public:
     std::vector<BufferObject*> mDebug;
     std::vector<BufferObject*> mSceneObjects;
 
-  m2::control<space >	* _meshGraph;
+  m2::surf<Space >	* _meshGraph;
     
   m2::Block<space, 24, std::vector<m2::vertex<space>*> >* blocks;
   BlockTree* tree;

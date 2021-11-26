@@ -1,31 +1,27 @@
 #ifndef __M2BINS__
 #define __M2BINS__
 
-#include <stack>
-#include "m2Includes.h"
 #include "conj_grad.hpp"
+#include "debugger.h"
+#include "m2Includes.h"
 #include "modify.hpp"
 #include "quartic/cubic.hpp"
-#include "debugger.h"
 #include "tribox_test.hpp"
+#include <stack>
 
 #include "TIMER.h"
 
 #include <cmath>
+#include <limits>
 
-bool boxOverlap(space3::triangle_type &tri,
-                space3::box_type &b)
-{
+bool boxOverlap(space3::triangle_type &tri, space3::box_type &b) {
   m2::va::tri_box<space3::double_type, space3::coordinate_type> tribox;
   bool inBox = tribox.triBoxOverlap(b.center, b.half, tri.p);
   return inBox;
 };
 
-namespace m2
-{
-template <typename SPACE>
-struct line_tests
-{
+namespace m2 {
+template <typename SPACE> struct line_tests {
   M2_TYPEDEFS;
 
   inline bool ray_triangle_intersect(const coordinate_type &r0,
@@ -33,9 +29,7 @@ struct line_tests
                                      const coordinate_type &v0,
                                      const coordinate_type &v1,
                                      const coordinate_type &v2,
-                                     coordinate_type &pi,
-                                     T &dist)
-  {
+                                     coordinate_type &pi, T &dist) {
     // Adapted from:
     // Copyright 2001, softSurfer (www.softsurfer.com)
     // using paramatric coordinates, V(s,t) = v0 + su +tv
@@ -78,10 +72,8 @@ struct line_tests
   }
 
   inline bool lineTriangle(coordinate_type e0, coordinate_type e1,
-                           coordinate_type p0,
-                           coordinate_type p1,
-                           coordinate_type p2)
-  {
+                           coordinate_type p0, coordinate_type p1,
+                           coordinate_type p2) {
     T t;
     coordinate_type p;
     bool hit = ray_triangle_intersect(e0, e1, p0, p1, p2, p, t);
@@ -105,11 +97,11 @@ struct line_tests
   }
 
   bool rayIntersectBox(coordinate_type ro, coordinate_type rd,
-                       coordinate_type boxmin, coordinate_type boxmax,
-                       T *tnear, T *tfar)
-  {
+                       coordinate_type boxmin, coordinate_type boxmax, T *tnear,
+                       T *tfar) {
     // compute intersection of ray with all six bbox planes
-    coordinate_type invR = coordinate_type(1.0 / rd[0], 1.0 / rd[1], 1.0 / rd[2]);
+    coordinate_type invR =
+        coordinate_type(1.0 / rd[0], 1.0 / rd[1], 1.0 / rd[2]);
     coordinate_type tbot = invR * (boxmin - ro);
     coordinate_type ttop = invR * (boxmax - ro);
 
@@ -127,8 +119,7 @@ struct line_tests
   }
 
   inline bool lineBox(coordinate_type L1, coordinate_type L2,
-                      coordinate_type B1, coordinate_type B2)
-  {
+                      coordinate_type B1, coordinate_type B2) {
     T tnear, tfar;
     if (norm(L2 - L1) < 1e-12)
       return false;
@@ -143,7 +134,7 @@ struct line_tests
       return false;
     if (tnear > 1 && tfar > 1)
       return false;
-    //std::cout << tnear << " " << tfar << std::endl;
+    // std::cout << tnear << " " << tfar << std::endl;
     coordinate_type p0 = L1 + Ld * tnear;
     coordinate_type p1 = L1 + Ld * tfar;
     Debugger &debug = Debugger::get_instance();
@@ -155,53 +146,40 @@ struct line_tests
   }
 };
 
-template <typename SPACE>
-class geometry_calculator
-{
+template <typename SPACE> class geometry_calculator {
 public:
   M2_TYPEDEFS;
-  coordinate_type center(coordinate_type p)
-  {
-    return p;
-  }
+  coordinate_type center(coordinate_type p) { return p; }
 
-  coordinate_type center(line_type p)
-  {
-    return 0.5 * (p[0] + p[1]);
-  }
+  coordinate_type center(line_type p) { return 0.5 * (p[0] + p[1]); }
 
-  coordinate_type center(triangle_type p)
-  {
+  coordinate_type center(triangle_type p) {
     return 0.33333 * (p[0] + p[1] + p[2]);
   }
 
-  void getExtents(coordinate_type p, coordinate_type &min, coordinate_type &max)
-  {
+  void getExtents(coordinate_type p, coordinate_type &min,
+                  coordinate_type &max) {
     min = p;
     max = p;
   }
 
-  void getExtents(line_type p, coordinate_type &min, coordinate_type &max)
-  {
+  void getExtents(line_type p, coordinate_type &min, coordinate_type &max) {
     min = this->center(p);
     max = min;
-    for (int i = 0; i < 3; i++)
-    {
-      for (int j = 0; j < 2; j++)
-      {
+    for (int i = 0; i < 3; i++) {
+      for (int j = 0; j < 2; j++) {
         min[i] = p[j][i] < min[i] ? p[j][i] : min[i];
         max[i] = p[j][i] > max[i] ? p[j][i] : max[i];
       }
     }
   }
 
-  void getExtents(swept_point_type p, coordinate_type &min, coordinate_type &max)
-  {
+  void getExtents(swept_point_type p, coordinate_type &min,
+                  coordinate_type &max) {
     min = p.p;
     max = min;
     T dt = p.dt;
-    for (int i = 0; i < 3; i++)
-    {
+    for (int i = 0; i < 3; i++) {
       min[i] = p.p[i] < min[i] ? p.p[i] : min[i];
       max[i] = p.p[i] > max[i] ? p.p[i] : max[i];
       min[i] = (p.p[i] + dt * p.v[i]) < min[i] ? p.p[i] + dt * p.v[i] : min[i];
@@ -209,14 +187,11 @@ public:
     }
   }
 
-  void getExtents(triangle_type p, coordinate_type &min, coordinate_type &max)
-  {
+  void getExtents(triangle_type p, coordinate_type &min, coordinate_type &max) {
     min = this->center(p);
     max = min;
-    for (int i = 0; i < 3; i++)
-    {
-      for (int j = 0; j < 3; j++)
-      {
+    for (int i = 0; i < 3; i++) {
+      for (int j = 0; j < 3; j++) {
         min[i] = p[j][i] < min[i] ? p[j][i] : min[i];
         max[i] = p[j][i] > max[i] ? p[j][i] : max[i];
       }
@@ -224,200 +199,40 @@ public:
   }
 };
 
-template <typename SPACE>
-class distance_calculator
-{
+template <typename SPACE> class distance_calculator {
 public:
   M2_TYPEDEFS;
-  inline T distanceFromLine(const coordinate_type &v0,
-                            const coordinate_type &v1,
-                            const coordinate_type &pt)
-  {
-    coordinate_type dx = v1 - v0;
-    T s = dot((pt - v0), dx) / (dot(dx, dx));
-    if (s >= 1)
-      s = 1;
-    if (s <= 0)
-      s = 0;
-    coordinate_type ptl = v0 + s * dx;
 
-    T d = norm2(pt - ptl);
-    return d;
-  }
-
-  inline T distanceLineLine(const coordinate_type &x0,
-                            const coordinate_type &x1,
-                            const coordinate_type &x2,
-                            const coordinate_type &x3)
-  {
-    coordinate_type a = x1 - x0;
-    coordinate_type b = x3 - x2;
-    coordinate_type c = x2 - x0;
-    coordinate_type axb = cross(a, b);
-    return dot(c, axb) / norm(axb);
-  }
-
-  inline T distanceSegmentSegment(const coordinate_type &s00,
-                                  const coordinate_type &s01,
-                                  const coordinate_type &s10,
-                                  const coordinate_type &s11)
-  {
-    //http://geomalgorithms.com/a07-_distance.html#dist3D_Segment_to_Segment()
-    //    Input:  two 3D line segments S1 and S2
-    //    Return: the shortest distance between S1 and S2
-    coordinate_type u = s01 - s00;
-    coordinate_type v = s11 - s10;
-    coordinate_type w = s00 - s10;
-    T a = dot(u, u); // always >= 0
-    T b = dot(u, v);
-    T c = dot(v, v); // always >= 0
-    T d = dot(u, w);
-    T e = dot(v, w);
-    T D = a * c - b * b; // always >= 0
-    T sc, sN, sD = D;    // sc = sN / sD, default sD = D >= 0
-    T tc, tN, tD = D;    // tc = tN / tD, default tD = D >= 0
-
-    // compute the line parameters of the two closest points
-    if (D < 1e-12)
-    {           // the lines are almost parallel
-      sN = 0.0; // force using point P0 on segment S1
-      sD = 1.0; // to prevent possible division by 0.0 later
-      tN = e;
-      tD = c;
-    }
-    else
-    { // get the closest points on the infinite lines
-      sN = (b * e - c * d);
-      tN = (a * e - b * d);
-      if (sN < 0.0)
-      { // sc < 0 => the s=0 edge is visible
-        sN = 0.0;
-        tN = e;
-        tD = c;
-      }
-      else if (sN > sD)
-      { // sc > 1  => the s=1 edge is visible
-        sN = sD;
-        tN = e + b;
-        tD = c;
-      }
-    }
-
-    if (tN < 0.0)
-    { // tc < 0 => the t=0 edge is visible
-      tN = 0.0;
-      // recompute sc for this edge
-      if (-d < 0.0)
-        sN = 0.0;
-      else if (-d > a)
-        sN = sD;
-      else
-      {
-        sN = -d;
-        sD = a;
-      }
-    }
-    else if (tN > tD)
-    { // tc > 1  => the t=1 edge is visible
-      tN = tD;
-      // recompute sc for this edge
-      if ((-d + b) < 0.0)
-        sN = 0;
-      else if ((-d + b) > a)
-        sN = sD;
-      else
-      {
-        sN = (-d + b);
-        sD = a;
-      }
-    }
-    // finally do the division to get sc and tc
-    sc = (abs(sN) < 1e-12 ? 0.0 : sN / sD);
-    tc = (abs(tN) < 1e-12 ? 0.0 : tN / tD);
-
-    // get the difference of the two closest points
-    coordinate_type dP = w + (sc * u) - (tc * v); // =  S1(sc) - S2(tc)
-    return norm2(dP);                             // return the closest distance
-  }
-
-  inline T distanceFromTriangle(const coordinate_type *tri,
-                                coordinate_type r0)
-  {
-    //then makes sure its in the direction of the plane.
-    const coordinate_type &v0 = tri[0];
-    const coordinate_type &v1 = tri[1];
-    const coordinate_type &v2 = tri[2];
-
-    coordinate_type u = v1 - v0;
-    coordinate_type v = v2 - v0;
-    coordinate_type N = cross(u, v);
-    T iN2 = 1.0 / (dot(N, N));
-    coordinate_type w = r0 - v0;
-    T b10 = dot(cross(u, w), N) * iN2;
-    T b20 = dot(cross(w, v), N) * iN2;
-    T b12 = 1.0 - b10 - b20;
-
-    if (b10 >= 0.0 && b20 >= 0.0 && b12 >= 0.0)
-    {
-      coordinate_type c = b10 * v2 + b20 * v1 + b12 * v0;
-      return norm2(r0 - c);
-    }
-    else
-    {
-#if 1
-      if (b10 <= 0)
-      {
-        return distanceFromLine(v0, v1, r0);
-      }
-      else if (b20 <= 0)
-      {
-        return distanceFromLine(v0, v2, r0);
-      }
-      else
-      {
-        return distanceFromLine(v1, v2, r0);
-      }
-#endif
-    }
-  }
-
-  T calcEdgeEdgeDistance(edge_ptr e0, edge_ptr e1)
-  {
+  T calcEdgeEdgeDistance(edge_ptr e0, edge_ptr e1) {
     coordinate_type x00 = e0->v1()->coordinate();
     coordinate_type x01 = e0->v2()->coordinate();
     coordinate_type x10 = e1->v1()->coordinate();
     coordinate_type x11 = e1->v2()->coordinate();
-    return distanceSegmentSegment(x00, x01, x10, x11);
+    return va::distance_Segment_Segment(x00, x01, x10, x11);
   }
 
-  T distance(line_type e0, line_type e1)
-  {
-    return distanceSegmentSegment(e0[0], e0[1], e1[0], e1[1]);
+  T distance(line_type e0, line_type e1) {
+    return va::distance_Segment_Segment(e0[0], e0[1], e1[0], e1[1]);
   }
 
-  T distance(triangle_type t, coordinate_type c)
-  {
-    return distanceFromTriangle(t.p, c);
+  T distance(triangle_type t, coordinate_type c) {
+    return va::distance_from_triangle(t.p, c);
   }
 
   inline void dimPolynomial(coordinate_type a, coordinate_type va,
                             coordinate_type b, coordinate_type vb,
-                            coordinate_type c, coordinate_type vc,
-                            int i, int j, int k,
-                            T &o, T &p, T &q, T &r)
-  {
+                            coordinate_type c, coordinate_type vc, int i, int j,
+                            int k, T &o, T &p, T &q, T &r) {
     o = va[i] * vb[j] * vc[k];
     p = a[i] * vb[j] * vc[k] + va[i] * b[j] * vc[k] + va[i] * vb[j] * c[k];
     q = va[i] * b[j] * c[k] + a[i] * vb[j] * c[k] + a[i] * b[j] * vc[k];
     r = a[i] * b[j] * c[k];
-    //std::cout << o << " " << p << " " << q << " " << r << std::endl;
+    // std::cout << o << " " << p << " " << q << " " << r << std::endl;
   }
 
-  void buildPolynomial(coordinate_type a, coordinate_type va,
-                       coordinate_type b, coordinate_type vb,
-                       coordinate_type c, coordinate_type vc,
-                       T &p, T &q, T &r)
-  {
+  void buildPolynomial(coordinate_type a, coordinate_type va, coordinate_type b,
+                       coordinate_type vb, coordinate_type c,
+                       coordinate_type vc, T &p, T &q, T &r) {
     T o0, o1, o2, o3, o4, o5;
     T p0, p1, p2, p3, p4, p5;
     T q0, q1, q2, q3, q4, q5;
@@ -432,19 +247,18 @@ public:
     p = p0 - p1 + p2 - p3 + p4 - p5;
     q = q0 - q1 + q2 - q3 + q4 - q5;
     r = r0 - r1 + r2 - r3 + r4 - r5;
-    //std::cout << o << " " << p << " " << q << " " << r << std::endl;
-    //o = o < 1e-12 ? 1e-12 : o;
+    // std::cout << o << " " << p << " " << q << " " << r << std::endl;
+    // o = o < 1e-12 ? 1e-12 : o;
     o += 1e-12;
     p /= o;
     q /= o;
     r /= o;
-    //std::cout << o << " " << p << " " << q << " " << r << std::endl;
+    // std::cout << o << " " << p << " " << q << " " << r << std::endl;
   }
 #if 1
-  T distance(swept_triangle_type t, swept_point_type c)
-  {
-    //TIMER function//TIMER(__FUNCTION__);
-    //int pj = tree.permutation[j];
+  T distance(swept_triangle_type t, swept_point_type c) {
+    // TIMER function//TIMER(__FUNCTION__);
+    // int pj = tree.permutation[j];
     T dt = t.dt;
     coordinate_type ci = c.p;
     coordinate_type vi = c.v;
@@ -458,16 +272,14 @@ public:
     roots[0] = 0.0;
     roots[1] = 0.0;
     roots[2] = 0.0;
-    buildPolynomial(c1 - c0, v1 - v0,
-                    c2 - c0, v2 - v0,
-                    ci - c0, vi - v0, p, q, r);
-    int rootcount = magnet::math::cubicSolve(p, q, r, roots[0], roots[1], roots[2]);
+    buildPolynomial(c1 - c0, v1 - v0, c2 - c0, v2 - v0, ci - c0, vi - v0, p, q,
+                    r);
+    int rootcount =
+        magnet::math::cubicSolve(p, q, r, roots[0], roots[1], roots[2]);
     T dist = 999;
-    for (int k = 0; k < rootcount; k++)
-    {
+    for (int k = 0; k < rootcount; k++) {
 
-      if (roots[k] > 0 && roots[k] < dt)
-      {
+      if (roots[k] > 0 && roots[k] < dt) {
         T ti = roots[k];
         if (ti > dt)
           continue;
@@ -477,7 +289,8 @@ public:
         triangle_type tri(c0 + ti * v0, c1 + ti * v1, c2 + ti * v2);
         T tdist = this->distance(tri, ci + ti * vi);
         dist = dist < tdist ? dist : tdist;
-        //std::cout << k << " : " << roots[k] << " " << tdist << " " << dist << " "
+        // std::cout << k << " : " << roots[k] << " " << tdist << " " << dist <<
+        // " "
         //	    << p << " " << q << " " << r <<  std::endl;
       }
     }
@@ -524,122 +337,19 @@ public:
 #endif
 };
 
-template <typename SPACE>
-inline void drawBox(typename SPACE::coordinate_type p,
-                    typename SPACE::coordinate_type h)
-{
-  glBegin(GL_LINES);
-  glVertex3d(p[0] - h[0], p[1] - h[1], p[2] - h[2]);
-  glVertex3d(p[0] + h[0], p[1] - h[1], p[2] - h[2]);
-
-  glVertex3d(p[0] + h[0], p[1] - h[1], p[2] - h[2]);
-  glVertex3d(p[0] + h[0], p[1] + h[1], p[2] - h[2]);
-
-  glVertex3d(p[0] + h[0], p[1] + h[1], p[2] - h[2]);
-  glVertex3d(p[0] - h[0], p[1] + h[1], p[2] - h[2]);
-
-  glVertex3d(p[0] - h[0], p[1] + h[1], p[2] - h[2]);
-  glVertex3d(p[0] - h[0], p[1] - h[1], p[2] - h[2]);
-
-  glVertex3d(p[0] - h[0], p[1] - h[1], p[2] + h[2]);
-  glVertex3d(p[0] + h[0], p[1] - h[1], p[2] + h[2]);
-
-  glVertex3d(p[0] + h[0], p[1] - h[1], p[2] + h[2]);
-  glVertex3d(p[0] + h[0], p[1] + h[1], p[2] + h[2]);
-
-  glVertex3d(p[0] + h[0], p[1] + h[1], p[2] + h[2]);
-  glVertex3d(p[0] - h[0], p[1] + h[1], p[2] + h[2]);
-
-  glVertex3d(p[0] - h[0], p[1] + h[1], p[2] + h[2]);
-  glVertex3d(p[0] - h[0], p[1] - h[1], p[2] + h[2]);
-
-  glVertex3d(p[0] - h[0], p[1] - h[1], p[2] - h[2]);
-  glVertex3d(p[0] - h[0], p[1] - h[1], p[2] + h[2]);
-
-  glVertex3d(p[0] + h[0], p[1] - h[1], p[2] - h[2]);
-  glVertex3d(p[0] + h[0], p[1] - h[1], p[2] + h[2]);
-
-  glVertex3d(p[0] + h[0], p[1] + h[1], p[2] - h[2]);
-  glVertex3d(p[0] + h[0], p[1] + h[1], p[2] + h[2]);
-
-  glVertex3d(p[0] - h[0], p[1] + h[1], p[2] - h[2]);
-  glVertex3d(p[0] - h[0], p[1] + h[1], p[2] + h[2]);
-
-  glVertex3d(p[0] - h[0], p[1] - h[1], p[2] - h[2]);
-  glVertex3d(p[0] - h[0], p[1] - h[1], p[2] + h[2]);
-
-  glEnd();
-}
-
-template <typename SPACE>
-inline void drawBox(typename SPACE::coordinate_typ p, double dx)
-{
-  glBegin(GL_LINES);
-  glVertex3d(p[0] - dx, p[1] - dx, p[2] - dx);
-  glVertex3d(p[0] + dx, p[1] - dx, p[2] - dx);
-
-  glVertex3d(p[0] + dx, p[1] - dx, p[2] - dx);
-  glVertex3d(p[0] + dx, p[1] + dx, p[2] - dx);
-
-  glVertex3d(p[0] + dx, p[1] + dx, p[2] - dx);
-  glVertex3d(p[0] - dx, p[1] + dx, p[2] - dx);
-
-  glVertex3d(p[0] - dx, p[1] + dx, p[2] - dx);
-  glVertex3d(p[0] - dx, p[1] - dx, p[2] - dx);
-
-  glVertex3d(p[0] - dx, p[1] - dx, p[2] + dx);
-  glVertex3d(p[0] + dx, p[1] - dx, p[2] + dx);
-
-  glVertex3d(p[0] + dx, p[1] - dx, p[2] + dx);
-  glVertex3d(p[0] + dx, p[1] + dx, p[2] + dx);
-
-  glVertex3d(p[0] + dx, p[1] + dx, p[2] + dx);
-  glVertex3d(p[0] - dx, p[1] + dx, p[2] + dx);
-
-  glVertex3d(p[0] - dx, p[1] + dx, p[2] + dx);
-  glVertex3d(p[0] - dx, p[1] - dx, p[2] + dx);
-
-  glVertex3d(p[0] - dx, p[1] - dx, p[2] - dx);
-  glVertex3d(p[0] - dx, p[1] - dx, p[2] + dx);
-
-  glVertex3d(p[0] + dx, p[1] - dx, p[2] - dx);
-  glVertex3d(p[0] + dx, p[1] - dx, p[2] + dx);
-
-  glVertex3d(p[0] + dx, p[1] + dx, p[2] - dx);
-  glVertex3d(p[0] + dx, p[1] + dx, p[2] + dx);
-
-  glVertex3d(p[0] - dx, p[1] + dx, p[2] - dx);
-  glVertex3d(p[0] - dx, p[1] + dx, p[2] + dx);
-
-  glVertex3d(p[0] - dx, p[1] - dx, p[2] - dx);
-  glVertex3d(p[0] - dx, p[1] - dx, p[2] + dx);
-
-  glEnd();
-}
-
-template <typename SPACE>
-struct face_bin
-{
+template <typename SPACE> struct face_bin {
   M2_TYPEDEFS;
 
   face_bin() {}
 
-  face_bin(face_bin &other)
-  {
-    *this = other;
-  }
+  face_bin(face_bin &other) { *this = other; }
 
-  face_bin(control_ref mesh, T dx)
-  {
-    this->binCenters(mesh, dx);
-  }
+  face_bin(surf_ref mesh, T dx) { this->binCenters(mesh, dx); }
 
   ~face_bin() {}
 
-  face_bin &operator=(face_bin &rhs)
-  {
-    if (this != &rhs)
-    {
+  face_bin &operator=(face_bin &rhs) {
+    if (this != &rhs) {
       _binnedFaces = rhs.binnedFaces();
       _binStart = rhs.binStart();
       _binCounter = rhs.binnedCounter();
@@ -654,10 +364,9 @@ struct face_bin
     }
     return *this;
   }
-  //void binTriangles(control_ref mesh, T dx){}
+  // void binTriangles(surf_ref mesh, T dx){}
 #if 1
-  void binTriangles(control_ref mesh, T dx)
-  {
+  void binTriangles(surf_ref mesh, T dx) {
     face_array &faces = mesh.get_faces();
     coordinate_type gmin = mesh.calc_min();
     coordinate_type gmax = mesh.calc_max();
@@ -668,9 +377,9 @@ struct face_bin
 
     _center = gcen;
     //_lengths = glengths;
-    //T maxl = glengths[0];
-    //maxl = maxl > lengths[1] ? maxl : glengths[1];
-    //maxl = maxl > lengths[2] ? maxl : glengths[2];
+    // T maxl = glengths[0];
+    // maxl = maxl > lengths[1] ? maxl : glengths[1];
+    // maxl = maxl > lengths[2] ? maxl : glengths[2];
 
     _xRes = ceil(glengths[0] / _dx);
     _yRes = ceil(glengths[1] / _dx);
@@ -680,21 +389,17 @@ struct face_bin
     _binStart.resize(_xRes * _yRes * _zRes + 1, 0);
     _binCounter.resize(_xRes * _yRes * _zRes, 0);
 
-    for (int c = 0; c < faces.size(); c++)
-    {
+    for (int c = 0; c < faces.size(); c++) {
       face_ptr f = faces[c];
-      if (f)
-      {
+      if (f) {
         face_vertex_ptr fv1 = f->fbegin();
         face_vertex_ptr fv2 = fv1->next();
         face_vertex_ptr fv3 = fv2->next();
-        coordinate_type tri[3] = {fv1->coordinate(),
-                                  fv2->coordinate(),
+        coordinate_type tri[3] = {fv1->coordinate(), fv2->coordinate(),
                                   fv3->coordinate()};
 
         coordinate_type cen(0, 0, 0), min, max;
-        for (int j = 0; j < 3; j++)
-        {
+        for (int j = 0; j < 3; j++) {
           cen += tri[j];
         }
         cen = tri[0] + tri[1] + tri[2];
@@ -702,8 +407,7 @@ struct face_bin
 
         min = cen;
         max = cen;
-        for (int j = 0; j < 3; j++)
-        {
+        for (int j = 0; j < 3; j++) {
           min[0] = tri[j][0] < min[0] ? tri[j][0] : min[0];
           min[1] = tri[j][1] < min[1] ? tri[j][1] : min[1];
           min[2] = tri[j][2] < min[2] ? tri[j][2] : min[2];
@@ -719,19 +423,14 @@ struct face_bin
         bRes[1] = bRes[1] == 0 ? 1 : bRes[1];
         bRes[2] = bRes[2] == 0 ? 1 : bRes[2];
 
-        for (int i = 0; i < bRes[0]; i++)
-        {
-          for (int j = 0; j < bRes[1]; j++)
-          {
-            for (int k = 0; k < bRes[2]; k++)
-            {
+        for (int i = 0; i < bRes[0]; i++) {
+          for (int j = 0; j < bRes[1]; j++) {
+            for (int k = 0; k < bRes[2]; k++) {
               int ix = mini[0] + i;
               int iy = mini[1] + j;
               int iz = mini[2] + k;
-              if (ix < _xRes && ix > -1 &&
-                  iy < _yRes && iy > -1 &&
-                  iz < _zRes && iz > -1)
-              {
+              if (ix < _xRes && ix > -1 && iy < _yRes && iy > -1 &&
+                  iz < _zRes && iz > -1) {
                 int index = ix + iy * _xRes + iz * _xRes * _yRes;
                 _binCounter[index]++;
               }
@@ -742,28 +441,23 @@ struct face_bin
     }
 
     _binStart[0] = 0;
-    for (int i = 1; i < _binStart.size(); i++)
-    {
+    for (int i = 1; i < _binStart.size(); i++) {
       _binStart[i] = _binStart[i - 1] + _binCounter[i - 1];
       _binCounter[i - 1] = 0;
     }
     _faceLoc.resize(faces.size());
     _binnedFaces.resize(_binStart.back());
-    for (int c = 0; c < faces.size(); c++)
-    {
+    for (int c = 0; c < faces.size(); c++) {
       face_ptr f = faces[c];
-      if (f)
-      {
+      if (f) {
         face_vertex_ptr fv1 = f->fbegin();
         face_vertex_ptr fv2 = fv1->next();
         face_vertex_ptr fv3 = fv2->next();
-        coordinate_type tri[3] = {fv1->coordinate(),
-                                  fv2->coordinate(),
+        coordinate_type tri[3] = {fv1->coordinate(), fv2->coordinate(),
                                   fv3->coordinate()};
 
         coordinate_type cen(0, 0, 0), min, max;
-        for (int j = 0; j < 3; j++)
-        {
+        for (int j = 0; j < 3; j++) {
           cen += tri[j];
         }
         cen = tri[0] + tri[1] + tri[2];
@@ -771,8 +465,7 @@ struct face_bin
 
         min = cen;
         max = cen;
-        for (int j = 0; j < 3; j++)
-        {
+        for (int j = 0; j < 3; j++) {
           min[0] = tri[j][0] < min[0] ? tri[j][0] : min[0];
           min[1] = tri[j][1] < min[1] ? tri[j][1] : min[1];
           min[2] = tri[j][2] < min[2] ? tri[j][2] : min[2];
@@ -789,35 +482,31 @@ struct face_bin
         bRes[1] = bRes[1] == 0 ? 1 : bRes[1];
         bRes[2] = bRes[2] == 0 ? 1 : bRes[2];
         coordinate_type hbox = 0.5 * coordinate_type(dx, dx, dx);
-        for (int i = 0; i < bRes[0]; i++)
-        {
-          for (int j = 0; j < bRes[1]; j++)
-          {
-            for (int k = 0; k < bRes[2]; k++)
-            {
+        for (int i = 0; i < bRes[0]; i++) {
+          for (int j = 0; j < bRes[1]; j++) {
+            for (int k = 0; k < bRes[2]; k++) {
               int ix = mini[0] + i;
               int iy = mini[1] + j;
               int iz = mini[2] + k;
-              coordinate_type ncen = _center - 0.5 * _lengths +
-                                     coordinate_type(ix * dx, iy * dx, iz * dx) +
-                                     0.5 * coordinate_type(dx, dx, dx);
-              if (ix < _xRes && ix > -1 &&
-                  iy < _yRes && iy > -1 &&
-                  iz < _zRes && iz > -1)
-              {
-                //tri_box<SPACE> tribox;
-                //bool inBox = tribox.triBoxOverlap(cen,hbox,tri);
-                //box_type tbox(cen,hbox);
+              coordinate_type ncen =
+                  _center - 0.5 * _lengths +
+                  coordinate_type(ix * dx, iy * dx, iz * dx) +
+                  0.5 * coordinate_type(dx, dx, dx);
+              if (ix < _xRes && ix > -1 && iy < _yRes && iy > -1 &&
+                  iz < _zRes && iz > -1) {
+                // tri_box<SPACE> tribox;
+                // bool inBox = tribox.triBoxOverlap(cen,hbox,tri);
+                // box_type tbox(cen,hbox);
                 bool inBox = boxOverlap(box_type(cen, hbox), tri);
-                if (inBox)
-                {
+                if (inBox) {
                   int index = ix + iy * _xRes + iz * _xRes * _yRes;
                   int bStart = _binStart[index];
                   int bCount = _binCounter[index];
 
                   _binnedFaces[bStart + bCount] = c;
                   _binCounter[index]++;
-                  _faceLoc[c] = index; //makes life a little easier to store the id;
+                  _faceLoc[c] =
+                      index; // makes life a little easier to store the id;
                 }
               }
             }
@@ -830,9 +519,8 @@ struct face_bin
 #endif
 
 #if 1
-  void binCenters(control_ref mesh, T dx)
-  {
-    //future home of barycenters???
+  void binCenters(surf_ref mesh, T dx) {
+    // future home of barycenters???
     face_array &faces = mesh.get_faces();
     coordinate_type gmin = mesh.calc_min();
     coordinate_type gmax = mesh.calc_max();
@@ -843,9 +531,9 @@ struct face_bin
 
     _center = gcen;
     //_lengths = glengths;
-    //T maxl = glengths[0];
-    //maxl = maxl > lengths[1] ? maxl : glengths[1];
-    //maxl = maxl > lengths[2] ? maxl : glengths[2];
+    // T maxl = glengths[0];
+    // maxl = maxl > lengths[1] ? maxl : glengths[1];
+    // maxl = maxl > lengths[2] ? maxl : glengths[2];
 
     _xRes = ceil(glengths[0] / _dx);
     _yRes = ceil(glengths[1] / _dx);
@@ -855,11 +543,9 @@ struct face_bin
     _binStart.resize(_xRes * _yRes * _zRes + 1, 0);
     _binCounter.resize(_xRes * _yRes * _zRes, 0);
 
-    for (int c = 0; c < faces.size(); c++)
-    {
+    for (int c = 0; c < faces.size(); c++) {
       face_ptr f = faces[c];
-      if (f)
-      {
+      if (f) {
         coordinate_type p = f->center();
         int b[3];
         nearestBin(p, b);
@@ -869,19 +555,16 @@ struct face_bin
     }
 
     _binStart[0] = 0;
-    for (int i = 1; i < _binStart.size(); i++)
-    {
+    for (int i = 1; i < _binStart.size(); i++) {
       _binStart[i] = _binStart[i - 1] + _binCounter[i - 1];
       _binCounter[i - 1] = 0;
     }
 
     std::cout << _binStart.back() << std::endl;
     _binnedFaces.resize(_binStart.back(), 0);
-    for (int c = 0; c < faces.size(); c++)
-    {
+    for (int c = 0; c < faces.size(); c++) {
       face_ptr f = faces[c];
-      if (f)
-      {
+      if (f) {
         coordinate_type p = f->center();
         int b[3];
         nearestBin(p, b);
@@ -896,8 +579,7 @@ struct face_bin
   }
 #endif
 
-  void clear()
-  {
+  void clear() {
     _binnedFaces.clear();
     _binStart.clear();
     _binCounter.clear();
@@ -912,51 +594,19 @@ struct face_bin
   coordinate_type center() { return _center; }
   coordinate_type lengths() { return _lengths; }
 
-  coordinate_type center(int x, int y, int z)
-  {
-    coordinate_type cen = _center - 0.5 * _lengths + coordinate_type(x * _dx, y * _dx, z * _dx) + 0.5 * coordinate_type(_dx, _dx, _dx);
+  coordinate_type center(int x, int y, int z) {
+    coordinate_type cen = _center - 0.5 * _lengths +
+                          coordinate_type(x * _dx, y * _dx, z * _dx) +
+                          0.5 * coordinate_type(_dx, _dx, _dx);
     return cen;
   }
 
-  void nearestBin(coordinate_type pos, int *bini)
-  {
+  void nearestBin(coordinate_type pos, int *bini) {
     coordinate_type binf =
         pos - (_center - 0.5 * _lengths + 0.5 * coordinate_type(_dx, _dx, _dx));
     bini[0] = binf[0] / _dx + 0.5;
     bini[1] = binf[1] / _dx + 0.5;
     bini[2] = binf[2] / _dx + 0.5;
-  }
-
-  void drawBoundingBox()
-  {
-    glColor3f(0.75, 0.15, 0.15);
-    m2::drawBox<SPACE>(_center, 0.5 * _lengths);
-  }
-
-  void draw()
-  {
-    T imax = _dx / _xRes;
-    for (int z = 0; z < _zRes; z++)
-    {
-      for (int y = 0; y < _yRes; y++)
-      {
-        for (int x = 0; x < _xRes; x++)
-        {
-          int xRes = _xRes;
-          int yRes = _yRes;
-          int zRes = _zRes;
-          int index = x + y * _xRes + z * _xRes * _yRes;
-          int bStart = _binStart[index];
-          int bEnd = _binStart[index + 1];
-
-          if (bEnd - bStart > 0)
-          {
-            glColor3f(0.5, 0.5, 0.5);
-            drawBox<SPACE>(this->center(x, y, z), _dx * 0.5);
-          }
-        }
-      }
-    }
   }
 
   vector<face_ptr> &faces() { return _faces; }
@@ -967,13 +617,13 @@ struct face_bin
   vector<int> &binnedCounter() { return _binCounter; }
   vector<face_ptr> _faces;
 
-  //binning variables
+  // binning variables
   vector<int> _binnedFaces;
   vector<int> _binStart;
   vector<int> _binCounter;
   vector<int> _faceLoc;
 
-  //grouping variables
+  // grouping variables
   int _numGroups;
 
   int _xRes;
@@ -984,29 +634,19 @@ struct face_bin
   coordinate_type _lengths;
 };
 
-template <typename SPACE>
-struct edge_bin
-{
+template <typename SPACE> struct edge_bin {
   M2_TYPEDEFS;
 
   edge_bin() {}
 
-  edge_bin(edge_bin &other)
-  {
-    *this = other;
-  }
+  edge_bin(edge_bin &other) { *this = other; }
 
-  edge_bin(control_ref mesh, T dx)
-  {
-    this->binEdges(mesh, dx);
-  }
+  edge_bin(surf_ref mesh, T dx) { this->binEdges(mesh, dx); }
 
   ~edge_bin() {}
 
-  edge_bin &operator=(edge_bin &rhs)
-  {
-    if (this != &rhs)
-    {
+  edge_bin &operator=(edge_bin &rhs) {
+    if (this != &rhs) {
       _binnedEdges = rhs.binnedEdges();
       _binStart = rhs.binStart();
       _binCounter = rhs.binnedCounter();
@@ -1022,47 +662,31 @@ struct edge_bin
     return *this;
   }
 
-  inline void incrementDDA(T &tMaxX, T &tMaxY, T &tMaxZ,
-                           int &x, int &y, int &z,
-                           coordinate_type &tDelta,
-                           int &stepX, int &stepY, int &stepZ,
-                           int &xRes, int &yRes, int &zRes)
-  {
+  inline void incrementDDA(T &tMaxX, T &tMaxY, T &tMaxZ, int &x, int &y, int &z,
+                           coordinate_type &tDelta, int &stepX, int &stepY,
+                           int &stepZ, int &xRes, int &yRes, int &zRes) {
 
-    if (tMaxX < tMaxY)
-    {
-      if (tMaxX < tMaxZ)
-      {
+    if (tMaxX < tMaxY) {
+      if (tMaxX < tMaxZ) {
         x += stepX;
         tMaxX += tDelta[0];
-      }
-      else
-      {
+      } else {
         z += stepZ;
         tMaxZ += tDelta[2];
       }
-    }
-    else if (tMaxY < tMaxZ)
-    {
+    } else if (tMaxY < tMaxZ) {
       y += stepY;
       tMaxY += tDelta[1];
-    }
-    else
-    {
+    } else {
       z += stepZ;
       tMaxZ += tDelta[2];
     }
   }
 
-  void DDA_3D(int ei,
-              coordinate_type r0,
-              coordinate_type r1,
-              coordinate_type bmin,
-              coordinate_type bmax,
-              int phase)
-  {
+  void DDA_3D(int ei, coordinate_type r0, coordinate_type r1,
+              coordinate_type bmin, coordinate_type bmax, int phase) {
 
-    //puts this in voxel coordinates 0:N
+    // puts this in voxel coordinates 0:N
     coordinate_type Nf(_xRes, _yRes, _zRes, 1);
     coordinate_type dbox = bmax - bmin;
     coordinate_type r_op = ((r0 - bmin).array() * Nf.array()) / dbox.array();
@@ -1076,12 +700,11 @@ struct edge_bin
     r_dp[1] = fabs(r_dp[1]) < eps ? eps : r_dp[1];
     r_dp[2] = fabs(r_dp[2]) < eps ? eps : r_dp[2];
 
-    int
-        stepX = r_dp[0] > 0 ? 1 : -1,
-        stepY = r_dp[1] > 0 ? 1 : -1,
+    int stepX = r_dp[0] > 0 ? 1 : -1, stepY = r_dp[1] > 0 ? 1 : -1,
         stepZ = r_dp[2] > 0 ? 1 : -1;
 
-    coordinate_type tDelta(stepX / r_dp[0], stepY / r_dp[1], stepZ / r_dp[2], 0);
+    coordinate_type tDelta(stepX / r_dp[0], stepY / r_dp[1], stepZ / r_dp[2],
+                           0);
 
     int x = floor(r0p[0]);
     int y = floor(r0p[1]);
@@ -1094,24 +717,15 @@ struct edge_bin
     int yMax = abs(floor(r_dp[1] + 0.5));
     int zMax = abs(floor(r_dp[2] + 0.5));
 
-    coordinate_type voxmax(x + (stepX > 0 ? 1 : 0),
-                           y + (stepY > 0 ? 1 : 0),
+    coordinate_type voxmax(x + (stepX > 0 ? 1 : 0), y + (stepY > 0 ? 1 : 0),
                            z + (stepZ > 0 ? 1 : 0), 0);
 
     coordinate_type vtMax = (voxmax - r_op).array() / r_dp.array();
-    T
-        tMaxX = vtMax[0],
-        tMaxY = vtMax[1],
-        tMaxZ = vtMax[2];
+    T tMaxX = vtMax[0], tMaxY = vtMax[1], tMaxZ = vtMax[2];
 
-    while (abs(x0 - x) < xMax ||
-           abs(y0 - y) < yMax ||
-           abs(z0 - z) < zMax)
-    {
+    while (abs(x0 - x) < xMax || abs(y0 - y) < yMax || abs(z0 - z) < zMax) {
 
-      incrementDDA(tMaxX, tMaxY, tMaxZ,
-                   x, y, z, tDelta,
-                   stepX, stepY, stepZ,
+      incrementDDA(tMaxX, tMaxY, tMaxZ, x, y, z, tDelta, stepX, stepY, stepZ,
                    _xRes, _yRes, _zRes);
 
       if (x < 0 || y < 0 || z < 0)
@@ -1119,25 +733,21 @@ struct edge_bin
       if (x > _xRes - 1 || y > _yRes - 1 || z > _zRes - 1)
         continue;
       int index = x + y * _xRes + z * _xRes * _yRes;
-      if (phase == 0)
-      {
+      if (phase == 0) {
         _binCounter[index]++;
-      }
-      else if (phase == 1)
-      {
+      } else if (phase == 1) {
         int bStart = _binStart[index];
         int bCount = _binCounter[index];
-        ///std::cout << index << " " << bStart << " " << bCount << std::endl;
+        /// std::cout << index << " " << bStart << " " << bCount << std::endl;
         _binnedEdges[bStart + bCount] = ei;
         _binCounter[index]++;
         _edgeLoc[ei] = index;
       }
     }
   }
-  //void binTriangles(control_ref mesh, T dx){}
+  // void binTriangles(surf_ref mesh, T dx){}
 #if 1
-  void binEdges(control_ref mesh, T dx)
-  {
+  void binEdges(surf_ref mesh, T dx) {
     edge_array &edges = mesh.get_edges();
     coordinate_type gmin = mesh.calc_min();
     coordinate_type gmax = mesh.calc_max();
@@ -1148,9 +758,9 @@ struct edge_bin
 
     _center = gcen;
     //_lengths = glengths;
-    //T maxl = glengths[0];
-    //maxl = maxl > lengths[1] ? maxl : glengths[1];
-    //maxl = maxl > lengths[2] ? maxl : glengths[2];
+    // T maxl = glengths[0];
+    // maxl = maxl > lengths[1] ? maxl : glengths[1];
+    // maxl = maxl > lengths[2] ? maxl : glengths[2];
 
     _xRes = ceil(0.25 * glengths[0] / _dx);
     _yRes = ceil(0.25 * glengths[1] / _dx);
@@ -1160,44 +770,41 @@ struct edge_bin
     _binStart.resize(_xRes * _yRes * _zRes + 1, 0);
     _binCounter.resize(_xRes * _yRes * _zRes, 0);
 
-    for (int c = 0; c < edges.size(); c++)
-    {
+    for (int c = 0; c < edges.size(); c++) {
       edge_ptr e = edges[c];
-      if (!e) continue;
-      
+      if (!e)
+        continue;
+
       face_vertex_ptr fv1 = e->v1();
       face_vertex_ptr fv2 = e->v2();
       coordinate_type p1 = fv1->coordinate();
       coordinate_type p2 = fv2->coordinate();
       DDA_3D(c, p1, p2, gmin, gmax, 0);
-      
     }
 
     _binStart[0] = 0;
-    for (int i = 1; i < _binStart.size(); i++)
-    {
+    for (int i = 1; i < _binStart.size(); i++) {
       _binStart[i] = _binStart[i - 1] + _binCounter[i - 1];
       _binCounter[i - 1] = 0;
     }
     _edgeLoc.resize(edges.size());
     _binnedEdges.resize(_binStart.back());
 
-    for (int c = 0; c < edges.size(); c++)
-    {
+    for (int c = 0; c < edges.size(); c++) {
       edge_ptr e = edges[c];
-      if (!e) continue;
-      
+      if (!e)
+        continue;
+
       face_vertex_ptr fv1 = e->v1();
       face_vertex_ptr fv2 = e->v2();
       coordinate_type p1 = fv1->coordinate();
       coordinate_type p2 = fv2->coordinate();
-      DDA_3D(c, p1, p2, gmin, gmax, 1);      
+      DDA_3D(c, p1, p2, gmin, gmax, 1);
     }
   }
 
 #endif
-  void clear()
-  {
+  void clear() {
     _binnedEdges.clear();
     _binStart.clear();
     _binCounter.clear();
@@ -1212,51 +819,19 @@ struct edge_bin
   coordinate_type center() { return _center; }
   coordinate_type lengths() { return _lengths; }
 
-  coordinate_type center(int x, int y, int z)
-  {
-    coordinate_type cen = _center - 0.5 * _lengths + coordinate_type(x * _dx, y * _dx, z * _dx) + 0.5 * coordinate_type(_dx, _dx, _dx);
+  coordinate_type center(int x, int y, int z) {
+    coordinate_type cen = _center - 0.5 * _lengths +
+                          coordinate_type(x * _dx, y * _dx, z * _dx) +
+                          0.5 * coordinate_type(_dx, _dx, _dx);
     return cen;
   }
 
-  void nearestBin(coordinate_type pos, int *bini)
-  {
+  void nearestBin(coordinate_type pos, int *bini) {
     coordinate_type binf =
         pos - (_center - 0.5 * _lengths + 0.5 * coordinate_type(_dx, _dx, _dx));
     bini[0] = binf[0] / _dx + 0.5;
     bini[1] = binf[1] / _dx + 0.5;
     bini[2] = binf[2] / _dx + 0.5;
-  }
-
-  void drawBoundingBox()
-  {
-    glColor3f(0.75, 0.15, 0.15);
-    m2::drawBox<SPACE>(_center, 0.5 * _lengths);
-  }
-
-  void draw()
-  {
-    T imax = _dx / _xRes;
-    for (int z = 0; z < _zRes; z++)
-    {
-      for (int y = 0; y < _yRes; y++)
-      {
-        for (int x = 0; x < _xRes; x++)
-        {
-          int xRes = _xRes;
-          int yRes = _yRes;
-          int zRes = _zRes;
-          int index = x + y * _xRes + z * _xRes * _yRes;
-          int bStart = _binStart[index];
-          int bEnd = _binStart[index + 1];
-
-          if (bEnd - bStart > 0)
-          {
-            glColor3f(0.5, 0.5, 0.5);
-            drawBox<SPACE>(this->center(x, y, z), _dx * 0.5);
-          }
-        }
-      }
-    }
   }
 
   vector<edge_ptr> &edges() { return _edges; }
@@ -1267,13 +842,13 @@ struct edge_bin
   vector<int> &binnedCounter() { return _binCounter; }
   vector<edge_ptr> _edges;
 
-  //binning variables
+  // binning variables
   vector<int> _binnedEdges;
   vector<int> _binStart;
   vector<int> _binCounter;
   vector<int> _edgeLoc;
 
-  //grouping variables
+  // grouping variables
   int _numGroups;
 
   int _xRes;
@@ -1284,29 +859,19 @@ struct edge_bin
   coordinate_type _lengths;
 };
 
-template <typename SPACE>
-struct vertex_bin
-{
+template <typename SPACE> struct vertex_bin {
   M2_TYPEDEFS;
 
   vertex_bin() {}
 
-  vertex_bin(vertex_bin &other)
-  {
-    *this = other;
-  }
+  vertex_bin(vertex_bin &other) { *this = other; }
 
-  vertex_bin(control_ref mesh, T dx)
-  {
-    this->binPoints(mesh, dx);
-  }
+  vertex_bin(surf_ref mesh, T dx) { this->binPoints(mesh, dx); }
 
   ~vertex_bin() {}
 
-  vertex_bin &operator=(vertex_bin &rhs)
-  {
-    if (this != &rhs)
-    {
+  vertex_bin &operator=(vertex_bin &rhs) {
+    if (this != &rhs) {
       _binnedVerts = rhs.binnedVerts();
       _binStart = rhs.binStart();
       _binCounter = rhs.binnedCounter();
@@ -1323,8 +888,7 @@ struct vertex_bin
   }
 
 #if 1
-  void binPoints(control_ref mesh, T dx)
-  {
+  void binPoints(surf_ref mesh, T dx) {
     vertex_array &verts = mesh.get_vertices();
     coordinate_type gmin = mesh.calc_min();
     coordinate_type gmax = mesh.calc_max();
@@ -1335,9 +899,9 @@ struct vertex_bin
 
     _center = gcen;
     //_lengths = glengths;
-    //T maxl = glengths[0];
-    //maxl = maxl > lengths[1] ? maxl : glengths[1];
-    //maxl = maxl > lengths[2] ? maxl : glengths[2];
+    // T maxl = glengths[0];
+    // maxl = maxl > lengths[1] ? maxl : glengths[1];
+    // maxl = maxl > lengths[2] ? maxl : glengths[2];
 
     _xRes = ceil(glengths[0] / _dx);
     _yRes = ceil(glengths[1] / _dx);
@@ -1347,11 +911,9 @@ struct vertex_bin
     _binStart.resize(_xRes * _yRes * _zRes + 1, 0);
     _binCounter.resize(_xRes * _yRes * _zRes, 0);
 
-    for (int c = 0; c < verts.size(); c++)
-    {
+    for (int c = 0; c < verts.size(); c++) {
       vertex_ptr v = verts[c];
-      if (v)
-      {
+      if (v) {
         coordinate_type p = v->coordinate();
         int b[3];
         nearestBin(p, b);
@@ -1361,19 +923,16 @@ struct vertex_bin
     }
 
     _binStart[0] = 0;
-    for (int i = 1; i < _binStart.size(); i++)
-    {
+    for (int i = 1; i < _binStart.size(); i++) {
       _binStart[i] = _binStart[i - 1] + _binCounter[i - 1];
       _binCounter[i - 1] = 0;
     }
 
     std::cout << _binStart.back() << std::endl;
     _binnedVerts.resize(_binStart.back(), 0);
-    for (int c = 0; c < verts.size(); c++)
-    {
+    for (int c = 0; c < verts.size(); c++) {
       vertex_ptr v = verts[c];
-      if (v)
-      {
+      if (v) {
         coordinate_type p = v->coordinate();
         int b[3];
         nearestBin(p, b);
@@ -1387,8 +946,7 @@ struct vertex_bin
     }
   }
 #endif
-  void clear()
-  {
+  void clear() {
     _binnedVerts.clear();
     _binStart.clear();
     _binCounter.clear();
@@ -1402,52 +960,19 @@ struct vertex_bin
   coordinate_type center() { return _center; }
   coordinate_type lengths() { return _lengths; }
 
-  coordinate_type center(int x, int y, int z)
-  {
+  coordinate_type center(int x, int y, int z) {
     coordinate_type cen = _center - 0.5 * _lengths +
                           coordinate_type(x * _dx, y * _dx, z * _dx, 0.0) +
                           0.5 * coordinate_type(_dx, _dx, _dx, 0.0);
     return cen;
   }
 
-  void nearestBin(coordinate_type pos, int *bini)
-  {
-    coordinate_type binf =
-        pos - (_center - 0.5 * _lengths + 0.5 * coordinate_type(_dx, _dx, _dx, 0.0));
+  void nearestBin(coordinate_type pos, int *bini) {
+    coordinate_type binf = pos - (_center - 0.5 * _lengths +
+                                  0.5 * coordinate_type(_dx, _dx, _dx, 0.0));
     bini[0] = floor(binf[0] / _dx + 0.5);
     bini[1] = floor(binf[1] / _dx + 0.5);
     bini[2] = floor(binf[2] / _dx + 0.5);
-  }
-
-  void drawBoundingBox()
-  {
-    glColor3f(0.75, 0.15, 0.15);
-    m2::drawBox<SPACE>(_center, 0.5 * _lengths);
-  }
-
-  void draw()
-  {
-    T imax = _dx / _xRes;
-    for (int z = 0; z < _zRes; z++)
-    {
-      for (int y = 0; y < _yRes; y++)
-      {
-        for (int x = 0; x < _xRes; x++)
-        {
-          int xRes = _xRes;
-          int yRes = _yRes;
-          int zRes = _zRes;
-          int index = x + y * _xRes + z * _xRes * _yRes;
-          int bStart = _binStart[index];
-          int bEnd = _binStart[index + 1];
-          if (bEnd - bStart > 0)
-          {
-            glColor3f(0.5, 0.5, 0.5);
-            drawBox<SPACE>(this->center(x, y, z), _dx * 0.5);
-          }
-        }
-      }
-    }
   }
 
   vector<vertex_ptr> &vertices() { return _verts; }
@@ -1457,12 +982,12 @@ struct vertex_bin
   vector<int> &binnedCounter() { return _binCounter; }
   vector<vertex_ptr> _verts;
 
-  //binning variables
+  // binning variables
   vector<int> _binnedVerts;
   vector<int> _binStart;
   vector<int> _binCounter;
 
-  //grouping variables
+  // grouping variables
   int _numGroups;
 
   int _xRes;
@@ -1473,9 +998,7 @@ struct vertex_bin
   coordinate_type _lengths;
 };
 
-template <typename SPACE>
-struct pole_node
-{
+template <typename SPACE> struct pole_node {
 public:
   M2_TYPEDEFS;
   int id;
@@ -1487,10 +1010,9 @@ public:
   coordinate_type centerOfMass;
   coordinate_type half;
   int children[8];
-  //int neighbors[6]; to be implemented later
+  // int neighbors[6]; to be implemented later
 
-  pole_node()
-  {
+  pole_node() {
     id = -1;
     begin = -1;
     size = -1;
@@ -1500,12 +1022,9 @@ public:
       children[i] = -1;
   }
 
-  ~pole_node()
-  {
-  }
+  ~pole_node() {}
 
-  pole_node(const pole_node &rhs)
-  {
+  pole_node(const pole_node &rhs) {
     center = rhs.center;
     centerOfMass = rhs.centerOfMass;
     half = rhs.half;
@@ -1518,11 +1037,9 @@ public:
       children[i] = rhs.children[i];
   }
 
-  pole_node &operator=(const pole_node &rhs)
-  {
-    //this = new pole_node();
-    if (this != &rhs)
-    {
+  pole_node &operator=(const pole_node &rhs) {
+    // this = new pole_node();
+    if (this != &rhs) {
       children = new int[8];
       center = rhs.center;
       centerOfMass = rhs.centerOfMass;
@@ -1539,10 +1056,8 @@ public:
   }
 };
 
-template <typename SPACE>
-struct pole_tree
-{
-  //specialized for points, this makes things really easy: basically quicksort
+template <typename SPACE> struct pole_tree {
+  // specialized for points, this makes things really easy: basically quicksort
   M2_TYPEDEFS;
 
 public:
@@ -1551,20 +1066,12 @@ public:
   pole_tree() {}
   ~pole_tree() {}
 
-  pole_tree(const pole_tree &other)
-  {
-    *this = other;
-  }
+  pole_tree(const pole_tree &other) { *this = other; }
 
-  pole_tree(vector<coordinate_type> &points)
-  {
-    this->build(points, 20);
-  }
+  pole_tree(vector<coordinate_type> &points) { this->build(points, 20); }
 
-  pole_tree &operator=(const pole_tree &rhs)
-  {
-    if (this != &rhs)
-    {
+  pole_tree &operator=(const pole_tree &rhs) {
+    if (this != &rhs) {
       nodes = rhs.nodes;
       permutation = rhs.permutation;
       leafNodes = rhs.leafNodes;
@@ -1572,13 +1079,9 @@ public:
     return *this;
   }
 
-  void calcHalfCenter(coordinate_type &half,
-                      coordinate_type &cen,
-                      coordinate_type &com,
-                      vector<coordinate_type> &points,
-                      vector<int> &permutation,
-                      int beg, int N)
-  {
+  void calcHalfCenter(coordinate_type &half, coordinate_type &cen,
+                      coordinate_type &com, vector<coordinate_type> &points,
+                      vector<int> &permutation, int beg, int N) {
 
     com = coordinate_type(0, 0, 0);
     for (int i = beg; i < beg + N; i++)
@@ -1586,8 +1089,7 @@ public:
     com /= (T)N;
     coordinate_type min = com;
     coordinate_type max = com;
-    for (int i = beg; i < beg + N; i++)
-    {
+    for (int i = beg; i < beg + N; i++) {
       coordinate_type p = points[permutation[i]];
       for (int j = 0; j < 3; j++)
         min[j] = min[j] < p[j] ? min[j] : p[j];
@@ -1598,8 +1100,7 @@ public:
     cen = 0.5 * (max + min);
   }
 
-  int getBin(const coordinate_type &p, const coordinate_type &c)
-  {
+  int getBin(const coordinate_type &p, const coordinate_type &c) {
     int flag = 0;
     if (p[0] > c[0])
       flag |= 1;
@@ -1610,16 +1111,14 @@ public:
     return flag;
   }
 
-  void build(vector<coordinate_type> &points,
-             int maxLevel)
-  {
-    //TIMER function//TIMER(__FUNCTION__);
-    //inititalize permutation
+  void build(vector<coordinate_type> &points, int maxLevel) {
+    // TIMER function//TIMER(__FUNCTION__);
+    // inititalize permutation
     permutation.resize(points.size());
     leafIds.resize(points.size());
     // nodes.reserve(points.size()*points.size());
     // permutation.reserve(points.size());
-    
+
     for (int i = 0; i < permutation.size(); i++)
       permutation[i] = i;
     node_type root;
@@ -1628,10 +1127,8 @@ public:
     root.size = points.size();
     root.id = nodes.size();
     root.parent = -1;
-    calcHalfCenter(root.half,
-                   root.center,
-                   root.centerOfMass,
-                   points, permutation, root.begin, root.size);
+    calcHalfCenter(root.half, root.center, root.centerOfMass, points,
+                   permutation, root.begin, root.size);
     stack<int> stack;
 
     stack.push(nodes.size());
@@ -1641,10 +1138,8 @@ public:
     nodes.reserve(size);
 
     nodes.push_back(root);
-    
-    
-    while (stack.size() > 0)
-    {
+
+    while (stack.size() > 0) {
       int pNodeId = stack.top();
       stack.pop();
       node_type pNode = nodes[pNodeId];
@@ -1655,15 +1150,13 @@ public:
       int cN[8], cCounter[8], cAccum[8];
       int *lPerm = new int[N];
 
-      for (int j = 0; j < 8; j++)
-      {
+      for (int j = 0; j < 8; j++) {
         cN[j] = 0;
         cCounter[j] = 0;
         cAccum[0] = 0;
       }
 
-      for (int i = beg; i < beg + N; i++)
-      {
+      for (int i = beg; i < beg + N; i++) {
         coordinate_type p = points[permutation[i]];
         int bin = getBin(p, pNode.centerOfMass);
         cN[bin]++;
@@ -1672,8 +1165,7 @@ public:
       for (int j = 1; j < 8; j++)
         cAccum[j] = cAccum[j - 1] + cN[j - 1];
 
-      for (int i = beg; i < beg + N; i++)
-      {
+      for (int i = beg; i < beg + N; i++) {
         coordinate_type p = points[permutation[i]];
         int bin = getBin(p, pNode.centerOfMass);
         lPerm[cAccum[bin] + cCounter[bin]] = permutation[i];
@@ -1682,15 +1174,13 @@ public:
 
       int ii = 0;
 
-      for (int i = beg; i < beg + N; i++)
-      {
-        //update the global permutation with the local permutation
+      for (int i = beg; i < beg + N; i++) {
+        // update the global permutation with the local permutation
         permutation[i] = lPerm[ii];
         ii++;
       }
 
-      for (int j = 0; j < 8; j++)
-      {
+      for (int j = 0; j < 8; j++) {
         if (cN[j] == 0)
           continue;
         int cNodeId = nodes.size();
@@ -1704,21 +1194,16 @@ public:
 
         nodes[pNodeId].children[j] = cNodeId;
 
-        calcHalfCenter(cNode.half,
-                       cNode.center,
-                       cNode.centerOfMass,
-                       points, permutation, cNode.begin, cNode.size);
+        calcHalfCenter(cNode.half, cNode.center, cNode.centerOfMass, points,
+                       permutation, cNode.begin, cNode.size);
         nodes.push_back(cNode);
-        if (cNode.size > 1 && cNode.level < maxLevel)
-        {
+        if (cNode.size > 1 && cNode.level < maxLevel) {
           stack.push(cNodeId);
-        }
-        else if (cNode.size == 1 || cNode.level == maxLevel)
-        {
+        } else if (cNode.size == 1 || cNode.level == maxLevel) {
           leafNodes.push_back(cNodeId);
-        } //leafIds.push_back(cNodeId);
+        } // leafIds.push_back(cNodeId);
       }
-      //delete lPerm;
+      // delete lPerm;
     }
   }
 
@@ -1728,9 +1213,7 @@ public:
   vector<int> permutation;
 };
 
-template <typename SPACE>
-struct aabb_node
-{
+template <typename SPACE> struct aabb_node {
 public:
   M2_TYPEDEFS;
   int dim;
@@ -1741,11 +1224,10 @@ public:
   int parent;
   int children[2];
   box_type bbox;
-  //coordinate_type centerOfMass;
-  //int neighbors[6]; to be implemented later
+  // coordinate_type centerOfMass;
+  // int neighbors[6]; to be implemented later
 
-  aabb_node()
-  {
+  aabb_node() {
     dim = 0;
     id = -1;
     begin = -1;
@@ -1756,14 +1238,11 @@ public:
     children[1] = -1;
   }
 
-  ~aabb_node()
-  {
-  }
+  ~aabb_node() {}
 
-  aabb_node(const aabb_node &rhs)
-  {
+  aabb_node(const aabb_node &rhs) {
     bbox = rhs.bbox;
-    //centerOfMass     = rhs.centerOfMass;
+    // centerOfMass     = rhs.centerOfMass;
     dim = rhs.dim;
     id = rhs.id;
     begin = rhs.begin;
@@ -1776,14 +1255,12 @@ public:
     children[1] = rhs.children[1];
   }
 
-  aabb_node &operator=(const aabb_node &rhs)
-  {
-    //this = new aabb_node();
-    if (this != &rhs)
-    {
+  aabb_node &operator=(const aabb_node &rhs) {
+    // this = new aabb_node();
+    if (this != &rhs) {
 
       bbox = rhs.bbox;
-      //centerOfMass     = rhs.centerOfMass;
+      // centerOfMass     = rhs.centerOfMass;
       dim = rhs.dim;
       id = rhs.id;
       begin = rhs.begin;
@@ -1797,18 +1274,12 @@ public:
     return *this;
   }
 
-  int getNumChildren(){
-    return 2;
-  }
+  int getNumChildren() { return 2; }
 
-  bool isLeaf(){
-    return children[0] < 0 && children[1] < 0;
-  }
+  bool isLeaf() const { return children[0] < 0 && children[1] < 0; }
 };
 
-template <typename SPACE, typename PRIMITIVE>
-struct aabb_tree
-{
+template <typename SPACE, typename PRIMITIVE> struct aabb_tree {
 
   M2_TYPEDEFS;
 
@@ -1818,20 +1289,12 @@ public:
   aabb_tree() {}
   ~aabb_tree() {}
 
-  aabb_tree(const aabb_tree &other)
-  {
-    *this = other;
-  }
+  aabb_tree(const aabb_tree &other) { *this = other; }
 
-  aabb_tree(vector<PRIMITIVE> &points)
-  {
-    this->build(points, 12);
-  }
+  aabb_tree(vector<PRIMITIVE> &points) { this->build(points, 12); }
 
-  aabb_tree &operator=(const aabb_tree &rhs)
-  {
-    if (this != &rhs)
-    {
+  aabb_tree &operator=(const aabb_tree &rhs) {
+    if (this != &rhs) {
       nodes = rhs.nodes;
       leafNodes = rhs.leafNodes;
       permutation = rhs.permutation;
@@ -1839,40 +1302,24 @@ public:
     return *this;
   }
 
-  void calcHalfCenter(coordinate_type &half,
-                      coordinate_type &cen,
-                      vector<PRIMITIVE> &points,
-                      vector<int> &permutation,
-                      int beg, int N)
-  {
-
-    coordinate_type com = coordinate_type(0, 0, 0);
-    for (int i = beg; i < beg + N; i++)
-      com += points[permutation[i]].center();
-    com /= (T)N;
-    coordinate_type min = com;
-    coordinate_type max = com;
-    for (int i = beg; i < beg + N; i++)
-    {
-      PRIMITIVE p = points[permutation[i]];
-      coordinate_type minp, maxp;
-      p.getExtents(minp, maxp);
-      min = min.array().min(minp.array());
-      max = max.array().max(maxp.array());
+  void calcHalfCenter(coordinate_type &half, coordinate_type &cen,
+                      vector<PRIMITIVE> &primitives, vector<int> &permutation,
+                      int beg, int N) {
+    box_type bb = primitives[permutation[beg]].bbox();
+    for (int i = beg; i < beg + N; i++) {
+      PRIMITIVE p = primitives[permutation[i]];
+      bb.expandBy(p.bbox());
     }
-
-    half = 0.5 * (max - min);
-    cen = 0.5 * (max + min);
+    half = bb.half;
+    cen = bb.center;
   }
 
-  void build(vector<PRIMITIVE> &points,
-             int maxLevel)
-  {
-    //TIMER function//TIMER(__FUNCTION__);
+  void build(vector<PRIMITIVE> &primitives, int maxLevel) {
+    // TIMER function//TIMER(__FUNCTION__);
 
-    //inititalize permutation
-    permutation.resize(points.size());
-    leafIds.resize(points.size());
+    // inititalize permutation
+    permutation.resize(primitives.size());
+    leafIds.resize(primitives.size());
     // nodes.reserve(points.size()*points.size());
     // permutation.reserve(points.size());
 
@@ -1882,19 +1329,17 @@ public:
     node_type root;
     root.begin = 0;
     root.level = 0;
-    root.size = points.size();
+    root.size = primitives.size();
     root.id = nodes.size();
     root.parent = -1;
-    calcHalfCenter(root.bbox.half,
-                   root.bbox.center,
-                   points, permutation, root.begin, root.size);
+    calcHalfCenter(root.bbox.half, root.bbox.center, primitives, permutation,
+                   root.begin, root.size);
 
     stack<int> stack;
-    nodes.reserve(log(points.size()) * points.size());
+    nodes.reserve(log(primitives.size()) * primitives.size());
     stack.push(nodes.size());
     nodes.push_back(root);
-    while (stack.size() > 0)
-    {
+    while (stack.size() > 0) {
       int pNodeId = stack.top();
       stack.pop();
       node_type pNode = nodes[pNodeId];
@@ -1908,20 +1353,17 @@ public:
       int cN[2] = {0, 0}, cCounter[2] = {0, 0}, cAccum[2] = {0, 0};
       int *lPerm = new int[N];
 
-      for (int i = beg; i < beg + N; i++)
-      {
-        PRIMITIVE p = points[permutation[i]];
-        int bin =
-            (p.center()[dim] < center[dim]) ? 0 : 1;
+      for (int i = beg; i < beg + N; i++) {
+        PRIMITIVE p = primitives[permutation[i]];
+        int bin = (p.center()[dim] < center[dim]) ? 0 : 1;
         cN[bin]++;
       }
 
       for (int j = 1; j < 2; j++)
         cAccum[j] = cAccum[j - 1] + cN[j - 1];
 
-      for (int i = beg; i < beg + N; i++)
-      {
-        PRIMITIVE p = points[permutation[i]];
+      for (int i = beg; i < beg + N; i++) {
+        PRIMITIVE p = primitives[permutation[i]];
         int bin = (p.center()[dim] < center[dim]) ? 0 : 1;
         lPerm[cAccum[bin] + cCounter[bin]] = permutation[i];
         cCounter[bin]++;
@@ -1929,16 +1371,13 @@ public:
 
       int ii = 0;
 
-      for (int i = beg; i < beg + N; i++)
-      {
-        //update the global permutation with the local permutation
+      for (int i = beg; i < beg + N; i++) {
+        // update the global permutation with the local permutation
         permutation[i] = lPerm[ii];
         ii++;
       }
 
-
-      for (int j = 0; j < 2; j++)
-      {
+      for (int j = 0; j < 2; j++) {
         if (cN[j] == 0)
           continue;
 
@@ -1954,85 +1393,105 @@ public:
 
         nodes[pNodeId].children[j] = cNodeId;
 
-        calcHalfCenter(cNode.bbox.half, cNode.bbox.center,
-                       points, permutation, cNode.begin, cNode.size);
-        //m2::Debugger& debug = m2::Debugger::get_instance();
-        //debug.DebugBoxes.push_back(cNode.bbox.center);
-        //debug.DebugBoxes.push_back(cNode.bbox.half);
+        calcHalfCenter(cNode.bbox.half, cNode.bbox.center, primitives,
+                       permutation, cNode.begin, cNode.size);
+        // m2::Debugger& debug = m2::Debugger::get_instance();
+        // debug.DebugBoxes.push_back(cNode.bbox.center);
+        // debug.DebugBoxes.push_back(cNode.bbox.half);
 
         nodes.push_back(cNode);
 
         if (cNode.size < pNode.size && cNode.level < maxLevel)
           stack.push(cNodeId);
-        else if (cNode.size == pNode.size || cNode.size == 1 || cNode.level == maxLevel)
+        else if (cNode.size == pNode.size || cNode.size == 1 ||
+                 cNode.level == maxLevel)
           leafNodes.push_back(cNodeId);
 
-        //leafIds.push_back(cNodeId);
+        // leafIds.push_back(cNodeId);
       }
       delete lPerm;
     }
   }
 
-  void draw()
-  {
-    //std::cout << " number of bins: " << nodes.size() << std::endl;
-    if (nodes.size() == 0)
-      return;
-    //for(int i= 0; i < 2; i++){
-    glLineWidth(1.0);
-    for (int i = 0; i < nodes.size(); i++)
-    {
-      node_type &node = nodes[i];
-      if (node.size > 0)
-      {
-        glColor3f(0.5, 0.5, 0.5);
-        drawBox<SPACE>(node.bbox.center, node.bbox.half);
-        if (norm(node.bbox.half) < 1e-16)
-        {
-          glPointSize(3.0);
-          glBegin(GL_POINTS);
-          glColor3f(0.75, 0.75, 0.75);
-          glVertex3d(node.bbox.center[0], node.bbox.center[1], node.bbox.center[2]);
-          glEnd();
-        }
-      }
-    }
-  }
-
-  void drawLeafNodes()
-  {
-    glBegin(GL_LINE_STRIP);
-    for (int i = 0; i < leafNodes.size(); i++)
-    {
-      node_type &node = nodes[leafNodes[i]];
-      glColor3f(0.5, 0.5, 0.5);
-      drawBox<SPACE>(node.center, node.half * 0.9);
-    }
-    glEnd();
-  }
-
-  void drawLeafConnectivity()
-  {
-    glBegin(GL_LINE_STRIP);
-    for (int i = 0; i < leafNodes.size(); i++)
-    {
-      node_type &node = nodes[leafNodes[i]];
-      coordinate_type cen = node.center;
-
-      glColor3f(0.75, 0.75, 0.75);
-      glVertex3d(cen[0], cen[1], cen[2]);
-    }
-    glEnd();
-  }
   vector<node_type> nodes;
   vector<int> leafIds;
   vector<int> leafNodes;
   vector<int> permutation;
 };
 
-template <typename SPACE, typename PRIMITIVE>
-struct dynamic_octnode
-{
+template <typename SPACE, typename PRIMITIVE_A, typename PRIMITIVE_B>
+PRIMITIVE_A
+getNearest(PRIMITIVE_B &primB, const aabb_tree<SPACE, PRIMITIVE_A> &faceTree,
+           const vector<PRIMITIVE_A> &primitives,
+           std::function<typename SPACE::double_type(const PRIMITIVE_A &a,
+                                                     const PRIMITIVE_B &b)>
+               testAB,
+           typename SPACE::double_type tol) {
+  M2_TYPEDEFS;
+  // TIMER function//TIMER(__FUNCTION__);
+  typedef aabb_tree<SPACE, PRIMITIVE_A> tree_type;
+  typedef typename tree_type::node_type Node;
+
+  PRIMITIVE_A primMin;
+  T dmin = std::numeric_limits<T>::infinity();
+
+  const Node &root = faceTree.nodes[0];
+  std::stack<int> cstack;
+  cstack.push(0);
+  bool hit = false;
+  // T tol = 0.05;
+  box_type boxB = primB.bbox();
+  boxB.inflate(coordinate_type(tol, tol, tol));
+
+  while (cstack.size() > 0) {
+    line_tests<SPACE> test;
+    int cId = cstack.top();
+    cstack.pop();
+    const Node &cnode = faceTree.nodes[cId];
+
+    if (cnode.children[0] == -1 && cnode.children[1] == -1) {
+      // in order to make this generic, I need to turn this piece into a
+      // function or create iterators for the leaves
+
+      // m2::Debugger& debug = m2::Debugger::get_instance();
+      // debug.DebugLines0.push_back(cnode.bbox.center);
+      // debug.DebugLines0.push_back(primB);
+      //std::cout << cnode.size << std::endl;
+      for (int k = cnode.begin; k < cnode.begin + cnode.size; k++) {
+        
+        PRIMITIVE_A primA = primitives[faceTree.permutation[k]];
+        box_type boxA = primA.bbox();
+
+        if (!boxA.overlap(boxB)) {
+          //std::cout << " no overlap child" << std::endl;
+          continue;
+        }
+
+        T dist = testAB(primA, primB);
+
+        if (dist < dmin && dist < std::numeric_limits<T>::infinity()) {
+          dmin = dist;
+          primMin = primA;
+        }
+      }
+    }
+
+    for (int i = 0; i < 2; i++) {
+      if (cnode.children[i] > -1) {
+        box_type boxA = faceTree.nodes[cnode.children[i]].bbox;
+        if (boxA.overlap(boxB)) {
+          cstack.push(cnode.children[i]);
+        } else{
+          //std::cout << cId << ": nover " << cnode.children[i] << std::endl;
+          continue;
+        }
+      }
+    }
+  }
+  return primMin;
+};
+
+template <typename SPACE, typename PRIMITIVE> struct dynamic_octnode {
 public:
   M2_TYPEDEFS;
   int id;
@@ -2041,11 +1500,10 @@ public:
   bool isLeaf;
   box_type bbox;
   int *children;
-  list<int> data; //index into the global primitive array
-  //int neighbors[6]; to be implemented later
+  list<int> data; // index into the global primitive array
+  // int neighbors[6]; to be implemented later
 
-  dynamic_octnode()
-  {
+  dynamic_octnode() {
     isLeaf = false;
     children = new int[8];
     id = -1;
@@ -2055,13 +1513,9 @@ public:
       children[i] = -1;
   }
 
-  ~dynamic_octnode()
-  {
-    delete children;
-  }
+  ~dynamic_octnode() { delete children; }
 
-  dynamic_octnode(const dynamic_octnode &rhs)
-  {
+  dynamic_octnode(const dynamic_octnode &rhs) {
     isLeaf = rhs.isLeaf;
     bbox = rhs.bbox;
     id = rhs.id;
@@ -2073,11 +1527,9 @@ public:
       children[i] = rhs.children[i];
   }
 
-  dynamic_octnode &operator=(const dynamic_octnode &rhs)
-  {
-    //this = new dynamic_octnode();
-    if (this != &rhs)
-    {
+  dynamic_octnode &operator=(const dynamic_octnode &rhs) {
+    // this = new dynamic_octnode();
+    if (this != &rhs) {
       isLeaf = rhs.isLeaf;
       bbox = rhs.bbox;
       children = new int[8];
@@ -2092,63 +1544,46 @@ public:
   }
 };
 
-template <typename SPACE, typename PRIMITIVE>
-struct dynamic_octree
-{
-  //specialized for faces, but...
+template <typename SPACE, typename PRIMITIVE> struct dynamic_octree {
+  // specialized for faces, but...
   M2_TYPEDEFS;
 
 public:
   ///////////////////////
-  //typedefs
+  // typedefs
   ///////////////////////
   typedef dynamic_octnode<SPACE, PRIMITIVE> node_type;
   typedef list<int> data_list;
   typedef typename data_list::iterator data_iterator;
 
   ///////////////////////
-  //constructor/destructors
+  // constructor/destructors
   ///////////////////////
   dynamic_octree() { this->maxLeafSize = 8; }
   ~dynamic_octree() {}
 
-  dynamic_octree(const dynamic_octree &other)
-  {
-    *this = other;
-  }
+  dynamic_octree(const dynamic_octree &other) { *this = other; }
 
-  dynamic_octree(vector<coordinate_type> &points)
-  {
-    this->build(points, 20);
-  }
+  dynamic_octree(vector<coordinate_type> &points) { this->build(points, 20); }
 
   ///////////////////////
-  //operators
+  // operators
   ///////////////////////
-  dynamic_octree &operator=(const dynamic_octree &rhs)
-  {
-    if (this != &rhs)
-    {
+  dynamic_octree &operator=(const dynamic_octree &rhs) {
+    if (this != &rhs) {
       nodes = rhs.nodes;
       leafNodes = rhs.leafNodes;
     }
     return *this;
   }
 
-  void remove(vector<PRIMITIVE> &primitives, int p,
-              int maxLevel)
-  {
+  void remove(vector<PRIMITIVE> &primitives, int p, int maxLevel) {}
 
-  }
-  
-  void insert(vector<PRIMITIVE> &primitives, int p,
-              int maxLevel)
-  {
-    typedef std::pair<int, int> frame_type; //node, primitive
+  void insert(vector<PRIMITIVE> &primitives, int p, int maxLevel) {
+    typedef std::pair<int, int> frame_type; // node, primitive
     stack<frame_type> stack;
-    //store the node and point associated with it
-    if (nodes.size() == 0)
-    {
+    // store the node and point associated with it
+    if (nodes.size() == 0) {
       node_type root;
       root.bbox = this->bbox;
       root.level = 0;
@@ -2162,8 +1597,7 @@ public:
     frame.second = p;
     stack.push(frame);
 
-    while (stack.size() > 0)
-    {
+    while (stack.size() > 0) {
       frame_type cFrame = stack.top();
       stack.pop();
       int pNodeId = cFrame.first;
@@ -2171,44 +1605,38 @@ public:
 
       PRIMITIVE &pPrim = primitives[pi];
       node_type pNode = nodes[pNodeId];
-      //if the maximum number of primitives in the node are exceeded,
-      //then the node must be resubdivided, flushed, and all the data
-      //needs to be binned further downward.
+      // if the maximum number of primitives in the node are exceeded,
+      // then the node must be resubdivided, flushed, and all the data
+      // needs to be binned further downward.
 
-      //if not a leaf push stack until a leaf is found
-      if (nodes[pNodeId].isLeaf == false)
-      {
-        for (int i = 0; i < 8; i++)
-        {
+      // if not a leaf push stack until a leaf is found
+      if (nodes[pNodeId].isLeaf == false) {
+        for (int i = 0; i < 8; i++) {
           int childId = nodes[pNodeId].children[i];
           bool overlap = boxOverlap(primitives[pi], nodes[childId].bbox);
-          if (overlap)
-          {
+          if (overlap) {
             frame_type newFrame(childId, pi);
             stack.push(newFrame);
           }
         }
         continue;
       }
-      //if the current node is a leaf then push the current frame into the current node.
+      // if the current node is a leaf then push the current frame into the
+      // current node.
       nodes[pNodeId].data.push_back(pi);
-      //if the current node is at the maximum level, continue, never subdivide
+      // if the current node is at the maximum level, continue, never subdivide
       if (nodes[pNodeId].level == maxLevel)
         continue;
 
-      //if the current leaf is too full and less than the maximum level.  Subdivide it and push all
-      //of its stored data onto the stack
+      // if the current leaf is too full and less than the maximum level.
+      // Subdivide it and push all of its stored data onto the stack
 
-      if (nodes[pNodeId].data.size() > maxLeafSize)
-      {
-        coordinate_type
-            cen = pNode.bbox.center,
-            half = pNode.bbox.half;
+      if (nodes[pNodeId].data.size() > maxLeafSize) {
+        coordinate_type cen = pNode.bbox.center, half = pNode.bbox.half;
 
         node_type cNodes[8];
         coordinate_type offset;
-        for (int i = 0; i < 8; i++)
-        {
+        for (int i = 0; i < 8; i++) {
           T xh = 0.5 * half[0];
           T yh = 0.5 * half[1];
           T zh = 0.5 * half[2];
@@ -2241,13 +1669,10 @@ public:
         data_iterator itb = nodes[pNodeId].data.begin();
         data_iterator ite = nodes[pNodeId].data.end();
         int d = 0;
-        while (itb != ite)
-        {
-          for (int i = 0; i < 8; i++)
-          {
+        while (itb != ite) {
+          for (int i = 0; i < 8; i++) {
             bool overlap = boxOverlap(primitives[*itb], cNodes[i].bbox);
-            if (overlap)
-            {
+            if (overlap) {
               frame_type newFrame(cNodes[i].id, *itb);
               stack.push(newFrame);
             }
@@ -2261,26 +1686,20 @@ public:
     }
   };
 
-  void build(vector<PRIMITIVE> &prims,
-             int maxLevel)
-  {
-    //TIMER function//TIMER(__FUNCTION__);
-    for (int i = 0; i < prims.size(); i++)
-    {
+  void build(vector<PRIMITIVE> &prims, int maxLevel) {
+    // TIMER function//TIMER(__FUNCTION__);
+    for (int i = 0; i < prims.size(); i++) {
       this->insert(prims, i, maxLevel);
     }
   }
 
-  void draw()
-  {
-    //std::cout << " number of bins: " << nodes.size() << std::endl;
+  void draw() {
+    // std::cout << " number of bins: " << nodes.size() << std::endl;
     glDisable(GL_LIGHTING);
-    for (int i = 0; i < nodes.size(); i++)
-    {
+    for (int i = 0; i < nodes.size(); i++) {
       node_type &node = nodes[i];
 
-      if (node.data.size() > 0)
-      {
+      if (node.data.size() > 0) {
         glColor3f(0.5, 0.5, 0.5);
         node.bbox.draw();
         node.bbox.drawCenter(3.0);
@@ -2296,10 +1715,10 @@ public:
 };
 
 template <typename SPACE, typename PRIMITIVE>
-inline bool intersectLineTest(typename SPACE::coordinate_type e0, typename SPACE::coordinate_type e1,
+inline bool intersectLineTest(typename SPACE::coordinate_type e0,
+                              typename SPACE::coordinate_type e1,
                               dynamic_octree<SPACE, PRIMITIVE> &faceTree,
-                              vector<PRIMITIVE> &corners)
-{
+                              vector<PRIMITIVE> &corners) {
   M2_TYPEDEFS;
 
   typedef dynamic_octree<SPACE, PRIMITIVE> tree_type;
@@ -2313,41 +1732,36 @@ inline bool intersectLineTest(typename SPACE::coordinate_type e0, typename SPACE
   if (corners.size() == 0)
     return false;
 
-  while (cstack.size() > 0)
-  {
+  while (cstack.size() > 0) {
     line_tests<SPACE> test;
     int cId = cstack.top();
     cstack.pop();
     node &cnode = faceTree.nodes[cId];
 
-    if (cnode.isLeaf)
-    {
-      //in order to make this generic, I need to turn this piece into a function or create
-      //iterators for the leaves
+    if (cnode.isLeaf) {
+      // in order to make this generic, I need to turn this piece into a
+      // function or create iterators for the leaves
       data_iterator itb = faceTree.nodes[cId].data.begin();
       data_iterator ite = faceTree.nodes[cId].data.end();
       int d = 0;
 
-      while (itb != ite)
-      {
+      while (itb != ite) {
         int ci = *itb;
-        hit = test.lineTriangle(e0, e1, corners[ci].p[0], corners[ci].p[1], corners[ci].p[2]);
+        hit = test.lineTriangle(e0, e1, corners[ci].p[0], corners[ci].p[1],
+                                corners[ci].p[2]);
         itb++;
       }
     }
 
-    for (int i = 0; i < 8; i++)
-    {
-      if (cnode.children[i] > -1)
-      {
+    for (int i = 0; i < 8; i++) {
+      if (cnode.children[i] > -1) {
         coordinate_type c0 = faceTree.nodes[cnode.children[i]].bbox.center;
         coordinate_type h0 = faceTree.nodes[cnode.children[i]].bbox.half;
         m2::Debugger &debug = m2::Debugger::get_instance();
         debug.DebugBoxes.push_back(c0);
         debug.DebugBoxes.push_back(h0);
 
-        if (test.lineBox(e0, e1, c0 - h0, c0 + h0))
-        {
+        if (test.lineBox(e0, e1, c0 - h0, c0 + h0)) {
           cstack.push(cnode.children[i]);
         }
       }
@@ -2361,53 +1775,47 @@ inline void getAllNearest(PRIMITIVE_B &primB,
                           aabb_tree<SPACE, PRIMITIVE_A> &faceTree,
                           vector<PRIMITIVE_A> &corners,
                           std::vector<int> &collectedPrimitives,
-                          typename SPACE::double_type tol)
-{
+                          typename SPACE::double_type tol) {
   M2_TYPEDEFS;
-  //TIMER function//TIMER(__FUNCTION__);
+  // TIMER function//TIMER(__FUNCTION__);
   typedef aabb_tree<SPACE, PRIMITIVE_A> tree_type;
   typedef typename tree_type::node_type node;
   node &root = faceTree.nodes[0];
   std::stack<int> cstack;
   cstack.push(0);
   bool hit = false;
-  //T tol = 0.05;
-  while (cstack.size() > 0)
-  {
+  // T tol = 0.05;
+  while (cstack.size() > 0) {
     line_tests<SPACE> test;
     int cId = cstack.top();
     cstack.pop();
     node &cnode = faceTree.nodes[cId];
 
-    if (cnode.children[0] == -1 && cnode.children[1] == -1)
-    {
-      //in order to make this generic, I need to turn this piece into a function or create
-      //iterators for the leaves
+    if (cnode.children[0] == -1 && cnode.children[1] == -1) {
+      // in order to make this generic, I need to turn this piece into a
+      // function or create iterators for the leaves
       int beg = faceTree.nodes[cId].begin;
       int end = beg + faceTree.nodes[cId].size;
       int d = 0;
-      //m2::Debugger& debug = m2::Debugger::get_instance();
-      //debug.DebugLines0.push_back(cnode.bbox.center);
-      //debug.DebugLines0.push_back(primB);
-      while (beg != end)
-      {
+      // m2::Debugger& debug = m2::Debugger::get_instance();
+      // debug.DebugLines0.push_back(cnode.bbox.center);
+      // debug.DebugLines0.push_back(primB);
+      while (beg != end) {
         PRIMITIVE_A primA = corners[faceTree.permutation[beg]];
         m2::distance_calculator<SPACE> calc;
         T dist = calc.distance(primA, primB);
-        //if(dist < 10) std::cout << dist << std::endl;
+        // if(dist < 10) std::cout << dist << std::endl;
         if (dist < tol * tol)
           collectedPrimitives.push_back(faceTree.permutation[beg]);
-        //m2::Debugger& debug = m2::Debugger::get_instance();
-        //debug.DebugLines0.push_back(primB);
-        //debug.DebugLines0.push_back(primA.center());
+        // m2::Debugger& debug = m2::Debugger::get_instance();
+        // debug.DebugLines0.push_back(primB);
+        // debug.DebugLines0.push_back(primA.center());
         beg++;
       }
     }
 
-    for (int i = 0; i < 2; i++)
-    {
-      if (cnode.children[i] > -1)
-      {
+    for (int i = 0; i < 2; i++) {
+      if (cnode.children[i] > -1) {
         coordinate_type c = faceTree.nodes[cnode.children[i]].bbox.center;
         coordinate_type h = faceTree.nodes[cnode.children[i]].bbox.half;
         coordinate_type minA = c - h;
@@ -2416,16 +1824,14 @@ inline void getAllNearest(PRIMITIVE_B &primB,
         coordinate_type maxB;
         geometry_calculator<SPACE> calc;
         calc.getExtents(primB, minB, maxB);
-        //m2::Debugger& debug = m2::Debugger::get_instance();
-        //debug.DebugBoxes.push_back(c);
-        //debug.DebugBoxes.push_back(h);
+        // m2::Debugger& debug = m2::Debugger::get_instance();
+        // debug.DebugBoxes.push_back(c);
+        // debug.DebugBoxes.push_back(h);
         if (minA[0] > maxB[0] + tol || minB[0] - tol > maxA[0] ||
             minA[1] > maxB[1] + tol || minB[1] - tol > maxA[1] ||
-            minA[2] > maxB[2] + tol || minB[2] - tol > maxA[2])
-        {
+            minA[2] > maxB[2] + tol || minB[2] - tol > maxA[2]) {
           continue;
-        }
-        else
+        } else
           cstack.push(cnode.children[i]);
       }
     }
@@ -2433,57 +1839,52 @@ inline void getAllNearest(PRIMITIVE_B &primB,
 };
 
 template <typename SPACE>
-inline void getAllNearestTriPoint(typename SPACE::coordinate_type &p,
-                                  aabb_tree<SPACE, typename SPACE::triangle_type> &faceTree,
-                                  vector<typename SPACE::triangle_type> &corners,
-                                  std::vector<int> &collectedPrimitives,
-                                  typename SPACE::double_type tol)
-{
+inline void
+getAllNearestTriPoint(typename SPACE::coordinate_type &p,
+                      aabb_tree<SPACE, typename SPACE::triangle_type> &faceTree,
+                      vector<typename SPACE::triangle_type> &corners,
+                      std::vector<int> &collectedPrimitives,
+                      typename SPACE::double_type tol) {
   M2_TYPEDEFS;
-  //TIMER function//TIMER(__FUNCTION__);
+  // TIMER function//TIMER(__FUNCTION__);
   typedef aabb_tree<SPACE, triangle_type> tree_type;
   typedef typename tree_type::node_type node;
   node &root = faceTree.nodes[0];
   std::stack<int> cstack;
   cstack.push(0);
   bool hit = false;
-  //T tol = 0.05;
-  while (cstack.size() > 0)
-  {
+  // T tol = 0.05;
+  while (cstack.size() > 0) {
     line_tests<SPACE> test;
     int cId = cstack.top();
     cstack.pop();
     node &cnode = faceTree.nodes[cId];
 
-    if (cnode.children[0] == -1 && cnode.children[1] == -1)
-    {
-      //in order to make this generic, I need to turn this piece into a function or create
-      //iterators for the leaves
+    if (cnode.children[0] == -1 && cnode.children[1] == -1) {
+      // in order to make this generic, I need to turn this piece into a
+      // function or create iterators for the leaves
       int beg = faceTree.nodes[cId].begin;
       int end = beg + faceTree.nodes[cId].size;
       int d = 0;
-      //m2::Debugger& debug = m2::Debugger::get_instance();
-      //debug.DebugLines0.push_back(cnode.bbox.center);
-      //debug.DebugLines0.push_back(p);
-      while (beg != end)
-      {
+      // m2::Debugger& debug = m2::Debugger::get_instance();
+      // debug.DebugLines0.push_back(cnode.bbox.center);
+      // debug.DebugLines0.push_back(p);
+      while (beg != end) {
         triangle_type primA = corners[faceTree.permutation[beg]];
         m2::distance_calculator<SPACE> calc;
         T dist = calc.distance(primA, p);
-        //if(dist < 10) std::cout << dist << std::endl;
+        // if(dist < 10) std::cout << dist << std::endl;
         if (dist < tol * tol)
           collectedPrimitives.push_back(faceTree.permutation[beg]);
-        //m2::Debugger& debug = m2::Debugger::get_instance();
-        //debug.DebugLines0.push_back(p);
-        //debug.DebugLines0.push_back(primA.center());
+        // m2::Debugger& debug = m2::Debugger::get_instance();
+        // debug.DebugLines0.push_back(p);
+        // debug.DebugLines0.push_back(primA.center());
         beg++;
       }
     }
 
-    for (int i = 0; i < 2; i++)
-    {
-      if (cnode.children[i] > -1)
-      {
+    for (int i = 0; i < 2; i++) {
+      if (cnode.children[i] > -1) {
         coordinate_type c = faceTree.nodes[cnode.children[i]].bbox.center;
         coordinate_type h = faceTree.nodes[cnode.children[i]].bbox.half;
         coordinate_type minA = c - h;
@@ -2492,33 +1893,27 @@ inline void getAllNearestTriPoint(typename SPACE::coordinate_type &p,
         coordinate_type maxB;
         geometry_calculator<SPACE> calc;
         calc.getExtents(p, minB, maxB);
-        //m2::Debugger& debug = m2::Debugger::get_instance();
-        //debug.DebugBoxes.push_back(c);
-        //debug.DebugBoxes.push_back(h);
-        /*if(minA[0] > maxB[0] + tol || minB[0] - tol > maxA[0] || 
-	     minA[1] > maxB[1] + tol || minB[1] - tol > maxA[1] || 
-	     minA[2] > maxB[2] + tol || minB[2] - tol > maxA[2]){
-	    continue;
-	  }*/
-        T d = 0; //sphere box intersect the dumb unoptimized way.
-        for (int k = 0; k < 3; k++)
-        {
-          if (p[k] < minA[k])
-          {
+        // m2::Debugger& debug = m2::Debugger::get_instance();
+        // debug.DebugBoxes.push_back(c);
+        // debug.DebugBoxes.push_back(h);
+        /*if(minA[0] > maxB[0] + tol || minB[0] - tol > maxA[0] ||
+             minA[1] > maxB[1] + tol || minB[1] - tol > maxA[1] ||
+             minA[2] > maxB[2] + tol || minB[2] - tol > maxA[2]){
+            continue;
+          }*/
+        T d = 0; // sphere box intersect the dumb unoptimized way.
+        for (int k = 0; k < 3; k++) {
+          if (p[k] < minA[k]) {
             T e = p[k] - minA[k];
             d += e * e;
-          }
-          else if (p[k] > maxA[k])
-          {
+          } else if (p[k] > maxA[k]) {
             T e = p[k] - maxA[k];
             d += e * e;
           }
         }
-        if (d > tol * tol)
-        {
+        if (d > tol * tol) {
           continue;
-        }
-        else
+        } else
           cstack.push(cnode.children[i]);
       }
     }
@@ -2529,10 +1924,9 @@ template <typename SPACE, typename PRIMITIVE_A>
 inline int getNearestInRange(typename SPACE::coordinate_type &p,
                              aabb_tree<SPACE, PRIMITIVE_A> &faceTree,
                              vector<PRIMITIVE_A> &corners,
-                             typename SPACE::double_type tol)
-{
+                             typename SPACE::double_type tol) {
   M2_TYPEDEFS;
-  //TIMER function//TIMER(__FUNCTION__);
+  // TIMER function//TIMER(__FUNCTION__);
   typedef aabb_tree<SPACE, PRIMITIVE_A> tree_type;
   typedef typename tree_type::node_type node;
   node &root = faceTree.nodes[0];
@@ -2542,72 +1936,60 @@ inline int getNearestInRange(typename SPACE::coordinate_type &p,
   int closestPrim = 0;
   T min = 9999;
   m2::Debugger &debug = m2::Debugger::get_instance();
-  //debug.DebugBoxes.push_back(p);
-  //debug.DebugBoxes.push_back(coordinate_type(tol,tol,tol));
+  // debug.DebugBoxes.push_back(p);
+  // debug.DebugBoxes.push_back(coordinate_type(tol,tol,tol));
 
-  while (cstack.size() > 0)
-  {
+  while (cstack.size() > 0) {
     line_tests<SPACE> test;
     int cId = cstack.top();
     cstack.pop();
     node &cnode = faceTree.nodes[cId];
-    //debug.DebugBoxes.push_back(cnode.bbox.center);
-    //debug.DebugBoxes.push_back(cnode.bbox.half);
+    // debug.DebugBoxes.push_back(cnode.bbox.center);
+    // debug.DebugBoxes.push_back(cnode.bbox.half);
 
-    if (cnode.children[0] == -1 && cnode.children[1] == -1)
-    {
-      //in order to make this generic, I need to turn this piece into a function or create
-      //iterators for the leaves
+    if (cnode.children[0] == -1 && cnode.children[1] == -1) {
+      // in order to make this generic, I need to turn this piece into a
+      // function or create iterators for the leaves
       int beg = faceTree.nodes[cId].begin;
       int end = beg + faceTree.nodes[cId].size;
       int d = 0;
-      //m2::Debugger& debug = m2::Debugger::get_instance();
-      //debug.DebugLines0.push_back(cnode.bbox.center);
-      //debug.DebugLines0.push_back(p);
-      //std::cout << beg << " " << end << std::endl;
-      while (beg != end)
-      {
+      // m2::Debugger& debug = m2::Debugger::get_instance();
+      // debug.DebugLines0.push_back(cnode.bbox.center);
+      // debug.DebugLines0.push_back(p);
+      // std::cout << beg << " " << end << std::endl;
+      while (beg != end) {
         PRIMITIVE_A primA = corners[faceTree.permutation[beg]];
         m2::distance_calculator<SPACE> calc;
         T dist = calc.distance(primA, p);
-        if (dist < tol + 1e-16 && dist < min)
-        {
+        if (dist < tol + 1e-16 && dist < min) {
           min = dist;
           closestPrim = faceTree.permutation[beg];
         };
         beg++;
       }
-      //debug.DebugLines0.push_back(cnode.bbox.center);
-      //debug.DebugLines0.push_back(p);
+      // debug.DebugLines0.push_back(cnode.bbox.center);
+      // debug.DebugLines0.push_back(p);
     }
 
-    for (int i = 0; i < 2; i++)
-    {
-      if (cnode.children[i] > -1)
-      {
+    for (int i = 0; i < 2; i++) {
+      if (cnode.children[i] > -1) {
         coordinate_type c = faceTree.nodes[cnode.children[i]].bbox.center;
         coordinate_type h = faceTree.nodes[cnode.children[i]].bbox.half;
         coordinate_type minA = c - h;
         coordinate_type maxA = c + h;
-        T d = 0; //sphere box intersect the dumb unoptimized way.
-        for (int k = 0; k < 3; k++)
-        {
-          if (p[k] < minA[k])
-          {
+        T d = 0; // sphere box intersect the dumb unoptimized way.
+        for (int k = 0; k < 3; k++) {
+          if (p[k] < minA[k]) {
             T e = p[k] - minA[k];
             d += e * e;
-          }
-          else if (p[k] > maxA[k])
-          {
+          } else if (p[k] > maxA[k]) {
             T e = p[k] - maxA[k];
             d += e * e;
           }
         }
-        if (d > tol * tol)
-        {
+        if (d > tol * tol) {
           continue;
-        }
-        else
+        } else
           cstack.push(cnode.children[i]);
       }
     }
@@ -2616,10 +1998,10 @@ inline int getNearestInRange(typename SPACE::coordinate_type &p,
 };
 
 template <typename SPACE, typename PRIMITIVE_A>
-typename SPACE::double_type getNearestRange(typename SPACE::coordinate_type &p,
-                                            aabb_tree<SPACE, PRIMITIVE_A> &faceTree,
-                                            vector<PRIMITIVE_A> &corners)
-{
+typename SPACE::double_type
+getNearestRange(typename SPACE::coordinate_type &p,
+                aabb_tree<SPACE, PRIMITIVE_A> &faceTree,
+                vector<PRIMITIVE_A> &corners) {
   M2_TYPEDEFS;
   ////TIMER functionTimer(__FUNCTION__);
   typedef aabb_tree<SPACE, PRIMITIVE_A> tree_type;
@@ -2628,55 +2010,48 @@ typename SPACE::double_type getNearestRange(typename SPACE::coordinate_type &p,
   std::stack<int> cstack;
   cstack.push(0);
   bool hit = false;
-  //T tol = 0.05;
-  //first we find the closest leaf as the best first guess
-  T min = 9999.0; //minimum calculated distance
-  int minId = 0;  //the current closest node
+  // T tol = 0.05;
+  // first we find the closest leaf as the best first guess
+  T min = 9999.0; // minimum calculated distance
+  int minId = 0;  // the current closest node
   int minTri = 0;
   m2::Debugger &debug = m2::Debugger::get_instance();
 
-  while (cstack.size() > 0)
-  {
+  while (cstack.size() > 0) {
     line_tests<SPACE> test;
     int cId = cstack.top();
     cstack.pop();
     node &cnode = faceTree.nodes[cId];
-    //debug.DebugBoxes.push_back(cnode.bbox.center);
-    //debug.DebugBoxes.push_back(cnode.bbox.half);
+    // debug.DebugBoxes.push_back(cnode.bbox.center);
+    // debug.DebugBoxes.push_back(cnode.bbox.half);
 
-    if (cnode.children[0] == -1 && cnode.children[1] == -1)
-    {
-      //in order to make this generic, I need to turn this piece into a function or create
-      //iterators for the leaves
+    if (cnode.children[0] == -1 && cnode.children[1] == -1) {
+      // in order to make this generic, I need to turn this piece into a
+      // function or create iterators for the leaves
       int beg = faceTree.nodes[cId].begin;
       int end = beg + faceTree.nodes[cId].size;
       int d = 0;
-      //m2::Debugger& debug = m2::Debugger::get_instance();
-      //debug.DebugLines0.push_back(cnode.bbox.center);
-      //debug.DebugLines0.push_back(primB);
-      while (beg != end)
-      {
+      // m2::Debugger& debug = m2::Debugger::get_instance();
+      // debug.DebugLines0.push_back(cnode.bbox.center);
+      // debug.DebugLines0.push_back(primB);
+      while (beg != end) {
         PRIMITIVE_A primA = corners[faceTree.permutation[beg]];
         m2::distance_calculator<SPACE> calc;
         T dist = calc.distance(primA, p);
-        if (dist < min)
-        {
+        if (dist < min) {
           minId = cId;
           minTri = faceTree.permutation[beg];
           min = dist;
         }
         beg++;
       }
-    }
-    else
-    {
+    } else {
 
       if (cnode.children[0] == -1)
         cstack.push(cnode.children[1]);
       else if (cnode.children[1] == -1)
         cstack.push(cnode.children[0]);
-      else
-      {
+      else {
         int pDim = cnode.dim;
         int cDim = (pDim + 1) % 3;
         coordinate_type c0 = faceTree.nodes[cnode.children[0]].bbox.center;
@@ -2691,7 +2066,7 @@ typename SPACE::double_type getNearestRange(typename SPACE::coordinate_type &p,
       }
     }
   }
-  //coordinate_type cen = faceTree.nodes[minId].bbox.center;
+  // coordinate_type cen = faceTree.nodes[minId].bbox.center;
 
   /*
     PRIMITIVE_A primA = corners[minTri];
@@ -2700,8 +2075,8 @@ typename SPACE::double_type getNearestRange(typename SPACE::coordinate_type &p,
     std::cout << dist << " " << norm(p-cen) << std::endl;
     */
 
-  //debug.DebugLines1.push_back(p);
-  //debug.DebugLines1.push_back(cen);
+  // debug.DebugLines1.push_back(p);
+  // debug.DebugLines1.push_back(cen);
 
   return sqrt(min);
 };
@@ -2709,23 +2084,18 @@ typename SPACE::double_type getNearestRange(typename SPACE::coordinate_type &p,
 template <typename SPACE, typename PRIMITIVE_A>
 inline int getNearest(typename SPACE::coordinate_type &p,
                       aabb_tree<SPACE, PRIMITIVE_A> &faceTree,
-                      vector<PRIMITIVE_A> &corners)
-{
+                      vector<PRIMITIVE_A> &corners) {
   M2_TYPEDEFS;
   T min = getNearestRange<SPACE, PRIMITIVE_A>(p, faceTree, corners);
-  //std::cout << min << std::endl;
+  // std::cout << min << std::endl;
   return getNearestInRange<SPACE, PRIMITIVE_A>(p, faceTree, corners, min);
 };
 
-template <typename SPACE>
-struct ccd
-{
+template <typename SPACE> struct ccd {
   M2_TYPEDEFS;
 
-  T edgeEdge(line_type e12,
-             line_type e34)
-  {
-    //Ec = b
+  T edgeEdge(line_type e12, line_type e34) {
+    // Ec = b
     Eigen::MatrixXd E(2, 2);
     E = Eigen::MatrixXd::Zero(2, 2);
     coordinate_type x21 = e12[1] - e12[0];
@@ -2744,11 +2114,8 @@ struct ccd
     return coordinate_type(b(0), b(1), 0.0);
   }
 
-  T pointTriangle(coordinate_type p,
-                  triangle_type tri,
-                  coordinate_type w)
-  {
-    //Ec = b
+  T pointTriangle(coordinate_type p, triangle_type tri, coordinate_type w) {
+    // Ec = b
     Eigen::MatrixXd E(2, 2);
     E = Eigen::MatrixXd::Zero(2, 2);
     coordinate_type x13 = tri[0] - tri[2];
@@ -2767,12 +2134,9 @@ struct ccd
     return coordinate_type(b(0), b(1), 0.0);
   }
 
-  T timeToCollision(coordinate_type x1, coordinate_type v1,
-                    coordinate_type x2, coordinate_type v2,
-                    coordinate_type x3, coordinate_type v3,
-                    coordinate_type x4, coordinate_type v4)
-  {
-  }
+  T timeToCollision(coordinate_type x1, coordinate_type v1, coordinate_type x2,
+                    coordinate_type v2, coordinate_type x3, coordinate_type v3,
+                    coordinate_type x4, coordinate_type v4) {}
 };
 
 } // namespace m2

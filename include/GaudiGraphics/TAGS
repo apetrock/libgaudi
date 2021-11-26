@@ -57,7 +57,7 @@ namespace m2 {m220,344
   class spring{ M2_TYPEDEFS;M2_TYPEDEFS23,392
   typedef coordinate_type							point_type ;point_type24,421
     typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator25,466
-    spring(control_ptr obj_in){spring27,543
+    spring(surf_ptr obj_in){spring27,543
     void initialize(){initialize37,781
     al::Vec<3,T>& get_force(long i){get_force78,1994
     void calculate_forces_and_stiffness(){calculate_forces_and_stiffness82,2063
@@ -72,7 +72,7 @@ namespace m2 {m220,344
     void randomize(){randomize267,6928
     void draw(){draw277,7202
     void reset_t(){reset_t280,7228
-    control_ptr		 mMesh;mMesh285,7285
+    surf_ptr		 mMesh;mMesh285,7285
     T mdt,meps,mks,mkrs;mdt286,7310
     T mdt,meps,mks,mkrs;meps286,7310
     T mdt,meps,mks,mkrs;mks286,7310
@@ -94,11 +94,11 @@ namespace m2 {m220,344
     M2_TYPEDEFS;M2_TYPEDEFS309,8136
     typedef coordinate_type							point_type ;point_type310,8153
     typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator311,8200
-    spring_electric(control_ptr obj_in){spring_electric314,8278
+    spring_electric(surf_ptr obj_in){spring_electric314,8278
     virtual void update_positions(){update_positions329,8622
     void randomize(){randomize435,11175
     void reset_t(){reset_t447,11485
-    control_ptr		 mMesh;mMesh452,11542
+    surf_ptr		 mMesh;mMesh452,11542
     T dt_,eps_,C_,K_;dt_453,11567
     T dt_,eps_,C_,K_;eps_453,11567
     T dt_,eps_,C_,K_;C_453,11567
@@ -141,12 +141,12 @@ namespace m2 {m221,363
       coordinate_list clist;clist31,701
     convex_hull(){};convex_hull34,744
     ~convex_hull(){};~convex_hull35,765
-    control_ptr tetrahedron(coordinate_type cxu,tetrahedron37,790
+    surf_ptr tetrahedron(coordinate_type cxu,tetrahedron37,790
     void collect_points(face_ptr f,collect_points101,2707
-    void concave_flip(control_ptr obj){concave_flip126,3484
+    void concave_flip(surf_ptr obj){concave_flip126,3484
     T edge_concave(edge_ptr e){edge_concave139,3843
     void find_horizon(face_ptr&			face_in,find_horizon149,4210
-    control_ptr quick_hull(std::vector<coordinate_type> clist){quick_hull191,5411
+    surf_ptr quick_hull(std::vector<coordinate_type> clist){quick_hull191,5411
 
 /home/jdelaney/code/libgaudi/src/manifold/construct.hpp,3219
 #define __TWOMANIFOLDFUNCTIONS____TWOMANIFOLDFUNCTIONS__11,179
@@ -164,31 +164,31 @@ namespace m2 {	m214,237
     M2_TYPEDEFS;M2_TYPEDEFS197,4908
     construct(){}construct199,4935
     ~construct(){}~construct200,4953
-    edge_ptr insert_edge(control_ptr	obj_in,insert_edge202,4975
-    edge_ptr insert_edge(control_ptr		obj_in,insert_edge213,5251
-    edge_ptr split_face(control_ptr    obj_in,split_face240,5863
-    edge_ptr  connect_face(control_ptr      obj_in,connect_face285,6947
-    face_ptr  delete_edge(control_ptr	obj_in,delete_edge358,8499
-    face_ptr  join_face(control_ptr obj_in, edge_ptr e){join_face392,9158
-    face_ptr disconnect_face(control_ptr obj_in, edge_ptr e){disconnect_face486,11651
-    list<edge_ptr> pipe_face(control_ptr obj_in, face_ptr f1, face_ptr f2){pipe_face632,14896
-    list<edge_ptr> stitch_unlike_faces(control_ptr obj_in, face_ptr f1, face_ptr f2){stitch_unlike_faces703,16272
-    void cleanup_zero_edges(control_ptr& obj_in, vertex_ptr & v){cleanup_zero_edges774,17656
-    face_ptr delete_vertex_primitive(control_ptr obj_in, vertex_ptr v){delete_vertex_primitive799,18205
-    face_ptr delete_vertex(control_ptr obj_in, vertex_ptr  v){delete_vertex847,19341
-bool delete_degenerates(control_ptr obj, vertex_ptr v){delete_degenerates917,21376
-    vertex_ptr collapse_edge_triangle(control_ptr obj, edge_ptr e){collapse_edge_triangle953,22553
-    vertex_ptr collapse_edge(control_ptr obj, edge_ptr e){collapse_edge1111,26994
-    vertex_ptr collapse_edge_primitive(control_ptr obj, edge_ptr e){collapse_edge_primitive1191,29213
-    void flip_edge(control_ptr & obj, edge_ptr & e){flip_edge1239,30427
-    bool stitch_faces(control_ptr obj_in, face_ptr f1, face_ptr f2, T tol){stitch_faces1296,31762
-    bool stitch_faces_diff_size(control_ptr obj_in, face_ptr f1, face_ptr f2, T tol){stitch_faces_diff_size1357,33299
-    void bevel(control_ptr obj_in, bevel1418,34846
-    bool bevel_face(control_ptr  obj_in, face_ptr  f1, bevel_face1426,35082
+    edge_ptr insert_edge(surf_ptr	obj_in,insert_edge202,4975
+    edge_ptr insert_edge(surf_ptr		obj_in,insert_edge213,5251
+    edge_ptr split_face(surf_ptr    obj_in,split_face240,5863
+    edge_ptr  connect_face(surf_ptr      obj_in,connect_face285,6947
+    face_ptr  delete_edge(surf_ptr	obj_in,delete_edge358,8499
+    face_ptr  join_face(surf_ptr obj_in, edge_ptr e){join_face392,9158
+    face_ptr disconnect_face(surf_ptr obj_in, edge_ptr e){disconnect_face486,11651
+    list<edge_ptr> pipe_face(surf_ptr obj_in, face_ptr f1, face_ptr f2){pipe_face632,14896
+    list<edge_ptr> stitch_unlike_faces(surf_ptr obj_in, face_ptr f1, face_ptr f2){stitch_unlike_faces703,16272
+    void cleanup_zero_edges(surf_ptr& obj_in, vertex_ptr & v){cleanup_zero_edges774,17656
+    face_ptr delete_vertex_primitive(surf_ptr obj_in, vertex_ptr v){delete_vertex_primitive799,18205
+    face_ptr delete_vertex(surf_ptr obj_in, vertex_ptr  v){delete_vertex847,19341
+bool delete_degenerates(surf_ptr obj, vertex_ptr v){delete_degenerates917,21376
+    vertex_ptr collapse_edge_triangle(surf_ptr obj, edge_ptr e){collapse_edge_triangle953,22553
+    vertex_ptr collapse_edge(surf_ptr obj, edge_ptr e){collapse_edge1111,26994
+    vertex_ptr collapse_edge_primitive(surf_ptr obj, edge_ptr e){collapse_edge_primitive1191,29213
+    void flip_edge(surf_ptr & obj, edge_ptr & e){flip_edge1239,30427
+    bool stitch_faces(surf_ptr obj_in, face_ptr f1, face_ptr f2, T tol){stitch_faces1296,31762
+    bool stitch_faces_diff_size(surf_ptr obj_in, face_ptr f1, face_ptr f2, T tol){stitch_faces_diff_size1357,33299
+    void bevel(surf_ptr obj_in, bevel1418,34846
+    bool bevel_face(surf_ptr  obj_in, face_ptr  f1, bevel_face1426,35082
     bool incremental_patch_hole(face_vertex_ptr & fv,incremental_patch_hole1559,39447
     bool patch_hole(face_vertex_ptr fv,patch_hole1631,41437
-    void fill_holes(control_ptr obj, vector<list<face_vertex_ptr> > corners){fill_holes1741,44624
-    void incremental_fill_holes(control_ptr obj){incremental_fill_holes1765,45386
+    void fill_holes(surf_ptr obj, vector<list<face_vertex_ptr> > corners){fill_holes1741,44624
+    void incremental_fill_holes(surf_ptr obj){incremental_fill_holes1765,45386
   class manage{manage1808,46548
     manage(){}manage1812,46595
     ~manage(){}~manage1813,46610
@@ -252,19 +252,19 @@ class   OctreeOctree168,4092
 #define __M1COSTRUCT____M1COSTRUCT__13,236
 namespace m1 {m115,260
   class construct {construct17,299
-    void add_moment_support(control_ptr& in){add_moment_support20,347
-    void insert_vertex(control_ptr ci, long ei){insert_vertex80,2205
-    control_ptr rand_graph(int N){rand_graph99,2712
+    void add_moment_support(surf_ptr& in){add_moment_support20,347
+    void insert_vertex(surf_ptr ci, long ei){insert_vertex80,2205
+    surf_ptr rand_graph(int N){rand_graph99,2712
 
 /home/jdelaney/code/libgaudi/src/manifold/edge_point_subdividers.hpp,576
 #define __M2EDGEPOINTSUBDIVIDE____M2EDGEPOINTSUBDIVIDE__11,171
 namespace m2 {m217,365
   class epSubdivide{epSubdivide19,408
     M2_TYPEDEFS;M2_TYPEDEFS20,429
-    void inset_vertex(control_ptr in, vertex_ptr v){inset_vertex22,456
-    void inset_vertex_triangle_collapse(control_ptr in, vertex_ptr v){inset_vertex_triangle_collapse94,2714
-    void inset_vertex_flag_collapse(control_ptr in, vertex_ptr v, vector<coordinate_type>& lc, long lcb){inset_vertex_flag_collapse199,5879
-    bool subdivide_set(control_ptr in, list<vertex_ptr>& lv){subdivide_set306,8942
+    void inset_vertex(surf_ptr in, vertex_ptr v){inset_vertex22,456
+    void inset_vertex_triangle_collapse(surf_ptr in, vertex_ptr v){inset_vertex_triangle_collapse94,2714
+    void inset_vertex_flag_collapse(surf_ptr in, vertex_ptr v, vector<coordinate_type>& lc, long lcb){inset_vertex_flag_collapse199,5879
+    bool subdivide_set(surf_ptr in, list<vertex_ptr>& lv){subdivide_set306,8942
 
 /home/jdelaney/code/libgaudi/src/manifold/manifold_singleton.h,729
 #define __MANIFOLD_SINGLETON____MANIFOLD_SINGLETON__13,209
@@ -293,7 +293,7 @@ al::Quat<T> naive_slerp(const al::Quat<T>& input, const al::Quat<T>& target, T a
 al::Vec<3,T> blend(T t, al::Vec<3,T> p00, al::Vec<3,T> pNorm,blend113,2847
 namespace m2 {m2159,4007
   class add_handle{add_handle161,4050
-    bool add(control_ptr ob, long i, long j, T teni, T tenj){add164,4099
+    bool add(surf_ptr ob, long i, long j, T teni, T tenj){add164,4099
     bool slerp_face(T t, face_ptr fi, face_ptr fj){slerp_face255,7005
 
 /home/jdelaney/code/libgaudi/src/manifold/remesh.hpp,1905
@@ -302,29 +302,29 @@ namespace m2 {m223,375
   class remesh{remesh25,418
     remesh(){}remesh29,471
     ~remesh(){}~remesh30,486
-    void stellate(control_ref	control_in){stellate31,502
-    void stellate_face_center(control_ref	obj_in,stellate_face_center57,1180
-    vertex_ptr stellate_face_generic(control_ref		obj_in,stellate_face_generic70,1588
-    void root2(control_ref	control_in){root2218,6236
-    bool merge_adjacent_planar_faces(control_ptr obj_in,merge_adjacent_planar_faces241,6791
-    bool merge_all_adjacent_planar_faces(control_ptr obj_in, T tol){merge_all_adjacent_planar_faces273,7569
+    void stellate(surf_ref	control_in){stellate31,502
+    void stellate_face_center(surf_ref	obj_in,stellate_face_center57,1180
+    vertex_ptr stellate_face_generic(surf_ref		obj_in,stellate_face_generic70,1588
+    void root2(surf_ref	control_in){root2218,6236
+    bool merge_adjacent_planar_faces(surf_ptr obj_in,merge_adjacent_planar_faces241,6791
+    bool merge_all_adjacent_planar_faces(surf_ptr obj_in, T tol){merge_all_adjacent_planar_faces273,7569
     bool find_group_boundary(face_vertex_ptr cfv, face_ptr& tface, find_group_boundary292,8108
     bool mark_adjacent_edges(vector<face_ptr>& faces_to_remove,mark_adjacent_edges318,8777
-    face_ptr merge_faces(control_ptr obj_in, vector<face_ptr>& faces_to_remove, int face_flag){merge_faces344,9538
-    control_ref dual(control_ref rhs){dual384,10998
+    face_ptr merge_faces(surf_ptr obj_in, vector<face_ptr>& faces_to_remove, int face_flag){merge_faces344,9538
+    surf_ref dual(surf_ref rhs){dual384,10998
     T cotan(face_vertex_ptr fv){cotan479,13761
-    void split4(control_ptr& mMesh, face_ptr f){split4493,14218
-    void split5(control_ptr& mMesh, face_ptr f){split5504,14540
-    void split6(control_ptr& mMesh, face_ptr f){split6533,15357
-    void postSplitTriangulateFace(control_ptr& mMesh, face_ptr f){postSplitTriangulateFace551,15941
-    void triangulate_quad(control_ptr& mMesh, face_ptr f){triangulate_quad581,16555
-    void slice_and_dice_face(control_ptr& mMesh, face_ptr f){slice_and_dice_face606,17258
-    void triangulate_face(control_ptr mMesh, face_ptr f){triangulate_face641,18215
-    void triangulate(control_ptr mMesh){triangulate673,19074
-    void flip_edges(control_ptr obj){flip_edges698,19664
+    void split4(surf_ptr& mMesh, face_ptr f){split4493,14218
+    void split5(surf_ptr& mMesh, face_ptr f){split5504,14540
+    void split6(surf_ptr& mMesh, face_ptr f){split6533,15357
+    void postSplitTriangulateFace(surf_ptr& mMesh, face_ptr f){postSplitTriangulateFace551,15941
+    void triangulate_quad(surf_ptr& mMesh, face_ptr f){triangulate_quad581,16555
+    void slice_and_dice_face(surf_ptr& mMesh, face_ptr f){slice_and_dice_face606,17258
+    void triangulate_face(surf_ptr mMesh, face_ptr f){triangulate_face641,18215
+    void triangulate(surf_ptr mMesh){triangulate673,19074
+    void flip_edges(surf_ptr obj){flip_edges698,19664
     void reverse_edge(edge_ptr& in){reverse_edge737,20689
     void reverse_face(face_ptr& in){reverse_face746,20979
-    void reverse(control_ref	rhs){reverse761,21331
+    void reverse(surf_ref	rhs){reverse761,21331
 
 /home/jdelaney/code/libgaudi/src/manifold/manifold_singleton.cpp,377
 namespace m2 {m212,192
@@ -349,20 +349,20 @@ namespace m2 {m219,315
     T cotan(face_vertex_ptr fv){cotan116,2906
     T getEdgeWeight(edge_ptr ei){getEdgeWeight125,3153
     T willmore(face_vertex_ptr fv){willmore132,3321
-    void calcDiffuseQuantity(m2::control<SPACE>& in,calcDiffuseQuantity146,3878
-    void calcDiffuseQuantity(m2::control<SPACE>& in,calcDiffuseQuantity187,5031
-    void calcCurveFlowNormal(m2::control<SPACE>& in,calcCurveFlowNormal227,6151
-    void calcWillmoreEnergy(m2::control<SPACE>& in,calcWillmoreEnergy282,7754
-    void calcDiffuseCurveFlowNormal(m2::control<SPACE>& in,calcDiffuseCurveFlowNormal322,8770
-    std::vector<vertex_ptr> getLocalVertices(m2::control<SPACE>& in,getLocalVertices331,9084
-    void calcCovariance(m2::control<SPACE>& in, calcCovariance369,10120
-    std::vector<edge_ptr> getEdgesNearPoint(m2::control<SPACE>& in,getEdgesNearPoint394,10821
-    std::vector<edge_ptr> getLocalEdges(m2::control<SPACE>& in,getLocalEdges461,12540
-    void calculateBiDirection(m2::control<SPACE>& in, calculateBiDirection505,13754
-    void calculateBiDirectionField(control_ref in,calculateBiDirectionField538,14665
-    void shadeVertices(control_ref mesh){shadeVertices586,16029
-    void shadeVerticesWillmore(control_ref mesh){shadeVerticesWillmore614,16809
-    void shadeVerticesWinding(control_ref mesh){shadeVerticesWinding645,17723
+    void calcDiffuseQuantity(m2::surf<SPACE>& in,calcDiffuseQuantity146,3878
+    void calcDiffuseQuantity(m2::surf<SPACE>& in,calcDiffuseQuantity187,5031
+    void calcCurveFlowNormal(m2::surf<SPACE>& in,calcCurveFlowNormal227,6151
+    void calcWillmoreEnergy(m2::surf<SPACE>& in,calcWillmoreEnergy282,7754
+    void calcDiffuseCurveFlowNormal(m2::surf<SPACE>& in,calcDiffuseCurveFlowNormal322,8770
+    std::vector<vertex_ptr> getLocalVertices(m2::surf<SPACE>& in,getLocalVertices331,9084
+    void calcCovariance(m2::surf<SPACE>& in, calcCovariance369,10120
+    std::vector<edge_ptr> getEdgesNearPoint(m2::surf<SPACE>& in,getEdgesNearPoint394,10821
+    std::vector<edge_ptr> getLocalEdges(m2::surf<SPACE>& in,getLocalEdges461,12540
+    void calculateBiDirection(m2::surf<SPACE>& in, calculateBiDirection505,13754
+    void calculateBiDirectionField(surf_ref in,calculateBiDirectionField538,14665
+    void shadeVertices(surf_ref mesh){shadeVertices586,16029
+    void shadeVerticesWillmore(surf_ref mesh){shadeVerticesWillmore614,16809
+    void shadeVerticesWinding(surf_ref mesh){shadeVerticesWinding645,17723
 
 /home/jdelaney/code/libgaudi/src/manifold/octree.hpp,2786
 #define __8TREE____8TREE__13,158
@@ -427,17 +427,17 @@ class   OctreeOctree167,4088
   typedef	m2::edge<SPACE>             edge_type;			\edge_type55,1463
   typedef	m2::vertex<SPACE>	    vertex_type;	        \vertex_type56,1516
   typedef	m2::face_vertex<SPACE>      face_vertex_type;		\face_vertex_type57,1571
-  typedef	m2::control<SPACE>	    control_type;	        \control_type58,1630
+  typedef	m2::surf<SPACE>	    surf_type;	        \surf_type58,1630
   typedef       m2::face<SPACE>*	    face_ptr;   \face_ptr59,1687
   typedef       m2::edge<SPACE>*	    edge_ptr;   \edge_ptr60,1738
   typedef       m2::vertex<SPACE>*      vertex_ptr;    \vertex_ptr61,1789
   typedef       m2::face_vertex<SPACE>* face_vertex_ptr; \face_vertex_ptr62,1846
-  typedef       m2::control<SPACE>*     control_ptr;   \control_ptr63,1905
+  typedef       m2::surf<SPACE>*     surf_ptr;   \surf_ptr63,1905
   typedef	m2::face<SPACE>&	    face_ref;	                \face_ref65,1971
   typedef	m2::edge<SPACE>&	    edge_ref;	                \edge_ref66,2030
   typedef	m2::vertex<SPACE>&          vertex_ref;			\vertex_ref67,2089
   typedef	m2::face_vertex<SPACE>&     face_vertex_ref;		\face_vertex_ref68,2143
-  typedef	m2::control<SPACE>&         control_ref;		\control_ref69,2201
+  typedef	m2::surf<SPACE>&         surf_ref;		\surf_ref69,2201
   typedef vector<coordinate_type >		coordinate_array;	\coordinate_array71,2266
   typedef	vector<face_ptr>		face_array;             \face_array72,2322
   typedef	vector<edge_ptr>		edge_array;             \edge_array73,2376
@@ -693,8 +693,8 @@ namespace m2 {m296,3449
       coordinate_type mPoint;mPoint1817,45468
     } mFaceSorter;mFaceSorter1818,45498
     control(){control1820,45520
-    control(const control_ref rhs){control1825,45598
-    control_ref operator=(const control_ref rhs){operator =1896,47863
+    control(const surf_ref rhs){control1825,45598
+    surf_ref operator=(const surf_ref rhs){operator =1896,47863
     ~control(){}		~control1974,50267
     face_ptr&	face(size_t ind)	{return mFaces[ind];}		face1980,50373
     edge_ptr&	edge(size_t ind)	{return mEdges[ind];}		edge1981,50428
@@ -714,7 +714,7 @@ namespace m2 {m296,3449
     coordinate_type calc_max(){calc_max2046,52492
     bounding_box<SPACE> calc_bbox(){calc_bbox2056,52775
     void sortFacesByPoint(coordinate_type c){sortFacesByPoint2072,53188
-    void merge(control_ref other){merge2082,53503
+    void merge(surf_ref other){merge2082,53503
     void push_vertex(vertex_ptr in){push_vertex2105,54060
     void push_edge(edge_ptr  in){			push_edge2118,54371
     void push_face(face_ptr in){push_face2131,54665
@@ -759,9 +759,9 @@ namespace m2 {m221,353
     T radius;radius27,540
     graph_skinning(){};graph_skinning29,557
     ~graph_skinning(){};~graph_skinning30,581
-    control_ptr build(m1::control<T>* graph_in){build31,606
+    surf_ptr build(m1::control<T>* graph_in){build31,606
     bool opposing_face_match(face_ptr f1, face_ptr f2, T tol){opposing_face_match192,5278
-    bool stitch_faces(control_ptr obj_in, face_ptr f1, face_ptr f2, T tol){stitch_faces246,6547
+    bool stitch_faces(surf_ptr obj_in, face_ptr f1, face_ptr f2, T tol){stitch_faces246,6547
 
 /home/jdelaney/code/libgaudi/src/manifold/objloader.hpp,1509
 #define __OBJ_LOADER____OBJ_LOADER__28,465
@@ -769,25 +769,25 @@ namespace m2 {m230,489
   class merge_proc {merge_proc33,597
     M2_TYPEDEFS;M2_TYPEDEFS34,618
     typedef Octree<T,vertex_type> Vtree;Vtree36,645
-    void merge_vertices(control_ptr obj_in, vertex_ptr v1, vertex_ptr v2, merge_vertices38,687
-    bool operator()(const Vtree &o, control_ptr data){operator ()53,1223
-    bool merge(const Vtree &o, control_ptr data){merge57,1319
+    void merge_vertices(surf_ptr obj_in, vertex_ptr v1, vertex_ptr v2, merge_vertices38,687
+    bool operator()(const Vtree &o, surf_ptr data){operator ()53,1223
+    bool merge(const Vtree &o, surf_ptr data){merge57,1319
     vector<list<face_vertex_ptr> > corners;corners79,1903
   class obj_loader{obj_loader83,1994
     typedef typename SPACE::coordinate_type VecT;VecT87,2051
     obj_loader(){}obj_loader88,2101
     ~obj_loader(){}~obj_loader89,2120
-    m2::control<SPACE>& operator()(string s){operator ()90,2140
+    m2::surf<SPACE>& operator()(string s){operator ()90,2140
     typedef Octree<T,vertex_type> Vtree;Vtree99,2604
-    Vtree* build_octree(control_ptr in_){build_octree100,2645
-    void merge_vertices(control_ptr in_, vector<list<face_vertex_ptr> > & corners){merge_vertices117,3098
+    Vtree* build_octree(surf_ptr in_){build_octree100,2645
+    void merge_vertices(surf_ptr in_, vector<list<face_vertex_ptr> > & corners){merge_vertices117,3098
     coordinate_type find_min(control<T>* in){find_min125,3413
     coordinate_type find_max(control<T>* in){find_max144,4073
-    void stitch_edges(control_ptr obj, vertex_ptr vert, list<face_vertex_ptr> & rFaceVertices){stitch_edges164,4628
-    control_ref buildObj(vector<coordinate_type> & inputVerts,buildObj191,5552
-    control_ref loadfile(string s){loadfile262,7489
-  void writeOBJ(m2::control<SPACE>& obj, string filename)writeOBJ357,9969
-  void writePBRT(m2::control<SPACE>& obj, const char* filename)writePBRT391,11112
+    void stitch_edges(surf_ptr obj, vertex_ptr vert, list<face_vertex_ptr> & rFaceVertices){stitch_edges164,4628
+    surf_ref buildObj(vector<coordinate_type> & inputVerts,buildObj191,5552
+    surf_ref loadfile(string s){loadfile262,7489
+  void writeOBJ(m2::surf<SPACE>& obj, string filename)writeOBJ357,9969
+  void writePBRT(m2::surf<SPACE>& obj, const char* filename)writePBRT391,11112
 
 /home/jdelaney/code/libgaudi/src/manifold/m2Operators.h,37
 #define __M2OPPS____M2OPPS__10,267
@@ -798,30 +798,30 @@ namespace m2 {m218,316
   class make  {make20,359
     make(){};make24,492
     ~make(){};~make25,506
-    control_ptr cube(T x, T y, T z){cube27,530
-    control_ptr extruded_knot(vector<coordinate_type> & knot, T r){extruded_knot44,1241
-    control_ptr trefoil(T r){trefoil102,3079
-    control_ptr torus(T r0, T r1){torus126,3738
-    control_ptr cylinder(T h, T r){cylinder140,4041
-    control_ptr max_tet(std::vector<coordinate_type> clist){max_tet179,5033
+    surf_ptr cube(T x, T y, T z){cube27,530
+    surf_ptr extruded_knot(vector<coordinate_type> & knot, T r){extruded_knot44,1241
+    surf_ptr trefoil(T r){trefoil102,3079
+    surf_ptr torus(T r0, T r1){torus126,3738
+    surf_ptr cylinder(T h, T r){cylinder140,4041
+    surf_ptr max_tet(std::vector<coordinate_type> clist){max_tet179,5033
 
 /home/jdelaney/code/libgaudi/src/manifold/surface_filters.hpp,1241
 #define __M2SURFACE_FILTER____M2SURFACE_FILTER__2,29
 namespace m2{m220,341
   class surface_filter{ M2_TYPEDEFS;surface_filter22,383
   class surface_filter{ M2_TYPEDEFS;M2_TYPEDEFS22,383
-    void filterCutoff(m2::control<SPACE>& in,filterCutoff26,432
-    static void filter(m2::control<SPACE>& in, T strength){filter80,1893
-    static void cuspFilter(m2::control<SPACE>& in, T strength){cuspFilter129,3223
+    void filterCutoff(m2::surf<SPACE>& in,filterCutoff26,432
+    static void filter(m2::surf<SPACE>& in, T strength){filter80,1893
+    static void cuspFilter(m2::surf<SPACE>& in, T strength){cuspFilter129,3223
     static coordinate_type laplacianFilterVertex(vertex_ptr v){laplacianFilterVertex180,4671
     static coordinate_type projectOntoLine(const coordinate_type& v0, projectOntoLine221,5643
-    static void mlsFilter(m2::control<SPACE>& in, T strength, T dx){mlsFilter231,5970
-    static void laplacianFilter(m2::control<SPACE>& in, T strength){laplacianFilter278,7383
-    static void taubinFilter(m2::control<SPACE>& in, T a,T b){taubinFilter300,8116
-    static void cacheTensor(m2::control<SPACE>& in, cacheTensor335,9228
+    static void mlsFilter(m2::surf<SPACE>& in, T strength, T dx){mlsFilter231,5970
+    static void laplacianFilter(m2::surf<SPACE>& in, T strength){laplacianFilter278,7383
+    static void taubinFilter(m2::surf<SPACE>& in, T a,T b){taubinFilter300,8116
+    static void cacheTensor(m2::surf<SPACE>& in, cacheTensor335,9228
     static coordinate_type nullLaplacianFilterVertex(vertex_ptr v,nullLaplacianFilterVertex367,10108
-    static void nullLaplacianFilter(m2::control<SPACE>& in, T strength){nullLaplacianFilter407,11209
-    void flaggedFilter(m2::control<SPACE>& in, T strength){flaggedFilter443,12412
+    static void nullLaplacianFilter(m2::surf<SPACE>& in, T strength){nullLaplacianFilter407,11209
+    void flaggedFilter(m2::surf<SPACE>& in, T strength){flaggedFilter443,12412
 
 /home/jdelaney/code/libgaudi/src/manifold/m1Includes.h,0
 
@@ -834,7 +834,7 @@ namespace m1 {m119,373
   class spring{ M1_TYPEDEFSspring82,1815
   typedef coordinate_type							point_type ;point_type83,1843
     typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator84,1888
-    spring(control_ptr obj_in){spring88,2025
+    spring(surf_ptr obj_in){spring88,2025
     void initialize(){initialize101,2283
     al::Vec<3,T>& get_force(long i){get_force149,3712
     al::Vec<3,T>& external_force(long i){external_force153,3781
@@ -860,7 +860,7 @@ namespace m1 {m119,373
     void draw(){draw389,9729
     void reset_t(){reset_t418,10598
     bool mbegin;mbegin423,10655
-    control_ptr		 sp_;sp_424,10672
+    surf_ptr		 sp_;sp_424,10672
     T mdt,meps,mks,mkrs;mdt425,10695
     T mdt,meps,mks,mkrs;meps425,10695
     T mdt,meps,mks,mkrs;mks425,10695
@@ -884,7 +884,7 @@ namespace m1 {m119,373
   class spring_non_linear{ M1_TYPEDEFSspring_non_linear450,11631
   typedef coordinate_type							point_type ;point_type451,11670
     typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator452,11715
-    spring_non_linear(control_ptr obj_in){spring_non_linear454,11792
+    spring_non_linear(surf_ptr obj_in){spring_non_linear454,11792
     void initialize(){initialize464,12049
     al::Vec<3,T>& get_force(long i){get_force505,13245
     T &M()       {return mM;}M509,13314
@@ -901,7 +901,7 @@ namespace m1 {m119,373
     void randomize(){randomize725,18977
     void draw(){draw735,19258
     void reset_t(){reset_t764,20127
-    control_ptr		 sp_;sp_769,20184
+    surf_ptr		 sp_;sp_769,20184
     T mdt,meps,mks,mkrs;mdt770,20207
     T mdt,meps,mks,mkrs;meps770,20207
     T mdt,meps,mks,mkrs;mks770,20207
@@ -922,12 +922,12 @@ namespace m1 {m119,373
   class spring_electric{ M1_TYPEDEFSspring_electric791,20902
   typedef coordinate_type							point_type ;point_type792,20939
     typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator793,20984
-    spring_electric(control_ptr obj_in){spring_electric795,21061
+    spring_electric(surf_ptr obj_in){spring_electric795,21061
     virtual void update_positions(){update_positions814,21465
     void update_t(){update_t887,23369
     void randomize(){randomize903,23572
     void reset_t(){reset_t915,23889
-    control_ptr		 sp_;sp_920,23946
+    surf_ptr		 sp_;sp_920,23946
     T dt_,eps_,C_,K_, energy0, energy;dt_921,23969
     T dt_,eps_,C_,K_, energy0, energy;eps_921,23969
     T dt_,eps_,C_,K_, energy0, energy;C_921,23969
@@ -1014,7 +1014,7 @@ inline Eigen::Matrix<T,4,1> cross(const Eigen::Matrix<T,4,1>& vecA, cross303,7
 namespace m2 {m223,380
   class set_operations{ M2_TYPEDEFS;set_operations26,424
   class set_operations{ M2_TYPEDEFS;M2_TYPEDEFS26,424
-    static bool flip_edges(control_ptr obj){flip_edges28,471
+    static bool flip_edges(surf_ptr obj){flip_edges28,471
   class join_mesh { M2_TYPEDEFS;join_mesh129,3245
   class join_mesh { M2_TYPEDEFS;M2_TYPEDEFS129,3245
     struct contact_manifold{contact_manifold135,3484
@@ -1022,14 +1022,14 @@ namespace m2 {m223,380
       int p1,p2;p2138,3532
       int p1type, p2type; //means that we can querie the collision typep1type139,3549
       int p1type, p2type; //means that we can querie the collision typep2type139,3549
-      control_ptr mMesh;mMesh140,3621
+      surf_ptr mMesh;mMesh140,3621
       T length(){length141,3646
     struct contact_manifold_sort {contact_manifold_sort150,3855
       bool operator() (contact_manifold c0, contact_manifold c1) { operator ()152,3902
-      control_ptr mMesh;mMesh169,4374
+      surf_ptr mMesh;mMesh169,4374
     } mContactSorter;mContactSorter170,4399
     join_mesh(){join_mesh173,4458
-    join_mesh(control_ptr mesh, T tolerance){join_mesh176,4483
+    join_mesh(surf_ptr mesh, T tolerance){join_mesh176,4483
     void init(){init185,4775
     inline void dimPolynomial(coordinate_type a, coordinate_type va, dimPolynomial197,5184
     void buildPolynomial(coordinate_type a, coordinate_type va, buildPolynomial209,5684
@@ -1042,11 +1042,11 @@ namespace m2 {m223,380
     bool checkEdgeInSet(face_vertex_ptr fv0,checkEdgeInSet587,18791
     triangle_type makeTriangle(face_vertex_ptr v0,makeTriangle601,19194
     face_ptr makeFace(vertex_ptr v0,makeFace610,19479
-    void stitchFaces(control_ptr control, face_ptr f1, face_ptr f2){stitchFaces632,20190
+    void stitchFaces(surf_ptr control, face_ptr f1, face_ptr f2){stitchFaces632,20190
     void pipeEdge(edge_ptr e0, edge_ptr e1,pipeEdge883,28672
     bool join(){join1076,35742
     T tol;tol1147,38124
-    control_ptr		 mMesh;mMesh1148,38135
+    surf_ptr		 mMesh;mMesh1148,38135
     dynamic_octree<SPACE,triangle_type> exteriorTree;exteriorTree1149,38160
     dynamic_octree<SPACE,triangle_type> interiorTree;interiorTree1150,38214
     vector<triangle_type> oldFaces;oldFaces1151,38268
@@ -1057,16 +1057,16 @@ namespace m2 {m223,380
   class calc_sdf { M2_TYPEDEFScalc_sdf1159,38454
     typedef aabb_tree<SPACE,triangle_type> triangle_tree;triangle_tree1161,38495
     typedef typename triangle_tree::node_type edge_node_type;edge_node_type1162,38553
-    control_ptr mMesh;mMesh1163,38615
+    surf_ptr mMesh;mMesh1163,38615
     vector<coordinate_type> normals;normals1165,38639
     vector<coordinate_type> vertices;vertices1166,38676
     vector<triangle_type>  tris;tris1167,38714
     vector<int>            triIndices;      triIndices1168,38747
     triangle_tree tree =   triangle_tree(this->tris);tree1169,38792
-    calc_sdf(control_ptr targetMesh){calc_sdf1171,38847
+    calc_sdf(surf_ptr targetMesh){calc_sdf1171,38847
     void initialize(){initialize1175,38925
-    vector<triangle_type> getTris(control_ptr targetMesh){getTris1186,39262
-    vector<int> getTriIndices(control_ptr targetMesh){getTriIndices1198,39742
+    vector<triangle_type> getTris(surf_ptr targetMesh){getTris1186,39262
+    vector<int> getTriIndices(surf_ptr targetMesh){getTriIndices1198,39742
     inline T clamp(T x, T a, T b){clamp1210,40247
     inline void  distanceFromTriangle(coordinate_type p, int tri,distanceFromTriangle1214,40334
     vector<pair<T,coordinate_type> > getSdf(vector<coordinate_type> & coordinates){getSdf1269,41934
@@ -1076,12 +1076,12 @@ namespace m2 {m223,380
     typedef typename SPACE::triangle_type	        triangle;triangle1299,42776
     typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator1300,42836
     typedef typename m2::Debugger Debugger;Debugger1301,42903
-    moving_mesh(control_ptr obj_in){moving_mesh1304,42958
+    moving_mesh(surf_ptr obj_in){moving_mesh1304,42958
     face_bin<SPACE> & getHash(){return mFaceHash;}getHash1331,43868
     void pin_half(){pin_half1333,43920
     void drawField(){drawField1352,44356
     coordinate_type getSvdNormal(vertex_ptr v){getSvdNormal1387,45445
-    vector<coordinate_type> getFaceOffsets(m2::control<SPACE>& in){getFaceOffsets1425,46399
+    vector<coordinate_type> getFaceOffsets(m2::surf<SPACE>& in){getFaceOffsets1425,46399
     coordinate_type getButterflyVertexWeight(face_vertex_ptr v){getButterflyVertexWeight1443,46943
     coordinate_type getButterflyWeight(edge_ptr e){getButterflyWeight1480,48028
     coordinate_type getAverageWeight(edge_ptr e){getAverageWeight1488,48301
@@ -1125,10 +1125,10 @@ namespace m2 {m223,380
     T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength;minLength2801,86182
     T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength;minCollapseLength2801,86182
     T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength;maxLength2801,86182
-    control_ptr		 mMesh;mMesh2802,86257
+    surf_ptr		 mMesh;mMesh2802,86257
   class vortex_sheet{vortex_sheet2807,86317
     M2_TYPEDEFS;M2_TYPEDEFS2808,86339
-    vortex_sheet(control_ptr obj_in){vortex_sheet2810,86366
+    vortex_sheet(surf_ptr obj_in){vortex_sheet2810,86366
     coordinate_type getButterflyVertexWeight(face_vertex_ptr v){getButterflyVertexWeight2856,87729
     coordinate_type getButterflyWeight(edge_ptr e){getButterflyWeight2893,88814
     void flip_edges(){flip_edges2902,89088
@@ -1184,7 +1184,7 @@ namespace m2 {m223,380
     T maxCurvature, minCurvature, minLength, minCollapseLength, maxLength, regLength, edgeJoinThresh;edgeJoinThresh4294,130577
     vector<coordinate_type> mEdgeCirculation;mEdgeCirculation4295,130679
     vector<coordinate_type> mFaceVorticity;mFaceVorticity4296,130725
-    control_ptr mMesh;mMesh4297,130769
+    surf_ptr mMesh;mMesh4297,130769
 
 /home/jdelaney/code/libgaudi/src/manifold/conj_grad.hpp,108
 #define __CONJ_GRAD____CONJ_GRAD__11,166
@@ -1446,11 +1446,11 @@ namespace m2 {m223,450
     M2_TYPEDEFS;M2_TYPEDEFS570,17567
     face_bin(){}face_bin572,17585
     face_bin(face_bin & other){face_bin574,17603
-    face_bin(control_ref mesh, T dx){face_bin578,17663
+    face_bin(surf_ref mesh, T dx){face_bin578,17663
     ~face_bin(){}~face_bin582,17741
     face_bin & operator=(face_bin & rhs){operator =584,17760
-    void binTriangles(control_ref mesh, T dx){binTriangles602,18212
-    void binCenters(control_ref mesh, T dx){binCenters755,22875
+    void binTriangles(surf_ref mesh, T dx){binTriangles602,18212
+    void binCenters(surf_ref mesh, T dx){binCenters755,22875
     void clear(){clear815,24559
     int xRes() {return _xRes;}xRes823,24710
     int yRes() {return _yRes;}yRes824,24741
@@ -1483,12 +1483,12 @@ namespace m2 {m223,450
     M2_TYPEDEFS;M2_TYPEDEFS898,26661
     edge_bin(){}edge_bin900,26679
     edge_bin(edge_bin & other){edge_bin902,26697
-    edge_bin(control_ref mesh, T dx){edge_bin906,26757
+    edge_bin(surf_ref mesh, T dx){edge_bin906,26757
     ~edge_bin(){}~edge_bin910,26833
     edge_bin & operator=(edge_bin & rhs){operator =912,26852
     inline void incrementDDA(T & tMaxX, T & tMaxY, T & tMaxZ,incrementDDA929,27253
     void DDA_3D(int ei,DDA_3D958,27767
-    void binEdges(control_ref mesh, T dx){binEdges1036,29835
+    void binEdges(surf_ref mesh, T dx){binEdges1036,29835
     void clear(){clear1091,31451
     int xRes() {return _xRes;}xRes1099,31602
     int yRes() {return _yRes;}yRes1100,31633
@@ -1521,10 +1521,10 @@ namespace m2 {m223,450
     M2_TYPEDEFS;M2_TYPEDEFS1174,33555
     vertex_bin(){}vertex_bin1176,33573
     vertex_bin(vertex_bin & other){vertex_bin1178,33593
-    vertex_bin(control_ref mesh, T dx){vertex_bin1182,33657
+    vertex_bin(surf_ref mesh, T dx){vertex_bin1182,33657
     ~vertex_bin(){}~vertex_bin1186,33736
     vertex_bin & operator=(vertex_bin & rhs){operator =1188,33757
-    void binPoints(control_ref mesh, T dx){binPoints1206,34141
+    void binPoints(surf_ref mesh, T dx){binPoints1206,34141
     void clear(){clear1264,35802
     int xRes() {return _xRes;}xRes1271,35929
     int yRes() {return _yRes;}yRes1272,35960
@@ -1716,14 +1716,14 @@ namespace m2 {m215,245
   class subdivide{subdivide17,288
     subdivide(){}subdivide21,344
     ~subdivide(){}~subdivide22,362
-    void subdivide_catmull_clark(control_ptr& obj_in){subdivide_catmull_clark24,390
+    void subdivide_catmull_clark(surf_ptr& obj_in){subdivide_catmull_clark24,390
     int calc_vertex(vertex_ptr& vertex_in,calc_vertex52,1284
     coordinate_type calc_edge(edge_ptr& edge_in){calc_edge89,2306
     coordinate_type calc_center(face_ptr& face_in){calc_center112,3035
     coordinate_type calc_normal(coordinate_type& c0,coordinate_type& c1,calc_normal134,3595
-    control_ref subdivide_control(control_ref	control_in){subdivide_control159,4536
-    void subdivide_edges(control_ptr obj_in){subdivide_edges381,12869
-    vertex_ptr subdivide_edge(control_ptr	obj_in,subdivide_edge390,13092
+    surf_ref subdivide_control(surf_ref	control_in){subdivide_control159,4536
+    void subdivide_edges(surf_ptr obj_in){subdivide_edges381,12869
+    vertex_ptr subdivide_edge(surf_ptr	obj_in,subdivide_edge390,13092
 
 /home/jdelaney/code/libgaudi/src/manifold/nearest_point.hpp,1113
 #define __BEZIER_NEAREST_POINT____BEZIER_NEAREST_POINT__12,219
@@ -1758,7 +1758,7 @@ Eigen::Matrix<T,4,1> blend(T t, Eigen::Matrix<T,4,1> p00, Eigen::Matrix<T,4,1> p
 namespace m2 {m2161,4357
   class add_handle{add_handle163,4400
     M2_TYPEDEFS;M2_TYPEDEFS164,4420
-    bool add(control_ptr ob, long i, long j, T teni, T tenj){add166,4447
+    bool add(surf_ptr ob, long i, long j, T teni, T tenj){add166,4447
     bool slerp_face(T t, face_ptr fi, face_ptr fj){slerp_face257,7483
 
 /home/jdelaney/code/libgaudi/src/manifold/modify.hpp,742
@@ -1768,11 +1768,11 @@ namespace m2 {m217,245
     M2_TYPEDEFS;M2_TYPEDEFS20,304
     modify(){}modify22,333
     ~modify(){}~modify23,348
-    void translate(control_ptr obj, T x, T y, T z){translate25,377
-    void move_to(control_ptr obj, coordinate_type newCenter){move_to37,670
-    void scale(control_ptr obj, T x, T y, T z){scale51,1115
-    void rotate(control_ptr obj, mat4 R){rotate63,1404
-    void center(control_ref in){center74,1741
+    void translate(surf_ptr obj, T x, T y, T z){translate25,377
+    void move_to(surf_ptr obj, coordinate_type newCenter){move_to37,670
+    void scale(surf_ptr obj, T x, T y, T z){scale51,1115
+    void rotate(surf_ptr obj, mat4 R){rotate63,1404
+    void center(surf_ref in){center74,1741
     void scale_face(face_ptr f1, T scale){scale_face113,3121
     void translate_face_along_vector(face_ptr f1, coordinate_type c1, T offset){translate_face_along_vector129,3513
     edge_ptr flip_edge(edge_ptr e1){flip_edge144,3840
@@ -1823,7 +1823,7 @@ namespace m2 {m219,298
     coordinate_type mcenter;mcenter194,4413
     coordinate_type mlengths;mlengths195,4442
   void testBins(){    testBins206,4678
-  makeBlock(m2::control<SPACE> *  mesh){makeBlock244,5695
+  makeBlock(m2::surf<SPACE> *  mesh){makeBlock244,5695
   class BlockTree : public Block<SPACE, L0, Block<SPACE, L1, Block<SPACE,L2, LeafBlock<SPACE, BLOCK_T> > > >{BlockTree269,6530
     M2_TYPEDEFS;M2_TYPEDEFS271,6641
     typedef Block<SPACE, L0, Block<SPACE, L1, Block<SPACE,L2, LeafBlock<SPACE,BLOCK_T> > > >  Root;Root274,6674
@@ -1845,8 +1845,8 @@ namespace m2 {m219,298
     int mLN0, mLN1, mLN2;mLN0407,11569
     int mLN0, mLN1, mLN2;mLN1407,11569
     int mLN0, mLN1, mLN2;mLN2407,11569
-    makeTree(m2::control<SPACE> *  mesh){makeTree413,11720
-    makeTriTree(m2::control<SPACE> *  mesh){makeTriTree441,12792
+    makeTree(m2::surf<SPACE> *  mesh){makeTree413,11720
+    makeTriTree(m2::surf<SPACE> *  mesh){makeTriTree441,12792
 
 /home/jdelaney/code/libgaudi/src/manifold/attic/m2Control.hpp,2827
 #define __TWOMANIFOLDCONTROL____TWOMANIFOLDCONTROL__10,178
@@ -1865,7 +1865,7 @@ namespace m2 {	m217,330
     edge_array&   get_edges(){return mEdges;}get_edges110,3273
     vertex_array& get_vertices(){return mVertices;}get_vertices111,3319
     void operator=(control& rhs){operator =112,3371
-    void merge(control_ref other){merge134,3875
+    void merge(surf_ref other){merge134,3875
     void push_vertex(vertex_ptr& in){push_vertex157,4435
     void push_edge(edge_ptr& in){			push_edge170,4748
     void push_face(face_ptr& in){push_face183,5045

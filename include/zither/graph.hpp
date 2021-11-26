@@ -15,7 +15,7 @@ namespace zither {
     int mWrite;
     
     std::array<T,S> mArray;
-  }
+  };
 
 
   class Process {

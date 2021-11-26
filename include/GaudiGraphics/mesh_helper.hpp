@@ -13,7 +13,7 @@
 namespace gg {
 
 template <typename SPACE>
-void fillBuffer(m2::control<SPACE> *mesh, gg::BufferObjectPtr obj,
+void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
                 m2::colorRGB col = m2::colorRGB(1.0, 0.5, 0.5, 1.0)) {
   using namespace nanogui;
   M2_TYPEDEFS;
@@ -35,6 +35,7 @@ void fillBuffer(m2::control<SPACE> *mesh, gg::BufferObjectPtr obj,
     auto &colors = o.colors();
 
     for (int i = 0; i < faces.size(); i++) {
+      if(!faces[i]) continue;
       face_vertex_ptr fvb = faces[i]->fbegin();
       face_vertex_ptr fve = faces[i]->fend();
       bool it = true;

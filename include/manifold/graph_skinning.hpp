@@ -28,8 +28,8 @@ namespace m2 {
 		
     graph_skinning(){};
     ~graph_skinning(){};
-    control_ptr build(m1::control<T>* graph_in){
-      control_ptr out = new control_type();
+    surf_ptr build(m1::control<T>* graph_in){
+      surf_ptr out = new surf_type();
       vector< face_list > faces_on_vertex;
       faces_on_vertex.resize(graph_in->get_vertices().size()); //some micromanagement here is necessary.
 			
@@ -71,7 +71,7 @@ namespace m2 {
 	cp3 += vb + dn*jr;	cp4 += vb + dn*jr;
 				
 	m2::construct<SPACE>	cons;
-	control_ptr seg = new m2::control<SPACE>();
+	surf_ptr seg = new m2::surf<SPACE>();
 	seg->insert_vertex(cp1);
 	seg->insert_vertex(cp2);
 	seg->insert_vertex(cp3);
@@ -131,7 +131,7 @@ namespace m2 {
 	    itb++;
 	  }
 					
-	  control_ptr joint;
+	  surf_ptr joint;
 	  m2::convex_hull<SPACE> ch;
 	  joint = ch.quick_hull(jverts);
 					
@@ -243,7 +243,7 @@ namespace m2 {
       return out;
     }
 		
-    bool stitch_faces(control_ptr obj_in, face_ptr f1, face_ptr f2, T tol){
+    bool stitch_faces(surf_ptr obj_in, face_ptr f1, face_ptr f2, T tol){
 			
       face_vertex_ptr fvb2 = f2->fbegin();			
       face_vertex_ptr fve2 = f2->fend();								

@@ -35,19 +35,19 @@
   typedef	m2::edge<SPACE>             edge_type;			\
   typedef	m2::vertex<SPACE>	    vertex_type;	        \
   typedef	m2::face_vertex<SPACE>      face_vertex_type;		\
-  typedef	m2::control<SPACE>	    control_type;	        \
+  typedef	m2::surf<SPACE>	    surf_type;	        \
 									\
   typedef	m2::face<SPACE>*	    face_ptr;	                \
   typedef	m2::edge<SPACE>*	    edge_ptr;	                \
   typedef	m2::vertex<SPACE>*          vertex_ptr;			\
   typedef	m2::face_vertex<SPACE>*     face_vertex_ptr;		\
-  typedef	m2::control<SPACE>*         control_ptr;		\
+  typedef	m2::surf<SPACE>*         surf_ptr;		\
 									\
   typedef	m2::face<SPACE>&	    face_ref;	                \
   typedef	m2::edge<SPACE>&	    edge_ref;	                \
   typedef	m2::vertex<SPACE>&          vertex_ref;			\
   typedef	m2::face_vertex<SPACE>&     face_vertex_ref;		\
-  typedef	m2::control<SPACE>&         control_ref;		\
+  typedef	m2::surf<SPACE>&         surf_ref;		\
 									\
   typedef vector<coordinate_type >		coordinate_array;	\
   typedef	vector<face_ptr>		face_array;             \

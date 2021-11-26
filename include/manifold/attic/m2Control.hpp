@@ -131,7 +131,7 @@ namespace m2 {
       }
     }
 	
-    void merge(control_ref other){
+    void merge(surf_ref other){
       this->pack();
       other.pack();
       for(long i = 0; i < other.mFaces.size(); i++){

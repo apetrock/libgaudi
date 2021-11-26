@@ -26,7 +26,7 @@ template <typename SPACE> class remesh {
 public:
   remesh() {}
   ~remesh() {}
-  void stellate(control_ref control_in) {
+  void stellate(surf_ref control_in) {
 
     face_array &rFaces = control_in.get_faces();
     fa_iterator fitb = rFaces.begin();
@@ -53,19 +53,19 @@ public:
     control_in.update_all();
   }
 
-  void stellate_face_center(control_ref obj_in, face_ref face_in) {
+  vertex_ptr stellate_face_center(surf_ptr obj_in, face_ptr face_in) {
 
     // 1. nitialize lists
     vertex_list vlist;
     face_vertex_list flist;
 
     // 2. calculate center vertex
-    coordinate_array vl = face_in.flagged_coordinate_trace(0);
+    coordinate_array vl = face_in->flagged_coordinate_trace(0);
     coordinate_type cc = calculate_average(vl);
-    this->stellate_face_generic(obj_in, face_in, cc);
+    return this->stellate_face_generic(obj_in, face_in, cc);
   }
 
-  vertex_ptr stellate_face_generic(control_ref obj_in, face_ref face_in,
+  vertex_ptr stellate_face_generic(surf_ptr obj_in, face_ptr face_in,
                                    coordinate_type cen) {
 
     // 1. nitialize lists
@@ -73,161 +73,58 @@ public:
     face_vertex_list flist;
 
     // 2. calculate center vertex
-    coordinate_array vl = face_in.flagged_coordinate_trace(0);
     coordinate_type cc = cen;
-    vertex_ptr vc = new vertex_type(cc);
+    vertex_ptr v0 = new vertex_type(cc);
 
-    //			center_vertices.push_back(vc);
-    obj_in.push_vertex(vc);
-    // I need to construct the first face, because we need to save that edge,
-    // then we'll loop around the face and make new faces, adding them to the
-    // control deleting the first face at the end.
+    obj_in->push_vertex(v0);
 
-    edge_ptr tail_edge = new edge_type();
-    obj_in.push_edge(tail_edge);
+    face_vertex_ptr itb = face_in->fbegin();
+    face_vertex_ptr ite = itb;
 
-    edge_ptr lead_edge = tail_edge; // beginning edge, next edge
-
-    // basically we need to hold a pointer to the first inner edge we make, then
-    // the then last inner edge.  Then as we loop around we connect the last to
-    // the first until we get to the end then we connect up around the circle.
-
-    face_vertex_ptr itb = face_in.fbegin();
-    face_vertex_ptr ite = face_in.fend();
-    //        if (itb->vertex()->flag == 0) {
-    //            itb = itb->next();
-    //            ite = ite->next();
-    //        }
-
-    face_vertex_list vtrace;
-
-    bool at_head = false;
-    while (!at_head) {
-      if (itb == ite) {
-        at_head = true;
-      }
-      vtrace.push_back(itb);
-      itb = itb->next();
-    }
-
-    typename face_vertex_list::iterator fvb = vtrace.begin();
     int i = 0;
 
-    bool dbug_flag = true;
-    vector<face_ptr> dbug;
-
-    while (fvb != vtrace.end()) {
-
-      face_vertex_ptr fv1 = *fvb;
+    std::vector<face_ptr> new_faces;
+    bool iterating = true;
+    while (iterating) {
+      std::cout << " itb: " << itb << " " << ite << std::endl;
+      face_vertex_ptr fv1 = itb;
       face_vertex_ptr fv2 = fv1->next();
-      // face_vertex_ptr fv3 = fv2->next();
+      itb = itb->next();
+      iterating = itb != ite;
       face_ptr nf;
-      // if (i == 0){nf = face_in; nf->flag = 0;}
-      // else
-      nf = new face_type();
+
+      vertex_ptr v1 = fv1->vertex();
+      vertex_ptr v2 = fv2->vertex();
       face_vertex_ptr p1 = fv1;
+      face_vertex_ptr p0 = v0->make_face_vertex();
+      face_vertex_ptr p2 = v2->make_face_vertex();
 
-      face_vertex_ptr p2 = new face_vertex_type();
-      p2->vertex() = fv2->vertex();
-      p2->vertex()->add_face_vertex(p2);
-
-      face_vertex_ptr p3 = new face_vertex_type();
-      p3->vertex() = vc;
-      p3->vertex()->add_face_vertex(p3);
-
-      // now we have them, we need to chain them
-
-      p1->next() = p2;
-      p2->prev() = p1;
-      p2->next() = p3;
-      p3->prev() = p2;
-      p3->next() = p1;
-      p1->prev() = p3;
-
-      // there are four face vertices per new face the first one is the current
-      // point
-      nf->fbegin() = p1;
-      p1->face() = nf;
-      p1->face_ID() = (long)0;
-
-      // pretty clear that we are doing the second edge, now.
-      p2->face() = nf;
-      edge_ptr e2;
-      if (i == vtrace.size() - 1)
-        e2 = tail_edge;
-      else {
-        e2 = new edge_type();
-        obj_in.push_edge(e2);
-      }
-      e2->v1() = p2; // we know what will be attaching to this edge, so we'll be
-                     // pretty clear about it and the first edge point is this
-                     // the leading face
-      p2->edge() = e2;
-      // p2->face_ID() = (long)1;
-
-      // Second interior edge, originating from the center;
-      p3->face() = nf;
-      edge_ptr e3;
-      if (i == 0) {
-        e3 = tail_edge;
-      } else
-        e3 = lead_edge;
-      p3->edge() = e3;
-      lead_edge->v2() = p3;
-
-      p3->face_ID() = 2;
-      // lets set the new leading edge
-      lead_edge = e2;
-
-      face_vertex_ptr cfv = (*fvb);
-      nf->update_all();
-      ++fvb;
-      i += 1;
-
-      obj_in.push_face(nf);
-      if (dbug_flag) {
-        dbug.push_back(nf);
-      }
+      nf = new face_type(p0, p1, p2);
+      new_faces.push_back(nf);
+      obj_in->push_face(nf);
     }
 
-    obj_in.remove_face(face_in.position_in_set());
-
-    if (dbug_flag) {
-      typename vector<face_ptr>::iterator dbb = dbug.begin();
-      typename vector<face_ptr>::iterator dbe = dbug.end();
-      cout << "begin subdivision----------------------------";
-      cout << endl;
-      cout << "fID \t fpos \t fvID \t eID \t x \t\t y \t\t z \t\t ev1 \t\t ev2";
-      cout << endl;
-      while (dbb != dbe) {
-        face_vertex_ptr ftb = (*dbb)->fbegin();
-        face_vertex_ptr fte = (*dbb)->fend();
-        cout << "face: " << (*dbb)->ID();
-        cout << endl;
-        bool iterating = true;
-        while (iterating) {
-          if (ftb == fte) {
-            iterating = false;
-          }
-          cout << ftb->face()->ID() << "\t\t " << ftb->face_ID() << "\t\t "
-               << ftb->ID() << " \t\t " << ftb->edge()->ID() << "\t\t ";
-          cout << ftb->vertex()->x() << "\t\t " << ftb->vertex()->y() << "\t\t "
-               << ftb->vertex()->z() << "\t\t " << ftb->edge()->v1()->ID()
-               << "\t\t " << ftb->edge()->v2()->ID() << "\t\t ";
-          ;
-          cout << endl;
-          ftb = ftb->next();
-        }
-        cout << "----------";
-        cout << endl;
-        cout << endl;
-        ++dbb;
-      }
+    for(int i = 0; i < new_faces.size(); i++){
+      int ip = (i + 1) % new_faces.size();
+      face_ptr f0 = new_faces[i];
+      face_ptr f1 = new_faces[ip];
+      face_vertex_ptr p0 = f0->fbegin()->prev();
+      face_vertex_ptr p1 = f1->fbegin();
+      edge_ptr e = new edge_type(p0, p1);
+      obj_in->push_edge(e);
     }
-    return vc;
+
+    for (int i = 0; i < new_faces.size(); i++) {
+      face_ptr f0 = new_faces[i];
+      f0->update_all();
+    }
+
+    obj_in->remove_face(face_in->position_in_set());
+
+    return v0;
   }
 
-  void root2(control_ref control_in) {
+  void root2(surf_ref control_in) {
 
     edge_array &rEdges = control_in.get_edges();
     for (long i = 0; i < rEdges.size(); i++) {
@@ -251,7 +148,7 @@ public:
     control_in.update_all();
   }
 
-  bool merge_adjacent_planar_faces(control_ptr obj_in, face_ptr face_in,
+  bool merge_adjacent_planar_faces(surf_ptr obj_in, face_ptr face_in,
                                    T tol) {
     face_vertex_ptr fvb = face_in->fbegin();
     face_vertex_ptr fve = face_in->fend();
@@ -280,7 +177,7 @@ public:
     return true;
   }
 
-  bool merge_all_adjacent_planar_faces(control_ptr obj_in, T tol) {
+  bool merge_all_adjacent_planar_faces(surf_ptr obj_in, T tol) {
     obj_in->reset_flags();
     face_array faces = obj_in->get_faces();
     for (int i = 0; i < faces.size(); i++) {
@@ -347,7 +244,7 @@ public:
     return true;
   }
 
-  face_ptr merge_faces(control_ptr obj_in, vector<face_ptr> &faces_to_remove,
+  face_ptr merge_faces(surf_ptr obj_in, vector<face_ptr> &faces_to_remove,
                        int face_flag) {
     // why don't I loop through everything, then tag them locally.  Then find
     // the outside edges and do a recursive search to connect them up right now
@@ -389,9 +286,9 @@ public:
     //			}
   }
 
-  control_ref dual(control_ref rhs) {
+  surf_ref dual(surf_ref rhs) {
     rhs.pack();
-    control_ptr out = new control_type();
+    surf_ptr out = new surf_type();
     vertex_array &cverts = rhs.get_vertices();
     face_array &cfaces = rhs.get_faces();
     edge_array &cedges = rhs.get_edges();
@@ -492,7 +389,7 @@ public:
     return *out;
   }
 
-  void split4(control_ptr &mMesh, face_ptr f) {
+  void split4(surf_ptr &mMesh, face_ptr f) {
     face_vertex_ptr itb = f->fbegin();
     face_vertex_ptr ite = f->fend();
     while (itb->flag != 1) {
@@ -503,7 +400,7 @@ public:
     itb->flag = 0;
   }
 
-  void split5(control_ptr &mMesh, face_ptr f) {
+  void split5(surf_ptr &mMesh, face_ptr f) {
     face_vertex_ptr itb0 = f->fbegin();
     while (itb0->flag != 1) {
       itb0 = itb0->next();
@@ -531,7 +428,7 @@ public:
     }
   }
 
-  void split6(control_ptr &mMesh, face_ptr f) {
+  void split6(surf_ptr &mMesh, face_ptr f) {
     face_vertex_ptr itb0 = f->fbegin();
     while (itb0->flag != 1) {
       itb0 = itb0->next();
@@ -549,7 +446,7 @@ public:
     edge_ptr e3 = cons.insert_edge(mMesh, itb0p, itb2);
   }
 
-  void postSplitTriangulateFace(control_ptr &mMesh, face_ptr f) {
+  void postSplitTriangulateFace(surf_ptr &mMesh, face_ptr f) {
 
     T maxArea = 0;
     T minDist = 99999;
@@ -579,7 +476,7 @@ public:
 #endif
   }
 
-  void triangulate_quad(control_ptr &mMesh, face_ptr f) {
+  void triangulate_quad(surf_ptr &mMesh, face_ptr f) {
     f->update_all();
 
     T maxArea = 0;
@@ -592,8 +489,8 @@ public:
     face_vertex_ptr v3 = v2->next();
 
     face_vertex_ptr fvEdge = NULL;
-    T cot13 = v0->cotan() + v0->cotan(); // corresponds to e13
-    T cot02 = v0->cotan() + v0->cotan();
+    T cot13 = v1->cotan() + v3->cotan(); // corresponds to e13
+    T cot02 = v0->cotan() + v2->cotan();
     if (cot13 * cot13 < cot02 * cot02) {
       m2::construct<SPACE> cons;
       edge_ptr ne = cons.insert_edge(mMesh, v1, v3);
@@ -603,7 +500,7 @@ public:
     }
   }
 
-  void slice_and_dice_face(control_ptr &mMesh, face_ptr f) {
+  void slice_and_dice_face(surf_ptr &mMesh, face_ptr f) {
     f->update_all();
 
     T maxArea = 0;
@@ -639,7 +536,7 @@ public:
     // std::cout << minDist << std::endl;
   }
 
-  void triangulate_face(control_ptr mMesh, face_ptr f) {
+  void triangulate_face(surf_ptr mMesh, face_ptr f) {
     f->update_all();
 
     T maxArea = 0;
@@ -673,7 +570,7 @@ public:
     }
   }
 
-  void triangulate(control_ptr mMesh) {
+  void triangulate(surf_ptr mMesh) {
     bool triangulating = true;
     int k = 0;
     while (triangulating && k < 100) {
@@ -698,7 +595,7 @@ public:
     }
   }
 
-  void flip_edges(control_ptr obj) {
+  void flip_edges(surf_ptr obj) {
     bool triangulating = true;
     int k = 0;
 
@@ -763,7 +660,7 @@ public:
     }
   }
 
-  void reverse(control_ref rhs) {
+  void reverse(surf_ref rhs) {
     edge_array edges = rhs.get_edges();
     for (long i = 0; i < edges.size(); i++) {
       reverse_edge(edges[i]);

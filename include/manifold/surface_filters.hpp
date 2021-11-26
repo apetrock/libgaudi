@@ -21,7 +21,7 @@ template <typename SPACE> class surface_filter {
   M2_TYPEDEFS;
 
 public:
-  void filterCutoff(m2::control<SPACE> &in, T cutoff, vector<T> &vertexWeights,
+  void filterCutoff(m2::surf<SPACE> &in, T cutoff, vector<T> &vertexWeights,
                     T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<vertex_ptr> &tverts = in.get_vertices();
@@ -77,7 +77,7 @@ public:
     }
   }
 
-  static void filter(m2::control<SPACE> &in, T strength) {
+  static void filter(m2::surf<SPACE> &in, T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<vertex_ptr> &tverts = in.get_vertices();
     vector<coordinate_type> filteredCoordinates;
@@ -131,7 +131,7 @@ public:
     }
   }
 
-  static void cuspFilter(m2::control<SPACE> &in, T strength) {
+  static void cuspFilter(m2::surf<SPACE> &in, T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<vertex_ptr> &tverts = in.get_vertices();
     vector<coordinate_type> filteredCoordinates;
@@ -238,7 +238,7 @@ public:
     return ptl;
   }
 
-  static void mlsFilter(m2::control<SPACE> &in, T strength, T dx) {
+  static void mlsFilter(m2::surf<SPACE> &in, T strength, T dx) {
     // TIMER functionTimer(__FUNCTION__);
     vector<T> vertexWeights;
     vector<T> edgeWeights;
@@ -290,7 +290,7 @@ public:
     }
   }
 
-  static void laplacianFilter(m2::control<SPACE> &in, T strength) {
+  static void laplacianFilter(m2::surf<SPACE> &in, T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<T> vertexWeights;
     vector<T> edgeWeights;
@@ -316,7 +316,7 @@ public:
     }
   }
 
-  static void taubinFilter(m2::control<SPACE> &in, T a, T b) {
+  static void taubinFilter(m2::surf<SPACE> &in, T a, T b) {
     // TIMER functionTimer(__FUNCTION__);
     vector<T> vertexWeights;
     vector<T> edgeWeights;
@@ -359,7 +359,7 @@ public:
     }
   }
 
-  static void cacheTensor(m2::control<SPACE> &in,
+  static void cacheTensor(m2::surf<SPACE> &in,
                           vector<coordinate_type *> &tensorArray,
                           vector<coordinate_type> &singularArray) {
     vector<vertex_ptr> &tverts = in.get_vertices();
@@ -437,7 +437,7 @@ public:
       return coordinate_type(0, 0, 0);
   }
 
-  static void nullLaplacianFilter(m2::control<SPACE> &in, T strength) {
+  static void nullLaplacianFilter(m2::surf<SPACE> &in, T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<T> vertexWeights;
     vector<T> edgeWeights;
@@ -478,7 +478,7 @@ public:
     }
   }
 
-  void flaggedFilter(m2::control<SPACE> &in, T strength) {
+  void flaggedFilter(m2::surf<SPACE> &in, T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<T> vertexWeights;
     vector<T> edgeWeights;

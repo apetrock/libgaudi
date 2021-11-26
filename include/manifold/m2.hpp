@@ -42,7 +42,6 @@
 #define M2_TYPEDEFS                                                            \
   typedef typename SPACE::coordinate_type coordinate_type;                     \
   typedef typename SPACE::line_type line_type;                                 \
-  typedef typename SPACE::triangle_type triangle_type;                         \
   typedef typename SPACE::swept_point_type swept_point_type;                   \
   typedef typename SPACE::swept_triangle_type swept_triangle_type;             \
   typedef typename SPACE::box_type box_type;                                   \
@@ -50,22 +49,26 @@
   typedef typename SPACE::mat3 mat3;                                           \
   typedef typename SPACE::mat4 mat4;                                           \
   typedef typename SPACE::double_type T;                                       \
-  typedef m2::face<SPACE> face_type;                                           \
-  typedef m2::edge<SPACE> edge_type;                                           \
-  typedef m2::vertex<SPACE> vertex_type;                                       \
-  typedef m2::face_vertex<SPACE> face_vertex_type;                             \
-  typedef m2::control<SPACE> control_type;                                     \
-  typedef m2::face<SPACE> *face_ptr;                                           \
-  typedef m2::edge<SPACE> *edge_ptr;                                           \
-  typedef m2::vertex<SPACE> *vertex_ptr;                                       \
-  typedef m2::face_vertex<SPACE> *face_vertex_ptr;                             \
-  typedef m2::control<SPACE> *control_ptr;                                     \
+  typedef m2::face_triangle<SPACE> triangle_type;                              \
+  typedef m2::face_triangle_pair<SPACE> triangle_pair;                         \
                                                                                \
-  typedef m2::face<SPACE> &face_ref;                                           \
-  typedef m2::edge<SPACE> &edge_ref;                                           \
-  typedef m2::vertex<SPACE> &vertex_ref;                                       \
-  typedef m2::face_vertex<SPACE> &face_vertex_ref;                             \
-  typedef m2::control<SPACE> &control_ref;                                     \
+  typedef m2::surf<SPACE> surf_type;                                           \
+  typedef typename m2::surf<SPACE>::face face_type;                            \
+  typedef typename m2::surf<SPACE>::edge edge_type;                            \
+  typedef typename m2::surf<SPACE>::vertex vertex_type;                        \
+  typedef typename m2::surf<SPACE>::face_vertex face_vertex_type;              \
+                                                                               \
+  typedef surf_type *surf_ptr;                                                 \
+  typedef face_type *face_ptr;                                                 \
+  typedef edge_type *edge_ptr;                                                 \
+  typedef vertex_type *vertex_ptr;                                             \
+  typedef face_vertex_type *face_vertex_ptr;                                   \
+                                                                               \
+  typedef surf_type &surf_ref;                                                 \
+  typedef face_type &face_ref;                                                 \
+  typedef edge_type &edge_ref;                                                 \
+  typedef vertex_type &vertex_ref;                                             \
+  typedef face_vertex_type &face_vertex_ref;                                   \
                                                                                \
   typedef vector<coordinate_type> coordinate_array;                            \
   typedef vector<face_ptr> face_array;                                         \
@@ -94,29 +97,88 @@ using namespace std;
 
 namespace m2 {
 
-template <typename SPACE> class face_vertex;
+template <typename SPACE> class surf;
 
-template <typename SPACE> class face;
+template <typename SPACE> struct face_triangle;
 
-template <typename SPACE> class edge;
+template <typename SPACE> struct face_triangle_pair;
 
-template <typename SPACE> class vertex;
-
-template <typename SPACE> class control;
-
-template <typename SPACE> class construct;
-
-template <typename SPACE> class subdivide;
-
-template <typename SPACE> struct bounding_box {
-  M2_TYPEDEFS;
+template <typename SPACE> struct face_triangle : SPACE::triangle_type {
 
 public:
-  coordinate_type min;
-  coordinate_type max;
-  bounding_box(const coordinate_type &mn, const coordinate_type &mx)
-      : min(mn), max(mx){};
+  M2_TYPEDEFS;
+
+  int indices[3];
+  int faceId;
+  face_triangle() {
+    indices[0] = -1;
+    indices[1] = -1;
+    indices[2] = -1;
+    faceId = -1;
+  };
+
+  face_triangle(coordinate_type p0, coordinate_type p1, coordinate_type p2,
+                int i0, int i1, int i2, int fid) {
+    this->p[0] = p0;
+    this->p[1] = p1;
+    this->p[2] = p2;
+    indices[0] = i0;
+    indices[1] = i1;
+    indices[2] = i2;
+    faceId = fid;
+  };
+
+  T dist(const face_triangle &that) const {
+    if (faceId == that.faceId)
+      return std::numeric_limits<T>::infinity();
+    return sqrt(this->avgSqdDist(that));
+  };
 };
+
+template <typename SPACE>
+inline bool operator==(const face_triangle<SPACE> &lhs,
+                       const face_triangle<SPACE> &rhs) {
+  return (lhs.indices[0] == rhs.indices[0] &&
+          lhs.indices[1] == rhs.indices[1] &&
+          lhs.indices[2] == rhs.indices[2] && lhs.faceId == rhs.faceId);
+}
+
+template <typename SPACE> struct face_triangle_pair {
+public:
+  M2_TYPEDEFS;
+
+  triangle_type A;
+  triangle_type B;
+  mutable T _norm = -1;
+
+  face_triangle_pair(const triangle_type &a, const triangle_type &b) {
+    A = a;
+    B = b;
+  };
+
+  T dist() const {
+    if (A.faceId == B.faceId)
+      return std::numeric_limits<T>::infinity();
+
+    if (_norm < 0)
+      _norm = A.dist(B);
+
+    return _norm;
+  };
+};
+
+template <typename SPACE>
+inline bool operator==(const face_triangle_pair<SPACE> &lhs,
+                       const face_triangle_pair<SPACE> &rhs) {
+  return (lhs.A == rhs.A && lhs.B == rhs.B) ||
+         (lhs.A == rhs.B && lhs.B == rhs.A);
+}
+
+template <typename SPACE>
+inline bool operator<(const face_triangle_pair<SPACE> &lhs,
+                      const face_triangle_pair<SPACE> &rhs) {
+  return lhs.dist() < rhs.dist();
+}
 
 struct colorRGB {
   double r, g, b, a;
@@ -157,1680 +219,1598 @@ template <typename T> inline T randd(T range_) {
 /*
 template <typename T>
 inline Eigen::Matrix<T,4,1> cross(Eigen::Matrix<T,4,1> a,Eigen::Matrix<T,4,1>
-b){ return Eigen::Matrix<T,4,1>( a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y -
-a.y*b.x, 1.0);
+b){ return Eigen::Matrix<T,4,1>( a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y
+- a.y*b.x, 1.0);
 }
 */
-template <typename SPACE> class edge {
-  M2_TYPEDEFS;
 
+template <typename SPACE> class surf {
 public:
-  edge() {
-    fv1 = NULL;
-    fv2 = NULL;
-    mSetPosition = -1;
-    m2::ID &manager = m2::ID::get_instance();
-    mID = manager.new_edge_id();
-    flag = 0;
-    delete_flag = 0;
-  };
-
-  edge(face_vertex_ref in1, face_vertex_ref in2) {
-    mSetPosition = -1;
-    fv1 = &in1;
-    fv2 = &in2;
-    in1.set_edge(*this);
-    in2.set_edge(*this);
-    flag = 0;
-    delete_flag = 0;
-  }
-
-  edge_ref operator=(edge_ref rhs) {
-    edge_ptr out = new edge_type(*rhs.fv1, *rhs.fv2);
-    m2::ID &manager = m2::ID::get_instance();
-    out->mID = manager.new_edge_id();
-    return *out;
-  }
-
-  ~edge(){};
-
-  int &position_in_set() { return mSetPosition; }
-  int position_in_set() const { return mSetPosition; }
-
-  int group() const { return mGroup; }
-  int &group() { return mGroup; }
-
-  size_t ID() const { return this->mID; }
-
-  face_vertex_ptr &v1() { return fv1; }
-  face_vertex_ptr v1() const { return fv1; }
-  face_vertex_ptr &v2() { return fv2; }
-  face_vertex_ptr v2() const { return fv2; }
-
-  face_vertex_ptr other(const face_vertex_ptr &cv) const {
-    if (cv == fv1) {
-      return fv2;
-    } else
-      return fv1;
-  }
-
-#if 0		
-    face_vertex_ptr  other(face_ptr cv){
-      if (cv->face() == fv1->face()) {
-	return fv2;
-      }
-      else return fv1;
-    }
-		
-    face_vertex_ptr	&	other(vertex_ptr cv){
-      if (cv == fv1->vertex()) {
-	return fv2;
-      }
-      else return fv1;
-    }
-#endif
-
-  face_vertex_ptr return_this(vertex_ptr cv) const {
-    if (cv != fv1->vertex()) {
-      return fv2;
-    } else
-      return fv1;
-  }
-
-  face_vertex_ptr this_fv(face_vertex_ptr cv) const {
-    if (cv != fv1) {
-      return fv2;
-    } else
-      return fv1;
-  }
-
-  void set(face_vertex_ptr nfv1, face_vertex_ptr nfv2) {
-    fv1 = nfv1;
-    fv2 = nfv2;
-    nfv1->edge() = this;
-    nfv2->edge() = this;
-  }
-
-  void set_this(face_vertex_ptr this_vertex, face_vertex_ptr new_vertex) {
-    if (this_vertex == fv1)
-      fv1 = new_vertex;
-    else
-      fv2 = new_vertex;
-    new_vertex->edge() = this;
-  }
-
-  void set_other(face_vertex_ptr this_vertex, face_vertex_ptr new_vertex) {
-    if (this_vertex == fv1)
-      fv2 = new_vertex;
-    else
-      fv1 = new_vertex;
-    new_vertex->edge() = this;
-  }
-
-  void set_other(face_ptr cv, face_vertex_ptr ov) {
-    if (cv->face() == fv1->face()) {
-      return fv2 = ov;
-    } else
-      fv1 = ov;
-  }
-
-  coordinate_type normal() {
-    coordinate_type n1 = fv1->face()->normal();
-    coordinate_type n2 = fv2->face()->normal();
-    coordinate_type na = n1 + n2;
-    na.normalize();
-    return na;
-  }
-
-  void update_vertex(face_vertex_ptr old_, face_vertex_ptr new_) {
-    if (fv1 == old_) {
-      fv1 = new_;
-    } else {
-      fv2 = new_;
-    }
-  }
-
-  face_ptr coface(face_vertex_ptr this_vert) const {
-    if (this_vert == fv1) {
-      return fv2->face();
-    } else {
-      return fv1->face();
-    }
-  }
-
-  void verify() {
-    assert(fv1->edge() == this);
-    assert(fv2->edge() == this);
-  };
-
-  void update_face_vertices() {
-    fv1->edge() = this;
-    fv2->edge() = this;
-  }
-
-  int vnum(face_vertex_ptr v) {
-    if (v == fv1)
-      return 1;
-    else if (v == fv2)
-      return 2;
-    else
-      return 0;
-  }
-
-  coordinate_type vec() {
-    coordinate_type c0 = this->v1()->coordinate();
-    coordinate_type c1 = this->v2()->coordinate();
-    return c0 - c1;
-  }
-
-  T dist() {
-    coordinate_type c0 = this->v1()->coordinate();
-    coordinate_type c1 = this->v2()->coordinate();
-    return (c0 - c1).norm();
-  }
-
-  T length() {
-    coordinate_type c0 = this->v1()->coordinate();
-    coordinate_type c1 = this->v2()->coordinate();
-    return (c0 - c1).norm();
-  }
-
-  face_vertex_ptr fv1;
-  face_vertex_ptr fv2;
-
-protected:
-  size_t mID;
-  int mSetPosition;
-  int mGroup;
-
-public:
-  unsigned int idata;
-  unsigned int flag;
-  unsigned int delete_flag;
-};
-
-template <typename SPACE> class face {
-
-  // typedef macro
-  M2_TYPEDEFS
-
-public:
-  face() {
-    m2::ID &manager = m2::ID::get_instance();
-    mID = manager.new_face_id();
-    flag = 0;
-    color.r = 0.4 + randd(0.1);
-    color.g = 0.4 + randd(0.1);
-    color.b = 0.4 + randd(0.1);
-    color.a = 0.75;
-    fHead = NULL;
-    mArea = 0.0;
-    mSetPosition = -1;
-    mSize = 0;
-    data3 = 1.0;
-    mNormal = coordinate_type(0, 0, 0);
-    mCenter = coordinate_type(0, 0, 0);
-    flag = 0;
-
-    data = coordinate_type(0, 0, 0);
-    data2 = coordinate_type(0, 0, 0);
-    data3 = 1.0;
-  }
-
-  face(vertex_ref pnt) {
-    // this makes a the face in a hypersphere from one point
-    m2::ID &manager = m2::ID::get_instance();
-    mID = manager.new_face_id();
-
-    face_vertex_ptr nfv = new face_vertex_type();
-    mSize = 1;
-    mArea = 0.0;
-
-    nfv->vertex() = &pnt;
-    nfv->face() = this;
-
-    nfv->prev() = nfv;
-    nfv->next() = nfv;
-
-    fHead = nfv;
-    this->renumber_vertex_IDs();
-
-    flag = 0;
-
-    color.r = 0.8 + randd(0.2);
-    color.g = 0.0 + randd(0.1);
-    color.b = 0.0 + randd(0.1);
-    color.a = 1.0;
-    mSetPosition = -1;
-
-    mNormal = coordinate_type(0, 0, 0);
-
-    data = coordinate_type(0, 0, 0);
-    data2 = coordinate_type(0, 0, 0);
-    data3 = 1.0;
-  }
-
-  ~face() {
-    // std::cout << "erasing face: " << ID() << std::endl;
-  }
-
-  int &size() { return mSize; }
-  int size() const { return mSize; }
-
-  int &position_in_set() { return mSetPosition; }
-  int position_in_set() const { return mSetPosition; }
-
-  void setHead(face_vertex_ptr head) { fHead = head; }
-
-  face_vertex_ptr &fbegin() { return fHead; }
-
-  face_vertex_ptr fbegin() const { return fHead; }
-
-  face_vertex_ptr fend() { return fHead->prev(); }
-
-  face_ref operator=(const face_ref rhs) {
-    face_ptr out = new face_type();
-    m2::ID &manager = m2::ID::get_instance();
-    out->mID = manager.new_face_id();
-    out->mNormal = rhs.mNormal;
-    out->mCenter = rhs.mCenter;
-    out->mVertices = rhs.mVertices;
-
-    return *out;
-  }
-
-  coordinate_type calc_center() {
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-    coordinate_type cen = coordinate_type(0.0, 0.0, 0.0);
-    float n = 0.0;
-    bool at_head = false;
-
-    while (!at_head) {
-      at_head = itb == ite;
-      cen += itb->coordinate();
-
-      n += 1.0;
-      itb = itb->next();
-    }
-    cen *= 1.0 / n;
-    return cen;
-  }
-
-  bounding_box<SPACE> calc_bbox() {
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-
-    coordinate_type min = this->calc_center(), max = min;
-
-    bool at_head = false;
-    while (!at_head) {
-      at_head = itb == ite;
-
-      coordinate_type p = itb->coordinate();
-      for (int j = 0; j < 3; j++) {
-        max[j] = max[j] > p[j] ? max[j] : p[j];
-        min[j] = min[j] < p[j] ? min[j] : p[j];
-      }
-      itb = itb->next();
-    }
-    return bounding_box<SPACE>(min, max);
-  }
-
-  coordinate_array flagged_coordinate_trace(unsigned int flag_num) {
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-    coordinate_array array_out;
-
-    bool at_head = false;
-    while (!at_head) {
-      if (itb == ite) {
-        at_head = true;
-      }
-      int cflag = itb->vertex()->flag;
-      if (cflag == flag_num) {
-        coordinate_type cd = itb->vertex()->coordinate();
-        array_out.push_back(cd);
-        cflag = itb->vertex()->flag;
-      }
-      itb = itb->next();
-    }
-    return array_out;
-  }
-
-  face_vertex_ptr get_corner_on_vertex(vertex_ptr v) {
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-
-    face_vertex_ptr ito = fHead;
-    bool at_head = false;
-    while (!at_head) {
-      if (itb == ite) {
-        at_head = true;
-      }
-      if (itb->vertex() == v)
-        ito = itb;
-      itb = itb->next();
-    }
-    return ito;
-  }
-
-  face_vertex_array face_vertex_trace() {
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-    face_vertex_array array_out;
-
-    bool at_head = false;
-    while (!at_head) {
-      if (itb == ite) {
-        at_head = true;
-      }
-      array_out.push_back(itb);
-      itb = itb->next();
-    }
-    return array_out;
-  }
-
-  face_vertex_list vertex_trace() {
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-    face_vertex_list array_out;
-
-    bool at_head = false;
-    while (!at_head) {
-      if (itb == ite) {
-        at_head = true;
-      }
-      array_out.push_back(itb);
-      itb = itb->next();
-    }
-    return array_out;
-  }
-
-  face_vertex_list flagged_vertex_trace(unsigned int flag_num) {
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-    face_vertex_list array_out;
-
-    bool at_head = false;
-    while (!at_head) {
-      if (itb == ite) {
-        at_head = true;
-      }
-      if (itb->vertex()->flag == flag_num) {
-        array_out.push_back(itb);
-        // itb->vertex()->flag = 0;
-      }
-      itb = itb->next();
-    }
-    return array_out;
-  }
-
-  edge_list flagged_edge_trace(unsigned int flag_num) {
-    face_vertex_ptr itb = fbegin();
-    face_vertex_ptr ite = fend();
-    edge_list array_out;
-
-    bool at_head = false;
-    while (!at_head) {
-      if (itb == ite) {
-        at_head = true;
-      }
-      if (itb->edge()->flag == flag_num) {
-        array_out.push_back(itb->edge());
-        // itb->vertex()->flag = 0;
-      }
-      itb = itb->next();
-    }
-    return array_out;
-  }
-
-  coordinate_array coordinate_trace() {
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-    coordinate_array array_out;
-
-    bool at_head = false;
-    while (!at_head) {
-      if (itb == ite) {
-        at_head = true;
-      }
-      coordinate_type cd = itb->coordinate();
-      array_out.push_back(cd);
-      itb = itb->next();
-    }
-    return array_out;
-  }
-
-  edge_list edge_trace() {
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-    edge_list list_out;
-
-    bool at_head = false;
-    while (!at_head) {
-      if (itb == ite) {
-        at_head = true;
-      }
-      edge_ptr ep = itb->edge();
-      list_out.push_back(ep);
-      itb = itb->next();
-    }
-    return list_out;
-  }
-
-  T thinness() {
-    face_vertex_ptr fv0 = this->fbegin();
-    face_vertex_ptr fv1 = fv0->next();
-    face_vertex_ptr fv2 = fv1->next();
-    T d0 = fv0->edge()->length();
-    T d1 = fv1->edge()->length();
-    T d2 = fv2->edge()->length();
-    T tEps = 0.95;
-    T thin0 = d0 / (d1 + d2);
-    T thin1 = d1 / (d0 + d2);
-    T thin2 = d2 / (d0 + d1);
-    T thin = thin0 > thin1 ? thin0 : thin1;
-    thin = thin > thin2 ? thin : thin2;
-  }
-
-  void update_all() {
-    this->update_vertex_faces();
-    this->renumber_vertex_IDs();
-    this->update_normal();
-    this->update_center();
-    // this->update_vertex_normals();
-    mArea = this->calc_area();
-  }
-
-  void renumber_vertex_IDs() {
-    face_vertex_ptr itb = fbegin();
-    face_vertex_ptr ite = fend();
-    size_t new_id = 0;
-    bool at_head = false;
-    bool iterating = true;
-    int i = 0;
-    while (iterating && i < 200) {
-      iterating = itb != ite;
-      itb->position_in_face() = new_id;
-      itb = itb->next();
-      new_id++;
-      i++;
-    }
-    this->mSize = new_id;
-  }
-
-  void update_vertex_faces() {
-    face_vertex_ptr itb = fbegin();
-    face_vertex_ptr ite = fend();
-    int i = 0;
-    bool at_head = false;
-    while (!at_head) {
-      if (itb->vertex() == NULL)
-        std::cout << "NULL VERTEX: " << std::endl;
-      if (itb->next() == NULL)
-        std::cout << "NULL NEXT: " << std::endl;
-      if (itb->prev() == NULL)
-        std::cout << "NULL PREV: " << std::endl;
-      at_head = itb == ite;
-      itb->face() = this;
-      itb = itb->next();
-      i++;
-    }
-  }
-
-  void update_vertex_normals() {
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-    int i = 0;
-    bool at_head = false;
-    while (!at_head && i < 200) {
-      if (itb == ite) {
-        at_head = true;
-      }
-      itb->vertex()->update_normal();
-      itb = itb->next();
-      i++;
-    }
-  }
-  /*
-  coordinate_type calculate_center(){
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-    coordinate_type out(0,0,0,0);
-    int i = 0;
-    bool at_head = false;
-    while (!at_head && i < 200) {
-      at_head = itb == ite;
-      out += itb->coordinate();
-      itb = itb->next(); i++;
-    }
-    out /= (T)this->size();
-    return out;
-  }
-
-  */
-  void delete_covertices() {
-    face_vertex_ptr itb = fHead->next();
-    face_vertex_ptr ite = fHead;
-    face_vertex_ptr nxt;
-
-    bool at_head = false;
-    while (!at_head) {
-      at_head = itb == ite;
-      nxt = itb->next();
-      if (itb->vertex_ID() == nxt->vertex_ID()) {
-        if (itb->next() == fHead) {
-          fHead = itb;
-          ite = fHead;
-        }
-        itb->delete_next();
-      }
-      itb = itb->next();
-    }
-    this->renumber_vertex_IDs();
-  }
-
-  T calc_area() {
-    face_vertex_ptr it0 = fHead;
-    face_vertex_ptr it1 = it0->next();
-    face_vertex_ptr it2 = it1->next();
-    face_vertex_ptr ite = fHead->prev();
-
-    coordinate_type c0 = it0->coordinate();
-    T out = 0;
-    bool iterating = true;
-    while (iterating) {
-      iterating = it2 != ite;
-      coordinate_type c1 = it1->coordinate();
-      coordinate_type c2 = it2->coordinate();
-      coordinate_type c10 = c1 - c0;
-      coordinate_type c20 = c2 - c0;
-      coordinate_type n = va::cross(c10, c20);
-      out += n.norm() * 0.5;
-      it1 = it1->next();
-      it2 = it2->next();
-    }
-    return out;
-  }
-
-  void update_normal() {
-
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-    mNormal = coordinate_type(0, 0, 0);
-    bool iterating = true;
-
-    while (iterating) {
-      iterating = itb != ite;
-      coordinate_type curr = itb->coordinate();
-      coordinate_type next = itb->next()->coordinate();
-      mNormal[0] += (curr[1] - next[1]) * (curr[2] + next[2]);
-      mNormal[1] += (curr[2] - next[2]) * (curr[0] + next[0]);
-      mNormal[2] += (curr[0] - next[0]) * (curr[1] + next[1]);
-      itb = itb->next();
-    }
-
-    mNormal.normalize();
-    //            mNormal = fnormalize(mNormal);
-    ncolor.r = 0.5 + mNormal[0] * 0.5;
-    ncolor.g = 0.5 + mNormal[1] * 0.5;
-    ncolor.b = 0.5 + mNormal[2] * 0.5;
-    ncolor.a = 1.0;
-    calc_normal = false;
-  }
-
-  void update_center() { mCenter = this->calc_center(); }
-
-  void draw() {
-    this->draw_face();
-    // this->draw_normal(0.0);
-  }
-
-  void draw(T off) {
-    //			this->draw_normal(off);
-    this->draw_face(off);
-    //			this->draw_face_vertices(off);
-  }
-
-  std::vector<triangle_type> get_tris() {
-    std::vector<triangle_type> tris;
-
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr c0 = fHead;
-    face_vertex_ptr c1 = c0->next();
-    face_vertex_ptr c2 = c1->next();
-    face_vertex_ptr ite = fHead;
-
-    coordinate_type &v0 = c0->coordinate();
-
-    //std::cout << "face size: " << mSize << std::endl;
-    bool at_head;
-    while (!at_head) {
-      at_head = ite == c2;
-      coordinate_type &v1 = c1->coordinate();
-      coordinate_type &v2 = c2->coordinate();
-      
-      if ((v1 - v0).norm() == 0)
-        continue;
-      if ((v2 - v0).norm() == 0)
-        continue;
-
-      tris.push_back(triangle_type(v0, v1, v2));
-      c1 = c2;
-      c2 = c2->next();
-    }
-    //std::cout << "tri size: " << tris.size() << std::endl;
-    return tris;
-  }
-  /*
-  void draw_vertex_colors(){
-    if (calc_normal) {
-      this->update_normal();
-    }
-
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr c0 = fHead;
-    face_vertex_ptr c1 = c0->next();
-    face_vertex_ptr c2 = c1->next();
-    face_vertex_ptr ite = fHead->prev();
-
-    coordinate_type& vect0 = c0->coordinate();
-
-    glDisable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);					// Enables Depth
-  Testing glEnable(GL_LIGHTING); glEnable(GL_COLOR_MATERIAL);
-    glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
-    glColorMaterial(GL_FRONT, GL_SHININESS);
-    glShadeModel(GL_SMOOTH);
-
-    glBegin(GL_TRIANGLE_FAN);
-    glNormal3f(mNormal[0], mNormal[1], mNormal[2]);
-    gl_set_color(c0->vertex()->color);
-    glVertex3f(vect0[0],
-               vect0[1],
-               vect0[2]);
-    bool at_head;
-    while (!at_head) {
-      at_head = itb==ite;
-
-      coordinate_type& vect1 = c1->coordinate();
-      coordinate_type& vect2 = c2->coordinate();
-      bool vNULL = &vect0 != NULL;
-      if (vNULL) {
-        gl_set_color(c1->vertex()->color);
-        glVertex3f(vect1[0],
-                   vect1[1],
-                   vect1[2]);
-        gl_set_color(c2->vertex()->color);
-        glVertex3f(vect2[0],
-                   vect2[1],
-                   vect2[2]);
-      }
-      c1 = c2;
-      c2 = c2->next();
-      itb = itb->next();
-    }
-    glEnd();
-    glEnable(GL_BLEND);
-    glDisable(GL_LIGHTING);
-  }
-  */
-  /*
-  void draw_face(){
-    if (calc_normal) {
-      this->update_normal();
-    }
-
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr c0 = fHead;
-    face_vertex_ptr c1 = c0->next();
-    face_vertex_ptr c2 = c1->next();
-    face_vertex_ptr ite = fHead->prev();
-
-    coordinate_type& vect0 = c0->coordinate();
-
-    glDisable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);					// Enables Depth
-  Testing glEnable(GL_LIGHTING); glEnable(GL_COLOR_MATERIAL);
-    glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
-    glColorMaterial(GL_FRONT, GL_SHININESS);
-    glShadeModel(GL_SMOOTH);
-
-    glBegin(GL_TRIANGLE_FAN);
-    glNormal3f(mNormal[0], mNormal[1], mNormal[2]);
-    gl_set_color(color);
-
-    if(c0->vertex()->pinned)
-      glColor3f(1,0,0);
-
-    glVertex3f(vect0[0],
-               vect0[1],
-               vect0[2]);
-    bool at_head;
-    while (!at_head) {
-      at_head = itb==ite;
-
-      coordinate_type& vect1 = c1->coordinate();
-      coordinate_type& vect2 = c2->coordinate();
-      bool vNULL = &vect0 != NULL;
-      if (vNULL) {
-        //glColor3f(randd(1.0), randd(1.0), randd(1.0));
-        if(c1->vertex()->pinned)
-          glColor3f(1,0,0);
-        else
-          gl_set_color(color);
-        glVertex3f(vect1[0],
-                   vect1[1],
-                   vect1[2]);
-        //glColor3f(randd(1.0), randd(1.0), randd(1.0));
-        if(c2->vertex()->pinned)
-          glColor3f(1,0,0);
-        else
-          gl_set_color(color);
-
-        glVertex3f(vect2[0],
-                   vect2[1],
-                   vect2[2]);
-      }
-      c1 = c2;
-      c2 = c2->next();
-      itb = itb->next();
-    }
-    glEnd();
-    glEnable(GL_BLEND);
-    glDisable(GL_LIGHTING);
-  }
-  */
-  /*
-  void draw_face(T off){
-
-    if (calc_normal) {
-      this->update_normal();
-    }
-
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-
-
-    glBegin(GL_POLYGON);
-    gl_set_color(color);
-    glColor4f(color.r,color.g,color.b,data3);
-    glNormal3f(mNormal[0], mNormal[1], mNormal[2]);
-    bool at_head = false;
-    while (!at_head) {
-      at_head = itb==ite;
-      coordinate_type& vect = itb->coordinate();
-      if (&vect != NULL) {
-        glVertex3f(vect[0] + off*mNormal[0],
-                   vect[1] + off*mNormal[1],
-                   vect[2] + off*mNormal[2]);
-      }
-      itb = itb->next();
-    }
-
-    glEnd();
-  }
-  */
-  /*
-  void draw_face_vertices(T off){
-    face_vertex_ptr itb = fHead;
-    face_vertex_ptr ite = fHead->prev();
-
-    bool at_head = false;
-    while (!at_head) {
-      if (itb == ite) {
-        at_head = true;
-      }
-      itb->draw(off);
-      itb = itb->next();
-    }
-
-    glEnd();
-  }
-  */
-
-  /*
-  void draw_normal(T off){
-
-    this->update_normal();
-    this->update_center();
-
-    T norm_dist = 0.01;
-    T n0x = mCenter[0] + mNormal[0]*off;
-    T n0y = mCenter[1] + mNormal[1]*off;
-    T n0z = mCenter[2] + mNormal[2]*off;
-    T n1x = n0x + mNormal[0]*norm_dist;
-    T n1y = n0y + mNormal[1]*norm_dist;
-    T n1z = n0z + mNormal[2]*norm_dist;
-
-    gl_set_color(ncolor);
-    glLineWidth(0.25);
-    glBegin(GL_LINES);
-    glVertex3f(n0x, n0y, n0z);
-    glVertex3f(n1x, n1y, n1z);
-    glEnd();
-  }
-  */
-
-  bool has_vertex(vertex_ptr v) {
-    face_vertex_ptr itb = fbegin();
-    face_vertex_ptr ite = fend();
-    bool iterating = true;
-    while (iterating) {
-      iterating = itb != ite;
-      if (itb->next()->vertex() == v)
-        return true;
-      itb = itb->next();
-    }
-    return false;
-  }
-
-  void verify() {
-    face_vertex_ptr itb = fbegin();
-    face_vertex_ptr ite = fend();
-    bool iterating = true;
-    while (iterating) {
-      iterating = itb != ite;
-      assert(itb->prev()->next() == itb);
-      assert(itb->next()->prev() == itb);
-      assert(itb->face() == this);
-      itb = itb->next();
-    }
-  }
-
-  void print() {
-    cout << "face " << mSetPosition << ": number of vertices: " << this->size()
-         << endl;
-    cout << "vertices: " << endl;
-
-    face_vertex_ptr itb = fbegin();
-    face_vertex_ptr ite = fend();
-    size_t new_id = 0;
-    bool iterating = true;
-    while (iterating) {
-      iterating = itb != ite;
-      cout << itb->vertex()->position_in_set() << ", ";
-      itb = itb->next();
-    }
-    cout << endl;
-  }
-
-  T area() {
-    this->calc_area();
-    return mArea;
-  }
-  coordinate_type &normal() { return mNormal; }
-  coordinate_type &center() { return mCenter; }
-
-  size_t ID() const { return this->mID; }
-  //		size_t	size()		const	{return
-  // this->fHead->prev()->face_ID() + 1;}
-
-  T &x() { return mCenter[0]; }
-  T &y() { return mCenter[1]; }
-  T &z() { return mCenter[2]; }
-
-  T x() const { return mCenter[0]; }
-  T y() const { return mCenter[1]; }
-  T z() const { return mCenter[2]; }
-  int group() const { return mGroup; }
-  int &group() { return mGroup; }
-
-protected:
-  // face_vertex_array	mVertices;
-  int mGroup;
-
-  face_vertex_ptr fHead;
-  coordinate_type mCenter;
-  coordinate_type mNormal;
-  T mArea;
-  int mID;
-  int mSize;
-
-  int mSetPosition;
-
-  bool calc_normal;
-  // bool calc_center;
-
-public:
-  colorRGB color;
-  colorRGB ncolor;
-  unsigned int flag;
-  coordinate_type data;
-  coordinate_type data2;
-  T data3;
-};
-
-template <typename SPACE> class face_vertex {
+  template <class ITYPE> class data_node;
+  class face_vertex;
+  class face;
+  class edge;
+  class vertex;
 
   M2_TYPEDEFS
 
-public:
-  face_vertex() {
-    mVertex = NULL;
-    mEdge = NULL;
-    mFace = NULL;
+  class datum {
+  public:
+    datum() {}
+    ~datum() {}
 
-    m2::ID &manager = m2::ID::get_instance();
-    mID = manager.new_face_vertex_id();
-    fID = 0;
-    flag = 0;
-    data = 0;
-  }
+    template <class CTYPE> CTYPE get() {
+      return *static_cast<CTYPE *>(_datum);
+    }
 
-  face_vertex(const face_vertex_ref rhs) {
-    this->mEdge = rhs.mEdge;
-    //			mEdge->set_this(&rhs,this);
-    this->mFace = rhs.mFace;
-    this->mVertex = rhs.mVertex;
-    this->nxt_face = rhs.nxt_face;
-    this->prv_face = rhs.prv_face;
-    this->data = rhs.data;
-    fID = 0;
+    template <class CTYPE> void set(const CTYPE &in) {
+      _datum = static_cast<void *>(new CTYPE(in));
+    }
 
-    m2::ID &manager = m2::ID::get_instance();
-    mID = manager.new_face_vertex_id();
-
-    flag = 0;
-  }
-
-  ~face_vertex(){
-      // mVertex->remove_face_vertex(mVertexPosition);
+    void *_datum;
   };
 
-  bool operator==(const face_vertex_ref rhs) {
-    if (mID == rhs.mID) {
-      return true;
-    } else
-      return false;
-  }
-
-  face_vertex_ref operator=(const face_vertex_ref rhs) {
-    face_vertex_ptr out = new face_vertex_type(rhs);
-    out->mEdge->update_vertex(&rhs, this);
-    return *out;
-  }
-
-  T angle() {
-    coordinate_type ci = this->coordinate();
-    coordinate_type ca = this->next()->coordinate();
-    coordinate_type cb = this->prev()->coordinate();
-    coordinate_type cai = ca - ci;
-    coordinate_type cbi = cb - ci;
-    T maga = sqrt(cai[0] * cai[0] + cai[1] * cai[1] + cai[2] * cai[2]);
-    T magb = sqrt(cbi[0] * cbi[0] + cbi[1] * cbi[1] + cbi[2] * cbi[2]);
-    T dotab = cai[0] * cbi[0] + cai[1] * cbi[1] + cai[2] * cbi[2];
-    return acos(dotab / (maga * magb));
-  }
-
-  T cotan() {
-    // assumes triangls
-    coordinate_type c0 = this->prev()->coordinate();
-    coordinate_type c1 = this->coordinate();
-    coordinate_type c2 = this->next()->coordinate();
-    return va::cotan(c0, c1, c2);
-  }
-
-  coordinate_type directed_vector() {
-    coordinate_type c0 = this->coordinate();
-    coordinate_type c1 = this->coedge()->coordinate();
-    return c0 - c1;
-  }
-
-  face_vertex_ptr coedge() { return mEdge->other(this); }
-
-  face_ref get_face() { return *mFace; }
-
-  face_vertex_ptr add_next() {
-    face_vertex_ptr out = new face_vertex(*this);
-    face_vertex_ptr nxt = this->nxt_face;
-    out->next() = nxt;
-    nxt->prev() = out;
-    out->prev() = this;
-    this->next() = out;
-
-    mFace->size() += 1;
-
-    out->face() = this->face();
-    out->face()->fbegin() = out;
-    this->vertex()->add_face_vertex(out);
-    this->vertex()->front() = out;
-
-    return out;
-  }
-
-  face_vertex_ptr add_prev() {
-    face_vertex_ptr out = new face_vertex(*this);
-    face_vertex_ptr prv = this->prv_face;
-    out->prev() = prv;
-    prv->next() = out;
-    out->next() = this;
-    this->prev() = out;
-
-    // prv->edge()->set_this(this,out);
-    mFace->size() += 1;
-
-    out->face() = this->face();
-    out->face()->fbegin() = out;
-    this->vertex()->add_face_vertex(out);
-    this->vertex()->front() = out;
-    return out;
-  }
-
-  face_vertex_ptr &next() { return nxt_face; }
-  face_vertex_ptr next() const { return nxt_face; }
-  face_vertex_ptr &prev() { return prv_face; }
-  face_vertex_ptr prev() const { return prv_face; }
-
-  face_vertex_ptr vnext() {
-    if (mEdge == NULL) {
-      return NULL;
-    } else {
-      face_vertex_ptr out = mEdge->other(this);
-      return out->next();
+  template <typename T>
+  class datum_t : public datum {
+  public:
+    datum_t(T d) {
+      this->template set<T>(d);
     }
-  }
+  };
 
-  face_vertex_ptr vprev() {
-    if (this->prev() == NULL || this->prev()->mEdge == NULL) {
-      return NULL;
-    } else {
-      face_vertex_ptr out = this->prev();
-      if (out->mEdge)
-        return out->mEdge->other(out);
+  template <class ITYPE> class data_node {
+  public:
+    datum &operator[](ITYPE i) { return _ddata[static_cast<int>(i)]; }
+
+    const datum &operator[](ITYPE i) const {
+      return _ddata[static_cast<int>(i)];
+    }
+
+    int size() const { return size_; }
+
+    template <typename TYPE> TYPE get(const ITYPE &i) {
+      return _ddata[static_cast<int>(i)].template get<TYPE>();
+    }
+
+    template <typename TYPE> void set(const TYPE &d, const ITYPE &i) {
+      _ddata[static_cast<int>(i)] = datum_t<TYPE>(d);
+    }
+
+  private:
+    datum _ddata[static_cast<int>(ITYPE::MAXINDEX) + 1];
+    int size_ = static_cast<int>(ITYPE::MAXINDEX) + 1;
+  };
+
+  class edge : public data_node<typename SPACE::edge_index> {
+
+  public:
+    edge() {
+      fv1 = NULL;
+      fv2 = NULL;
+      mSetPosition = -1;
+      m2::ID &manager = m2::ID::get_instance();
+      mID = manager.new_edge_id();
+      flag = 0;
+      delete_flag = 0;
+    };
+
+    edge(face_vertex_ptr in1, face_vertex_ptr in2) {
+      mSetPosition = -1;
+      fv1 = in1;
+      fv2 = in2;
+      in1->edge() = this;
+      in2->edge() = this;
+      flag = 0;
+      delete_flag = 0;
+    }
+
+    edge_ref operator=(edge_ref rhs) {
+      edge_ptr out = new edge_type(*rhs.fv1, *rhs.fv2);
+      m2::ID &manager = m2::ID::get_instance();
+      out->mID = manager.new_edge_id();
+      return *out;
+    }
+
+    ~edge(){};
+
+    int &position_in_set() { return mSetPosition; }
+    int position_in_set() const { return mSetPosition; }
+
+    int group() const { return mGroup; }
+    int &group() { return mGroup; }
+
+    size_t ID() const { return this->mID; }
+
+    face_vertex_ptr &v1() { return fv1; }
+    face_vertex_ptr v1() const { return fv1; }
+    face_vertex_ptr &v2() { return fv2; }
+    face_vertex_ptr v2() const { return fv2; }
+
+    face_vertex_ptr other(const face_vertex_ptr &cv) const {
+      if (cv == fv1) {
+        return fv2;
+      } else
+        return fv1;
+    }
+
+    face_vertex_ptr this_fv(face_vertex_ptr cv) const {
+      if (cv != fv1) {
+        return fv2;
+      } else
+        return fv1;
+    }
+
+    void set(face_vertex_ptr nfv1, face_vertex_ptr nfv2) {
+      // lets be a little careful and make sure we maintain order.
+      // its probably not a problem, but...
+
+      if (nfv1 == fv2 || nfv2 == fv1) {
+        fv1 = nfv2;
+        fv2 = nfv1;
+      } else {
+        fv1 = nfv1;
+        fv2 = nfv2;
+      }
+
+      fv1 = nfv1;
+      fv2 = nfv2;
+      nfv1->edge() = this;
+      nfv2->edge() = this;
+    }
+
+    void set_this(face_vertex_ptr this_vertex, face_vertex_ptr new_vertex) {
+      if (this_vertex == fv1)
+        fv1 = new_vertex;
       else
-        return NULL;
+        fv2 = new_vertex;
+      new_vertex->edge() = this;
     }
-  }
 
-  void draw(T off) {
-    this->draw_vertex(off);
-    this->draw_tail(off);
-  }
-  /*
-  void draw_vertex(T off){
-
-    coordinate_type n1 = mFace->normal();
-
-    T
-      t0x = n1[0]*off + this->x(),
-      t0y = n1[1]*off + this->y(),
-      t0z = n1[2]*off + this->z();
-
-    //			glPushMatrix();
-    glPointSize(2.0f);
-    glBegin(GL_POINTS);
-    glColor4f(0.0,0.0,0.0,0.0);
-    glVertex3f(t0x,t0y,t0z);
-    glEnd();
-    //			glPopMatrix();
-  }
-  */
-  /*
-  void draw_tail(T off){
-
-    coordinate_type n1 = mFace->normal();
-    T
-      t0x = n1[0]*off + this->x(),
-      t0y = n1[1]*off + this->y(),
-      t0z = n1[2]*off + this->z(),
-
-      t1x = t0x - (this->x() - nxt_face->x())*0.3,
-      t1y = t0y - (this->y() - nxt_face->y())*0.3,
-      t1z = t0z - (this->z() - nxt_face->z())*0.3;
-
-    //			glPushMatrix();
-    glLineWidth(0.5f);
-    glBegin(GL_LINES);
-    glColor4f(0.1,0.1,0.1,0.0);
-    glVertex3f(t0x, t0y, t0z);
-    glVertex3f(t1x, t1y, t1z);
-    glEnd();
-    //			glPopMatrix();
-  }
-  */
-
-  edge_ptr &edge() { return mEdge; }
-  edge_ptr edge() const { return mEdge; }
-  face_ptr &face() { return mFace; }
-  face_ptr face() const { return mFace; }
-  face_ptr coface() const { return mEdge->other(this)->face(); }
-  vertex_ptr &vertex() { return mVertex; }
-  vertex_ptr vertex() const { return mVertex; }
-
-  int vertex_ID() const { return mVertex->ID(); }
-  int ID() const { return this->mID; }
-  int face_ID() const { return this->mFacePosition; }
-  int &face_ID() { return this->mFacePosition; }
-
-  int &position_in_face() { return mFacePosition; }
-  int position_in_face() const { return mFacePosition; }
-  void set_edge(edge_ref input) { mEdge = &input; };
-  void set_face(face_ref input) { mFace = &input; };
-  void set_vertex(vertex_ref input) { mVertex = &input; };
-
-  coordinate_type &coordinate() { return mVertex->coordinate(); }
-
-  T &x() { return mVertex->coordinate()[0]; }
-  T x() const { return mVertex->coordinate()[0]; }
-  T &y() { return mVertex->coordinate()[1]; }
-  T y() const { return mVertex->coordinate()[1]; }
-  T &z() { return mVertex->coordinate()[2]; }
-  T z() const { return mVertex->coordinate()[2]; }
-  int &group() { return mGroup; }
-  int group() const { return mGroup; }
-  T &operator[](int i) { return mVertex->coordinate()[i]; }
-  T operator[](int i) const { return mVertex->coordinate()[i]; }
-
-protected:
-  int mGroup;
-  int mID;
-  int fID;
-
-  face_vertex_ptr nxt_face;
-  face_vertex_ptr prv_face;
-
-  edge_ptr mEdge;
-  face_ptr mFace;
-  vertex_ptr mVertex;
-
-  int mFacePosition;
-
-public:
-  unsigned int flag;
-  T data;
-};
-
-template <typename SPACE, typename F>
-void for_each(m2::vertex<SPACE> *v, F &func) {
-  M2_TYPEDEFS;
-  face_vertex_ptr fvb = v->fbegin();
-  face_vertex_ptr fve = v->fend();
-  bool iterating = true;
-  while (iterating) {
-    iterating = fvb != fve;
-    func(fvb);
-    fvb = fvb->vnext();
-  }
-}
-
-template <typename SPACE> class vertex {
-  M2_TYPEDEFS;
-
-public:
-  int graphColor;
-  bool smooth;
-  int isDegenerate;
-  colorRGB color;
-
-  vertex() {
-    int graphColor = -1;
-    // mNormal.zero();
-    mNormal = coordinate_type(0.0, 0.0, 0.0);
-    mCoordinate = coordinate_type(0.0, 0.0, 0.0);
-    m2::ID &manager = m2::ID::get_instance();
-    mID = manager.new_vertex_id();
-
-    flag = 0;
-    mSize = 0;
-    color.r = 0.4 + randd(0.1);
-    color.g = 0.4 + randd(0.1);
-    color.b = 0.4 + randd(0.1);
-    color.a = 1.0;
-    pinned = false;
-    mFront = NULL;
-    mSetPosition = -1;
-    winding = 0;
-    data2 = 0;
-    isDegenerate = -1;
-  }
-
-  vertex(T x, T y, T z) {
-    int graphColor = -1;
-
-    mCoordinate = coordinate_type(0.0, 0.0, 0.0);
-    mCoordinate[0] = x;
-    mCoordinate[1] = y;
-    mCoordinate[2] = z;
-    mNormal = coordinate_type(0.0, 0.0, 0.0);
-
-    m2::ID &manager = m2::ID::get_instance();
-    mID = manager.new_vertex_id();
-
-    flag = 0;
-    mSize = 0;
-    color.r = 0.4 + randd(0.1);
-    color.g = 0.4 + randd(0.1);
-    color.b = 0.4 + randd(0.1);
-    color.a = 1.0;
-    pinned = false;
-    mFront = NULL;
-    mSetPosition = -1;
-    winding = 0;
-    data2 = 0;
-    isDegenerate = -1;
-  }
-
-  vertex(coordinate_type co) {
-    int graphColor = -1;
-    mCoordinate[0] = co[0];
-    mCoordinate[1] = co[1];
-    mCoordinate[2] = co[2];
-    mNormal.setZero();
-
-    m2::ID &manager = m2::ID::get_instance();
-    mID = manager.new_vertex_id();
-
-    flag = 0;
-    mSize = 0;
-    color.r = 0.4 + randd(0.1);
-    color.g = 0.4 + randd(0.1);
-    color.b = 0.4 + randd(0.1);
-    color.a = 1.0;
-    pinned = false;
-    mFront = NULL;
-    mSetPosition = -1;
-    winding = 0;
-    data2 = 0;
-    isDegenerate = -1;
-  }
-
-  void init() {
-    int graphColor = -1;
-    face_ptr new_face = new face_type(*this);
-    face_vertex_ptr new_fv = new_face->fbegin();
-    new_fv->face() = new_face;
-    this->add_face_vertex(new_fv);
-    pinned = false;
-    data2 = 0;
-  }
-
-  int &position_in_set() { return mSetPosition; }
-
-  T &x() { return mCoordinate[0]; }
-  T x() const { return mCoordinate[0]; }
-  T &y() { return mCoordinate[1]; }
-  T y() const { return mCoordinate[1]; }
-  T &z() { return mCoordinate[2]; }
-  T z() const { return mCoordinate[2]; }
-  T &operator[](int i) { return mCoordinate[i]; }
-  T operator[](int i) const { return mCoordinate[i]; }
-
-  int &group() { return mGroup; }
-  int group() const { return mGroup; }
-
-  int &ID() { return mSetPosition; }
-  int ID() const { return mSetPosition; }
-
-  int calc_size() {
-    face_vertex_ptr fvb = this->fbegin();
-    face_vertex_ptr fve = this->fend();
-    bool iterating = true;
-    int sz = 0;
-    while (iterating) {
-      iterating = fvb != fve;
-      fvb = fvb->vnext();
-      sz++;
+    void set_other(face_vertex_ptr this_vertex, face_vertex_ptr new_vertex) {
+      if (this_vertex == fv1)
+        fv2 = new_vertex;
+      else
+        fv1 = new_vertex;
+      new_vertex->edge() = this;
     }
-    return sz;
-  }
 
-  int size() { return mSize; }
-  coordinate_type normal() const { return mNormal; }
-  coordinate_type &coordinate() { return mCoordinate; }
-  coordinate_type coordinate() const { return mCoordinate; }
-
-  void add_face_vertex(face_vertex_ptr new_fv) {
-    mFront = new_fv;
-    mSize++;
-    // mFaceVertices.push_back(new_fv);
-    // fvl_iterator end = mFaceVertices.end();
-    // end--;
-    // new_fv->position_in_vertex() = end;
-    new_fv->vertex() = this;
-  }
-
-  void remove_face_vertex(face_vertex_ptr fv) {
-    // mFront = fv->vnext();
-    mSize--;
-    // mFaceVertices.erase(it);
-
-    // if (mFaceVertices[in]) {
-    // 	face_vertex_ptr fv = mFaceVertices[in];
-    // 	mFaceVertices[in] = NULL;
-    // 	mRecycle.push_back(in);
-    // }
-  }
-
-  // void pack(){
-  //   if (mRecycle.size() > 0) {
-  // 	vector<face_vertex_ptr> tFaceVertices;
-  // 	int j = 0;
-  // 	for (int i = 0; i < mFaceVertices.size(); i++) {
-  // 	  if(mFaceVertices[i]){
-  // 	    tFaceVertices.push_back(mFaceVertices[i]);
-  // 	    tFaceVertices.back()->position_in_vertex() = j;
-  // 	    j++;
-  // 	  }
-  // 	}
-  // 	swap(mFaceVertices,tFaceVertices);
-  //   mRecycle.clear();
-  //   }
-  // }
-
-  face_vertex_ptr &front() { return mFront; }
-  face_vertex_ptr fbegin() { return this->front(); }
-  face_vertex_ptr fend() { return this->front()->vprev(); }
-
-  T thinness() {
-    if (mSize == 0)
-      return 0.0;
-    vertex_ptr v = this;
-    face_vertex_ptr fvb = v->fbegin();
-    face_vertex_ptr fve = v->fend();
-    bool iterating = true;
-    T vthin = 0;
-    int s = 0;
-    while (iterating) {
-      iterating = fvb != fve;
-      vthin += fvb->face()->thinness();
-      fvb = fvb->vnext();
-      s++;
+    void set_other(face_ptr cv, face_vertex_ptr ov) {
+      if (cv->face() == fv1->face()) {
+        return fv2 = ov;
+      } else
+        fv1 = ov;
     }
-    vthin /= (T)s;
 
-    return vthin;
-  }
-
-  bool shares_edge_with(vertex_ptr vi) {
-    if (mSize == 0)
-      return false;
-    vertex_ptr v = this;
-    face_vertex_ptr fvb = v->fbegin();
-    face_vertex_ptr fve = v->fend();
-    bool iterating = true;
-    bool share = false;
-    while (iterating) {
-      iterating = fvb != fve;
-      if (fvb->next()->vertex() == vi)
-        share = true;
-      fvb = fvb->vnext();
+    coordinate_type normal() {
+      coordinate_type n1 = fv1->face()->normal();
+      coordinate_type n2 = fv2->face()->normal();
+      coordinate_type na = n1 + n2;
+      na.normalize();
+      return na;
     }
-    return share;
-  }
 
-  edge_ptr get_shared_edge(vertex_ptr vi) {
-    if (mSize == 0)
-      return false;
-    vertex_ptr v = this;
-    face_vertex_ptr fvb = v->fbegin();
-    face_vertex_ptr fve = v->fend();
-    bool iterating = true;
-    bool share = false;
-    while (iterating) {
-      iterating = fvb != fve;
-      if (fvb->coedge()->vertex() == vi)
-        return fvb->edge();
-      fvb = fvb->vnext();
+    T cotan() {
+      face_vertex_ptr fv1p = fv1->prev();
+      face_vertex_ptr fv2p = fv2->prev();
+      return fv1p->cotan() + fv2p->cotan();
     }
-    return NULL;
-  }
 
-  face_vertex_ptr get_insertion_face_vertex(vertex_ptr that) {
-    if (size() > 1) {
-      return find_insertion_face_vertex(that);
-    } else {
-      return mFront;
+    void update_vertex(face_vertex_ptr old_, face_vertex_ptr new_) {
+      if (fv1 == old_) {
+        fv1 = new_;
+      } else {
+        fv2 = new_;
+      }
     }
-  }
 
-  face_vertex_ptr find_insertion_face_vertex(vertex_ptr that) {
+    face_ptr coface(face_vertex_ptr this_vert) const {
+      if (this_vert == fv1) {
+        return fv2->face();
+      } else {
+        return fv1->face();
+      }
+    }
 
-    face_vertex_ptr itb = mFront;
-    face_vertex_ptr ite = itb->vprev();
+    void verify() {
+      assert(fv1->edge() == this);
+      assert(fv2->edge() == this);
+    };
 
-    coordinate_type this_point = this->coordinate();
-    coordinate_type that_point = that->coordinate();
-    coordinate_type next_pt, xc, xp;
-    face_vertex_ptr out = itb;
-    T d;
-    size_t sz = size();
-    coordinate_type dp = that_point - this_point;
-    coordinate_type dnp = ite->next()->coordinate() - this_point;
-    xp = va::cross(dp, dnp);
-    next_pt = itb->next()->coordinate();
-    T dt = va::dist(that_point, next_pt);
-    d = dt;
-    while (itb != ite) {
-      next_pt = itb->next()->coordinate();
-      // coordinate_type dp  = that_point - this_point;
-      coordinate_type dnp = next_pt - this_point;
-      xc = va::cross(dp, dnp);
-      T s = xc[0] * xp[0] + xc[1] * xp[1] + xc[2] * xp[2];
+    void update_face_vertices() {
+      fv1->edge() = this;
+      fv2->edge() = this;
+    }
 
-      T dt = va::dist(that_point, next_pt);
-      if (s < 0) {
-        if (dt < d) {
-          d = dt;
-          out = itb;
+    int vnum(face_vertex_ptr v) {
+      if (v == fv1)
+        return 1;
+      else if (v == fv2)
+        return 2;
+      else
+        return 0;
+    }
+
+    coordinate_type vec() {
+      coordinate_type c0 = this->v1()->coordinate();
+      coordinate_type c1 = this->v2()->coordinate();
+      return c0 - c1;
+    }
+
+    T dist() {
+      coordinate_type c0 = this->v1()->coordinate();
+      coordinate_type c1 = this->v2()->coordinate();
+      return (c0 - c1).norm();
+    }
+
+    T length() {
+      coordinate_type c0 = this->v1()->coordinate();
+      coordinate_type c1 = this->v2()->coordinate();
+      return (c0 - c1).norm();
+    }
+
+    face_vertex_ptr fv1;
+    face_vertex_ptr fv2;
+
+  protected:
+    size_t mID;
+    int mSetPosition;
+    int mGroup;
+
+  public:
+    unsigned int idata;
+    unsigned int flag;
+    unsigned int delete_flag;
+  };
+
+  class face : public data_node<typename SPACE::face_index> {
+
+  public:
+    face() {
+      m2::ID &manager = m2::ID::get_instance();
+      mID = manager.new_face_id();
+      flag = 0;
+      color.r = 0.4 + randd(0.1);
+      color.g = 0.4 + randd(0.1);
+      color.b = 0.4 + randd(0.1);
+      color.a = 0.75;
+      fHead = NULL;
+      mArea = 0.0;
+      mSetPosition = -1;
+      mSize = 0;
+      data3 = 1.0;
+      mNormal = coordinate_type(0, 0, 0);
+      mCenter = coordinate_type(0, 0, 0);
+      flag = 0;
+
+      data = coordinate_type(0, 0, 0);
+      data2 = coordinate_type(0, 0, 0);
+      data3 = 1.0;
+    }
+
+    face(vertex_ref pnt) {
+      // this makes a the face in a hypersphere from one point
+      m2::ID &manager = m2::ID::get_instance();
+      mID = manager.new_face_id();
+
+      face_vertex_ptr nfv = new face_vertex_type();
+      mSize = 1;
+      mArea = 0.0;
+
+      nfv->vertex() = &pnt;
+      nfv->face() = this;
+
+      nfv->prev() = nfv;
+      nfv->next() = nfv;
+
+      fHead = nfv;
+      this->renumber_vertex_IDs();
+
+      flag = 0;
+
+      color.r = 0.8 + randd(0.2);
+      color.g = 0.0 + randd(0.1);
+      color.b = 0.0 + randd(0.1);
+      color.a = 1.0;
+      mSetPosition = -1;
+
+      mNormal = coordinate_type(0, 0, 0);
+
+      data = coordinate_type(0, 0, 0);
+      data2 = coordinate_type(0, 0, 0);
+      data3 = 1.0;
+    }
+
+    face(face_vertex_ptr &fv0, face_vertex_ptr &fv1, face_vertex_ptr &fv2) {
+      // this makes a the face in a hypersphere from one point
+      m2::ID &manager = m2::ID::get_instance();
+      mID = manager.new_face_id();
+
+      face_vertex_ptr nfv = new face_vertex_type();
+      mSize = 1;
+      mArea = 0.0;
+      fv0->next() = fv1;
+      fv1->next() = fv2;
+      fv2->next() = fv0;
+
+      fv2->prev() = fv1;
+      fv1->prev() = fv0;
+      fv0->prev() = fv2;
+
+      fv0->face() = this;
+      fv1->face() = this;
+      fv2->face() = this;
+
+      this->fbegin() = fv0;
+      mNormal = coordinate_type(0, 0, 0);
+
+      data = coordinate_type(0, 0, 0);
+      data2 = coordinate_type(0, 0, 0);
+      data3 = 1.0;
+    }
+
+    ~face() {
+      // std::cout << "erasing face: " << ID() << std::endl;
+    }
+
+    int &size() { return mSize; }
+    int size() const { return mSize; }
+
+    int &position_in_set() { return mSetPosition; }
+    int position_in_set() const { return mSetPosition; }
+
+    // TODO: delete setHead... actually make all fronts() set_fronts()
+    void setHead(face_vertex_ptr head) { fHead = head; }
+    face_vertex_ptr &front() { return fHead; }
+
+    face_vertex_ptr &fbegin() { return fHead; }
+
+    face_vertex_ptr fbegin() const { return fHead; }
+
+    face_vertex_ptr fend() { return fHead->prev(); }
+    face_vertex_ptr fendr() { return fHead->next(); }
+
+    face_ref operator=(const face_ref rhs) {
+      face_ptr out = new face_type();
+      m2::ID &manager = m2::ID::get_instance();
+      out->mID = manager.new_face_id();
+      out->mNormal = rhs.mNormal;
+      out->mCenter = rhs.mCenter;
+      out->mVertices = rhs.mVertices;
+
+      return *out;
+    }
+
+    coordinate_type calc_center() {
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
+      coordinate_type cen = coordinate_type(0.0, 0.0, 0.0);
+      float n = 0.0;
+      bool at_head = false;
+
+      while (!at_head) {
+        at_head = itb == ite;
+        cen += itb->coordinate();
+
+        n += 1.0;
+        itb = itb->next();
+      }
+      cen *= 1.0 / n;
+      return cen;
+    }
+
+    box_type calc_bbox() {
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
+
+      coordinate_type min = this->calc_center(), max = min;
+
+      bool at_head = false;
+      while (!at_head) {
+        at_head = itb == ite;
+
+        coordinate_type p = itb->coordinate();
+        for (int j = 0; j < 3; j++) {
+          max[j] = max[j] > p[j] ? max[j] : p[j];
+          min[j] = min[j] < p[j] ? min[j] : p[j];
         }
+        itb = itb->next();
       }
-      xp = xc;
-      itb = itb->vnext();
+      return makeBoxMinMax(min, max);
     }
-    return out;
-  }
 
-  // coordinate_array vertex_trace(){
-  //   coordinate_array tOut;
-  //   fvl_iterator itb = mFaceVertices.begin();
-  //   fvl_iterator ite = mFaceVertices.end();
-  //   size_t fv_size = mFaceVertices.size();
+    coordinate_array flagged_coordinate_trace(unsigned int flag_num) {
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
+      coordinate_array array_out;
 
-  //   while (itb != ite) {
-  // 	coordinate_type other_vert = (*itb)->next()->coordinate();
-  // 	tOut.push_back(other_vert-mCoordinate);
-  // 	//tOut.push_back((*itb)->face()->normal());
-  // 	++itb;
-  //   }
-  //   return tOut;
-  // }
-
-  // coordinate_array one_ring_trace(){
-  //   coordinate_array tOut;
-  //   fvl_iterator itb = mFaceVertices.begin();
-  //   fvl_iterator ite = mFaceVertices.end();
-  //   size_t fv_size = mFaceVertices.size();
-
-  //   while (itb != ite) {
-  // 	coordinate_type other_vert = (*itb)->next()->coordinate();
-  // 	tOut.push_back(other_vert-mCoordinate);
-  // 	//tOut.push_back((*itb)->face()->normal());
-  // 	++itb;
-  //   }
-  //   return tOut;
-  // }
-
-  // coordinate_array ordered_normal_trace(){
-  //   coordinate_array tOut;
-  //   face_vertex_ptr itb = mFaceVertices.front();
-  //   face_vertex_ptr ite = itb->vprev();
-  //   size_t fv_size = mFaceVertices.size();
-
-  //   while (itb != ite) {
-  // 	coordinate_type other_vert = (*itb)->vnext()->face()->normal();
-  // 	tOut.push_back(other_vert);
-  // 	//tOut.push_back((*itb)->face()->normal());
-  // 	itb = itb->vnext();
-  //   }
-  //   return tOut;
-  // }
-
-  void update_normal() {
-    if (mSize == 0)
-      return;
-    coordinate_type N(0, 0, 0);
-    int n = 0;
-    face_vertex_ptr itb = mFront;
-    face_vertex_ptr ite = mFront->vprev();
-    bool iterating = true;
-
-    while (iterating) {
-      iterating = itb != ite;
-      face_ptr f = itb->face();
-      if (f->area() > 1e-12) {
-        coordinate_type Ni = f->normal();
-        N += Ni;
-        n++;
+      bool at_head = false;
+      while (!at_head) {
+        if (itb == ite) {
+          at_head = true;
+        }
+        int cflag = itb->vertex()->flag;
+        if (cflag == flag_num) {
+          coordinate_type cd = itb->vertex()->coordinate();
+          array_out.push_back(cd);
+          cflag = itb->vertex()->flag;
+        }
+        itb = itb->next();
       }
-      itb = itb->vnext();
+      return array_out;
     }
 
-    mNormal = 1.0 / (T)n * N;
-    mNormal.normalize();
-    calc_normal = false;
-  }
+    face_vertex_ptr get_corner_on_vertex(vertex_ptr v) {
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
 
-  void verify() {
-    if (mSize == 0)
-      return;
-    face_vertex_ptr itb = this->fbegin();
-    face_vertex_ptr ite = this->fend();
-    bool iterating = true;
-    while (iterating) {
-      iterating = itb != ite;
-      assert(itb->vertex() == this);
-      itb = itb->vnext();
+      face_vertex_ptr ito = fHead;
+      bool at_head = false;
+      while (!at_head) {
+        if (itb == ite) {
+          at_head = true;
+        }
+        if (itb->vertex() == v)
+          ito = itb;
+        itb = itb->next();
+      }
+      return ito;
     }
 
-    coordinate_type c = this->coordinate();
-    assert(!isnan(c[0]));
-    assert(!isnan(c[1]));
-    assert(!isnan(c[2]));
-  }
+    face_vertex_array face_vertex_trace() {
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
+      face_vertex_array array_out;
 
-  void print() {
-    if (mSize == 0)
-      return;
-    face_vertex_ptr itb = this->fbegin();
-    face_vertex_ptr ite = this->fend();
-    bool iterating = true;
-    std::cout << " - vertex: " << mSetPosition << ", size: " << this->mSize
-              << std::endl;
-    std::cout << " edges: ";
-    while (iterating) {
-      iterating = itb != ite;
-      // std::cout << itb->next()->vertex()->position_in_set() << ", ";
-      std::cout << itb->edge()->position_in_set() << ", ";
-      itb = itb->vnext();
+      bool at_head = false;
+      while (!at_head) {
+        if (itb == ite) {
+          at_head = true;
+        }
+        array_out.push_back(itb);
+        itb = itb->next();
+      }
+      return array_out;
     }
-    std::cout << std::endl;
-  }
 
-  void update_center_of_mass() {
-    coordinate_array vt_list = this->vertex_trace();
-    vt_list.push_back(mCoordinate);
-    mCentMass = calculate_average(vt_list);
-  }
+    face_vertex_list vertex_trace() {
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
+      face_vertex_list array_out;
 
-  void draw() {
+      bool at_head = false;
+      while (!at_head) {
+        if (itb == ite) {
+          at_head = true;
+        }
+        array_out.push_back(itb);
+        itb = itb->next();
+      }
+      return array_out;
+    }
 
-    this->draw_vertex_point();
-    // this->draw_normal();
-  }
-  /*
-  void draw_vertex_point(){
-    glPushMatrix();
-    glColor3f(color.r,color.g,color.b);
-    glPointSize(5.0f);
-    glBegin(GL_POINTS);
-    glVertex3f(mCoordinate[0],mCoordinate[1], mCoordinate[2]);
-    glEnd();
-    glPopMatrix();
-  }
+    face_vertex_list flagged_vertex_trace(unsigned int flag_num) {
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
+      face_vertex_list array_out;
 
-  void draw_vertex(){
-    glPushMatrix();
-    glColor3f(0,0.0,0.0);
-    glPointSize(5.0f);
-    glBegin(GL_POINTS);
-    glVertex3f(mCoordinate[0],mCoordinate[1], mCoordinate[2]);
-    glEnd();
-    glPopMatrix();
+      bool at_head = false;
+      while (!at_head) {
+        if (itb == ite) {
+          at_head = true;
+        }
+        if (itb->vertex()->flag == flag_num) {
+          array_out.push_back(itb);
+          // itb->vertex()->flag = 0;
+        }
+        itb = itb->next();
+      }
+      return array_out;
+    }
 
-    glLineWidth(1.0);
-    glBegin(GL_LINE_STRIP);
-    T off = 0.05;
-    for (int i = 0; i < 3; i++) {
+    edge_list flagged_edge_trace(unsigned int flag_num) {
+      face_vertex_ptr itb = fbegin();
+      face_vertex_ptr ite = fend();
+      edge_list array_out;
+
+      bool at_head = false;
+      while (!at_head) {
+        if (itb == ite) {
+          at_head = true;
+        }
+        if (itb->edge()->flag == flag_num) {
+          array_out.push_back(itb->edge());
+          // itb->vertex()->flag = 0;
+        }
+        itb = itb->next();
+      }
+      return array_out;
+    }
+
+    coordinate_array coordinate_trace() {
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
+      coordinate_array array_out;
+
+      bool at_head = false;
+      while (!at_head) {
+        if (itb == ite) {
+          at_head = true;
+        }
+        coordinate_type cd = itb->coordinate();
+        array_out.push_back(cd);
+        itb = itb->next();
+      }
+      return array_out;
+    }
+
+    edge_list edge_trace() {
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
+      edge_list list_out;
+
+      bool at_head = false;
+      while (!at_head) {
+        if (itb == ite) {
+          at_head = true;
+        }
+        edge_ptr ep = itb->edge();
+        list_out.push_back(ep);
+        itb = itb->next();
+      }
+      return list_out;
+    }
+
+    T thinness() {
+      face_vertex_ptr fv0 = this->fbegin();
+      face_vertex_ptr fv1 = fv0->next();
+      face_vertex_ptr fv2 = fv1->next();
+      T d0 = fv0->edge()->length();
+      T d1 = fv1->edge()->length();
+      T d2 = fv2->edge()->length();
+      T tEps = 0.95;
+      T thin0 = d0 / (d1 + d2);
+      T thin1 = d1 / (d0 + d2);
+      T thin2 = d2 / (d0 + d1);
+      T thin = thin0 > thin1 ? thin0 : thin1;
+      thin = thin > thin2 ? thin : thin2;
+    }
+
+    void update_all() {
+      this->update_vertex_faces();
+      this->renumber_vertex_IDs();
+      this->update_normal();
+      this->update_center();
+      // this->update_vertex_normals();
+      mArea = this->calc_area();
+    }
+
+    void renumber_vertex_IDs() {
+      face_vertex_ptr itb = fbegin();
+      face_vertex_ptr ite = fend();
+      size_t new_id = 0;
+      bool at_head = false;
       bool iterating = true;
+      int i = 0;
+      while (iterating && i < 200) {
+        iterating = itb != ite;
+        itb->position_in_face() = new_id;
+        itb = itb->next();
+        new_id++;
+        i++;
+      }
+      this->mSize = new_id;
+    }
+
+    void update_vertex_faces() {
+      face_vertex_ptr itb = fbegin();
+      face_vertex_ptr ite = fend();
+      int i = 0;
+      bool at_head = false;
+      while (!at_head) {
+        if (itb->vertex() == NULL)
+          std::cout << "NULL VERTEX: " << std::endl;
+        if (itb->next() == NULL)
+          std::cout << "NULL NEXT: " << std::endl;
+        if (itb->prev() == NULL)
+          std::cout << "NULL PREV: " << std::endl;
+        at_head = itb == ite;
+        itb->face() = this;
+        itb = itb->next();
+        i++;
+      }
+    }
+
+    void update_vertex_normals() {
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
+      int i = 0;
+      bool at_head = false;
+      while (!at_head && i < 200) {
+        if (itb == ite) {
+          at_head = true;
+        }
+        itb->vertex()->update_normal();
+        itb = itb->next();
+        i++;
+      }
+    }
+    /*
+    coordinate_type calculate_center(){
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
+      coordinate_type out(0,0,0,0);
+      int i = 0;
+      bool at_head = false;
+      while (!at_head && i < 200) {
+        at_head = itb == ite;
+        out += itb->coordinate();
+        itb = itb->next(); i++;
+      }
+      out /= (T)this->size();
+      return out;
+    }
+
+    */
+    void delete_covertices() {
+      face_vertex_ptr itb = fHead->next();
+      face_vertex_ptr ite = fHead;
+      face_vertex_ptr nxt;
+
+      bool at_head = false;
+      while (!at_head) {
+        at_head = itb == ite;
+        nxt = itb->next();
+        if (itb->vertex_ID() == nxt->vertex_ID()) {
+          if (itb->next() == fHead) {
+            fHead = itb;
+            ite = fHead;
+          }
+          itb->delete_next();
+        }
+        itb = itb->next();
+      }
+      this->renumber_vertex_IDs();
+    }
+
+    T calc_area() {
+      face_vertex_ptr it0 = fHead;
+      face_vertex_ptr it1 = it0->next();
+      face_vertex_ptr it2 = it1->next();
+      face_vertex_ptr ite = fHead->prev();
+
+      coordinate_type c0 = it0->coordinate();
+      T out = 0;
+      bool iterating = true;
+      while (iterating) {
+        iterating = it2 != ite;
+        coordinate_type c1 = it1->coordinate();
+        coordinate_type c2 = it2->coordinate();
+        coordinate_type c10 = c1 - c0;
+        coordinate_type c20 = c2 - c0;
+        coordinate_type n = va::cross(c10, c20);
+        out += n.norm() * 0.5;
+        it1 = it1->next();
+        it2 = it2->next();
+      }
+      return out;
+    }
+
+    void update_normal() {
+
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr ite = fHead->prev();
+      mNormal = coordinate_type(0, 0, 0);
+      bool iterating = true;
+
+      while (iterating) {
+        iterating = itb != ite;
+        coordinate_type curr = itb->coordinate();
+        coordinate_type next = itb->next()->coordinate();
+        mNormal[0] += (curr[1] - next[1]) * (curr[2] + next[2]);
+        mNormal[1] += (curr[2] - next[2]) * (curr[0] + next[0]);
+        mNormal[2] += (curr[0] - next[0]) * (curr[1] + next[1]);
+        itb = itb->next();
+      }
+
+      mNormal.normalize();
+      //            mNormal = fnormalize(mNormal);
+      ncolor.r = 0.5 + mNormal[0] * 0.5;
+      ncolor.g = 0.5 + mNormal[1] * 0.5;
+      ncolor.b = 0.5 + mNormal[2] * 0.5;
+      ncolor.a = 1.0;
+      calc_normal = false;
+    }
+
+    void update_center() { mCenter = this->calc_center(); }
+
+    std::vector<triangle_type> get_tris() {
+      std::vector<triangle_type> tris;
+
+      face_vertex_ptr itb = fHead;
+      face_vertex_ptr c0 = fHead;
+      face_vertex_ptr c1 = c0->next();
+      face_vertex_ptr c2 = c1->next();
+      face_vertex_ptr ite = fHead;
+
+      coordinate_type &v0 = c0->coordinate();
+      int i0 = c0->vertex()->position_in_set();
+      int fid = this->position_in_set();
+      // std::cout << "face size: " << mSize << std::endl;
+      bool at_head = false;
+      while (!at_head) {
+        at_head = ite == c2;
+        coordinate_type &v1 = c1->coordinate();
+        coordinate_type &v2 = c2->coordinate();
+        int i1 = c1->vertex()->position_in_set();
+        int i2 = c2->vertex()->position_in_set();
+
+        if ((v1 - v0).norm() == 0)
+          continue;
+        if ((v2 - v0).norm() == 0)
+          continue;
+
+        tris.push_back(triangle_type(v0, v1, v2, i0, i1, i2, fid));
+        c1 = c2;
+        c2 = c2->next();
+      }
+      // std::cout << "tri size: " << tris.size() << std::endl;
+      return tris;
+    }
+
+    bool has_vertex(vertex_ptr v) {
+      face_vertex_ptr itb = fbegin();
+      face_vertex_ptr ite = fend();
+      bool iterating = true;
+      while (iterating) {
+        iterating = itb != ite;
+        if (itb->next()->vertex() == v)
+          return true;
+        itb = itb->next();
+      }
+      return false;
+    }
+
+    int count_shared_vertices(face_ptr fB) {
+      int shared_vertices = 0;
+
+      face_vertex_ptr fvA = this->fbegin();
+      face_vertex_ptr fvAe = this->fend();
+      bool itA = true;
+      while (itA) {
+        itA = fvA != fvAe;
+        vertex_ptr vA = fvA->vertex();
+        face_vertex_ptr fvB = fB->fbegin();
+        face_vertex_ptr fvBe = fB->fend();
+        bool itB = true;
+        while (itB) {
+          itB = fvB != fvBe;
+          vertex_ptr vB = fvB->vertex();
+          shared_vertices += int(vA == vB);
+          fvB = fvB->next();
+        }
+        fvA = fvA->next();
+      }
+      return shared_vertices;
+    }
+
+    int count_adjacent_shared_vertices(face_ptr fB) {
+      int shared_vertices = 0;
+
+      face_vertex_ptr fvA = this->fbegin();
+      face_vertex_ptr fvAe = this->fend();
+
+      bool itA = true;
+      while (itA) {
+        itA = fvA != fvAe;
+        vertex_ptr vA = fvA->vertex();
+
+        face_vertex_ptr fvvA = fvA->vnext();
+        face_vertex_ptr fvvAe = fvA->vprev();
+        bool itv = true;
+        while (itv) {
+          itv = fvvA != fvvAe;
+          vertex_ptr vvA = fvvA->next()->vertex();
+
+          face_vertex_ptr fvB = fB->fbegin();
+          face_vertex_ptr fvBe = fB->fend();
+          bool itB = true;
+          while (itB) {
+            itB = fvB != fvBe;
+            vertex_ptr vB = fvB->vertex();
+            shared_vertices += int(vvA == vB);
+            fvB = fvB->next();
+          }
+
+          fvvA = fvvA->vnext();
+        }
+        fvA = fvA->next();
+      }
+      return shared_vertices;
+    }
+
+    void verify() {
+      face_vertex_ptr itb = fbegin();
+      face_vertex_ptr ite = fend();
+      bool iterating = true;
+      while (iterating) {
+        iterating = itb != ite;
+
+        assert(itb->prev()->next() == itb);
+        assert(itb->next()->prev() == itb);
+        assert(itb->face() == this);
+        itb = itb->next();
+      }
+    }
+
+    void print() {
+      cout << "face " << mSetPosition
+           << ": number of vertices: " << this->size() << endl;
+      cout << "vertices: " << endl;
+
+      face_vertex_ptr itb = fbegin();
+      face_vertex_ptr ite = fend();
+      size_t new_id = 0;
+      bool iterating = true;
+      while (iterating) {
+        iterating = itb != ite;
+        cout << itb->vertex()->position_in_set() << ", ";
+        itb = itb->next();
+      }
+      cout << endl;
+    }
+
+    void flag_vertices() {
+      face_vertex_ptr fvA = this->fbegin();
+      face_vertex_ptr fvAe = this->fend();
+      bool has = false;
+      bool itf = true;
+      while (itf) {
+        itf = fvA != fvAe;
+        fvA->vertex()->flag = 1;
+        fvA = fvA->next();
+      }
+    }
+
+    void print_vert_ids(bool reverse = false) {
+      face_vertex_ptr fvA = this->fbegin();
+      face_vertex_ptr fvAe = reverse ? this->fendr() : this->fend();
+      bool itf = true;
+      while (itf) {
+        itf = fvA != fvAe;
+        std::cout << "   " << fvA->vertex()->position_in_set() << " ";
+        fvA = reverse ? fvA->prev() : fvA->next();
+      }
+      std::cout << std::endl;
+    }
+
+    void print_shared_edge() {
+      face_vertex_ptr fvA = this->fbegin();
+      face_vertex_ptr fvAe = this->fend();
+      bool itf = true;
+      while (itf) {
+        itf = fvA != fvAe;
+        bool eA = fvA->edge()->v1()->vertex()->position_in_set() ==
+                  fvA->edge()->v2()->vertex()->position_in_set();
+        std::cout << "   " << eA;
+        fvA = fvA->next();
+      }
+      std::cout << std::endl;
+    }
+
+    T area() {
+      this->calc_area();
+      return mArea;
+    }
+    coordinate_type &normal() { return mNormal; }
+    coordinate_type &center() { return mCenter; }
+
+    size_t ID() const { return this->mID; }
+    //		size_t	size()		const	{return
+    // this->fHead->prev()->face_ID() + 1;}
+
+    T &x() { return mCenter[0]; }
+    T &y() { return mCenter[1]; }
+    T &z() { return mCenter[2]; }
+
+    T x() const { return mCenter[0]; }
+    T y() const { return mCenter[1]; }
+    T z() const { return mCenter[2]; }
+    int group() const { return mGroup; }
+    int &group() { return mGroup; }
+
+  protected:
+    // face_vertex_array	mVertices;
+    int mGroup;
+
+    face_vertex_ptr fHead;
+    coordinate_type mCenter;
+    coordinate_type mNormal;
+    T mArea;
+    int mID;
+    int mSize;
+
+    int mSetPosition;
+
+    bool calc_normal;
+
+  public:
+    colorRGB color;
+    colorRGB ncolor;
+    unsigned int flag;
+    coordinate_type data;
+    coordinate_type data2;
+    T data3;
+  };
+
+  class face_vertex {
+
+  public:
+    face_vertex() {
+      mVertex = NULL;
+      mEdge = NULL;
+      mFace = NULL;
+
+      m2::ID &manager = m2::ID::get_instance();
+      mID = manager.new_face_vertex_id();
+      fID = 0;
+      flag = 0;
+      data = 0;
+    }
+
+    face_vertex(const face_vertex_ref rhs) {
+      this->mEdge = rhs.mEdge;
+      //			mEdge->set_this(&rhs,this);
+      this->mFace = rhs.mFace;
+      this->mVertex = rhs.mVertex;
+      this->nxt_face = rhs.nxt_face;
+      this->prv_face = rhs.prv_face;
+      this->data = rhs.data;
+      fID = 0;
+
+      m2::ID &manager = m2::ID::get_instance();
+      mID = manager.new_face_vertex_id();
+
+      flag = 0;
+    }
+
+    ~face_vertex(){
+        // mVertex->remove_face_vertex(mVertexPosition);
+    };
+
+    bool operator==(const face_vertex_ref rhs) {
+      if (mID == rhs.mID) {
+        return true;
+      } else
+        return false;
+    }
+
+    face_vertex_ref operator=(const face_vertex_ref rhs) {
+      face_vertex_ptr out = new face_vertex_type(rhs);
+      out->mEdge->update_vertex(&rhs, this);
+      return *out;
+    }
+
+    T angle() {
+      coordinate_type ci = this->coordinate();
+      coordinate_type ca = this->next()->coordinate();
+      coordinate_type cb = this->prev()->coordinate();
+      coordinate_type cai = ca - ci;
+      coordinate_type cbi = cb - ci;
+      T maga = sqrt(cai[0] * cai[0] + cai[1] * cai[1] + cai[2] * cai[2]);
+      T magb = sqrt(cbi[0] * cbi[0] + cbi[1] * cbi[1] + cbi[2] * cbi[2]);
+      T dotab = cai[0] * cbi[0] + cai[1] * cbi[1] + cai[2] * cbi[2];
+      return acos(dotab / (maga * magb));
+    }
+
+    T cotan() {
+      // assumes triangls
+      coordinate_type c0 = this->prev()->coordinate();
+      coordinate_type c1 = this->coordinate();
+      coordinate_type c2 = this->next()->coordinate();
+      return va::cotan(c0, c1, c2);
+    }
+
+    coordinate_type directed_vector() {
+      coordinate_type c0 = this->coordinate();
+      coordinate_type c1 = this->coedge()->coordinate();
+      return c0 - c1;
+    }
+
+    face_vertex_ptr coedge() { return mEdge->other(this); }
+
+    face_ref get_face() { return *mFace; }
+
+    face_vertex_ptr add_next() {
+      face_vertex_ptr out = new face_vertex(*this);
+      face_vertex_ptr nxt = this->nxt_face;
+      out->next() = nxt;
+      nxt->prev() = out;
+      out->prev() = this;
+      this->next() = out;
+
+      mFace->size() += 1;
+
+      out->face() = this->face();
+      out->face()->fbegin() = out;
+      this->vertex()->add_face_vertex(out);
+      this->vertex()->front() = out;
+
+      return out;
+    }
+
+    face_vertex_ptr add_prev() {
+      face_vertex_ptr out = new face_vertex(*this);
+      face_vertex_ptr prv = this->prv_face;
+      out->prev() = prv;
+      prv->next() = out;
+      out->next() = this;
+      this->prev() = out;
+
+      // prv->edge()->set_this(this,out);
+      mFace->size() += 1;
+
+      out->face() = this->face();
+      out->face()->fbegin() = out;
+      this->vertex()->add_face_vertex(out);
+      this->vertex()->front() = out;
+      return out;
+    }
+
+    face_vertex_ptr &next() { return nxt_face; }
+    face_vertex_ptr next() const { return nxt_face; }
+    face_vertex_ptr &prev() { return prv_face; }
+    face_vertex_ptr prev() const { return prv_face; }
+
+    face_vertex_ptr vnext() {
+      if (mEdge == NULL) {
+        return NULL;
+      } else {
+        face_vertex_ptr out = mEdge->other(this);
+        return out->next();
+      }
+    }
+
+    face_vertex_ptr vprev() {
+      if (this->prev() == NULL || this->prev()->mEdge == NULL) {
+        return NULL;
+      } else {
+        face_vertex_ptr out = this->prev();
+        if (out->mEdge)
+          return out->mEdge->other(out);
+        else
+          return NULL;
+      }
+    }
+
+    void draw(T off) {
+      this->draw_vertex(off);
+      this->draw_tail(off);
+    }
+    /*
+    void draw_vertex(T off){
+
+      coordinate_type n1 = mFace->normal();
+
+      T
+        t0x = n1[0]*off + this->x(),
+        t0y = n1[1]*off + this->y(),
+        t0z = n1[2]*off + this->z();
+
+      //			glPushMatrix();
+      glPointSize(2.0f);
+      glBegin(GL_POINTS);
+      glColor4f(0.0,0.0,0.0,0.0);
+      glVertex3f(t0x,t0y,t0z);
+      glEnd();
+      //			glPopMatrix();
+    }
+    */
+    /*
+    void draw_tail(T off){
+
+      coordinate_type n1 = mFace->normal();
+      T
+        t0x = n1[0]*off + this->x(),
+        t0y = n1[1]*off + this->y(),
+        t0z = n1[2]*off + this->z(),
+
+        t1x = t0x - (this->x() - nxt_face->x())*0.3,
+        t1y = t0y - (this->y() - nxt_face->y())*0.3,
+        t1z = t0z - (this->z() - nxt_face->z())*0.3;
+
+      //			glPushMatrix();
+      glLineWidth(0.5f);
+      glBegin(GL_LINES);
+      glColor4f(0.1,0.1,0.1,0.0);
+      glVertex3f(t0x, t0y, t0z);
+      glVertex3f(t1x, t1y, t1z);
+      glEnd();
+      //			glPopMatrix();
+    }
+    */
+
+    edge_ptr &edge() { return mEdge; }
+    edge_ptr edge() const { return mEdge; }
+    face_ptr &face() { return mFace; }
+    face_ptr face() const { return mFace; }
+    face_ptr coface() const { return mEdge->other(this)->face(); }
+    vertex_ptr &vertex() { return mVertex; }
+    vertex_ptr vertex() const { return mVertex; }
+
+    int vertex_ID() const { return mVertex->ID(); }
+    int ID() const { return this->mID; }
+    int face_ID() const { return this->mFacePosition; }
+    int &face_ID() { return this->mFacePosition; }
+
+    int &position_in_face() { return mFacePosition; }
+    int position_in_face() const { return mFacePosition; }
+    void set_edge(edge_ref input) { mEdge = &input; };
+    void set_face(face_ref input) { mFace = &input; };
+    void set_vertex(vertex_ref input) { mVertex = &input; };
+
+    coordinate_type &coordinate() { return mVertex->coordinate(); }
+
+    T &x() { return mVertex->coordinate()[0]; }
+    T x() const { return mVertex->coordinate()[0]; }
+    T &y() { return mVertex->coordinate()[1]; }
+    T y() const { return mVertex->coordinate()[1]; }
+    T &z() { return mVertex->coordinate()[2]; }
+    T z() const { return mVertex->coordinate()[2]; }
+    int &group() { return mGroup; }
+    int group() const { return mGroup; }
+    T &operator[](int i) { return mVertex->coordinate()[i]; }
+    T operator[](int i) const { return mVertex->coordinate()[i]; }
+
+  protected:
+    int mGroup;
+    int mID;
+    int fID;
+
+    face_vertex_ptr nxt_face;
+    face_vertex_ptr prv_face;
+
+    edge_ptr mEdge;
+    face_ptr mFace;
+    vertex_ptr mVertex;
+
+    int mFacePosition;
+
+  public:
+    unsigned int flag;
+    T data;
+  };
+
+  void for_each(vertex *v, std::function<void(face_vertex_ptr fv)> &func) {
+    face_vertex_ptr fvb = v->fbegin();
+    face_vertex_ptr fve = v->fend();
+    bool iterating = true;
+    while (iterating) {
+      iterating = fvb != fve;
+      func(fvb);
+      fvb = fvb->vnext();
+    }
+  }
+
+  class vertex : public data_node<typename SPACE::vertex_index> {
+
+  public:
+    int graphColor;
+    bool smooth;
+    int isDegenerate;
+    colorRGB color;
+
+    vertex() {
+      int graphColor = -1;
+      // mNormal.zero();
+      mNormal = coordinate_type(0.0, 0.0, 0.0);
+      mCoordinate = coordinate_type(0.0, 0.0, 0.0);
+      m2::ID &manager = m2::ID::get_instance();
+      mID = manager.new_vertex_id();
+
+      flag = 0;
+      mSize = 0;
+      color.r = 0.4 + randd(0.1);
+      color.g = 0.4 + randd(0.1);
+      color.b = 0.4 + randd(0.1);
+      color.a = 1.0;
+      pinned = false;
+      mFront = NULL;
+      mSetPosition = -1;
+      winding = 0;
+      data2 = 0;
+      isDegenerate = -1;
+    }
+
+    vertex(T x, T y, T z) {
+      int graphColor = -1;
+
+      mCoordinate = coordinate_type(0.0, 0.0, 0.0);
+      mCoordinate[0] = x;
+      mCoordinate[1] = y;
+      mCoordinate[2] = z;
+      mNormal = coordinate_type(0.0, 0.0, 0.0);
+
+      m2::ID &manager = m2::ID::get_instance();
+      mID = manager.new_vertex_id();
+
+      flag = 0;
+      mSize = 0;
+      color.r = 0.4 + randd(0.1);
+      color.g = 0.4 + randd(0.1);
+      color.b = 0.4 + randd(0.1);
+      color.a = 1.0;
+      pinned = false;
+      mFront = NULL;
+      mSetPosition = -1;
+      winding = 0;
+      data2 = 0;
+      isDegenerate = -1;
+    }
+
+    vertex(coordinate_type co) {
+      int graphColor = -1;
+      mCoordinate[0] = co[0];
+      mCoordinate[1] = co[1];
+      mCoordinate[2] = co[2];
+      mNormal.setZero();
+
+      m2::ID &manager = m2::ID::get_instance();
+      mID = manager.new_vertex_id();
+
+      flag = 0;
+      mSize = 0;
+      color.r = 0.4 + randd(0.1);
+      color.g = 0.4 + randd(0.1);
+      color.b = 0.4 + randd(0.1);
+      color.a = 1.0;
+      pinned = false;
+      mFront = NULL;
+      mSetPosition = -1;
+      winding = 0;
+      data2 = 0;
+      isDegenerate = -1;
+    }
+
+    void init() {
+      int graphColor = -1;
+      face_ptr new_face = new face_type(*this);
+      face_vertex_ptr new_fv = new_face->fbegin();
+      new_fv->face() = new_face;
+      this->add_face_vertex(new_fv);
+      pinned = false;
+      data2 = 0;
+    }
+
+    int &position_in_set() { return mSetPosition; }
+
+    T &x() { return mCoordinate[0]; }
+    T x() const { return mCoordinate[0]; }
+    T &y() { return mCoordinate[1]; }
+    T y() const { return mCoordinate[1]; }
+    T &z() { return mCoordinate[2]; }
+    T z() const { return mCoordinate[2]; }
+    T &operator[](int i) { return mCoordinate[i]; }
+    T operator[](int i) const { return mCoordinate[i]; }
+
+    int &group() { return mGroup; }
+    int group() const { return mGroup; }
+
+    int &ID() { return mSetPosition; }
+    int ID() const { return mSetPosition; }
+
+    int calc_size() {
       face_vertex_ptr fvb = this->fbegin();
       face_vertex_ptr fve = this->fend();
+      bool iterating = true;
+      int sz = 0;
       while (iterating) {
         iterating = fvb != fve;
-        coordinate_type cn = fvb->edge()->other(fvb)->vertex()->coordinate();
-        coordinate_type dcn = mCoordinate + off*(cn-mCoordinate);
-        glColor3f(0.0, 0.0, 0.0);
-        glVertex3f(dcn[0],dcn[1],dcn[2]);
+        fvb = fvb->vnext();
+        sz++;
+      }
+      return sz;
+    }
+
+    int size() { return mSize; }
+    coordinate_type normal() const { return mNormal; }
+    coordinate_type &coordinate() { return mCoordinate; }
+    coordinate_type coordinate() const { return mCoordinate; }
+
+    face_vertex_ptr make_face_vertex() {
+      face_vertex_ptr fv = new face_vertex_type();
+      mFront = fv;
+      fv->vertex() = this;
+      mSize++;
+      return fv;
+    }
+
+    void add_face_vertex(face_vertex_ptr new_fv) {
+      mFront = new_fv;
+      mSize++;
+      // mFaceVertices.push_back(new_fv);
+      // fvl_iterator end = mFaceVertices.end();
+      // end--;
+      // new_fv->position_in_vertex() = end;
+      new_fv->vertex() = this;
+    }
+
+    void remove_face_vertex(face_vertex_ptr fv) {
+      // mFront = fv->vnext();
+      mSize--;
+      // mFaceVertices.erase(it);
+
+      // if (mFaceVertices[in]) {
+      // 	face_vertex_ptr fv = mFaceVertices[in];
+      // 	mFaceVertices[in] = NULL;
+      // 	mRecycle.push_back(in);
+      // }
+    }
+
+    void update_all() {
+
+      face_vertex_ptr itb = this->fbegin();
+      face_vertex_ptr ite = this->fend();
+      bool iterating = true;
+
+      while (iterating) {
+        mSize++;
+        iterating = itb != ite;
+        itb->vertex() = this;
+        itb = itb->vnext();
+      }
+    }
+    // void pack(){
+    //   if (mRecycle.size() > 0) {
+    // 	vector<face_vertex_ptr> tFaceVertices;
+    // 	int j = 0;
+    // 	for (int i = 0; i < mFaceVertices.size(); i++) {
+    // 	  if(mFaceVertices[i]){
+    // 	    tFaceVertices.push_back(mFaceVertices[i]);
+    // 	    tFaceVertices.back()->position_in_vertex() = j;
+    // 	    j++;
+    // 	  }
+    // 	}
+    // 	swap(mFaceVertices,tFaceVertices);
+    //   mRecycle.clear();
+    //   }
+    // }
+
+    face_vertex_ptr &front() { return mFront; }
+    face_vertex_ptr fbegin() { return this->front(); }
+    face_vertex_ptr fend() { return this->front()->vprev(); }
+
+    T thinness() {
+      if (mSize == 0)
+        return 0.0;
+      vertex_ptr v = this;
+      face_vertex_ptr fvb = v->fbegin();
+      face_vertex_ptr fve = v->fend();
+      bool iterating = true;
+      T vthin = 0;
+      int s = 0;
+      while (iterating) {
+        iterating = fvb != fve;
+        vthin += fvb->face()->thinness();
+        fvb = fvb->vnext();
+        s++;
+      }
+      vthin /= (T)s;
+
+      return vthin;
+    }
+
+    bool shares_edge_with(vertex_ptr vi) {
+      if (mSize == 0)
+        return false;
+      vertex_ptr v = this;
+      face_vertex_ptr fvb = v->fbegin();
+      face_vertex_ptr fve = v->fend();
+      bool iterating = true;
+      bool share = false;
+      while (iterating) {
+        iterating = fvb != fve;
+        if (fvb->next()->vertex() == vi)
+          share = true;
         fvb = fvb->vnext();
       }
-      off+=0.05;
+      return share;
     }
 
-    glEnd();
-  }
-
-  void draw_label(){
-    char str[10];
-
-    sprintf(str,"%d",position_in_set());
-    glColor3f(0., 0., 0.);
-    renderModStringX(mCoordinate[0],
-                     mCoordinate[1],
-                     mCoordinate[2], str);
-  }
-
-  void draw_normal(){
-    if (calc_normal) {
-      this->update_normal();
+    edge_ptr get_shared_edge(vertex_ptr vi) {
+      if (mSize == 0)
+        return false;
+      vertex_ptr v = this;
+      face_vertex_ptr fvb = v->fbegin();
+      face_vertex_ptr fve = v->fend();
+      bool iterating = true;
+      bool share = false;
+      while (iterating) {
+        iterating = fvb != fve;
+        if (fvb->coedge()->vertex() == vi)
+          return fvb->edge();
+        fvb = fvb->vnext();
+      }
+      return NULL;
     }
 
-    T nx = mCoordinate[0] + mNormal[0]*0.25;
-    T ny = mCoordinate[1] + mNormal[1]*0.25;
-    T nz = mCoordinate[2] + mNormal[2]*0.25;
+    face_vertex_ptr get_insertion_face_vertex(vertex_ptr that) {
+      if (size() > 1) {
+        return find_insertion_face_vertex(that);
+      } else {
+        return mFront;
+      }
+    }
 
-    glColor4f((1 + mNormal[0])/2, (1 + mNormal[1])/2, (1+mNormal[2])/2, 0.5);
-    glLineWidth(0.25);
-    glBegin(GL_LINES);
-    glVertex3f(mCoordinate[0], mCoordinate[1], mCoordinate[2]);
-    glVertex3f(nx, ny, nz);
-    glEnd();
-  }
-  */
+    face_vertex_ptr find_insertion_face_vertex(vertex_ptr that) {
 
-protected:
-  coordinate_type mCoordinate;
-  coordinate_type mCentMass;
-  coordinate_type mNormal;
-  face_vertex_ptr mFront;
+      face_vertex_ptr itb = mFront;
+      face_vertex_ptr ite = itb->vprev();
 
-  size_t mID;
-  bool calc_normal;
-  int mSetPosition;
-  int mSize;
-  int mGroup;
+      coordinate_type this_point = this->coordinate();
+      coordinate_type that_point = that->coordinate();
+      coordinate_type next_pt, xc, xp;
+      face_vertex_ptr out = itb;
+      T d;
+      size_t sz = size();
+      coordinate_type dp = that_point - this_point;
+      coordinate_type dnp = ite->next()->coordinate() - this_point;
+      xp = va::cross(dp, dnp);
+      next_pt = itb->next()->coordinate();
+      T dt = va::dist(that_point, next_pt);
+      d = dt;
+      while (itb != ite) {
+        next_pt = itb->next()->coordinate();
+        // coordinate_type dp  = that_point - this_point;
+        coordinate_type dnp = next_pt - this_point;
+        xc = va::cross(dp, dnp);
+        T s = xc[0] * xp[0] + xc[1] * xp[1] + xc[2] * xp[2];
 
-public:
-  int pinned;
-  unsigned int flag;
-  coordinate_type data;
-  T data2;
-  T winding;
-};
+        T dt = va::dist(that_point, next_pt);
+        if (s < 0) {
+          if (dt < d) {
+            d = dt;
+            out = itb;
+          }
+        }
+        xp = xc;
+        itb = itb->vnext();
+      }
+      return out;
+    }
 
-template <typename SPACE> class control {
-public:
-  M2_TYPEDEFS
+    // coordinate_array vertex_trace(){
+    //   coordinate_array tOut;
+    //   fvl_iterator itb = mFaceVertices.begin();
+    //   fvl_iterator ite = mFaceVertices.end();
+    //   size_t fv_size = mFaceVertices.size();
+
+    //   while (itb != ite) {
+    // 	coordinate_type other_vert = (*itb)->next()->coordinate();
+    // 	tOut.push_back(other_vert-mCoordinate);
+    // 	//tOut.push_back((*itb)->face()->normal());
+    // 	++itb;
+    //   }
+    //   return tOut;
+    // }
+
+    // coordinate_array one_ring_trace(){
+    //   coordinate_array tOut;
+    //   fvl_iterator itb = mFaceVertices.begin();
+    //   fvl_iterator ite = mFaceVertices.end();
+    //   size_t fv_size = mFaceVertices.size();
+
+    //   while (itb != ite) {
+    // 	coordinate_type other_vert = (*itb)->next()->coordinate();
+    // 	tOut.push_back(other_vert-mCoordinate);
+    // 	//tOut.push_back((*itb)->face()->normal());
+    // 	++itb;
+    //   }
+    //   return tOut;
+    // }
+
+    // coordinate_array ordered_normal_trace(){
+    //   coordinate_array tOut;
+    //   face_vertex_ptr itb = mFaceVertices.front();
+    //   face_vertex_ptr ite = itb->vprev();
+    //   size_t fv_size = mFaceVertices.size();
+
+    //   while (itb != ite) {
+    // 	coordinate_type other_vert = (*itb)->vnext()->face()->normal();
+    // 	tOut.push_back(other_vert);
+    // 	//tOut.push_back((*itb)->face()->normal());
+    // 	itb = itb->vnext();
+    //   }
+    //   return tOut;
+    // }
+
+    void update_normal() {
+      if (!mFront->edge())
+        return;
+      coordinate_type N(0, 0, 0);
+      int n = 0;
+      face_vertex_ptr itb = mFront;
+      face_vertex_ptr ite = mFront->vprev();
+      bool iterating = true;
+
+      while (iterating) {
+        iterating = itb != ite;
+        face_ptr f = itb->face();
+        if (f->area() > 1e-12) {
+          coordinate_type Ni = f->normal();
+          N += Ni;
+          n++;
+        }
+        itb = itb->vnext();
+      }
+
+      mNormal = 1.0 / (T)n * N;
+      mNormal.normalize();
+      calc_normal = false;
+    }
+
+    void verify() {
+      if (mSize == 0)
+        return;
+      face_vertex_ptr itb = this->fbegin();
+      face_vertex_ptr ite = this->fend();
+      bool iterating = true;
+      while (iterating) {
+        iterating = itb != ite;
+        if (itb->vertex() != this)
+          std::cout << " asserted: " << position_in_set() << std::endl;
+        assert(itb->vertex() == this);
+        itb = itb->vnext();
+      }
+
+      coordinate_type c = this->coordinate();
+      assert(!isnan(c[0]));
+      assert(!isnan(c[1]));
+      assert(!isnan(c[2]));
+    }
+
+    void print() {
+      if (mSize == 0)
+        return;
+      face_vertex_ptr itb = this->fbegin();
+      face_vertex_ptr ite = this->fend();
+      bool iterating = true;
+      std::cout << " - vertex: " << mSetPosition << ", size: " << this->mSize
+                << std::endl;
+      std::cout << " edges: ";
+      while (iterating) {
+        iterating = itb != ite;
+        // std::cout << itb->next()->vertex()->position_in_set() << ", ";
+        std::cout << itb->edge()->position_in_set() << ", ";
+        itb = itb->vnext();
+      }
+      std::cout << std::endl;
+    }
+
+    void update_center_of_mass() {
+      coordinate_array vt_list = this->vertex_trace();
+      vt_list.push_back(mCoordinate);
+      mCentMass = calculate_average(vt_list);
+    }
+
+  protected:
+    coordinate_type mCoordinate;
+    coordinate_type mCentMass;
+    coordinate_type mNormal;
+    face_vertex_ptr mFront = NULL;
+
+    size_t mID;
+    bool calc_normal;
+    int mSetPosition;
+    int mSize;
+    int mGroup;
+
+  public:
+    int pinned;
+    unsigned int flag;
+    coordinate_type data;
+    T data2;
+    T winding;
+  };
 
   struct faceDistFromPointSorter {
     bool operator()(face_ptr fi, face_ptr fj) {
@@ -1843,12 +1823,12 @@ public:
     coordinate_type mPoint;
   } mFaceSorter;
 
-  control() {
+  surf() {
     maxGraphColor = 0;
     manual_clean_up = false;
   }
 
-  control(const control_ref rhs) {
+  surf(const surf_ref rhs) {
     maxGraphColor = 0;
     manual_clean_up = false;
     // mFaces.clear();
@@ -1927,7 +1907,7 @@ public:
     bool here = true;
   }
 
-  control_ref operator=(const control_ref rhs) {
+  surf_ref operator=(const surf_ref rhs) {
     std::cout << "deep copy equals" << std::endl;
     // deep copy
     maxGraphColor = 0;
@@ -2009,7 +1989,7 @@ public:
     return *this;
   }
 
-  ~control() {}
+  ~surf() {}
 
   //		face<T>& get_face(size_t ind){
   //			return *mFaces[ind];
@@ -2118,7 +2098,7 @@ public:
     return max;
   }
 
-  bounding_box<SPACE> calc_bbox() {
+  box_type calc_bbox() {
 
     coordinate_type max = this->calc_center();
     coordinate_type min = max;
@@ -2131,7 +2111,7 @@ public:
       }
     }
 
-    return bounding_box<SPACE>(min, max);
+    return makeBoxMinMax<T, coordinate_type>(min, max);
   }
 
   void sortFacesByPoint(coordinate_type c) {
@@ -2144,7 +2124,7 @@ public:
     }
   }
 
-  void merge(control_ref other) {
+  void merge(surf_ref other) {
     this->pack();
     other.pack();
     for (int i = 0; i < other.mFaces.size(); i++) {
@@ -2205,6 +2185,7 @@ public:
 
   void remove_vertex(int i) {
     vertex_ptr v = mVertices[i];
+    // std::cout << "       deleting vert: " << i << std::endl;
     // std::cout << " removing vert: " << i << " " << v  << " " << v->size() <<
     // std::endl;
     mVertexRecycle.push_back(i);
@@ -2217,6 +2198,7 @@ public:
 
   void remove_edge(int i) {
     edge_ptr e = mEdges[i];
+    // std::cout << "       deleting edge: " << i << std::endl;
     // if(i == 175548) throw('gdb here we come!');
     if (this->mEdgeDeleteFunc)
       this->mEdgeDeleteFunc(e);
@@ -2229,6 +2211,7 @@ public:
   }
 
   void remove_face(int i) {
+    // std::cout << "       deleting face: " << i << std::endl;
     face_ptr f = mFaces[i];
     mFaceRecycle.push_back(i);
     if (!manual_clean_up) {
@@ -2592,6 +2575,7 @@ public:
     for (int i = 0; i < mFaces.size(); i++) {
       if (mFaces[i]) {
         mFaces[i]->verify();
+        mFaces[i]->calc_area();
       }
     }
 
@@ -2604,6 +2588,7 @@ public:
     for (int i = 0; i < mVertices.size(); i++) {
       if (mVertices[i]) {
         mVertices[i]->verify();
+        mVertices[i]->calc_size();
       }
     }
   }
@@ -2811,6 +2796,7 @@ public:
 protected:
   bool manual_clean_up;
   int numGroups;
+
   vector<int> groupSizes;
   face_array mFaces;
   vector<int> mFaceRecycle;
@@ -2823,7 +2809,7 @@ protected:
 
 public:
   int maxGraphColor;
-};
+}; // namespace m2
 
 } // namespace m2
 //#undef TYPEDEF_LIST

@@ -193,14 +193,14 @@ public:
   construct() {}
   ~construct() {}
 
-  edge_ptr insert_edge(control_ptr obj_in, vertex_ptr v1, vertex_ptr v2) {
+  edge_ptr insert_edge(surf_ptr obj_in, vertex_ptr v1, vertex_ptr v2) {
 
     face_vertex_ptr fv1 = v1->get_insertion_face_vertex(v2);
     face_vertex_ptr fv2 = v2->get_insertion_face_vertex(v1);
     return insert_edge(obj_in, fv1, fv2);
   }
 
-  edge_ptr insert_edge(control_ptr obj_in, face_vertex_ptr v1,
+  edge_ptr insert_edge(surf_ptr obj_in, face_vertex_ptr v1,
                        face_vertex_ptr v2) {
     face_ptr f1 = v1->face();
     face_ptr f2 = v2->face();
@@ -219,7 +219,7 @@ public:
     }
   }
 
-  edge_ptr split_face(control_ptr obj_in, face_vertex_ptr v1,
+  edge_ptr split_face(surf_ptr obj_in, face_vertex_ptr v1,
                       face_vertex_ptr v2) {
 
     face_ptr f1 = v1->face();
@@ -264,7 +264,7 @@ public:
     return e1;
   }
 
-  edge_ptr connect_face(control_ptr obj_in, face_vertex_ptr v1,
+  edge_ptr connect_face(surf_ptr obj_in, face_vertex_ptr v1,
                         face_vertex_ptr v2) {
 
     face_ptr face1 = v1->face();
@@ -338,7 +338,7 @@ public:
     return e1;
   }
 
-  face_ptr delete_edge(control_ptr obj_in, edge_ptr e) {
+  face_ptr delete_edge(surf_ptr obj_in, edge_ptr e) {
 
     face_vertex_ptr v1 = e->v1();
     face_vertex_ptr v2 = e->v2();
@@ -370,7 +370,7 @@ public:
     return fout;
   }
 
-  face_ptr join_face(control_ptr obj_in, edge_ptr e) {
+  face_ptr join_face(surf_ptr obj_in, edge_ptr e) {
 
     // this removes an edge
     // we gather up all the face vertices
@@ -469,7 +469,7 @@ public:
     return f1;
   }
 
-  face_ptr disconnect_face(control_ptr obj_in, edge_ptr e) {
+  face_ptr disconnect_face(surf_ptr obj_in, edge_ptr e) {
     // std::cout << "face 1 == face 2" << std::endl;
     // we gather up all the face vertices
 
@@ -615,7 +615,7 @@ public:
     }
   }
 
-  vertex_ptr subdivide_edge(control_ptr obj_in, edge_ptr edge_in) {
+  vertex_ptr subdivide_edge(surf_ptr obj_in, edge_ptr edge_in) {
 
     face_vertex_ptr fv1 = edge_in->v1();
     face_vertex_ptr fv2 = edge_in->v2();
@@ -667,7 +667,7 @@ public:
     return vn;
   }
 
-  list<edge_ptr> pipe_face(control_ptr obj_in, face_ptr f1, face_ptr f2) {
+  list<edge_ptr> pipe_face(surf_ptr obj_in, face_ptr f1, face_ptr f2) {
     list<edge_ptr> new_edges;
     face_vertex_ptr fv1 = f1->fbegin(), fv1e = f1->fend(),
 
@@ -734,7 +734,7 @@ public:
     return new_edges;
   }
 
-  list<edge_ptr> stitch_unlike_faces(control_ptr obj_in, face_ptr f1,
+  list<edge_ptr> stitch_unlike_faces(surf_ptr obj_in, face_ptr f1,
                                      face_ptr f2) {
     list<edge_ptr> new_edges;
     face_vertex_ptr fv1 = f1->fbegin(), fv1e = f1->fend(),
@@ -802,7 +802,7 @@ public:
     return new_edges;
   }
 
-  void cleanup_zero_edges(control_ptr &obj_in, vertex_ptr &v) {
+  void cleanup_zero_edges(surf_ptr &obj_in, vertex_ptr &v) {
     bool cleanup = true;
     while (cleanup) {
       face_vertex_ptr fvb = v->fbegin(), fve = v->fend();
@@ -825,7 +825,7 @@ public:
     }
   }
 
-  face_ptr delete_vertex_primitive(control_ptr obj_in, vertex_ptr v) {
+  face_ptr delete_vertex_primitive(surf_ptr obj_in, vertex_ptr v) {
     // we gather up all the face vertices
     // vertex_ptr v = obj_in->get_vertices()[i];
     if (v->size() < 1) {
@@ -870,7 +870,7 @@ public:
     }
   }
 
-  face_ptr delete_vertex(control_ptr obj_in, vertex_ptr v) {
+  face_ptr delete_vertex(surf_ptr obj_in, vertex_ptr v) {
 
     face_vertex_ptr fvb = v->fbegin(), fve = v->fend();
     bool iterating = true;
@@ -942,7 +942,7 @@ public:
     return nf;
   }
 
-  bool delete_degenerates(control_ptr obj, vertex_ptr v) {
+  bool delete_degenerates(surf_ptr obj, vertex_ptr v) {
 
     vector<edge_ptr> edgeDegenerates;
     vector<vertex_ptr> vertDegenerates;
@@ -960,13 +960,13 @@ public:
       }
     };
 
-    m2::for_each<SPACE, decltype(gatherDegenVerts)>(v, gatherDegenVerts);
+    m2::surf<SPACE>::for_each(v, gatherDegenVerts);
     std::for_each(vertDegenerates.begin(), vertDegenerates.end(),
                   [this, &obj](vertex_ptr v) mutable {
                     this->delete_vertex_primitive(obj, v);
                   });
 
-    m2::for_each<SPACE, decltype(gatherDegenEdges)>(v, gatherDegenEdges);
+    m2::surf<SPACE>::for_each(v, gatherDegenEdges);
     std::for_each(
         edgeDegenerates.begin(), edgeDegenerates.end(),
         [this, &obj](edge_ptr e) mutable { this->delete_edge(obj, e); });
@@ -975,7 +975,8 @@ public:
     return (edgeDegenerates.size() > 0 || vertDegenerates.size() > 0);
   };
 
-  vertex_ptr collapse_edge_triangle(control_ptr obj, edge_ptr e) {
+  vertex_ptr collapse_edge_triangle(surf_ptr obj, edge_ptr e) {
+    // TODO:: move to triangle_ops, compare with joinFaceOneSharedEdge
     if (e->v1()->vertex() == e->v2()->vertex())
       return e->v1()->vertex();
 
@@ -1128,13 +1129,13 @@ public:
       fv->vertex() = v1;
       fv->next()->vertex()->front() = fv->next();
     };
-    m2::for_each<SPACE, decltype(reassignFront)>(v1, reassignFront);
+    m2::surf<SPACE>::for_each(v1, reassignFront);
 
     // while(this->delete_degenerates(obj,v1));
     return v1;
   }
 
-  vertex_ptr collapse_edge(control_ptr obj, edge_ptr e) {
+  vertex_ptr collapse_edge(surf_ptr obj, edge_ptr e) {
     if (e->v1()->vertex() == e->v2()->vertex())
       return e->v1()->vertex();
 
@@ -1218,7 +1219,7 @@ public:
     return v1;
   }
 
-  vertex_ptr collapse_edge_primitive(control_ptr obj, edge_ptr e) {
+  vertex_ptr collapse_edge_primitive(surf_ptr obj, edge_ptr e) {
 
     face_vertex_ptr fv1 = e->v1();
     face_vertex_ptr fv2 = e->v2();
@@ -1267,7 +1268,7 @@ public:
     return v1;
   }
 
-  void flip_edge(control_ptr &obj, edge_ptr &e) {
+  void flip_edge(surf_ptr &obj, edge_ptr &e) {
 
 #if 1
     // valid if both faces are of size three.
@@ -1328,7 +1329,7 @@ public:
 #endif
   }
 
-  bool stitch_faces(control_ptr obj_in, face_ptr f1, face_ptr f2, T tol) {
+  bool stitch_faces(surf_ptr obj_in, face_ptr f1, face_ptr f2, T tol) {
 
     face_vertex_ptr fvb2 = f2->fbegin();
     face_vertex_ptr fve2 = f2->fend();
@@ -1390,7 +1391,7 @@ public:
     return true;
   }
 
-  bool stitch_faces_diff_size(control_ptr obj_in, face_ptr f1, face_ptr f2,
+  bool stitch_faces_diff_size(surf_ptr obj_in, face_ptr f1, face_ptr f2,
                               T tol) {
 
     face_vertex_ptr fvb2 = f2->fbegin();
@@ -1453,13 +1454,13 @@ public:
     return true;
   }
 
-  void bevel(control_ptr obj_in, const int &i1, const T &offset,
+  void bevel(surf_ptr obj_in, const int &i1, const T &offset,
              const T &inset) {
     face_ptr f1 = obj_in->face(i1);
     this->bevel_face(obj_in, f1, offset, inset);
   }
 
-  bool bevel_face(control_ptr obj_in, face_ptr f1, const T &offset,
+  bool bevel_face(surf_ptr obj_in, face_ptr f1, const T &offset,
                   const T &inset) {
     f1->update_normal();
 
@@ -1619,7 +1620,7 @@ public:
     return true;
   }
 
-  bool incremental_patch_hole(face_vertex_ptr &fv, control_ptr obj) {
+  bool incremental_patch_hole(face_vertex_ptr &fv, surf_ptr obj) {
     face_vertex_ptr fvb = fv;
     face_vertex_ptr fve = fv->vprev();
     if (!fve) {
@@ -1697,7 +1698,7 @@ public:
 #endif
   }
 
-  bool patch_hole(face_vertex_ptr fv, control_ptr obj) {
+  bool patch_hole(face_vertex_ptr fv, surf_ptr obj) {
     face_vertex_ptr fvb = fv;
     face_vertex_ptr fve = fv->vprev();
     if (!fve) {
@@ -1783,7 +1784,7 @@ public:
           // nfvs[i]->prev()  = nfvs[ip];
           // nfvs[ip]->next() = nfvs[i];
 
-          edge_ptr ne = new edge_type(*nfvs[i], *ofvs[ip]);
+          edge_ptr ne = new edge_type(nfvs[i], ofvs[ip]);
 
           obj->push_edge(ne);
 
@@ -1807,7 +1808,7 @@ public:
 #endif
   }
 
-  void fill_holes(control_ptr obj, vector<list<face_vertex_ptr>> corners) {
+  void fill_holes(surf_ptr obj, vector<list<face_vertex_ptr>> corners) {
     vector<vertex_ptr> &verts = obj->get_vertices();
     int kk = 0;
     int max = 40;
@@ -1833,7 +1834,7 @@ public:
     }
   }
 
-  void incremental_fill_holes(control_ptr obj) {
+  void incremental_fill_holes(surf_ptr obj) {
     vector<vertex_ptr> &verts = obj->get_vertices();
     int kk = 0;
     int max = 40;
@@ -1873,14 +1874,6 @@ public:
   }
 };
 
-template <typename SPACE> class manage {
-  M2_TYPEDEFS
-
-public:
-  manage() {}
-  ~manage() {}
-
-}; // manage
 
 } // namespace m2
 #endif

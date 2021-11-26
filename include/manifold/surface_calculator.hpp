@@ -123,7 +123,7 @@ public:
   }
 
   template <typename TYPE>
-  void calcDiffuseQuantity(m2::control<SPACE> &in, vector<TYPE> &vertexWeights,
+  void calcDiffuseQuantity(m2::surf<SPACE> &in, vector<TYPE> &vertexWeights,
                            T amt) {
 
     // TIMER function//TIMER(__FUNCTION__);
@@ -164,7 +164,7 @@ public:
     }
   }
 
-  void calcDiffuseQuantity(m2::control<SPACE> &in, vector<T> &vertexWeights,
+  void calcDiffuseQuantity(m2::surf<SPACE> &in, vector<T> &vertexWeights,
                            T amt) {
 
     // TIMER function//TIMER(__FUNCTION__);
@@ -204,7 +204,7 @@ public:
     }
   }
 
-  void calcCurveFlowNormal(m2::control<SPACE> &in, vector<T> &vertexWeights,
+  void calcCurveFlowNormal(m2::surf<SPACE> &in, vector<T> &vertexWeights,
                            vector<T> &edgeWeights) {
     // TIMER function//TIMER(__FUNCTION__);
 
@@ -259,7 +259,7 @@ public:
     }
   }
 
-  void calcWillmoreEnergy(m2::control<SPACE> &in, vector<T> &vertexWeights) {
+  void calcWillmoreEnergy(m2::surf<SPACE> &in, vector<T> &vertexWeights) {
     // TIMER function//TIMER(__FUNCTION__);
 
     vector<vertex_ptr> &tverts = in.get_vertices();
@@ -297,7 +297,7 @@ public:
     }
   }
 
-  void calcDiffuseCurveFlowNormal(m2::control<SPACE> &in,
+  void calcDiffuseCurveFlowNormal(m2::surf<SPACE> &in,
                                   vector<T> &vertexWeights) {
     // TIMER function//TIMER(__FUNCTION__);
     // vector<T> vertexWeights;
@@ -306,7 +306,7 @@ public:
     calcDiffuseQuantity(in, vertexWeights, 0.1);
   }
 
-  std::vector<vertex_ptr> getLocalVertices(m2::control<SPACE> &in,
+  std::vector<vertex_ptr> getLocalVertices(m2::surf<SPACE> &in,
                                            vertex_ptr seed,
                                            int maxRecDepth = 3) {
     // TIMER function//TIMER(__FUNCTION__);
@@ -344,7 +344,7 @@ public:
     return out;
   }
 
-  void calcCovariance(m2::control<SPACE> &in, vertex_ptr v,
+  void calcCovariance(m2::surf<SPACE> &in, vertex_ptr v,
                       coordinate_type &covVals, mat3 &covTens, T dx) {
     if (v->size() == 0)
       return;
@@ -368,7 +368,7 @@ public:
     // std::cout << lverts.size() << " " << covVals << std::endl;
   }
 
-  std::vector<edge_ptr> getEdgesNearPoint(m2::control<SPACE> &in,
+  std::vector<edge_ptr> getEdgesNearPoint(m2::surf<SPACE> &in,
                                           vertex_ptr seed, T eps,
                                           int maxRecDepth = 3) {
     // TIMER function//TIMER(__FUNCTION__);
@@ -433,7 +433,7 @@ public:
     return out;
   }
 
-  std::vector<edge_ptr> getLocalEdges(m2::control<SPACE> &in, vertex_ptr seed,
+  std::vector<edge_ptr> getLocalEdges(m2::surf<SPACE> &in, vertex_ptr seed,
                                       T eps) {
     // TIMER function//TIMER(__FUNCTION__);
     std::vector<edge_ptr> out;
@@ -475,7 +475,7 @@ public:
     return out;
   }
 
-  void calculateBiDirection(m2::control<SPACE> &in, vertex_ptr v,
+  void calculateBiDirection(m2::surf<SPACE> &in, vertex_ptr v,
                             coordinate_type &w, mat3 &cov, T dx) {
 
     // TIMER function//TIMER(__FUNCTION__);
@@ -505,7 +505,7 @@ public:
     calcSVD<SPACE>(cov, w);
   }
 
-  void calculateBiDirectionField(control_ref in, vector<mat3> &directionField,
+  void calculateBiDirectionField(surf_ref in, vector<mat3> &directionField,
                                  vector<coordinate_type> &directionWeights,
                                  T dx) {
 
@@ -548,7 +548,7 @@ public:
     }
   }
 
-  void shadeVertices(control_ref mesh) {
+  void shadeVertices(surf_ref mesh) {
     vector<vertex_ptr> &verts = mesh.get_vertices();
     vector<T> edgeWeights;
     vector<T> vertexWeights;
@@ -576,7 +576,7 @@ public:
     }
   }
 
-  void shadeVerticesWillmore(control_ref mesh) {
+  void shadeVerticesWillmore(surf_ref mesh) {
     vector<vertex_ptr> &verts = mesh.get_vertices();
     vector<T> vertexWeights;
     calcWillmoreEnergy(mesh, vertexWeights);
@@ -607,7 +607,7 @@ public:
     }
   }
 
-  void shadeVerticesWinding(control_ref mesh) {
+  void shadeVerticesWinding(surf_ref mesh) {
     vector<vertex_ptr> &verts = mesh.get_vertices();
 
     T maxW = 0;
