@@ -177,8 +177,11 @@ typename SPACE::coordinate_type center(typename surf<SPACE>::face_ptr f) {
   typename SPACE::real n = 0.0;
   for_each_face<SPACE>(f, [&n, &cen](face_vertex_ptr itb) {
     cen += get_coordinate<SPACE>(itb);
+    std::cout << "      <<" << get_coordinate<SPACE>(itb).transpose() << std::endl;
     n += 1.0;
   });
+
+  std::cout << "      <<" << n << std::endl;
 
   cen *= 1.0 / n;
   return cen;

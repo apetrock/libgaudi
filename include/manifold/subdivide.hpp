@@ -52,7 +52,7 @@ public:
 
   coordinate_type calc_vertex(vertex_ptr &vertex_in) {
     coordinate_type out(0, 0, 0);
-   
+
     T B = 3.0 / 2.0;
     T G = 1.0 / 4.0;
     face_vertex_ptr fvb = vertex_in->fbegin();
@@ -112,10 +112,13 @@ public:
     coordinate_type out =
         (c11 + c12 + c21 + c22) * 1. / 16. + (c1 + c2) * 3. / 8.;
     edge_in->flag = 1;
+
     return out;
   }
 
-  coordinate_type calc_center(face_ptr &face_in) { return this->center(face_in); }
+  coordinate_type calc_center(face_ptr &face_in) {
+    return this->center(face_in);
+  }
 
   surf_ref subdivide_control(surf_ref control_in) {
     std::cout << " ===subdividing=== " << std::endl;
@@ -171,11 +174,13 @@ public:
 
     for (long i = 0; i < cverts.size(); i++) {
       vertex_ptr nv = new vertex_type();
-      this->coordinate(calc_vertex(cverts[i]), cverts[i]);
-      //if (err == 0)
+      coordinate_type c = calc_vertex(cverts[i]);
+      this->coordinate(c, nv);
+      // if (err == 0)
       //  return control_in;
 
       nv->position_in_set() = i;
+      
       nverts[i] = nv;
     }
 
@@ -183,7 +188,8 @@ public:
     for (long i = 0; i < cedges.size(); i++) {
       vertex_ptr nv = new vertex_type();
 
-      this->coordinate(calc_edge(cedges[i]), nv);
+      coordinate_type c = calc_edge(cedges[i]);
+      this->coordinate(c, nv);
 
       long setpos = cverts.size() + i;
       nv->position_in_set() = setpos;
@@ -206,7 +212,9 @@ public:
 
       if (cf) {
         vertex_ptr nv = new vertex_type();
-        this->coordinate(calc_center(cf), nv);
+
+        coordinate_type c = calc_center(cf);
+        this->coordinate(c, nv);
         long setpos = cverts.size() + cedges.size() + i;
         nv->position_in_set() = setpos;
         nverts[setpos] = nv;
@@ -265,7 +273,6 @@ public:
           fv3->vertex() = vprev;
           fv3->face() = nf;
           vprev->add_face_vertex(fv3);
-
           fv0->next() = fv1;
           fv1->prev() = fv0;
           fv1->next() = fv2;

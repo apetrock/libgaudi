@@ -523,11 +523,13 @@ public:
 
     _meshGraph = mk.two_tets(1.0, -0.095);
 
+    _meshGraph->update_all();
+    _meshGraph->pack();
+
+    _meshGraph = &sub.subdivide_control(*_meshGraph);
+    _meshGraph = &sub.subdivide_control(*_meshGraph);
+    _meshGraph = &sub.subdivide_control(*_meshGraph);
      _meshGraph = &sub.subdivide_control(*_meshGraph);
-     _meshGraph = &sub.subdivide_control(*_meshGraph);
-     _meshGraph = &sub.subdivide_control(*_meshGraph);
-    // _meshGraph = &sub.subdivide_control(*_meshGraph);
-    /*
     _meshGraph->print();
 
     rem.triangulate(_meshGraph);
@@ -548,7 +550,7 @@ public:
     mod.centerGeometry(*_meshGraph);
 
     std::cout << "creating buffer" << std::endl;
-    */
+    
     // auto tree = build_tree(_meshGraph);
     // debugTree(tree, _debugLines);
 
