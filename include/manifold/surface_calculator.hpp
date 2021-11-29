@@ -12,8 +12,6 @@
 #include "debugger.h"
 #include "geometry_types.hpp"
 #include "m2Includes.h"
-#include "modify.hpp"
-#include "remesh.hpp"
 
 namespace m2 {
 
@@ -21,6 +19,7 @@ template <typename SPACE>
 inline void calcSVD(typename SPACE::coordinate_type *vec,
                     typename SPACE::coordinate_type &val) {
   M2_TYPEDEFS;
+
   Eigen::Matrix3f m3;
   for (int i = 0; i < 3; i++)
     for (int j = 0; j < 3; j++)
@@ -39,6 +38,7 @@ template <typename SPACE>
 inline void calcSVD(typename SPACE::mat3 &mi,
                     typename SPACE::coordinate_type &val) {
   M2_TYPEDEFS;
+  
   mat3 m3;
   for (int i = 0; i < 3; i++)
     for (int j = 0; j < 3; j++)
@@ -57,16 +57,16 @@ inline void calcSVD(typename SPACE::mat3 &mi,
       mi(i, j) = U(i, j);
 }
 
-template <typename SPACE> class surface_calculator {
+template <typename SPACE> class surface_calculator : public default_interface<SPACE> {
   M2_TYPEDEFS;
 
 public:
   T baryArea(face_vertex_ptr fv) {
     // assumes triangels
-    coordinate_type c0 = fv->coordinate();
-    coordinate_type c1 = fv->next()->coordinate();
-    coordinate_type c2n = fv->vnext()->next()->coordinate();
-    coordinate_type c2p = fv->vprev()->next()->coordinate();
+    coordinate_type c0 = this->coordinate(fv);
+    coordinate_type c1 = this->coordinate(fv->next());
+    coordinate_type c2n = this->coordinate(fv->vnext());
+    coordinate_type c2p = this->coordinate(fv->vprev());
 
     coordinate_type c1h = 0.5 * (c0 + c1);
     coordinate_type c2nh = (c0 + c1 + c2n) / 3.0;
@@ -101,15 +101,16 @@ public:
   T getEdgeWeight(edge_ptr ei) {
     face_vertex_ptr fv1 = ei->v1();
     face_vertex_ptr fv2 = ei->v2();
-    return fv1->cotan() + fv1->cotan();
+    return this->cotan(fv1) + this->cotan(fv2);
   }
 
   T willmore(face_vertex_ptr fv) {
 
-    coordinate_type ci = fv->coordinate();
-    coordinate_type cj = fv->next()->coordinate();
-    coordinate_type ck = fv->prev()->coordinate();
-    coordinate_type cl = fv->vnext()->next()->coordinate();
+    coordinate_type ci = this->coordinate(fv);
+    coordinate_type cj = this->coordinate(fv->next());
+    coordinate_type ck = this->coordinate(fv->prev());
+    coordinate_type cl = this->coordinate(fv->vnext()->next());
+
     coordinate_type A = cj - ck;
     A.normalize();
     coordinate_type B = cl - cj;
@@ -118,6 +119,7 @@ public:
     B.normalize();
     coordinate_type D = ci - ck;
     B.normalize();
+    
     return va::dot(A, C) * va::dot(B, D) - va::dot(A, B) * va::dot(C, D) -
            va::dot(B, C) * va::dot(D, A);
   }
@@ -215,9 +217,9 @@ public:
     for (long i = 0; i < tedges.size(); i++) {
       if (!tedges[i])
         continue;
-      T l = tedges[i]->length();
-      T A1 = tedges[i]->v1()->face()->area();
-      T A2 = tedges[i]->v2()->face()->area();
+      T l = this->length(tedges[i]);
+      T A1 = this->area(tedges[i]->v1()->face());
+      T A2 = this->area(tedges[i]->v2()->face());
       if (l > 1e-12 && A1 > 1e-12 && A2 > 1e-12) {
         edgeWeights[tedges[i]->position_in_set()] = getEdgeWeight(tedges[i]);
       } else
@@ -240,9 +242,9 @@ public:
 
             T wij = edgeWeights[itb->edge()->position_in_set()];
             T aij = baryArea(itb);
-            T polyArea = itb->face()->area();
-            coordinate_type c0 = itb->coordinate();
-            coordinate_type c1 = itb->next()->coordinate();
+            T polyArea = this->area(itb->face());
+            coordinate_type c0 = this->coordinate(itb);
+            coordinate_type c1 = this->coordinate(itb->next());
             wTotal += wij;
             aTotal += aij;
             kA += wij * (c1 - c0);
@@ -281,9 +283,9 @@ public:
 
             T wij = willmore(itb);
 
-            T polyArea = itb->face()->area();
-            coordinate_type c0 = itb->coordinate();
-            coordinate_type c1 = itb->next()->coordinate();
+            T polyArea = area(itb->face());
+            coordinate_type c0 = this->coordinate(itb);
+            coordinate_type c1 = this->coordinate(itb->next());
             wTotal += wij;
 
             itb = itb->vnext();

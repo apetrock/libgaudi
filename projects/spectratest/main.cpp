@@ -158,7 +158,7 @@ public:
   void createGeometry() {
     std::cout << "creating buffer" << std::endl;
     m2::obj_loader<space3> load;
-    m2::modify<space3> mod;
+    m2::affine<space3> mod;
 
     std::cout << "  loading assets" << std::endl;
     _meshGraph = &load("assets/messer.obj");
@@ -228,7 +228,6 @@ public:
 
   virtual void onAnimate() {
 
-    m2::modify<space3> mod;
     gg::fillBuffer(_meshGraph, _obj);
   }
 

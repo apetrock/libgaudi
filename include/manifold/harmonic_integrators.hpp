@@ -84,7 +84,7 @@ public:
     vector<coordinate_type> normals;
     vector<triangle_type> triangles;
     for (int i = 0; i < faces.size(); i++) {
-      std::vector<triangle_type> tris = faces[i]->get_tris();
+      std::vector<triangle_type> tris = m2::ci::get_tris<SPACE>(faces[i]);
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
 
@@ -183,7 +183,7 @@ public:
     vector<coordinate_type> normals;
     vector<triangle_type> triangles;
     for (int i = 0; i < faces.size(); i++) {
-      std::vector<triangle_type> tris = faces[i]->get_tris();
+      std::vector<triangle_type> tris = m2::ci::get_tris<SPACE>(faces[i]);
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
 

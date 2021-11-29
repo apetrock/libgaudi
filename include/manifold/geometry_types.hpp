@@ -351,9 +351,9 @@ public:
 
   enum class face_index {
     NORMAL = 0,
-    AREA = 1,
-    MAXINDEX = 2
-
+    CENTER = 1,
+    AREA = 2,
+    MAXINDEX = 3
   };
 };
 

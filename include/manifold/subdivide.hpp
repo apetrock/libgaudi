@@ -15,7 +15,7 @@
 
 #include <cmath>
 namespace m2 {
-template <typename SPACE> class subdivide {
+template <typename SPACE> class subdivide : public default_interface<SPACE> {
   M2_TYPEDEFS
 
 public:
@@ -50,16 +50,17 @@ public:
     obj_in->print();
   }
 
-  int calc_vertex(vertex_ptr &vertex_in, coordinate_type &out) {
-
+  coordinate_type calc_vertex(vertex_ptr &vertex_in) {
+    coordinate_type out(0, 0, 0);
+   
     T B = 3.0 / 2.0;
     T G = 1.0 / 4.0;
     face_vertex_ptr fvb = vertex_in->fbegin();
     face_vertex_ptr fve = vertex_in->fend();
 
-    coordinate_type cc = vertex_in->coordinate();
+    coordinate_type cc = this->coordinate(vertex_in);
 
-    //out = cc * (1. - B - G);
+    // out = cc * (1. - B - G);
     bool iterating = true;
     if (fvb == NULL)
       iterating == false;
@@ -71,18 +72,17 @@ public:
       iterating &= fvb != NULL;
       if (fvb != NULL) {
         face_vertex_ptr fvn = fvb->prev();
-        coordinate_type adj = fvn->coordinate();
-        coordinate_type opp = fvn->prev()->coordinate();
-        out += (B*adj + G*opp);
+        coordinate_type adj = this->coordinate(fvn);
+        coordinate_type opp = this->coordinate(fvn->prev());
+        out += (B * adj + G * opp);
         fvb = fvb->vnext();
         k += 1.0;
         i++;
       }
     }
     out /= k * k;
-    out +=  (1.0 - B / k - G / k) * cc;
-
-
+    out += (1.0 - B / k - G / k) * cc;
+    /*
     if (i == maxIt) {
       return 0;
       fvb->face()->color.r = 1.0;
@@ -90,6 +90,8 @@ public:
       fvb->face()->color.b = 0.0;
     } else
       return 1;
+    */
+    return out;
   }
 
   coordinate_type calc_edge(edge_ptr &edge_in) {
@@ -98,14 +100,14 @@ public:
     // c11     c21
     // c1  o   c2
     // c12     c22
-    coordinate_type c1 = fv1->coordinate();
-    coordinate_type c2 = fv2->coordinate();
+    coordinate_type c1 = this->coordinate(fv1);
+    coordinate_type c2 = this->coordinate(fv2);
 
-    coordinate_type c11 = fv1->vnext()->next()->coordinate();
-    coordinate_type c12 = fv1->prev()->coordinate();
+    coordinate_type c11 = this->coordinate(fv1->vnext()->next());
+    coordinate_type c12 = this->coordinate(fv1->prev());
 
-    coordinate_type c21 = fv2->vnext()->next()->coordinate();
-    coordinate_type c22 = fv2->prev()->coordinate();
+    coordinate_type c21 = this->coordinate(fv2->vnext()->next());
+    coordinate_type c22 = this->coordinate(fv2->prev());
 
     coordinate_type out =
         (c11 + c12 + c21 + c22) * 1. / 16. + (c1 + c2) * 3. / 8.;
@@ -113,51 +115,7 @@ public:
     return out;
   }
 
-  coordinate_type calc_center(face_ptr &face_in) {
-    return face_in->calc_center();
-    /*
-    face_vertex_ptr  fvb = face_in->fbegin();
-    face_vertex_ptr  fve = face_in->fend();
-    T size = (T)face_in->size();
-    bool iterating = true;
-    coordinate_type out;
-    while (iterating) {
-      iterating = fvb != fve;
-
-      face_vertex_ptr fvn = fvb->next();
-      coordinate_type adj = fvn->coordinate();
-      out += adj/size;
-
-      fvb = fvb->next();
-    }
-    return out;
-    */
-  }
-
-  coordinate_type calc_normal(coordinate_type &c0, coordinate_type &c1,
-                              coordinate_type &c2, coordinate_type &c3) {
-    coordinate_type out;
-    out[0] += (c0[1] - c1[1]) * (c0[2] + c1[2]);
-    out[1] += (c0[2] - c1[2]) * (c0[0] + c1[0]);
-    out[2] += (c0[0] - c1[0]) * (c0[1] + c1[1]);
-
-    out[0] += (c1[1] - c2[1]) * (c1[2] + c2[2]);
-    out[1] += (c1[2] - c2[2]) * (c1[0] + c2[0]);
-    out[2] += (c1[0] - c2[0]) * (c1[1] + c2[1]);
-
-    out[0] += (c2[1] - c3[1]) * (c2[2] + c3[2]);
-    out[1] += (c2[2] - c3[2]) * (c2[0] + c3[0]);
-    out[2] += (c2[0] - c3[0]) * (c2[1] + c3[1]);
-
-    out[0] += (c3[1] - c0[1]) * (c3[2] + c0[2]);
-    out[1] += (c3[2] - c0[2]) * (c3[0] + c0[0]);
-    out[2] += (c3[0] - c0[0]) * (c3[1] + c0[1]);
-    T inv = va::Q_rsqrt(out[0] * out[0] + out[1] * out[1] + out[2] * out[2]);
-    //            out = fnormalize(out);
-    out = out * inv;
-
-    return out;
-  }
+  coordinate_type calc_center(face_ptr &face_in) { return this->center(face_in); }
 
   surf_ref subdivide_control(surf_ref control_in) {
     std::cout << " ===subdividing=== " << std::endl;
@@ -213,10 +171,9 @@ public:
 
     for (long i = 0; i < cverts.size(); i++) {
       vertex_ptr nv = new vertex_type();
-      //                nv->coordinate() = cverts[i]->coordinate();
-      int err = calc_vertex(cverts[i], nv->coordinate());
-      if (err == 0)
-        return control_in;
+      this->coordinate(calc_vertex(cverts[i]), cverts[i]);
+      //if (err == 0)
+      //  return control_in;
 
       nv->position_in_set() = i;
       nverts[i] = nv;
@@ -225,11 +182,8 @@ public:
     // loop through edges and create all new vertices
     for (long i = 0; i < cedges.size(); i++) {
       vertex_ptr nv = new vertex_type();
-      //                nv->coordinate() = (cedges[i]->v1()->coordinate() +
-      //                cedges[i]->v2()->coordinate())*0.5;
-      nv->coordinate() = calc_edge(cedges[i]);
 
-      // std::cout << nv->coordinate().transpose() << std::endl;
+      this->coordinate(calc_edge(cedges[i]), nv);
 
       long setpos = cverts.size() + i;
       nv->position_in_set() = setpos;
@@ -252,9 +206,7 @@ public:
 
       if (cf) {
         vertex_ptr nv = new vertex_type();
-        // nv->coordinate() = cf->center();
-        nv->coordinate() = calc_center(cf);
-        // std::cout << nv->coordinate().transpose() << std::endl;
+        this->coordinate(calc_center(cf), nv);
         long setpos = cverts.size() + cedges.size() + i;
         nv->position_in_set() = setpos;
         nverts[setpos] = nv;
@@ -375,10 +327,6 @@ public:
 
           fv3->edge() = e3;
           nf->size() = 4;
-
-          //                        nf->update_normal();
-          nf->normal() = calc_normal(fv0->coordinate(), fv1->coordinate(),
-                                     fv2->coordinate(), fv3->coordinate());
 
           nf->position_in_set() = fcntr;
           nfaces[fcntr] = nf;

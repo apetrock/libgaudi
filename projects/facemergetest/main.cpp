@@ -47,7 +47,7 @@ using namespace GaudiMath;
 
 namespace m2 {
 
-template <typename SPACE> class triangle_ops {
+template <typename SPACE> class triangle_ops : public default_interface<SPACE> {
 public:
   M2_TYPEDEFS;
 
@@ -231,14 +231,14 @@ public:
     fA->print_vert_ids();
     fB->print_vert_ids(true);
 
-    coordinate_type ca0 = fvA0->coordinate();
-    coordinate_type ca1 = fvA1->coordinate();
-    coordinate_type ca2 = fvA2->coordinate();
+    coordinate_type ca0 = this->coordinate(fvA0);
+    coordinate_type ca1 = this->coordinate(fvA1);
+    coordinate_type ca2 = this->coordinate(fvA2);
     // assume the other coordinate rotates in opposite direction since they
     // are facing opposite directions
-    coordinate_type cb0 = fvB0->coordinate();
-    coordinate_type cb1 = fvB1->coordinate();
-    coordinate_type cb2 = fvB2->coordinate();
+    coordinate_type cb0 = this->coordinate(fvB0);
+    coordinate_type cb1 = this->coordinate(fvB1);
+    coordinate_type cb2 = this->coordinate(fvB2);
 
     T d0 = 1.0 / 3.0 *
            ((cb0 - ca0).squaredNorm() + (cb1 - ca1).squaredNorm() +
@@ -270,9 +270,9 @@ public:
       vertex_ptr vA = fvA->vertex();
       vertex_ptr vB = fvB->vertex();
       if (vA != vB) {
-        coordinate_type cA = vA->coordinate();
-        coordinate_type cB = vB->coordinate();
-        vA->coordinate() = 0.5 * (cA + cB);
+        coordinate_type cA = this->coordinate(vA);
+        coordinate_type cB = this->coordinate(vB);
+        this->coordinate(0.5 * (cA + cB), vA);
       }
       fvA = fvA->next();
       fvB = fvB->prev();
@@ -289,7 +289,7 @@ public:
     std::vector<triangle_type> tris;
 
     std::for_each(faces.begin(), faces.end(), [&tris](const face_ptr &f) {
-      std::vector<triangle_type> ftris = f->get_tris();
+      std::vector<triangle_type> ftris = m2::ci::get_tris<SPACE>(f);
       tris.insert(tris.end(), ftris.begin(), ftris.end());
     });
 
@@ -450,10 +450,10 @@ void debugLines(m2::surf<SPACE> *mesh, gg::DebugBufferPtr debug) {
   std::cout << "  rendering vorticity" << std::endl;
 
   for (auto e : mesh->get_edges()) {
-    coordinate_type c0 = e->v1()->coordinate();
-    coordinate_type c1 = e->v2()->coordinate();
-    coordinate_type N0 = e->v1()->face()->normal();
-    coordinate_type N1 = e->v2()->face()->normal();
+    coordinate_type c0 = m2::ci::get_coordinate<SPACE>(e->v1());
+    coordinate_type c1 = m2::ci::get_coordinate<SPACE>(e->v2());
+    coordinate_type N0 = m2::ci::get_coordinate<SPACE>(e->v1());
+    coordinate_type N1 = m2::ci::get_coordinate<SPACE>(e->v2());
     c0 += 0.025 * N0;
     c1 += 0.025 * N1;
 
@@ -473,9 +473,9 @@ void debugNormals(m2::surf<SPACE> *mesh, gg::DebugBufferPtr debug) {
   std::cout << "  rendering vorticity" << std::endl;
 
   for (auto f : mesh->get_faces()) {
-    coordinate_type c = f->center();
-    coordinate_type N = f->normal();
-    T area = f->calc_area();
+    coordinate_type c = m2::ci::center<SPACE>(f);
+    coordinate_type N = m2::ci::normal<SPACE>(f);
+    T area = m2::ci::area<SPACE>(f);
     coordinate_type c0 = c;
     coordinate_type c1 = c + sqrt(area) * N;
     gg::Vec4 col(1.0, 0.0, 0.0, 1.0);
@@ -516,54 +516,20 @@ public:
     m2::subdivide<space3> sub;
     m2::make<space3> mk;
     m2::convex_hull<space3> ch;
-    m2::add_handle<space3> ah;
     m2::remesh<space3> rem;
 
     m2::construct<space3> bevel;
-    m2::modify<space3> mod;
+    m2::affine<space3> mod;
 
     _meshGraph = mk.two_tets(1.0, -0.095);
 
-    _meshGraph = &sub.subdivide_control(*_meshGraph);
-    _meshGraph = &sub.subdivide_control(*_meshGraph);
-    _meshGraph = &sub.subdivide_control(*_meshGraph);
-    _meshGraph = &sub.subdivide_control(*_meshGraph);
-    std::vector<m2::surf<space3>::vertex_ptr> verts =
-        _meshGraph->get_vertices();
-    int start_s = clock();
-    int i;
-    space3::coordinate_type bar = verts[0]->coordinate();
-    for (i = 0; i < 5000; i++) {
-      std::for_each(
-          verts.begin(), verts.end(), [](m2::surf<space3>::vertex_ptr v) {
-            const space3::coordinate_type &bar = v->coordinate();
-            m2::set_coordinate<space3>(bar, v);
-            space3::coordinate_type foo = m2::get_coordinate<space3>(v);
-            foo *= 1.01;
-            m2::set_coordinate<space3>(foo, v);
-          });
-    }
-    int stop_s = clock();
-    cout << "time 0: " << (stop_s - start_s) / double(CLOCKS_PER_SEC) * 1000
-         << std::endl;
-
-    start_s = clock();
-    i;
-    for (i = 0; i < 5000; i++) {
-      std::for_each(verts.begin(), verts.end(),
-                    [](m2::surf<space3>::vertex_ptr v) {
-                      const space3::coordinate_type &bar = v->coordinate();
-                      v->coordinate() = bar;
-                      space3::coordinate_type foo = v->coordinate();
-                      foo *= 1.01;
-                      v->coordinate() = foo;
-                    });
-    }
-    stop_s = clock();
-    cout << "time 1: " << (stop_s - start_s) / double(CLOCKS_PER_SEC) * 1000
-         << std::endl;
-
+     _meshGraph = &sub.subdivide_control(*_meshGraph);
+     _meshGraph = &sub.subdivide_control(*_meshGraph);
+     _meshGraph = &sub.subdivide_control(*_meshGraph);
+    // _meshGraph = &sub.subdivide_control(*_meshGraph);
+    /*
     _meshGraph->print();
+
     rem.triangulate(_meshGraph);
     std::cout << "--center" << std::endl;
     std::cout << "--update_all" << std::endl;
@@ -582,10 +548,12 @@ public:
     mod.centerGeometry(*_meshGraph);
 
     std::cout << "creating buffer" << std::endl;
-
+    */
     // auto tree = build_tree(_meshGraph);
     // debugTree(tree, _debugLines);
 
+    _meshGraph->update_all();
+    _meshGraph->pack();
     debugLines(_meshGraph, _debugLines);
     debugNormals(_meshGraph, _debugLines);
     gg::fillBuffer(_meshGraph, _obj);

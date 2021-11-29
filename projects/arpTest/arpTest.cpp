@@ -143,11 +143,11 @@ void centerGeometry(m2::surf<SPACE>& in){
   maxl = maxl > dl[1] ? maxl : dl[1]; 
   maxl = maxl > dl[2] ? maxl : dl[2]; 
   T s = 2.0/maxl;
-  m2::modify<SPACE> mod;
+  m2::affine<SPACE> aff;
   std::cout << "offset: "<< cen.transpose() << std::endl;
   std::cout << "scale: "<< s << std::endl;
-  mod.translate(&in,-cen[0],-cen[1],-cen[2]);
-  mod.scale(&in,s,s,s);
+  aff.translate(&in, -cen[0], -cen[1], -cen[2]);
+  aff.scale(&in, s, s, s);
 };
 
 
@@ -310,7 +310,7 @@ public:
     m2::remesh<space3>	    rem;
 
     m2::construct<space3>	    bevel;
-    m2::modify<space3> mod;  
+    m2::affine<space3> mod;  
     
     _meshGraph = &load("assets/models/messer.obj");
     //_meshGraph = &load("assets/models/donut.obj");

@@ -13,7 +13,7 @@
 
 namespace m2 {
 
-template <typename SPACE> class geometry_helper {
+template <typename SPACE> class geometry_helper : public default_interface<SPACE> {
 public:
   M2_TYPEDEFS;
 
@@ -186,19 +186,12 @@ public:
 
 }; // geometry helper
 
-template <typename SPACE> class construct {
+template <typename SPACE> class construct : public default_interface<SPACE> {
   M2_TYPEDEFS;
 
 public:
   construct() {}
   ~construct() {}
-
-  edge_ptr insert_edge(surf_ptr obj_in, vertex_ptr v1, vertex_ptr v2) {
-
-    face_vertex_ptr fv1 = v1->get_insertion_face_vertex(v2);
-    face_vertex_ptr fv2 = v2->get_insertion_face_vertex(v1);
-    return insert_edge(obj_in, fv1, fv2);
-  }
 
   edge_ptr insert_edge(surf_ptr obj_in, face_vertex_ptr v1,
                        face_vertex_ptr v2) {
@@ -219,8 +212,7 @@ public:
     }
   }
 
-  edge_ptr split_face(surf_ptr obj_in, face_vertex_ptr v1,
-                      face_vertex_ptr v2) {
+  edge_ptr split_face(surf_ptr obj_in, face_vertex_ptr v1, face_vertex_ptr v2) {
 
     face_ptr f1 = v1->face();
     face_ptr f2 = new face_type();
@@ -342,7 +334,7 @@ public:
 
     face_vertex_ptr v1 = e->v1();
     face_vertex_ptr v2 = e->v2();
-    
+
     v1->vertex()->front() = v1->vnext();
     v2->vertex()->front() = v2->vnext();
 
@@ -440,9 +432,9 @@ public:
 
     else {
       //	 std::cout << e->position_in_set() << " " <<
-      //v1->position_in_set() << " " << v2->position_in_set() << " "
+      // v1->position_in_set() << " " << v2->position_in_set() << " "
       //	 << v1a << " " << v2a << " " << " " << v1p << " " << v2n <<
-      //std::endl;
+      // std::endl;
       v1p->next() = v2n;
       v2n->prev() = v1p;
       v2p->next() = v1n;
@@ -620,15 +612,15 @@ public:
     face_vertex_ptr fv1 = edge_in->v1();
     face_vertex_ptr fv2 = edge_in->v2();
 
-    coordinate_type c1 = fv1->coordinate();
-    coordinate_type c2 = fv2->coordinate();
+    coordinate_type c1 = this->coordinate(fv1);
+    coordinate_type c2 = this->coordinate(fv2);
     coordinate_type cn = 0.5 * (c1 + c2);
 
     vertex_ptr v1 = fv1->vertex();
     vertex_ptr v2 = fv2->vertex();
 
-    vertex_ptr vn = new vertex_type(cn);
-
+    vertex_ptr vn = new vertex_type();
+    this->coordinate(cn, vn);
     edge_ptr e1 = edge_in;
     edge_ptr e2 = new edge_type();
     face_vertex_ptr fv1n = fv1->add_next();
@@ -669,15 +661,13 @@ public:
 
   list<edge_ptr> pipe_face(surf_ptr obj_in, face_ptr f1, face_ptr f2) {
     list<edge_ptr> new_edges;
-    face_vertex_ptr fv1 = f1->fbegin(), fv1e = f1->fend(),
-
-                    fv2 = f2->fbegin(), fv2e = f2->fend(),
-
-                    fv1t = fv1, fv2t = fv2;
+    face_vertex_ptr fv1 = f1->fbegin(), fv1e = f1->fend(), fv2 = f2->fbegin(),
+                    fv2e = f2->fend(), fv1t = fv1, fv2t = fv2;
 
     bool it1 = true, it2 = true;
-    T mz1 = fv1->coordinate()[2];
-    T mz2 = fv1->coordinate()[2];
+    coordinate_type c0 = this->coordinate(fv1);
+    T mz1 = c0[2];
+    T mz2 = c0[2];
 
     it1 = true;
     it2 = true;
@@ -685,7 +675,7 @@ public:
 
     while (it1) {
       it1 = fv1 != fv1e;
-      c1 = fv1->coordinate();
+      c1 = this->coordinate(fv1);
 
       if (c1[2] > mz1) {
         mz1 = c1[2];
@@ -696,7 +686,7 @@ public:
 
     while (it2) {
       it2 = fv2 != fv2e;
-      c2 = fv2->coordinate();
+      c2 = this->coordinate(fv2);
 
       if (c2[2] > mz2) {
         mz2 = c2[2];
@@ -744,8 +734,10 @@ public:
                     fv1t = fv1, fv2t = fv2;
 
     bool it1 = true, it2 = true;
-    T mz1 = fv1->coordinate()[2];
-    T mz2 = fv1->coordinate()[2];
+
+    coordinate_type c0 = this->coordinate(fv1);
+    T mz1 = c0[2];
+    T mz2 = c0[2];
 
     it1 = true;
     it2 = true;
@@ -753,7 +745,7 @@ public:
 
     while (it1) {
       it1 = fv1 != fv1e;
-      c1 = fv1->coordinate();
+      c1 = this->coordinate(fv1);
 
       if (c1[2] > mz1) {
         mz1 = c1[2];
@@ -764,7 +756,7 @@ public:
 
     while (it2) {
       it2 = fv2 != fv2e;
-      c2 = fv2->coordinate();
+      c2 = this->coordinate(fv2);
 
       if (c2[2] > mz2) {
         mz2 = c2[2];
@@ -985,11 +977,10 @@ public:
     vertex_ptr v1 = va0->vertex();
     vertex_ptr v2 = vb0->vertex();
 
-    coordinate_type c1 = v1->coordinate();
-    coordinate_type c2 = v2->coordinate();
+    coordinate_type c1 = this->coordinate(v1);
+    coordinate_type c2 = this->coordinate(v2);
     coordinate_type cp = 0.5 * (c1 + c2);
-
-    v1->coordinate() = cp;
+    this->coordinate(cp, v1);
 
     if (va0->face()->size() == 1 || va0->face()->size() == 2) {
       std::cout << "e pos (v2): " << e->position_in_set() << std::endl;
@@ -1125,11 +1116,10 @@ public:
     if (vb2)
       delete vb2;
 
-    auto reassignFront = [&v1](face_vertex_ptr fv) -> void {
+    for_each(v1, [&v1](face_vertex_ptr fv) -> void {
       fv->vertex() = v1;
       fv->next()->vertex()->front() = fv->next();
-    };
-    m2::surf<SPACE>::for_each(v1, reassignFront);
+    });
 
     // while(this->delete_degenerates(obj,v1));
     return v1;
@@ -1148,11 +1138,11 @@ public:
     // v1->print();
     // v2->print();
 
-    coordinate_type c1 = v1->coordinate();
-    coordinate_type c2 = v2->coordinate();
+    coordinate_type c1 = this->coordinate(v1);
+    coordinate_type c2 = this->coordinate(v2);
     coordinate_type cp = 0.5 * (c1 + c2);
+    this->coordinate(cp,v1);
 
-    v1->coordinate() = cp;
     if (v2->size() == 3) {
 
       face_ptr f = delete_vertex_primitive(obj, v2);
@@ -1226,10 +1216,10 @@ public:
 
     vertex_ptr v1 = fv1->vertex();
     vertex_ptr v2 = fv2->vertex();
-    coordinate_type c1 = v1->coordinate();
-    coordinate_type c2 = v2->coordinate();
+    coordinate_type c1 = coordinate(v1);
+    coordinate_type c2 = coordinate(v2);
     coordinate_type cp = 0.5 * (c1 + c2);
-    v1->coordinate() = cp;
+    coordinate(v1, cp);
 
     face_vertex_ptr fv1p = fv1->vnext();
     // if(fv1->face()->size() < 3 || fv2->face()->size() < 3) {
@@ -1333,14 +1323,14 @@ public:
 
     face_vertex_ptr fvb2 = f2->fbegin();
     face_vertex_ptr fve2 = f2->fend();
-    coordinate_type fc = f1->fbegin()->coordinate();
+    coordinate_type fc = coordinate(f1->fbegin());
 
     T normv = 1000., normt = 1000.;
     bool it1 = true;
 
     while (it1) {
       it1 = fvb2 != fve2;
-      normv = dot(fc, fvb2->coordinate());
+      normv = dot(fc, coordinate(fvb2));
       if (normv < normt) {
         normt = normv;
         f2->fbegin() = fvb2;
@@ -1396,14 +1386,14 @@ public:
 
     face_vertex_ptr fvb2 = f2->fbegin();
     face_vertex_ptr fve2 = f2->fend();
-    coordinate_type fc = f1->fbegin()->coordinate();
+    coordinate_type fc = coordinate(f1->fbegin());
 
     T normv = 1000., normt = 1000.;
     bool it1 = true;
 
     while (it1) {
       it1 = fvb2 != fve2;
-      normv = dot(fc, fvb2->coordinate());
+      normv = dot(fc, coordinate(fvb2));
       if (normv < normt) {
         normt = normv;
         f2->fbegin() = fvb2;
@@ -1454,21 +1444,19 @@ public:
     return true;
   }
 
-  void bevel(surf_ptr obj_in, const int &i1, const T &offset,
-             const T &inset) {
+  void bevel(surf_ptr obj_in, const int &i1, const T &offset, const T &inset) {
     face_ptr f1 = obj_in->face(i1);
     this->bevel_face(obj_in, f1, offset, inset);
   }
 
   bool bevel_face(surf_ptr obj_in, face_ptr f1, const T &offset,
                   const T &inset) {
-    f1->update_normal();
 
     face_vertex_ptr fvb = f1->fbegin();
     face_vertex_ptr fve = fvb->prev();
     bool it1 = true;
-    coordinate_type N = fvb->face()->normal();
-    coordinate_type cen = fvb->face()->calc_center();
+    coordinate_type N = this->normal(fvb->face());
+    coordinate_type cen = this->center(fvb->face());
 
     vector<vertex_ptr> nverts;
     vector<vertex_ptr> overts;
@@ -1485,13 +1473,14 @@ public:
 
     while (it1) {
       it1 = fvb != fve;
-      coordinate_type c = fvb->coordinate();
+      coordinate_type c = this->coordinate(fvb);
 
       coordinate_type C = c - cen;
       C.normalize();
       coordinate_type cn = c + N * offset + inset * C;
 
-      vertex_ptr nv = new vertex_type(cn);
+      vertex_ptr nv = new vertex_type();
+      this->coordinate(cn, nv);
       vertex_ptr ov = fvb->vertex();
       // push back the old vertices and add the new ofset vertices
       nverts.push_back(nv);
@@ -1583,7 +1572,6 @@ public:
       topfv.push_back(fv1);
       botfv.push_back(fv3);
       botfv.push_back(fv0);
-      nf->update_normal();
 
       obj_in->push_face(nf);
       fvb = fvb->next();
@@ -1873,7 +1861,6 @@ public:
     }
   }
 };
-
 
 } // namespace m2
 #endif

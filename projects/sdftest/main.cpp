@@ -53,7 +53,7 @@ build_tree(m2::surf<SPACE> *mesh) {
   std::vector<triangle_type> tris;
 
   std::for_each(faces.begin(), faces.end(), [&tris](const face_ptr &f) {
-    std::vector<triangle_type> ftris = f->get_tris();
+    std::vector<triangle_type> ftris = m2::ci::get_tris<SPACE>(f);
     tris.insert(tris.end(), ftris.begin(), ftris.end());
   });
 
@@ -99,7 +99,7 @@ public:
   void createGeometry() {
     std::cout << "creating buffer" << std::endl;
     m2::obj_loader<space3> load;
-    m2::modify<space3> mod;
+    m2::affine<space3> mod;
 
     std::cout << "  loading assets" << std::endl;
     _meshGraph = &load("assets/messer.obj");
@@ -184,7 +184,7 @@ public:
 
     auto &faces = _meshGraph->get_faces();
     for (int i = 0; i < faces.size(); i++) {
-      std::vector<m2::face_triangle<space3>> tris = faces[i]->get_tris();
+      std::vector<m2::face_triangle<space3>> tris = m2::ci::get_tris<space3>(faces[i]);
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
 
@@ -240,7 +240,7 @@ public:
     std::vector<space3::vec3> normals;
 
     for (int i = 0; i < faces.size(); i++) {
-      std::vector<m2::face_triangle<space3>> tris = faces[i]->get_tris();
+      std::vector<m2::face_triangle<space3>> tris = m2::ci::get_tris<space3>(faces[i]);
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
 
@@ -293,7 +293,6 @@ public:
 
   virtual void onAnimate() {
 
-    m2::modify<space3> mod;
     gg::fillBuffer(_meshGraph, _obj);
   }
 

@@ -7,13 +7,8 @@
 #include <omp.h>
 #endif
 
-#include "bins.hpp"
-#include "conj_grad.hpp"
 #include "debugger.h"
-#include "geometry_types.hpp"
 #include "m2Includes.h"
-#include "modify.hpp"
-#include "remesh.hpp"
 #include "surface_calculator.hpp"
 
 namespace m2 {

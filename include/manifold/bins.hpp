@@ -4,7 +4,7 @@
 #include "conj_grad.hpp"
 #include "debugger.h"
 #include "m2Includes.h"
-#include "modify.hpp"
+
 #include "quartic/cubic.hpp"
 #include "tribox_test.hpp"
 #include <stack>
@@ -204,10 +204,10 @@ public:
   M2_TYPEDEFS;
 
   T calcEdgeEdgeDistance(edge_ptr e0, edge_ptr e1) {
-    coordinate_type x00 = e0->v1()->coordinate();
-    coordinate_type x01 = e0->v2()->coordinate();
-    coordinate_type x10 = e1->v1()->coordinate();
-    coordinate_type x11 = e1->v2()->coordinate();
+    coordinate_type x00 = get_coordinate(e0->v1());
+    coordinate_type x01 = get_coordinate(e0->v2());
+    coordinate_type x10 = get_coordinate(e1->v1());
+    coordinate_type x11 = get_coordinate(e1->v2());
     return va::distance_Segment_Segment(x00, x01, x10, x11);
   }
 
@@ -395,8 +395,8 @@ template <typename SPACE> struct face_bin {
         face_vertex_ptr fv1 = f->fbegin();
         face_vertex_ptr fv2 = fv1->next();
         face_vertex_ptr fv3 = fv2->next();
-        coordinate_type tri[3] = {fv1->coordinate(), fv2->coordinate(),
-                                  fv3->coordinate()};
+        coordinate_type tri[3] = {get_coordinate(fv1), get_coordinate(fv2),
+                                  get_coordinate(fv3)};
 
         coordinate_type cen(0, 0, 0), min, max;
         for (int j = 0; j < 3; j++) {
@@ -453,8 +453,8 @@ template <typename SPACE> struct face_bin {
         face_vertex_ptr fv1 = f->fbegin();
         face_vertex_ptr fv2 = fv1->next();
         face_vertex_ptr fv3 = fv2->next();
-        coordinate_type tri[3] = {fv1->coordinate(), fv2->coordinate(),
-                                  fv3->coordinate()};
+        coordinate_type tri[3] = {get_coordinate(fv1), get_coordinate(fv2),
+                                  get_coordinate(fv3)};
 
         coordinate_type cen(0, 0, 0), min, max;
         for (int j = 0; j < 3; j++) {
@@ -522,12 +522,11 @@ template <typename SPACE> struct face_bin {
   void binCenters(surf_ref mesh, T dx) {
     // future home of barycenters???
     face_array &faces = mesh.get_faces();
-    coordinate_type gmin = mesh.calc_min();
-    coordinate_type gmax = mesh.calc_max();
     _dx = dx;
     T idx = 1.0 / dx;
-    coordinate_type gcen = 0.5 * (gmin + gmax);
-    coordinate_type glengths = gmax - gmin;
+    box_type bb = ci::bound<SPACE>(&mesh);
+    coordinate_type gcen = bb.center;
+    coordinate_type glengths = 2.0 * bb.half;
 
     _center = gcen;
     //_lengths = glengths;
@@ -546,7 +545,7 @@ template <typename SPACE> struct face_bin {
     for (int c = 0; c < faces.size(); c++) {
       face_ptr f = faces[c];
       if (f) {
-        coordinate_type p = f->center();
+        coordinate_type p = ci::center<SPACE>(f);
         int b[3];
         nearestBin(p, b);
         int index = b[0] + b[1] * _xRes + b[2] * _xRes * _yRes;
@@ -565,7 +564,7 @@ template <typename SPACE> struct face_bin {
     for (int c = 0; c < faces.size(); c++) {
       face_ptr f = faces[c];
       if (f) {
-        coordinate_type p = f->center();
+        coordinate_type p = ci::center<SPACE>(f);
         int b[3];
         nearestBin(p, b);
         int index = b[0] + b[1] * _xRes + b[2] * _xRes * _yRes;
@@ -777,8 +776,8 @@ template <typename SPACE> struct edge_bin {
 
       face_vertex_ptr fv1 = e->v1();
       face_vertex_ptr fv2 = e->v2();
-      coordinate_type p1 = fv1->coordinate();
-      coordinate_type p2 = fv2->coordinate();
+      coordinate_type p1 = get_coordinate(fv1);
+      coordinate_type p2 = get_coordinate(fv2);
       DDA_3D(c, p1, p2, gmin, gmax, 0);
     }
 
@@ -797,8 +796,8 @@ template <typename SPACE> struct edge_bin {
 
       face_vertex_ptr fv1 = e->v1();
       face_vertex_ptr fv2 = e->v2();
-      coordinate_type p1 = fv1->coordinate();
-      coordinate_type p2 = fv2->coordinate();
+      coordinate_type p1 = get_coordinate(fv1);
+      coordinate_type p2 = get_coordinate(fv2);
       DDA_3D(c, p1, p2, gmin, gmax, 1);
     }
   }
@@ -914,7 +913,7 @@ template <typename SPACE> struct vertex_bin {
     for (int c = 0; c < verts.size(); c++) {
       vertex_ptr v = verts[c];
       if (v) {
-        coordinate_type p = v->coordinate();
+        coordinate_type p = get_coordinate(v);
         int b[3];
         nearestBin(p, b);
         int index = b[0] + b[1] * _xRes + b[2] * _xRes * _yRes;
@@ -933,7 +932,7 @@ template <typename SPACE> struct vertex_bin {
     for (int c = 0; c < verts.size(); c++) {
       vertex_ptr v = verts[c];
       if (v) {
-        coordinate_type p = v->coordinate();
+        coordinate_type p = get_coordinate(v);
         int b[3];
         nearestBin(p, b);
         int index = b[0] + b[1] * _xRes + b[2] * _xRes * _yRes;

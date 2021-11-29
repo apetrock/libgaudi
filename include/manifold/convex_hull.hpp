@@ -12,7 +12,7 @@
 
 #include "construct.hpp"
 #include "m2Includes.h"
-#include "modify.hpp"
+#include "triangle_operations.hpp"
 #include "remesh.hpp"
 #include <time.h>
 
@@ -107,9 +107,9 @@ public:
       std::cout << fv1 << " " << fv2 << " " << fv3 << std::endl;
       for (; itb != ite; itb++) {
         coordinate_type c4 = *itb;
-        coordinate_type v41 = fv1->coordinate() - c4;
-        coordinate_type v42 = fv2->coordinate() - c4;
-        coordinate_type v43 = fv3->coordinate() - c4;
+        coordinate_type v41 = get_coordinate(fv1) - c4;
+        coordinate_type v42 = get_coordinate(fv2) - c4;
+        coordinate_type v43 = get_coordinate(fv3) - c4;
         T det = determinant(v41, v42, v43);
         if (det < 0.0) {
           to_fill.push_back(c4);
@@ -127,17 +127,17 @@ public:
       if (det < 0) {
         std::cout << "flipping edges" << std::endl;
         edge_ptr e = edges[i];
-        m2::modify<SPACE> mod;
-        e = mod.flip_edge(e);
+        m2::triangle_operations<SPACE> triops;
+        e = triops.flip(e);
       }
     }
   }
 
   T edge_concave(edge_ptr e) {
-    coordinate_type v1 = e->v1()->vertex()->coordinate();
-    coordinate_type v2 = e->v1()->prev()->vertex()->coordinate();
-    coordinate_type v3 = e->v2()->vertex()->coordinate();
-    coordinate_type v4 = e->v2()->prev()->vertex()->coordinate();
+    coordinate_type v1 = get_coordinate(e->v1()->vertex());
+    coordinate_type v2 = get_coordinate(e->v1()->prev()->vertex());
+    coordinate_type v3 = get_coordinate(e->v2()->vertex());
+    coordinate_type v4 = get_coordinate(e->v2()->prev()->vertex());
 
     T det = determinant(v2 - v1, v2 - v3, v2 - v4);
     return det;
@@ -168,9 +168,9 @@ public:
         face_vertex_ptr fv3 = fv2->next();
         ;
         coordinate_type c4 = cen;
-        coordinate_type v41 = fv1->coordinate() - c4;
-        coordinate_type v42 = fv2->coordinate() - c4;
-        coordinate_type v43 = fv3->coordinate() - c4;
+        coordinate_type v41 = get_coordinate(fv1) - c4;
+        coordinate_type v42 = get_coordinate(fv2) - c4;
+        coordinate_type v43 = get_coordinate(fv3) - c4;
 
         T det1 = determinant(v41, v42, v43);
         if (det1 < 0) {
@@ -267,9 +267,9 @@ public:
       std::cout << "looping through next coordinate list" << std::endl;
       while (itb != ite) {
         coordinate_type c1 = *itb;
-        coordinate_type p1 = fv1->coordinate();
-        coordinate_type p2 = fv2->coordinate();
-        coordinate_type p3 = fv3->coordinate();
+        coordinate_type p1 = get_coordinate(fv1);
+        coordinate_type p2 = get_coordinate(fv2);
+        coordinate_type p3 = get_coordinate(fv3);
         T d = distance_from_plane(p1, p2, p3, c1);
 
         if (d > dmax) {

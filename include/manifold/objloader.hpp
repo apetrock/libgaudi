@@ -79,7 +79,7 @@ public:
   vector<list<face_vertex_ptr>> corners;
 }; // merge_proc
 
-template <typename SPACE> class obj_loader {
+template <typename SPACE> class obj_loader : public default_interface<SPACE> {
   M2_TYPEDEFS
 
 public:
@@ -188,7 +188,7 @@ public:
       }
       if (vert->position_in_set() == 14637) {
         std::cout << "14637:" << fvn << " " << fvn->edge() << " "
-                  << fvn->face()->area() << " "
+                  << this->area(fvn->face()) << " "
                   << fvn->next()->vertex()->position_in_set() << " "
                   << fvn->prev()->vertex()->position_in_set() << " "
                   << std::endl;
@@ -202,7 +202,8 @@ public:
     surf_ptr obj = new surf_type();
     for (int i = 0; i < inputVerts.size(); i++) {
       coordinate_type v = inputVerts[i];
-      vertex_ptr vert = new vertex_type(v);
+      vertex_ptr vert = new vertex_type();
+      this->coordinate(v, vert);
       obj->push_vertex(vert);
     }
 

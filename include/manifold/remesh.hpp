@@ -20,8 +20,8 @@
 #include <cmath>
 
 namespace m2 {
-template <typename SPACE> class remesh {
-  M2_TYPEDEFS
+template <typename SPACE> class remesh : public default_interface<SPACE> {
+  M2_TYPEDEFS;
 
 public:
   remesh() {}
@@ -74,8 +74,8 @@ public:
 
     // 2. calculate center vertex
     coordinate_type cc = cen;
-    vertex_ptr v0 = new vertex_type(cc);
-
+    vertex_ptr v0 = new vertex_type();
+    this->coordinate(cc,v0);
     obj_in->push_vertex(v0);
 
     face_vertex_ptr itb = face_in->fbegin();
@@ -104,7 +104,7 @@ public:
       obj_in->push_face(nf);
     }
 
-    for(int i = 0; i < new_faces.size(); i++){
+    for (int i = 0; i < new_faces.size(); i++) {
       int ip = (i + 1) % new_faces.size();
       face_ptr f0 = new_faces[i];
       face_ptr f1 = new_faces[ip];
@@ -148,8 +148,7 @@ public:
     control_in.update_all();
   }
 
-  bool merge_adjacent_planar_faces(surf_ptr obj_in, face_ptr face_in,
-                                   T tol) {
+  bool merge_adjacent_planar_faces(surf_ptr obj_in, face_ptr face_in, T tol) {
     face_vertex_ptr fvb = face_in->fbegin();
     face_vertex_ptr fve = face_in->fend();
     coordinate_type n0 = face_in->normal();
@@ -187,7 +186,8 @@ public:
       }
       //				remesh<T> rem;
       //				face_ptr nf = merge_faces(obj_in,
-      //tFaces); 				if (faces[i]->flag != 5) { 					faces[i]->flag = 5; 					nf->flag = 5;
+      // tFaces); 				if (faces[i]->flag != 5) {
+      // faces[i]->flag = 5; 					nf->flag = 5;
       //				}
     }
     obj_in->reset_flags();
@@ -489,8 +489,8 @@ public:
     face_vertex_ptr v3 = v2->next();
 
     face_vertex_ptr fvEdge = NULL;
-    T cot13 = v1->cotan() + v3->cotan(); // corresponds to e13
-    T cot02 = v0->cotan() + v2->cotan();
+    T cot13 = this->cotan(v1) + this->cotan(v3); // corresponds to e13
+    T cot02 = this->cotan(v0) + this->cotan(v2);
     if (cot13 * cot13 < cot02 * cot02) {
       m2::construct<SPACE> cons;
       edge_ptr ne = cons.insert_edge(mMesh, v1, v3);
@@ -609,10 +609,10 @@ public:
         face_vertex_ptr v2 = e->v2();
         face_vertex_ptr v3 = v2->prev();
 
-        coordinate_type c0 = v0->coordinate();
-        coordinate_type c1 = v1->coordinate();
-        coordinate_type c2 = v2->coordinate();
-        coordinate_type c3 = v3->coordinate();
+        coordinate_type c0 = this->coordinate(v0);
+        coordinate_type c1 = this->coordinate(v1);
+        coordinate_type c2 = this->coordinate(v2);
+        coordinate_type c3 = this->coordinate(v3);
 
         face_vertex_ptr fvEdge = NULL;
         T cos0 = dot((c1 - c0), (c3 - c0));

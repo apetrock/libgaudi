@@ -16,7 +16,7 @@
 // functions-------------------------------
 
 namespace m2 {
-template <typename SPACE> class make {
+template <typename SPACE> class make : public default_interface<SPACE> {
   // class designed to produce primitives, such as convex hulls or loading .obj,
   // etc;
   M2_TYPEDEFS
@@ -28,15 +28,19 @@ public:
     surf_ptr tcube = new surf_type();
     construct<SPACE> cons;
     subdivide<SPACE> subd;
-    tcube->insert_vertex(-x * 0.5, -y * 0.5, -z * 0.5);
-    tcube->insert_vertex(x * 0.5, -y * 0.5, -z * 0.5);
-    tcube->insert_vertex(x * 0.5, y * 0.5, -z * 0.5);
-    tcube->insert_vertex(-x * 0.5, y * 0.5, -z * 0.5);
+    face_vertex_ptr fv0 = tcube->insert_vertex()->front();
+    face_vertex_ptr fv1 = tcube->insert_vertex()->front();
+    face_vertex_ptr fv2 = tcube->insert_vertex()->front();
+    face_vertex_ptr fv3 = tcube->insert_vertex()->front();
+    this->coordinate(coordinate_type(-x * 0.5, -y * 0.5, -z * 0.5), fv0);
+    this->coordinate(coordinate_type(x * 0.5, -y * 0.5, -z * 0.5), fv1);
+    this->coordinate(coordinate_type(x * 0.5, y * 0.5, -z * 0.5), fv2);
+    this->coordinate(coordinate_type(-x * 0.5, y * 0.5, -z * 0.5), fv3);
 
-    cons.insert_edge(tcube, tcube->vertex(0), tcube->vertex(1));
-    cons.insert_edge(tcube, tcube->vertex(1), tcube->vertex(2));
-    cons.insert_edge(tcube, tcube->vertex(2), tcube->vertex(3));
-    cons.insert_edge(tcube, tcube->vertex(3), tcube->vertex(0));
+    cons.insert_edge(tcube, fv0, fv1);
+    cons.insert_edge(tcube, fv1, fv2);
+    cons.insert_edge(tcube, fv2, fv3);
+    cons.insert_edge(tcube, fv3, fv0);
     cons.bevel(tcube, 0.0, z, 0.0);
     return tcube;
   }
@@ -45,23 +49,29 @@ public:
     surf_ptr out = new surf_type();
     construct<SPACE> cons;
     subdivide<SPACE> subd;
-    face_vertex_ptr fv0 = out->insert_vertex(diff, 1.0, 0.0)->front();
-    face_vertex_ptr fv1 = out->insert_vertex(diff, -0.6, -0.6)->front();
-    face_vertex_ptr fv2 = out->insert_vertex(diff, -0.6, 0.6)->front();
+
+    face_vertex_ptr fv0 = out->insert_vertex()->front();
+    face_vertex_ptr fv1 = out->insert_vertex()->front();
+    face_vertex_ptr fv2 = out->insert_vertex()->front();
+    this->coordinate(coordinate_type(diff, 1.0, 0.0), fv0);
+    this->coordinate(coordinate_type(diff, -0.6, -0.6), fv1);
+    this->coordinate(coordinate_type(diff, -0.6, 0.6), fv2);
 
     cons.insert_edge(out, fv0, fv1);
     cons.insert_edge(out, fv1, fv2);
     cons.insert_edge(out, fv2, fv0);
     m2::remesh<SPACE> rem;
 
-    rem.stellate_face_generic(out, fv1->face(),
-                             coordinate_type(1.0, 0.0,0.0));
-        // cons.insert_edge(out, fv1->vnext(), fv0);
-        // cons.insert_edge(out, fv0, fv2->vnext());
+    rem.stellate_face_generic(out, fv1->face(), coordinate_type(1.0, 0.0, 0.0));
+    // cons.insert_edge(out, fv1->vnext(), fv0);
+    // cons.insert_edge(out, fv0, fv2->vnext());
 
-    face_vertex_ptr fv3 = out->insert_vertex(-diff, 1.0, 0.0)->front();
-    face_vertex_ptr fv4 = out->insert_vertex(-diff, -0.6, -0.6)->front();
-    face_vertex_ptr fv5 = out->insert_vertex(-diff, -0.6, 0.6)->front();
+    face_vertex_ptr fv3 = out->insert_vertex()->front();
+    face_vertex_ptr fv4 = out->insert_vertex()->front();
+    face_vertex_ptr fv5 = out->insert_vertex()->front();
+    this->coordinate(coordinate_type(-diff, 1.0, 0.0), fv3);
+    this->coordinate(coordinate_type(-diff, -0.6, -0.6), fv4);
+    this->coordinate(coordinate_type(-diff, -0.6, 0.6), fv5);
 
     cons.insert_edge(out, fv3, fv4);
     cons.insert_edge(out, fv4, fv5);
@@ -115,7 +125,7 @@ public:
       coordinate_type cen = fi->calculate_center();
       while (iterating) {
         iterating = fvb != fve;
-        coordinate_type ci = fvb->vertex()->coordinate();
+        coordinate_type ci = get_coordinate(fvb->vertex());
         coordinate_type dc = ci - cen;
         dc = q0.rotate(dc);
         coordinate_type cp = dc + cen;
@@ -124,7 +134,7 @@ public:
         im1 = im1 < 0 ? im1 + kN : im1;
         int ip1 = i + 1;
         ip1 = ip1 > kN - 1 ? ip1 - kN : ip1;
-        fvb->vertex()->coordinate() = cp + 0.5 * (knot[ip1] - knot[im1]);
+        set_coordinate(fvb->vertex(), cp + 0.5 * (knot[ip1] - knot[im1]));
         fvb = fvb->next();
       }
     }

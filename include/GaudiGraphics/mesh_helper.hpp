@@ -58,8 +58,8 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
 
     for (int i = 0; i < verts.size(); i++) {
       for (int j = 0; j < 3; j++) {
-        // std::cout << verts[i]->coordinate()[j] << std::endl;
-        positions.col(i)[j] = verts[i]->coordinate()[j];
+        coordinate_type ci = m2::ci::get_coordinate<SPACE>(verts[i]);
+        positions.col(i)[j] = ci[j];
       }
       colors.col(i)[0] = col.r;
       colors.col(i)[1] = col.g;

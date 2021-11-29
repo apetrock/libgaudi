@@ -48,7 +48,7 @@ void debugVorticity(m2::surf<SPACE> *mesh, gg::DebugBufferPtr debug) {
 
   for (auto f : mesh->get_faces()) {
     coordinate_type v = 0.1 * f->data;
-    coordinate_type cen = f->calc_center();
+    coordinate_type cen = m2::ci::center<SPACE>(f);
 
     coordinate_type l0 = cen - 1.0 * v;
     coordinate_type l1 = cen + 1.0 * v;
@@ -80,10 +80,9 @@ public:
     m2::subdivide<space3> sub;
     m2::make<space3> mk;
     m2::convex_hull<space3> ch;
-    m2::add_handle<space3> ah;
 
     m2::construct<space3> bevel;
-    m2::modify<space3> mod;
+    m2::affine<space3> mod;
 
     //_meshGraph = &load("assets/bunny.obj");
     //_meshGraph = &load("assets/messer.obj");
@@ -124,7 +123,7 @@ public:
     std::cout << " edges: " << _meshGraph->get_edges().size() << std::endl;
     std::cout << " faces: " << _meshGraph->get_faces().size() << std::endl;
 
-    m2::modify<space3> mod;
+    m2::affine<space3> mod;
     double max = 0.025;
     double min = max / 10.0;
     double dt = 0.1;
