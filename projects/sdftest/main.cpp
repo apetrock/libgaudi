@@ -83,8 +83,8 @@ public:
 
     createGeometry();
     //testTree();
-    testDistance();
-    //testAvg();
+    //testDistance();
+    testAvg();
     //testNormals();
     _debugLines->renderLines();
   }
@@ -100,9 +100,19 @@ public:
     std::cout << "creating buffer" << std::endl;
     m2::obj_loader<space3> load;
     m2::affine<space3> mod;
-
+    m2::make<space3> mk;
+    m2::subdivide<space3> sub;
     std::cout << "  loading assets" << std::endl;
-    _meshGraph = &load("assets/messer.obj");
+    //_meshGraph = &load("assets/messer.obj");
+    _meshGraph = mk.cube(1.0, 1.0, 1.0);
+
+    _meshGraph = &sub.subdivide_control(*_meshGraph);
+    _meshGraph = &sub.subdivide_control(*_meshGraph);
+    _meshGraph = &sub.subdivide_control(*_meshGraph);
+    _meshGraph = &sub.subdivide_control(*_meshGraph);
+    m2::remesh<space3> rem;
+    rem.triangulate(_meshGraph);
+
     _meshGraph->update_all();
     std::cout << "--pack" << std::endl;
     _meshGraph->pack();
@@ -221,7 +231,7 @@ public:
     for (int i = 0; i < avgs.size(); i++) {
       auto p = positions[i];
       auto a = avgs[i];
-      auto pa = p + 0.25 * a;
+      auto pa = p + a;
       auto c = rainbow(m2::va::norm(a));
       _debugLines->pushLine(Vec4(p[0], p[1], p[2], 1.0),
                             Vec4(pa[0], pa[1], pa[2], 1.0),

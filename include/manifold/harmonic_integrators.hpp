@@ -13,6 +13,7 @@
 #include "tree_code.hpp"
 
 namespace m2 {
+
 template <typename SPACE> class mesh_calculator {
 public:
   M2_TYPEDEFS;
@@ -28,8 +29,9 @@ public:
     T regLength = 0.0001;
     auto pre = [](const vector<triangle_type> &tris, DNode &node, DTree &tree,
                   coordinate_type &netCharge,
-                  coordinate_type &avgPoint) -> void {
+                  coordinate_type &avgPoint, coordinate_type &avgNormal) -> void {
       avgPoint = coordinate_type(0, 0, 0);
+      avgNormal = coordinate_type(0, 0, 0);
       netCharge = coordinate_type(0, 0, 0);
 
       T netWeight = 0;
@@ -39,14 +41,13 @@ public:
         triangle_type tri = tris[ii];
         T w = tri.area();
         avgPoint += w * tri.center();
-        netCharge += w * tri.normal();
+        avgNormal += w * tri.normal();
+        //netCharge += w;
         netWeight += w;
       }
       // std::cout << "w: " << netWeight << std::endl;
       avgPoint /= netWeight;
-      // netCharge /= netWeight;
-      coordinate_type l0 = avgPoint;
-      coordinate_type l1 = l0 + netCharge;
+
     };
 
     auto computeK = [](T dist, T C) {
@@ -58,11 +59,11 @@ public:
       return kappa;
     };
 
-    auto compute =
-        [this, regLength, computeK](
-            const coordinate_type &q, const coordinate_type &pc,
-            const coordinate_type &pe,
-            const vector<triangle_type> &tris, DNode &node, DTree &tree) -> T {
+    auto compute = [this, regLength, computeK](
+                       const coordinate_type &q, const coordinate_type &pc,
+                       const coordinate_type &pe, const coordinate_type &N,
+                       const vector<triangle_type> &tris, DNode &node,
+                       DTree &tree) -> T {
       T out = 0;
       coordinate_type dp = pc - pe;
       T dist = m2::va::norm(dp);
@@ -75,7 +76,7 @@ public:
         }
       } else {
         T kappa = computeK(dist, regLength);
-        out += kappa * m2::va::dot(q, dp);
+        out += kappa * m2::va::dot(N, dp);
       }
       return out;
     };
@@ -98,23 +99,20 @@ public:
     return u;
   }
 
-
-
-  using Avg_Integrator =
-      m2::Geometry_Integrator<SPACE, coordinate_type, triangle_type,
-                              coordinate_type>;
-  using ATree = typename Avg_Integrator::Tree;
-  using ANode = typename Avg_Integrator::Node;
-
-  vector<coordinate_type> harmonicAvg(surf_ptr mesh,
-                                      std::vector<coordinate_type> faceVectors,
-                                      std::vector<coordinate_type> evalPoints, T regLength = 0.5) {
+  template <typename Q>
+  vector<Q> harmonicAvg(surf_ptr mesh, std::vector<Q> faceVectors,
+                        std::vector<coordinate_type> evalPoints,
+                        T regLength = 0.5) {
+    using Avg_Integrator = m2::Geometry_Integrator<SPACE, Q, triangle_type, Q>;
+    using ATree = typename Avg_Integrator::Tree;
+    using ANode = typename Avg_Integrator::Node;
 
     auto pre = [faceVectors](const vector<triangle_type> &tris, ANode &node,
-                             ATree &tree, coordinate_type &netCharge,
-                             coordinate_type &avgPoint) -> void {
+                             ATree &tree, Q &netCharge,
+                             coordinate_type &avgPoint,
+                             coordinate_type &avgNormal) -> void {
       avgPoint = coordinate_type(0, 0, 0);
-      netCharge = coordinate_type(0, 0, 0);
+      netCharge = z::zero<Q>();
 
       T netWeight = 0;
 
@@ -123,6 +121,7 @@ public:
         triangle_type tri = tris[ii];
         T w = tri.area();
         avgPoint += w * tri.center();
+        avgNormal += w * tri.normal();
         netCharge += w * faceVectors[ii];
         netWeight += w;
       }
@@ -131,50 +130,59 @@ public:
     };
 
     auto computeK = [](T dist, T C) {
-#if 0
+#if 1
       T d3 = dist * dist * dist;
       T l3 = C * C * C;
       T kappa = (1.0 - exp(-d3 / l3)) / d3;
+      return kappa / pow(4.0 * M_PI, 1.5);
 #elif 0
-      T d2 = dist * dist;
-      T l2 = C * C;
-      T kappa = 1.0 / pow(d2 + l2, 1.5);
-#elif 1
-      T d2 = dist * dist;
-      T l2 = C * C;
-      T kappa = (1.0 - exp(-d2 / l2)) / d2;
-#else
-      T d2 = dist * dist;
-      T l2 = C * C;
-      T kappa = 1.0 /  (d2 + l2);
+      T dist3 = dist * dist * dist;
+      T l3 = C * C * C;
+      T kappa = 1.0 / (dist3 + l3);
+      return kappa / pow(4.0 * M_PI, 1.5);
+#elif 0
+      T dist2 = dist * dist;
+      T dt = 0.5;
+      T kappa = exp(-dist2 / 4.0 / dt);
+      return kappa / pow(4.0 * M_PI * dt, 1.5);
 #endif
-      return kappa;
+      
     };
 
     auto compute = [this, faceVectors, regLength, computeK](
-                       const coordinate_type &q, const coordinate_type &pc,
-                       const coordinate_type &pe,
+                       const Q &wq, const coordinate_type &pc,
+                       const coordinate_type &pe, const coordinate_type &N,
                        const vector<triangle_type> &tris, ANode &node,
-                       ATree &tree) -> coordinate_type {
-      coordinate_type out = coordinate_type(0, 0, 0);
-      coordinate_type dp = pc - pe;
-      T dist = m2::va::norm(dp);
+                       ATree &tree) -> Q {
+      Q out = z::zero<Q>();
+
 
       if (node.isLeaf()) {
         for (int i = node.begin; i < node.begin + node.size; i++) {
           int ii = tree.permutation[i];
-          coordinate_type q = faceVectors[ii];
+          Q qi = faceVectors[ii];
           auto tri = tris[ii];
           auto w = tri.area();
           auto c = tri.center();
-          dp = c - pe;
+          coordinate_type dp = c - pe;
           T dist = m2::va::norm(dp);
-          //out += w * computeK(dist, regLength) * va::cross(q,dp);
-          out += w * computeK(dist, regLength) * q;
+
+          //if(dist <= std::numeric_limits<T>::epsilon())
+          //  continue;
+          // out += w * computeK(dist, regLength) * va::cross(q,dp);
+
+          //T Ndp = m2::va::dot(tri.normal(), dp);
+          
+          T k = computeK(dist, regLength);
+          out += w * k * qi;
         }
       } else {
-        //out += computeK(dist, regLength) * va::cross(q, dp);
-        out += computeK(dist, regLength) * q;
+        // out += computeK(dist, regLength) * va::cross(q, dp);
+        coordinate_type dp = pc - pe;
+        T dist = m2::va::norm(dp);
+        //T Ndp = m2::va::dot(N, dp);
+        T k = computeK(dist, regLength);
+        out += k * wq;
       }
       return out;
     };
@@ -191,7 +199,7 @@ public:
       normals.push_back(t.normal());
     }
 
-    vector<coordinate_type> u(evalPoints.size(), coordinate_type(0, 0, 0));
+    vector<Q> u(evalPoints.size(), z::zero<Q>());
     Avg_Integrator integrator;
     integrator.integrate(faceVectors, triangles, evalPoints, u, pre, compute);
 

@@ -4,7 +4,7 @@
 #include "m2.hpp"
 
 namespace m2 {
-namespace ci{
+namespace ci {
 ///////////////////////
 // get/set coordinates
 ///////////////////////
@@ -14,12 +14,10 @@ template <typename SPACE> void dirty(typename surf<SPACE>::vertex_ptr v) {
 
   v->set_dirty();
   for_each_vertex<SPACE>(v, [](face_vertex_ptr fv) {
-    
     if (fv->face())
       fv->face()->set_dirty();
     if (fv->edge())
       fv->edge()->set_dirty();
-  
   });
 }
 
@@ -75,10 +73,10 @@ template <typename SPACE>
 typename SPACE::real cotan(typename surf<SPACE>::face_vertex_ptr fv) {
   using coordinate_type = typename SPACE::coordinate_type;
 
-  coordinate_type c0 = get_coordinate<SPACE>(fv->prev());
-  coordinate_type c1 = get_coordinate<SPACE>(fv);
-  coordinate_type c2 = get_coordinate<SPACE>(fv->next());
-  return va::cotan(c0, c1, c2);
+  coordinate_type cp = get_coordinate<SPACE>(fv->prev());
+  coordinate_type c0 = get_coordinate<SPACE>(fv);
+  coordinate_type cn = get_coordinate<SPACE>(fv->next());
+  return va::cotan(c0, cp, cn);
 }
 
 template <typename SPACE>
@@ -148,6 +146,20 @@ typename SPACE::real area(typename surf<SPACE>::face_ptr f) {
 }
 
 template <typename SPACE>
+typename SPACE::coordinate_type
+point_to_bary(typename surf<SPACE>::face_ptr f,
+              typename SPACE::coordinate_type c) {
+  using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
+  using coordinate_type = typename SPACE::coordinate_type;
+
+  std::vector<coordinate_type> vertices;
+  for_each_face<SPACE>(f, [&vertices](face_vertex_ptr itb) mutable {
+    vertices.push_back(get_coordinate<SPACE>(itb));
+  });
+  return va::calc_bary(c, vertices);;
+}
+
+template <typename SPACE>
 typename SPACE::coordinate_type normal(typename surf<SPACE>::face_ptr f) {
   using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
   using coordinate_type = typename SPACE::coordinate_type;
@@ -155,7 +167,7 @@ typename SPACE::coordinate_type normal(typename surf<SPACE>::face_ptr f) {
   coordinate_type n = coordinate_type(0, 0, 0);
   coordinate_type c0 = get_coordinate<SPACE>(f->fbegin());
 
-  for_each_face<SPACE>(f, [&n, c0](face_vertex_ptr itb) {
+  for_each_face_except_0<SPACE>(f, [&n, c0](face_vertex_ptr itb) {
     coordinate_type c1 = get_coordinate<SPACE>(itb);
     coordinate_type c2 = get_coordinate<SPACE>(itb->next());
     coordinate_type c10 = c1 - c0;
@@ -177,11 +189,12 @@ typename SPACE::coordinate_type center(typename surf<SPACE>::face_ptr f) {
   typename SPACE::real n = 0.0;
   for_each_face<SPACE>(f, [&n, &cen](face_vertex_ptr itb) {
     cen += get_coordinate<SPACE>(itb);
-    std::cout << "      <<" << get_coordinate<SPACE>(itb).transpose() << std::endl;
+    // std::cout << "      <<" << get_coordinate<SPACE>(itb).transpose()
+    //          << std::endl;
     n += 1.0;
   });
 
-  std::cout << "      <<" << n << std::endl;
+  // std::cout << "      <<" << n << std::endl;
 
   cen *= 1.0 / n;
   return cen;
@@ -340,6 +353,33 @@ flagged_coordinate_trace(typename surf<SPACE>::face_ptr f,
 // Surf Operations
 ///////////////////////
 
+
+template <typename SPACE>
+typename SPACE::real mean_length(typename surf<SPACE>::surf_ptr s) {
+  using real = typename SPACE::real;
+  real sum = 0;
+  int N = 0;
+  for (auto e : s->get_edges()) {
+    sum += log(m2::ci::length<SPACE>(e));
+    N++;
+  }
+  sum /= real(N);
+  return exp(sum);
+}
+
+template <typename SPACE>
+typename SPACE::real area(typename surf<SPACE>::surf_ptr s) {
+  using real = typename SPACE::real;
+  real ar = 0;
+  auto verts = s->get_faces();
+  for (auto f : s->get_faces()) {
+    if (!f)
+      continue;
+    ar += area<SPACE>(f);
+  }
+  return ar;
+}
+
 template <typename SPACE>
 typename SPACE::coordinate_type center(typename surf<SPACE>::surf_ptr s) {
   using T = typename SPACE::real;
@@ -376,6 +416,7 @@ typename SPACE::box_type bound(typename surf<SPACE>::surf_ptr s) {
   return makeBoxMinMax<T, coordinate_type>(min, max);
 }
 
+
 template <typename SPACE>
 std::vector<typename SPACE::coordinate_type>
 get_coordinates(typename surf<SPACE>::surf_ptr s) {
@@ -384,21 +425,35 @@ get_coordinates(typename surf<SPACE>::surf_ptr s) {
   std::vector<coordinate_type> coords;
 
   auto verts = s->get_vertices();
-  for (int i = 0; i < verts.size(); i++) {
-    coordinate_type p = get_coordinate<SPACE>(verts[i]);
-    coords.push_back(p);
+  for (auto v : s->get_vertices()) {
+    coords.push_back(get_coordinate<SPACE>(v));
   }
 
   return coords;
 }
+
+template <typename SPACE>
+std::vector<typename SPACE::coordinate_type>
+get_centers(typename surf<SPACE>::surf_ptr s) {
+  using T = typename SPACE::real;
+  using coordinate_type = typename SPACE::coordinate_type;
+  std::vector<coordinate_type> coords;
+  for (auto f : s->get_faces()) {
+    coords.push_back(center<SPACE>(f));
+  }
+  return coords;
 }
+
+} // namespace ci
 
 template <typename SPACE> class default_interface {
   M2_TYPEDEFS;
-  public: 
+
+public:
   coordinate_type coordinate(vertex_ptr fv) {
     return ci::get_coordinate<SPACE>(fv);
   }
+
   void coordinate(typename SPACE::coordinate_type p, vertex_ptr fv) {
     return ci::set_coordinate<SPACE>(p, fv);
   }
@@ -406,11 +461,11 @@ template <typename SPACE> class default_interface {
   coordinate_type coordinate(face_vertex_ptr fv) {
     return ci::get_coordinate<SPACE>(fv);
   }
+
   void coordinate(typename SPACE::coordinate_type p, face_vertex_ptr fv) {
     return ci::set_coordinate<SPACE>(p, fv);
   }
 
-  
   coordinate_type center(face_ptr f) { return ci::center<SPACE>(f); }
   coordinate_type normal(face_ptr f) { return ci::normal<SPACE>(f); }
   box_type bound(face_ptr f) { return ci::bound<SPACE>(f); }

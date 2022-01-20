@@ -62,7 +62,7 @@ public:
       stack.pop();
       Node &pNode = octree.nodes[pId];
       coordinate_type avgPoint(0, 0, 0);
-      coordinate_type netCharge(0, 0, 0);
+      CHARGE netCharge = z::zero<CHARGE>();
       T netChargeMag = 0;
       int N = pNode.size;
       int beg = pNode.begin;
@@ -136,26 +136,28 @@ public:
   using ComputeAccumulation = std::function<void()>;
   using ComputeCharge = std::function<void()>;
 
-  using PreComputeFcn = std::function<void(const vector<PRIMITIVE> &points,
-      Node &node, Tree &tree, coordinate_type &avgPoint, CHARGE &netCharge)>;
+  using PreComputeFcn = std::function<void(
+      const vector<PRIMITIVE> &points, Node &node, Tree &tree,
+      CHARGE &netCharge, coordinate_type &avgPoint,
+      coordinate_type &avgNormal)>;
 
   using ComputeFcn = std::function<OUTPUT(
-      const CHARGE &q, const coordinate_type &pc, const coordinate_type &pe, const vector<PRIMITIVE> &points,
-      Node &node, Tree &tree)>;
+      const CHARGE &q, const coordinate_type &pc, const coordinate_type &pe,
+      const coordinate_type &N, const vector<PRIMITIVE> &points, Node &node,
+      Tree &tree)>;
 
-  void integrate(vector<CHARGE> &charges,
-                           vector<PRIMITIVE> &chargePrimitives,
-                           vector<coordinate_type> &evalPoints,
-                           vector<OUTPUT> &u,
-                           PreComputeFcn preComputeFcn,
-                           ComputeFcn computeFcn ) {
+  void integrate(vector<CHARGE> &charges, vector<PRIMITIVE> &chargePrimitives,
+                 vector<coordinate_type> &evalPoints, vector<OUTPUT> &u,
+                 PreComputeFcn preComputeFcn, ComputeFcn computeFcn) {
 
     Tree tree(chargePrimitives);
 
     vector<CHARGE> nodeCharges;
     vector<coordinate_type> nodePositions;
+    vector<coordinate_type> nodeNormals;
     nodeCharges.resize(tree.nodes.size());
     nodePositions.resize(tree.nodes.size());
+    nodeNormals.resize(tree.nodes.size());
 
     std::stack<int> stack;
     stack.push(0);
@@ -166,13 +168,16 @@ public:
       stack.pop();
       Node &pNode = tree.nodes[pId];
       coordinate_type avgPoint(0, 0, 0);
-      CHARGE netCharge(0, 0, 0);
+      coordinate_type avgNormal(0, 0, 0);
+
+      CHARGE netCharge = z::zero<CHARGE>();
       T netChargeMag = 0;
-      preComputeFcn(chargePrimitives, pNode, tree, netCharge,
-                    avgPoint);
+      preComputeFcn(chargePrimitives, pNode, tree, netCharge, avgPoint,
+                    avgNormal);
 
       nodeCharges[pId] = netCharge;
       nodePositions[pId] = avgPoint;
+      nodeNormals[pId] = avgNormal;
 
       for (int j = 0; j < pNode.getNumChildren(); j++) {
         if (pNode.children[j] != -1)
@@ -195,12 +200,13 @@ public:
         stack1.pop();
         Node &pNode = tree.nodes[pId];
         coordinate_type pj = nodePositions[pId];
+        coordinate_type Nj = nodeNormals[pId];
 
         coordinate_type dp = pi - pj;
 
         T dc = va::norm(dp);
         T sc = pNode.bbox.half.maxCoeff();
-        //T sc = va::norm(pNode.bbox.half);
+        // T sc = va::norm(pNode.bbox.half);
 
         if (sc / dc > thresh) {
           // if(sc/dc > thresh){
@@ -212,8 +218,8 @@ public:
         }
 
         else {
-          coordinate_type ci = nodeCharges[pId];
-          OUTPUT ui = computeFcn(ci, pj, pi, chargePrimitives, pNode, tree);
+          CHARGE cj = nodeCharges[pId];
+          OUTPUT ui = computeFcn(cj, pj, pi, Nj, chargePrimitives, pNode, tree);
           u[i] += ui;
         }
       }

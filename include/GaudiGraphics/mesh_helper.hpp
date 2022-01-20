@@ -54,7 +54,7 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
       }
       // std::cout << std::endl;
       // std::cout << indices.col(i) << std::endl;
-    }
+    }   
 
     for (int i = 0; i < verts.size(); i++) {
       for (int j = 0; j < 3; j++) {
@@ -64,6 +64,65 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
       colors.col(i)[0] = col.r;
       colors.col(i)[1] = col.g;
       colors.col(i)[2] = col.b;
+    }
+    // std::cout << indices << std::endl;
+  });
+};
+
+template <typename SPACE>
+void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
+                const std::vector<m2::colorRGB> & col) {
+  using namespace nanogui;
+  M2_TYPEDEFS;
+  std::vector<face_ptr> faces = mesh->get_faces();
+  std::vector<vertex_ptr> verts = mesh->get_vertices();
+
+  int numVerts = 0;
+  int numIndices = 0;
+
+  for (int i = 0; i < faces.size(); i++) {
+    numIndices += faces[i]->size();
+  }
+  numVerts = verts.size();
+
+  obj->fillBuffer([&](gg::BufferObject &o) -> void {
+    o.allocateVerts(faces.size(), numVerts);
+    auto &indices = o.indices();
+    auto &positions = o.positions();
+    auto &colors = o.colors();
+
+    for (int i = 0; i < faces.size(); i++) {
+      if (!faces[i])
+        continue;
+      face_vertex_ptr fvb = faces[i]->fbegin();
+      face_vertex_ptr fve = faces[i]->fend();
+      bool it = true;
+      int j = 0;
+
+      while (it) {
+        it = fvb != fve;
+        indices.col(i)[j] = fvb->vertex()->position_in_set();
+        // std::cout << fvb->vertex()->position_in_set() << " ";
+        //                    std::cout << fvb->vertex()->position_in_set() <<
+        //                    std::endl;
+        j++;
+        fvb = fvb->next();
+        if (j == 3)
+          break;
+      }
+      // std::cout << std::endl;
+      // std::cout << indices.col(i) << std::endl;
+    }
+
+    for (int i = 0; i < verts.size(); i++) {
+      for (int j = 0; j < 3; j++) {
+        coordinate_type ci = m2::ci::get_coordinate<SPACE>(verts[i]);
+        positions.col(i)[j] = ci[j];
+      }
+
+      colors.col(i)[0] = col[i].r;
+      colors.col(i)[1] = col[i].g;
+      colors.col(i)[2] = col[i].b;
     }
     // std::cout << indices << std::endl;
   });

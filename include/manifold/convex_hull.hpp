@@ -11,8 +11,8 @@
 #define __TWOMANICONVEXHULL__
 
 #include "construct.hpp"
-#include "m2Includes.h"
 #include "triangle_operations.hpp"
+#include "m2Includes.h"
 #include "remesh.hpp"
 #include <time.h>
 
@@ -127,8 +127,8 @@ public:
       if (det < 0) {
         std::cout << "flipping edges" << std::endl;
         edge_ptr e = edges[i];
-        m2::triangle_operations<SPACE> triops;
-        e = triops.flip(e);
+        m2::edge_flipper<SPACE> flipper;
+        e = flipper.flip(e);
       }
     }
   }

@@ -310,6 +310,7 @@ template <typename T> class euclidean_space {
 public:
   typedef T double_type;
   typedef T real;
+  typedef std::complex<T> complex;
 
   // always use homogeneous coordinates, provides decent error checking
   typedef Eigen::Matrix<T, 3, 1> coordinate_type;
@@ -340,23 +341,25 @@ public:
   typedef Eigen::Matrix<T, 4, 1> int3;
   typedef Eigen::Matrix<T, 4, 1> int4;
 
-  enum class edge_index { 
-    MAXINDEX = 0
-   };
+  enum class edge_index { MAXINDEX = 0 };
 
-  enum class vertex_index {
-    COORDINATE = 0,
-    MAXINDEX = 1
-  };
+  enum class vertex_index { COORDINATE = 0, MAXINDEX = 1 };
 
-  enum class face_index {
-    NORMAL = 0,
-    CENTER = 1,
-    AREA = 2,
-    MAXINDEX = 3
-  };
+  enum class face_index { NORMAL = 0, CENTER = 1, AREA = 2, MAXINDEX = 3 };
+
+  enum class face_vertex_index { MAXINDEX = 0 };
 };
 
 typedef euclidean_space<double> space3;
 
+namespace z {
+template <typename T> T zero() { return T(0.0); }
+
+template <> double zero<double>() { return 0.0; }
+
+template <> Eigen::Matrix<double, 3, 1> zero<Eigen::Matrix<double, 3, 1>>() {
+  return Eigen::Matrix<double, 3, 1>(0, 0, 0);
+}
+
+} // namespace z
 #endif

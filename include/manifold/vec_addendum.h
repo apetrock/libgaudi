@@ -6,23 +6,30 @@
  *  Copyright 2011 __MyCompanyName__. All rights reserved.
  *
  */
+#include <Eigen/Dense>
+#include <Eigen/Eigenvalues>
+#include <complex>
 #include <iostream>
 #include <math.h>
 #include <vector>
 
-#include <Eigen/Dense>
-#include <Eigen/Eigenvalues>
-
 #ifndef __VECADD__
 #define __VECADD__
 
-using namespace std;
+    using namespace std;
 
 namespace m2 {
 namespace va {
 template <typename T> using VEC3 = Eigen::Matrix<T, 3, 1>;
 template <typename T> using VEC4 = Eigen::Matrix<T, 4, 1>;
+
 template <int N, typename T> using VEC = Eigen::Matrix<T, N, 1>;
+
+template <typename T>
+using MAT = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+
+template <typename T>
+using MAT3 = Eigen::Matrix<T, 3, 3>;
 
 template <class Tf, class Tv> inline Tv linear(Tf f, const Tv &x, const Tv &y) {
   return (y - x) * f + x;
@@ -208,7 +215,7 @@ inline bool ray_triangle_intersectII(VEC3<T> &pi, const VEC3<T> &r0,
                                      const VEC3<T> &r1, const VEC3<T> &v0,
                                      const VEC3<T> &v1, const VEC3<T> &v2,
                                      T &dist) {
-  // Fast Minimum Storage RayTriangle Intersection
+  // Fast Minimum Storage Ray-Triangle Intersection
   //	Tomas Moller
   //	Ben Trumbore
   // http://www.cs.virginia.edu/~gfx/Courses/2003/ImageSynthesis/papers/Acceleration/Fast%20MinimumStorage%20RayTriangle%20Intersection.pdf
@@ -663,6 +670,22 @@ template <typename T> inline VEC3<T> fnormalize(VEC3<T> vecin) {
   T mag = vecin[0] * vecin[0] + vecin[1] * vecin[1] + vecin[2] * vecin[2];
   T imag = Q_rsqrt(mag);
   return vecin * imag;
+}
+
+template <typename T>
+inline VEC3<T> calc_bary(VEC3<T> c, std::vector<VEC3<T>> vertices) {
+  MAT3<T> V;
+  int i = 0;
+  
+  for(auto v : vertices){
+    V.block(0, i, 3, 1) = v;
+    i++;
+  }
+
+  //VEC3<T> l = V.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(c                                                                                                         );
+  VEC3<T> l = V.colPivHouseholderQr().solve(c);
+  //std::cout << l.transpose() << std::endl;
+  return l;
 }
 
 } // namespace va

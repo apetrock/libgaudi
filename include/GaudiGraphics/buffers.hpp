@@ -284,6 +284,8 @@ public:
                                      Vec3(3, 3., 5.));
     updateShaderAttributes();
     /* Draw 2 triangles starting at index 0 */
+    //
+    //this->displayShader().drawIndexed(GL_LINES, 0, mIndices.cols());
     this->displayShader().drawIndexed(GL_TRIANGLES, 0, mIndices.cols());
   }
 

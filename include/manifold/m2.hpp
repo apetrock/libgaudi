@@ -33,6 +33,7 @@
 #endif
 
 #include <memory>
+#include <any>
 
 #include "geometry_types.hpp"
 #include "manifold_singleton.h"
@@ -40,6 +41,8 @@
 
 // this typedef list is ugly but useful!!!
 #define M2_TYPEDEFS                                                            \
+  typedef typename SPACE::real real;                                           \
+  typedef typename SPACE::complex complex;                                     \
   typedef typename SPACE::coordinate_type coordinate_type;                     \
   typedef typename SPACE::line_type line_type;                                 \
   typedef typename SPACE::swept_point_type swept_point_type;                   \
@@ -234,63 +237,51 @@ public:
 
   M2_TYPEDEFS
 
-  class datum {
-  public:
-    datum() {}
-    ~datum() {}
-
-    template <class CTYPE> CTYPE get() { return *static_cast<CTYPE *>(_datum); }
-
-    template <class CTYPE> void set(const CTYPE &in) {
-      _datum = static_cast<void *>(new CTYPE(in));
-    }
-
-    bool dirty = true;
-    void *_datum;
-  };
-
-  template <typename T> class datum_t : public datum {
-  public:
-    datum_t(T d) { this->template set<T>(d); }
-  };
-
   template <class ITYPE> class data_node {
   public:
-    data_node() {}
+    data_node() {
+
+    }
 
     data_node(const data_node &other) {
       _ddata = other._ddata;
       _size = other._size;
     }
 
-    datum &operator[](ITYPE i) { return _ddata[static_cast<int>(i)]; }
+    std::any &operator[](ITYPE i) { return _ddata[static_cast<int>(i)]; }
 
-    const datum &operator[](ITYPE i) const {
+    const std::any &operator[](ITYPE i) const {
       return _ddata[static_cast<int>(i)];
     }
 
     int size() const { return _size; }
 
     template <typename TYPE> TYPE get(const ITYPE &i) {
-      return _ddata[static_cast<int>(i)].template get<TYPE>();
+      return std::any_cast<TYPE>(_ddata[static_cast<int>(i)]);
     }
 
     template <typename TYPE> void set(const ITYPE &i, const TYPE &d) {
-      _ddata[static_cast<int>(i)] = datum_t<TYPE>(d);
+      _ddata[static_cast<int>(i)] = d;
+      //_ddata[static_cast<int>(i)] = datum_t<TYPE>(d);
     }
 
     void set_dirty(const ITYPE &i, bool val) {
-      _ddata[static_cast<int>(i)].dirty = val;
+      dirty[static_cast<int>(i)] = val;
+    }
+
+    void get_dirty(const ITYPE &i) {
+      return dirty[static_cast<int>(i)];
     }
 
     void set_dirty() {
       for (int i = 0; i < size(); i++) {
-        _ddata[i].dirty = true;
+        dirty[i] = true;
       }
     }
 
   private:
-    datum _ddata[static_cast<int>(ITYPE::MAXINDEX)];
+    std::any _ddata[static_cast<int>(ITYPE::MAXINDEX)];
+    bool dirty[static_cast<int>(ITYPE::MAXINDEX)];
     int _size = static_cast<int>(ITYPE::MAXINDEX);
   };
 
@@ -829,7 +820,7 @@ public:
     T data3;
   };
 
-  class face_vertex {
+  class face_vertex : public data_node<typename SPACE::face_vertex_index> {
 
   public:
     face_vertex() {
@@ -2010,7 +2001,7 @@ void for_each_vertex_reverse(
     typename surf<SPACE>::vertex_ptr v,
     std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
   using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
-  
+
   if (!v->fbegin())
     return;
 
@@ -2033,7 +2024,7 @@ void for_each_face(
     std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
 
   using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
-  
+
   if (!f->fbegin())
     return;
   if (!f->fend())
@@ -2050,11 +2041,33 @@ void for_each_face(
 }
 
 template <typename SPACE>
+void for_each_face_except_0(
+    typename surf<SPACE>::face_ptr f,
+    std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
+
+  using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
+
+  if (!f->fbegin())
+    return;
+  if (!f->fend())
+    return;
+
+  face_vertex_ptr fvb = f->fbegin()->next();
+  face_vertex_ptr fve = f->fend();
+  bool iterating = true;
+  while (iterating) {
+    iterating = fvb != fve;
+    func(fvb);
+    fvb = fvb->next();
+  }
+}
+
+template <typename SPACE>
 void for_each_face_reverse(
     typename surf<SPACE>::face_ptr f,
     std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
   using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
-  
+
   if (!f->fbegin())
     return;
 

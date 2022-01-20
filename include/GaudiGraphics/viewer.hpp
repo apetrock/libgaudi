@@ -141,20 +141,20 @@ using SimpleAppPtr = std::shared_ptr<SimpleApp>;
 class SimpleApp : public nanogui::Screen {
 public:
   
-  static SimpleAppPtr create(std::string file) {
-    return std::make_shared<SimpleApp>(file);
+  static SimpleAppPtr create() {
+    return std::make_shared<SimpleApp>();
   }
 
   typedef double Real;
 
-  SimpleApp(std::string file)
-      : nanogui::Screen(Eigen::Vector2i(800, 800), "NanoGUI Test") {
+  SimpleApp()
+      : nanogui::Screen(Eigen::Vector2i(800, 800), "simple app") {
     using namespace nanogui;
 
     // now for GUI
-    Window *window = new Window(this, "coordinates");
-    window->setPosition(Vector2i(15, 15));
-    window->setLayout(new GroupLayout());
+    //Window *window = new Window(this, "coordinates");
+    //window->setPosition(Vector2i(15, 15));
+    //window->setLayout(new GroupLayout());
 
     performLayout(mNVGContext);
 
@@ -213,12 +213,13 @@ public:
   ///////////////////////////
 
   virtual void draw(NVGcontext *ctx) {
-    if (false)
-      Screen::draw(ctx);
+    //if (false)
+    Screen::draw(ctx);
   }
 
   virtual void animate() {
-    mScene->onAnimate();
+    if (mScene)
+      mScene->onAnimate();
   }
 
 
@@ -228,7 +229,9 @@ public:
 
     if (this->_animate)
       this->animate();
-    mScene->onDraw(*_viewer);
+
+    if (mScene)
+      mScene->onDraw(*_viewer);
 
     _frame++;
   }
@@ -238,6 +241,7 @@ private:
   unsigned int _frame = 0;
   ScenePtr mScene;
   gg::ViewerPtr _viewer;
+  
 }; //Simple App
 
 } // namespace GaudiGraphics

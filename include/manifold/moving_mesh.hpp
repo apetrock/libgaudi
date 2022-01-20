@@ -956,7 +956,7 @@ public:
       topology_change = true;
     }
     if (topology_change) {
-      m2::remesh<space3> rem;
+      m2::remesh<SPACE> rem;
       rem.triangulate(mMesh);
       mMesh->pack();
       mMesh->update_all();
