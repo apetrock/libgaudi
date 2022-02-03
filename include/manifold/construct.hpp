@@ -13,7 +13,8 @@
 
 namespace m2 {
 
-template <typename SPACE> class geometry_helper : public default_interface<SPACE> {
+template <typename SPACE>
+class geometry_helper : public default_interface<SPACE> {
 public:
   M2_TYPEDEFS;
 
@@ -345,6 +346,8 @@ public:
     int sz2 = f2->size();
     face_ptr fout;
     int sw = 0;
+
+    //std::cout << e << " " << f1 << " " << f2 << std::endl;
 
     if (f1 == f2) {
       face_ptr f1 = disconnect_face(obj_in, e);
@@ -934,37 +937,39 @@ public:
     return nf;
   }
 
-  bool delete_degenerates(surf_ptr obj, vertex_ptr v) {
-
-    vector<edge_ptr> edgeDegenerates;
+  bool delete_degenerates(surf_ptr obj, vertex_ptr v, real tol = 1e-8) {
     vector<vertex_ptr> vertDegenerates;
+    if(v->calc_size() < 3){
+      //std::cout << " deleting: " << v->position_in_set() << std::endl;
+      this->delete_vertex_primitive(obj, v);
+      return true;
+    }
+    if (m2::ci::area<SPACE>(v) < tol) {
+      this->delete_vertex_primitive(obj, v);
+      return true;
+    }
+    return false;
+  };
 
-    int dSize = 0;
-    auto gatherDegenVerts = [&vertDegenerates](face_vertex_ptr fv) -> void {
-      if (fv->next()->vertex()->calc_size() < 3) {
-        vertDegenerates.push_back(fv->next()->vertex());
-      }
-    };
+  bool delete_degenerates(surf_ptr obj, edge_ptr e) {
+    if (m2::ci::length<SPACE>(e) == 0) {
+      // std::cout << " deleting 1: " << e->position_in_set() << std::endl;
+      this->delete_edge(obj, e);
+      return true;
+    }
 
-    auto gatherDegenEdges = [&edgeDegenerates](face_vertex_ptr fv) -> void {
-      if (fv->face()->size() < 3) {
-        edgeDegenerates.push_back(fv->edge());
-      }
-    };
+    if(e->v1()->face()->size() < 3){
+      //std::cout << " deleting 1: " << e->position_in_set() << std::endl;
+      this->delete_edge(obj, e);
+      return true;
+    }
+    if (e->v2()->face()->size() < 3) {
+      //std::cout << " deleting 2: " << e->position_in_set() << std::endl;
+      this->delete_edge(obj, e);
+      return true;
+    }
+    return false;
 
-    m2::surf<SPACE>::for_each(v, gatherDegenVerts);
-    std::for_each(vertDegenerates.begin(), vertDegenerates.end(),
-                  [this, &obj](vertex_ptr v) mutable {
-                    this->delete_vertex_primitive(obj, v);
-                  });
-
-    m2::surf<SPACE>::for_each(v, gatherDegenEdges);
-    std::for_each(
-        edgeDegenerates.begin(), edgeDegenerates.end(),
-        [this, &obj](edge_ptr e) mutable { this->delete_edge(obj, e); });
-    std::cout << edgeDegenerates.size() << " " << vertDegenerates.size()
-              << std::endl;
-    return (edgeDegenerates.size() > 0 || vertDegenerates.size() > 0);
   };
 
   vertex_ptr collapse_edge_triangle(surf_ptr obj, edge_ptr e) {
@@ -1126,6 +1131,11 @@ public:
   }
 
   vertex_ptr collapse_edge(surf_ptr obj, edge_ptr e) {
+    if (e->v1()->size() == 0)
+      return e->v2()->vertex();
+    if (e->v2()->size() == 0)
+      return e->v1()->vertex();
+
     if (e->v1()->vertex() == e->v2()->vertex())
       return e->v1()->vertex();
 
@@ -1141,8 +1151,9 @@ public:
     coordinate_type c1 = this->coordinate(v1);
     coordinate_type c2 = this->coordinate(v2);
     coordinate_type cp = 0.5 * (c1 + c2);
-    this->coordinate(cp,v1);
-
+    this->coordinate(cp, v1);
+    
+    /*
     if (v2->size() == 3) {
 
       face_ptr f = delete_vertex_primitive(obj, v2);
@@ -1150,7 +1161,11 @@ public:
       // v1->print();
       return v1;
     }
+    */
+    std::cout << v1->position_in_set() << ":" << v1->size() << " "
+              << v2->position_in_set() << ":" << v2->size() << " " << std::endl;
 
+    /*
     if (v2->size() == 2) {
       edge_ptr e1n = fv1->next()->edge();
       edge_ptr e2n = fv2->next()->edge();
@@ -1163,7 +1178,7 @@ public:
       obj->remove_vertex(v2->position_in_set());
       return v1;
     }
-
+    */
     if (fv1->face()->size() == 3)
       this->delete_edge(obj, fv1->next()->edge());
     if (fv2->face()->size() == 3)
@@ -1186,6 +1201,8 @@ public:
     bool iterating = true;
     face_vertex_ptr fvb = fv2->vnext();
     face_vertex_ptr fve = fv2->vprev();
+
+
     while (iterating) {
       iterating = fvb != fve;
       v2->remove_face_vertex(fvb);

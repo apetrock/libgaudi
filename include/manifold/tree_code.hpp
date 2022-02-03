@@ -100,19 +100,18 @@ public:
         T sc = pNode.half.maxCoeff();
         // int ii = octree.permutation[pNode.begin];
 
-        if (sc / dc > thresh) {
-          // if(sc/dc > thresh){
+        if (sc / dc < thresh || pNode.isLeaf()) {
+          coordinate_type ci = nodeCharges[pId];
+          OUTPUT ui = computeFcn(ci, pj, pi);
+          u[i] += ui;
+        }
+
+        else {
           for (int j = 0; j < 8; j++) {
             if (pNode.children[j] != -1) {
               stack1.push(pNode.children[j]);
             }
           }
-        }
-
-        else {
-          coordinate_type ci = nodeCharges[pId];
-          OUTPUT ui = computeFcn(ci, pj, pi);
-          u[i] += ui;
         }
       }
     }
@@ -185,7 +184,7 @@ public:
       }
     }
 
-    T thresh = 0.40;
+    T thresh = 0.5;
 
     for (int i = 0; i < evalPoints.size(); i++) {
       int count = 0;
@@ -208,19 +207,17 @@ public:
         T sc = pNode.bbox.half.maxCoeff();
         // T sc = va::norm(pNode.bbox.half);
 
-        if (sc / dc > thresh) {
+        if (sc / dc <= thresh || pNode.isLeaf()) {
+          CHARGE cj = nodeCharges[pId];
+          OUTPUT ui = computeFcn(cj, pj, pi, Nj, chargePrimitives, pNode, tree);
+          u[i] += ui;
           // if(sc/dc > thresh){
+        } else {
           for (int j = 0; j < pNode.getNumChildren(); j++) {
             if (pNode.children[j] != -1) {
               stack1.push(pNode.children[j]);
             }
           }
-        }
-
-        else {
-          CHARGE cj = nodeCharges[pId];
-          OUTPUT ui = computeFcn(cj, pj, pi, Nj, chargePrimitives, pNode, tree);
-          u[i] += ui;
         }
       }
     }

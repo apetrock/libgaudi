@@ -166,6 +166,22 @@ inline T cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
 }
 
 template <typename T>
+inline T abs_cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
+
+  T e1 = norm(VEC3<T>(c1 - c0));
+  T e2 = norm(VEC3<T>(c2 - c0));
+  T e3 = norm(VEC3<T>(c2 - c1));
+
+  if(e1 == 0.0 || e2 == 0.0)
+    return 0.0;
+
+  float cos_alpha = fabs((e1 * e1 + e2 * e2 - e3 * e3) / (2.0f * e1 * e2));
+
+  return cos_alpha;
+}
+
+
+template <typename T>
 inline bool ray_triangle_intersect(VEC3<T> &pi, const VEC3<T> &r0,
                                    const VEC3<T> &r1, const VEC3<T> &v0,
                                    const VEC3<T> &v1, const VEC3<T> &v2,
@@ -678,6 +694,7 @@ inline VEC3<T> calc_bary(VEC3<T> c, std::vector<VEC3<T>> vertices) {
   int i = 0;
   
   for(auto v : vertices){
+    if(i > 2) break;
     V.block(0, i, 3, 1) = v;
     i++;
   }

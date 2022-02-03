@@ -10,8 +10,8 @@
 #ifndef __CONJ_GRAD__
 #define __CONJ_GRAD__
 
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -19,114 +19,98 @@
 
 #include <math.h>
 
-template <typename MAT, typename T>
-void	cgsolve(MAT& A, vector<T>& x, vector<T>& b){
-	//conjugate gradient solver... not preconditioned
-	//depending on the data type, reqires copy into vector x
-	
-	int nthreads, tid, i, chunk;
-	chunk = 10;
-	T tol = 1; T alpha,beta,r0,r1,eps;
-	eps = 0.000001;
-	long N = x.size();
-	vector<T> R;  R.resize(N);
-	vector<T> p;  p.resize(N);
-	vector<T> Ap; Ap.resize(N);
-	
-	T RR = 0;
-	
-	//we'll have to let the user parallelize the multiplication... though could do it via a kernel, for now this works :(
-	A.mult(x,Ap);
-//#pragma omp parallel private(i,tid)	
-	//#pragma omp parallel shared(b,R,xt,x,p,nthreads) private(i,tid)
-	{
-	  //	tid = omp_get_thread_num();
-	  //	if (tid == 0)
-	  //	{
-	  //		nthreads = omp_get_num_threads();
-	  //	}
-//#pragma omp for schedule(dynamic,chunk)
-		for (i = 0; i < N; i++){
-			R[i] = b[i] - Ap[i];
-			p[i] = R[i];
-			RR  += R[i]*R[i];
-		}		
-	}
-	
-	r0 = RR;
-	r1 = r0;
-	/*
-	 ----------------------------------------------------------------------------------------
-	 begin iterating	
-	 ----------------------------------------------------------------------------------------*/	
-	int counter = 0;
+namespace m2 {
+template <typename SPACE> class gradient_descent {
+  M2_TYPEDEFS;
 
-	while (counter < N){		
-		T pAp = 0;			
-		RR    = 0;
-		alpha = 0;
-		beta  = 0;
-		
-		A.mult(p,Ap);
-#ifdef _OPENMP		
-//#pragma omp parallel private(i,tid)			
+public:
+  gradient_descent() {}
+  ~gradient_descent() {}
+
+  typename SPACE::real dot(const std::vector<typename SPACE::real> &A,
+                           const std::vector<typename SPACE::real> &B) {
+
+    real v = 0.0;
+    for (int i = 0; i < A.size(); i++) {
+      v += A[i] * B[i];
+    }
+    return v;
+  }
+
+  std::vector<typename SPACE::real>
+  addScaledVec(const std::vector<typename SPACE::real> &X0,
+               const std::vector<typename SPACE::real> &V,
+               typename SPACE::real C) {
+
+    std::vector<real> X(X0);
+    for (int i = 0; i < X.size(); i++) {
+      X[i] = X0[i] + C * V[i];
+    }
+    return X;
+  }
+
+  std::vector<typename SPACE::real>
+  solveConjugateGradient(const std::vector<typename SPACE::real> &B,
+                         function<std::vector<real>(const std::vector<real> &)> M,
+                         int & its) {
+
+    /*
+     x =          initial guess for solution of Ax=b
+     r = b - Ax = residual, to be made small
+     p = r      = initial "search direction"
+
+     do while ( new_r , new_r ) not small
+        v = Ap                        ... matrix-vector multiply
+        a = ( r , r ) / ( p , v )     ... dot product
+        x = x + a*p                   ... updated approximate solution
+        r_new = r - a*v               ... update the residual
+        g = ( r_new , r_new ) / ( r , r )
+        p = r_new + g*p               ... update search direction
+        r = r_new
+     enddo
+    */
+
+    // x =          initial guess for solution of Ax=b
+    std::vector<real> X = B;
+
+    // std::vector<real> MU = diffMult(surf, U0, dt, C);
+    std::vector<real> MX = M(X);
+
+    // r = b - Ax = residual, to be made small
+    std::vector<real> R = addScaledVec(B, MX, -1);
+    // p = r = initial "search direction"
+    std::vector<real> P = R;
+    real sig1 = dot(R, R);
+    int ii = 0;
+    while (ii < 512 && sig1 > 1e-16) {
+
+      // v = Ap                        ... matrix-vector multiply
+      std::vector<real> V = M(P);
+
+      // a = ( r , r ) / ( p , v )     ... dot product
+      real a = sig1 / dot(P, V);
+      // std::cout << sig1 << std::endl;
+      // x = x + a*p                   ... updated approximate solution
+      X = addScaledVec(X, P, a);
+      // r_new = r - a * v... update the residual
+      std::vector<real> Rn = addScaledVec(R, V, -a);
+      // g = ( r_new , r_new ) / ( r , r )
+      real sig0 = sig1;
+      sig1 = dot(Rn, Rn);
+      real g = sig1 / sig0;
+
+      // p = r_new + g *p... update search direction
+      P = addScaledVec(Rn, P, g);
+
+      // r = r_new
+      R = Rn;
+      ii++;
+    }
+    std::cout << "computed grad to: " << sig1 << " in " << ii << " iterations"
+              << std::endl;
+    its = ii;
+    return X;
+  }
+}; // gradient_descent
+} // namespace m2
 #endif
-		{	
-#ifdef _OPENMP
-			tid = omp_get_thread_num();
-			if (tid == 0) nthreads = omp_get_num_threads();	
-
-//#pragma omp for schedule(dynamic,chunk)
-#endif		
-			for (i = 0; i < N; i++) {			
-				pAp += p[i]*Ap[i];
-			}
-		};
-		
-		alpha = r1/(pAp);
-
-//#pragma omp parallel private(i,tid)			
-
-		{
-#ifdef _OPENMP
-			tid = omp_get_thread_num();
-			if (tid == 0) nthreads = omp_get_num_threads();	
-#endif				
-//#pragma omp for schedule(dynamic,chunk)
-			for (i = 0; i < N; i++) {				
-				x[i] +=  p[i]*alpha;			
-				R[i] -=  Ap[i]*alpha;
-				RR   +=  R[i]*R[i];				
-			}
-		}
-		r1 = RR;
-		beta = r1/r0;
-		double rnorm = r1.norm2();
-		//if (r1 <= r0*0.1) counter = N;
-		if (rnorm == 0) counter = N;		
-		if (rnorm < 0.00001) counter = N;				
-		//if (r1 > r0) counter = N;
-		
-//		cout << "r:       " << counter << ": " << rnorm << endl;
-		//cout << "beta:    " << counter << ": " << beta[0] << endl;		
-
-//		#pragma omp parallel private(i,tid)	
-		////#pragma omp parallel shared(b,R,xt,x,p,nthreads) private(i,tid)
-		{
-#ifdef _OPENMP
-			tid = omp_get_thread_num();
-			if (tid == 0) nthreads = omp_get_num_threads();			
-//			#pragma omp for schedule(dynamic,chunk)
-#endif
-			for (int i = 0; i < N; i++){
-				p[i] = R[i] + p[i]*beta;
-				//cout << "p:    " << counter << ": " << p[i][0] << " " << p[i][1] << " " << p[i][2] << endl;
-			}
-		}
-		counter++;
-		r0 = r1;
-	}	
-}
-
-#endif
-

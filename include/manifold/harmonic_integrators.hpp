@@ -130,12 +130,12 @@ public:
     };
 
     auto computeK = [](T dist, T C) {
-#if 1
+#if 0
       T d3 = dist * dist * dist;
       T l3 = C * C * C;
       T kappa = (1.0 - exp(-d3 / l3)) / d3;
       return kappa / pow(4.0 * M_PI, 1.5);
-#elif 0
+#elif 1
       T dist3 = dist * dist * dist;
       T l3 = C * C * C;
       T kappa = 1.0 / (dist3 + l3);
@@ -156,7 +156,7 @@ public:
                        ATree &tree) -> Q {
       Q out = z::zero<Q>();
 
-
+    
       if (node.isLeaf()) {
         for (int i = node.begin; i < node.begin + node.size; i++) {
           int ii = tree.permutation[i];
@@ -182,6 +182,112 @@ public:
         T dist = m2::va::norm(dp);
         //T Ndp = m2::va::dot(N, dp);
         T k = computeK(dist, regLength);
+        out += k * wq;
+      }
+      return out;
+    };
+
+    vector<face_ptr> &faces = mesh->get_faces();
+    vector<coordinate_type> normals;
+    vector<triangle_type> triangles;
+    for (int i = 0; i < faces.size(); i++) {
+      std::vector<triangle_type> tris = m2::ci::get_tris<SPACE>(faces[i]);
+      triangles.insert(triangles.end(), tris.begin(), tris.end());
+    }
+
+    for (auto t : triangles) {
+      normals.push_back(t.normal());
+    }
+
+    vector<Q> u(evalPoints.size(), z::zero<Q>());
+    Avg_Integrator integrator;
+    integrator.integrate(faceVectors, triangles, evalPoints, u, pre, compute);
+
+    return u;
+  }
+
+  template <typename Q>
+  vector<Q> harmonicNormal(surf_ptr mesh, std::vector<Q> faceVectors,
+                        std::vector<coordinate_type> evalPoints,
+                        T regLength = 0.5) {
+    using Avg_Integrator = m2::Geometry_Integrator<SPACE, Q, triangle_type, Q>;
+    using ATree = typename Avg_Integrator::Tree;
+    using ANode = typename Avg_Integrator::Node;
+
+    auto pre = [faceVectors](const vector<triangle_type> &tris, ANode &node,
+                             ATree &tree, Q &netCharge,
+                             coordinate_type &avgPoint,
+                             coordinate_type &avgNormal) -> void {
+      avgPoint = coordinate_type(0, 0, 0);
+      netCharge = z::zero<Q>();
+
+      T netWeight = 0;
+
+      for (int i = node.begin; i < node.begin + node.size; i++) {
+        int ii = tree.permutation[i];
+        triangle_type tri = tris[ii];
+        T w = tri.area();
+        avgPoint += w * tri.center();
+        avgNormal += w * tri.normal();
+        netCharge += w * faceVectors[ii];
+        netWeight += w;
+      }
+
+      avgPoint /= netWeight;
+    };
+
+    auto computeK = [](T dist, T C) {
+#if 0
+      T d3 = dist * dist * dist;
+      T l3 = C * C * C;
+      T kappa = (1.0 - exp(-d3 / l3)) / d3;
+      return kappa / pow(4.0 * M_PI, 1.5);
+#elif 1
+      T dist3 = dist * dist * dist;
+      T l3 = C * C * C;
+      T kappa = 1.0 / (dist3 + l3);
+      return kappa / pow(4.0 * M_PI, 1.5);
+#elif 0
+      T dist2 = dist * dist;
+      T dt = 0.5;
+      T kappa = exp(-dist2 / 4.0 / dt);
+      return kappa / pow(4.0 * M_PI * dt, 1.5);
+#endif
+
+    };
+
+    auto compute = [this, faceVectors, regLength, computeK](
+                       const Q &wq, const coordinate_type &pc,
+                       const coordinate_type &pe, const coordinate_type &N,
+                       const vector<triangle_type> &tris, ANode &node,
+                       ATree &tree) -> Q {
+      Q out = z::zero<Q>();
+      
+      if (node.isLeaf()) {
+        for (int i = node.begin; i < node.begin + node.size; i++) {
+          int ii = tree.permutation[i];
+          Q qi = faceVectors[ii];
+          auto tri = tris[ii];
+          auto w = tri.area();
+          auto c = tri.center();
+          coordinate_type dp = c - pe;
+          T dist = m2::va::norm(dp);
+
+          // if(dist <= std::numeric_limits<T>::epsilon())
+          //  continue;
+          // out += w * computeK(dist, regLength) * va::cross(q,dp);
+
+          T Ndp = m2::va::dot(tri.normal(), qi);
+
+          T k = Ndp * computeK(dist, regLength);
+          out += w * k * qi;
+        }
+      } else {
+        // out += computeK(dist, regLength) * va::cross(q, dp);
+        coordinate_type dp = pc - pe;
+        T dist = m2::va::norm(dp);
+        T Ndp = m2::va::dot(N, wq);
+        T k = Ndp * computeK(dist, regLength);
         out += k * wq;
       }
       return out;

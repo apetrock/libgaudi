@@ -17,6 +17,7 @@
 #include <math.h>
 #include <stack>
 #include <vector>
+#include <bitset>
 
 #ifdef __APPLE__
 #include <OpenGL/gl.h>
@@ -32,8 +33,8 @@
 //#include <GL/glut.h>
 #endif
 
-#include <memory>
 #include <any>
+#include <memory>
 
 #include "geometry_types.hpp"
 #include "manifold_singleton.h"
@@ -239,13 +240,10 @@ public:
 
   template <class ITYPE> class data_node {
   public:
-    data_node() {
+    data_node() { flags.reset(); }
 
-    }
-
-    data_node(const data_node &other) {
-      _ddata = other._ddata;
-      _size = other._size;
+    data_node(const data_node &other)
+        : _ddata(other._ddata), _size(other._size), flags(other.flags) {
     }
 
     std::any &operator[](ITYPE i) { return _ddata[static_cast<int>(i)]; }
@@ -269,9 +267,7 @@ public:
       dirty[static_cast<int>(i)] = val;
     }
 
-    void get_dirty(const ITYPE &i) {
-      return dirty[static_cast<int>(i)];
-    }
+    void get_dirty(const ITYPE &i) { return dirty[static_cast<int>(i)]; }
 
     void set_dirty() {
       for (int i = 0; i < size(); i++) {
@@ -279,6 +275,9 @@ public:
       }
     }
 
+    std::bitset<8> flags;
+    int topologyChange = -1; // needs to be changed to stored value
+    
   private:
     std::any _ddata[static_cast<int>(ITYPE::MAXINDEX)];
     bool dirty[static_cast<int>(ITYPE::MAXINDEX)];
@@ -329,6 +328,13 @@ public:
     face_vertex_ptr v1() const { return fv1; }
     face_vertex_ptr &v2() { return fv2; }
     face_vertex_ptr v2() const { return fv2; }
+
+    face_vertex_ptr& other(const face_vertex_ptr &cv) {
+      if (cv == fv1) {
+        return fv2;
+      } else
+        return fv1;
+    }
 
     face_vertex_ptr other(const face_vertex_ptr &cv) const {
       if (cv == fv1) {
@@ -1178,10 +1184,11 @@ public:
     int mSetPosition;
     int mSize;
     int mGroup;
-
+   
   public:
     int pinned;
     unsigned int flag;
+
     coordinate_type data;
     T data2;
     T winding;
@@ -1775,12 +1782,16 @@ public:
         mEdges[i]->flag = 0;
         mEdges[i]->v1()->flag = 0;
         mEdges[i]->v2()->flag = 0;
+
+        mEdges[i]->flags[0] = 0;
+        mEdges[i]->flags[1] = 0;
       }
     }
 
     for (int i = 0; i < mVertices.size(); i++) {
       if (mVertices[i]) {
         mVertices[i]->flag = 0;
+        mVertices[i]->topologyChange = -1;
       }
     }
   }
@@ -2033,11 +2044,15 @@ void for_each_face(
   face_vertex_ptr fvb = f->fbegin();
   face_vertex_ptr fve = f->fend();
   bool iterating = true;
+
   while (iterating) {
+
     iterating = fvb != fve;
     func(fvb);
     fvb = fvb->next();
+
   }
+
 }
 
 template <typename SPACE>

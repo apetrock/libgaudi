@@ -230,9 +230,12 @@ public:
     if (this->_animate)
       this->animate();
 
+    glEnable(GL_DEPTH_TEST);
+    
     if (mScene)
       mScene->onDraw(*_viewer);
 
+    glDisable(GL_DEPTH_TEST);
     _frame++;
   }
 

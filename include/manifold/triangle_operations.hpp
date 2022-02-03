@@ -13,11 +13,11 @@
 
 namespace m2 {
 
-template <typename SPACE> class edge_splitter {
+template <typename SPACE> class edge_split {
   M2_TYPEDEFS;
 
 public:
-  vertex_ptr split(surf_ptr obj_in, edge_ptr edge_in) {
+  vertex_ptr operator()(surf_ptr obj_in, edge_ptr edge_in) {
 
     face_vertex_ptr fv1 = edge_in->v1();
     face_vertex_ptr fv2 = edge_in->v2();
@@ -66,14 +66,267 @@ public:
   }
 };
 
-template <typename SPACE> class edge_flipper {
+template <typename SPACE> class edge_collapse {
   M2_TYPEDEFS;
 
 public:
-  edge_flipper() {}
-  ~edge_flipper() {}
+#if 1
+  vertex_ptr operator()(surf_ptr obj, edge_ptr e) {
+    // TODO:: move to triangle_ops, compare with joinFaceOneSharedEdge
+    if (e->v1()->vertex() == e->v2()->vertex())
+      return e->v1()->vertex();
 
-  edge_ptr flip(edge_ptr e1) {
+    face_vertex_ptr va0 = e->v1();
+    face_vertex_ptr vb0 = e->v2();
+    vertex_ptr v1 = va0->vertex();
+    vertex_ptr v2 = vb0->vertex();
+    construct<SPACE> cons;
+    if (va0->face()->size() == 1 || va0->face()->size() == 2) {
+      std::cout << "e pos (v2): " << e->position_in_set() << std::endl;
+      v2->print();
+      cons.delete_edge(obj, e);
+      return v1;
+    }
+
+    if (vb0->face()->size() == 1 || vb0->face()->size() == 2) {
+      std::cout << "e pos (v2): " << e->position_in_set() << std::endl;
+      v2->print();
+      cons.delete_edge(obj, e);
+      return v2;
+    }
+
+    if (v1->calc_size() == 1 || v1->calc_size() == 2) {
+      std::cout << "e pos (v1): " << e->position_in_set() << std::endl;
+      v1->print();
+      // std::cout << " deleting v1" << std::endl;
+      face_ptr f = cons.delete_vertex_primitive(obj, v1);
+      return v2;
+    }
+
+    if (v2->calc_size() == 1 || v2->calc_size() == 2) {
+      std::cout << "e pos (v2): " << e->position_in_set() << std::endl;
+      v2->print();
+      face_ptr f = cons.delete_vertex_primitive(obj, v2);
+      //	std::cout << "output 3: " << std::endl;
+      // v1->print();
+      return v1;
+    }
+
+    if (v1->calc_size() == 1 || v1->calc_size() == 2) {
+      std::cout << "e pos (v1): " << e->position_in_set() << std::endl;
+      v1->print();
+      // std::cout << " deleting v1" << std::endl;
+      face_ptr f = cons.delete_vertex_primitive(obj, v1);
+      return v2;
+    }
+
+    face_vertex_ptr va1 = va0->next();
+    face_vertex_ptr va2 = va0->prev();
+    edge_ptr ea1 = va1->edge();
+    edge_ptr ea2 = va2->edge();
+    face_vertex_ptr va2p = ea1->other(va1);
+    face_vertex_ptr va0p = ea2->other(va2);
+
+    face_vertex_ptr vb1 = vb0->next();
+    face_vertex_ptr vb2 = vb0->prev();
+    edge_ptr eb1 = vb1->edge();
+    edge_ptr eb2 = vb2->edge();
+    face_vertex_ptr vb2p = eb1->other(vb1);
+    face_vertex_ptr vb0p = eb2->other(vb2);
+
+    if (e->position_in_set() == 57456) {
+
+      std::cout << " e: " << e->position_in_set() << std::endl;
+      std::cout << " ea2: " << ea2->position_in_set() << std::endl;
+      std::cout << " eb2: " << eb2->position_in_set() << std::endl;
+
+      std::cout << " e: " << e->v1() << " " << e->v2() << std::endl;
+      std::cout << va0 << " " << va1 << " " << va2 << " " << vb0 << " " << vb1
+                << " " << vb2 << std::endl;
+
+      std::cout << va0p << " " << va2p << " " << vb0p << " " << vb2p
+                << std::endl;
+
+      bool iterating = true;
+      face_vertex_ptr fvb = v1->fbegin();
+      face_vertex_ptr fve = v1->fend();
+      while (iterating) {
+        iterating = fvb != fve;
+        std::cout << fvb->edge()->position_in_set() << " ";
+        fvb = fvb->vnext();
+      }
+      std::cout << std::endl;
+
+      iterating = true;
+      fvb = v1->fbegin();
+      fve = v1->fend();
+      while (iterating) {
+        iterating = fvb != fve;
+        std::cout << fvb->edge()->v1() << " ";
+        fvb = fvb->vnext();
+      }
+      std::cout << std::endl;
+
+      iterating = true;
+      fvb = v1->fbegin();
+      fve = v1->fend();
+      while (iterating) {
+        iterating = fvb != fve;
+        std::cout << fvb->edge()->v2() << " ";
+        //<< fvb->next()->vertex()->calc_size() <<  " ";
+        fvb = fvb->vnext();
+      }
+      std::cout << std::endl;
+    }
+
+    ea1->set(va0p, va2p);
+    eb1->set(vb0p, vb2p);
+
+    va0p->vertex() = v1;
+
+    va0p->vertex()->front() = va0p;
+    va2p->vertex()->front() = va2p;
+    vb0p->vertex()->front() = vb0p;
+    vb2p->vertex()->front() = vb2p;
+
+    face_ptr fa = va0->face();
+    face_ptr fb = vb0->face();
+
+    v1->color.r = 1.0;
+
+    obj->remove_face(fa->position_in_set());
+    obj->remove_face(fb->position_in_set());
+
+    obj->remove_edge(e->position_in_set());
+    obj->remove_edge(ea2->position_in_set());
+    obj->remove_edge(eb2->position_in_set());
+    obj->remove_vertex(v2->position_in_set());
+    // these gotta go last
+    if (va0)
+      delete va0;
+    if (va1)
+      delete va1;
+    if (va2)
+      delete va2;
+    if (vb0)
+      delete vb0;
+    if (vb1)
+      delete vb1;
+    if (vb2)
+      delete vb2;
+
+    m2::for_each_vertex<SPACE>(v1, [&v1](face_vertex_ptr fv) -> void {
+      fv->vertex() = v1;
+      fv->next()->vertex()->front() = fv->next();
+    });
+
+    // while(this->delete_degenerates(obj,v1));
+    return v1;
+  }
+#else
+  vertex_ptr operator()(surf_ptr obj, edge_ptr e) {
+    if (e->v1()->size() == 0)
+      return e->v2()->vertex();
+    if (e->v2()->size() == 0)
+      return e->v1()->vertex();
+
+    if (e->v1()->vertex() == e->v2()->vertex())
+      return e->v1()->vertex();
+
+    face_vertex_ptr fv1 = e->v1();
+    face_vertex_ptr fv2 = e->v2();
+    vertex_ptr v1 = fv1->vertex();
+    vertex_ptr v2 = fv2->vertex();
+
+    construct<SPACE> cons;
+    if (fv1->face()->size() == 3) {
+      std::cout << "dm1 " << fv2->next()->edge()->flag[0] << std::endl;
+      cons.delete_edge(obj, fv2->next()->edge());
+    }
+    if (fv2->face()->size() == 3) {
+      std::cout << "dm2" << fv2->next()->edge()->flag[0] << std::endl;
+      cons.delete_edge(obj, fv2->next()->edge());
+    }
+
+    v1->front() = fv1->vprev();
+    v2->front() = fv2->vprev();
+
+    std::cout << "v1: " << v1->front() << " " << fv1->vnext() << std::endl;
+    std::cout << "v2: " << v2->front() << " " << fv2->vnext() << std::endl;
+
+    std::cout << v1->position_in_set() << ":" << v1->size() << " "
+              << v2->position_in_set() << ":" << v2->size() << " " << std::endl;
+
+    face_vertex_ptr v1p = fv1->prev();
+    face_vertex_ptr v1n = fv1->next();
+    face_vertex_ptr v2p = fv2->prev();
+    face_vertex_ptr v2n = fv2->next();
+
+    fv1->face()->fbegin() = v1p;
+    fv2->face()->fbegin() = v2p;
+    v1p->next() = v1n;
+    v1n->prev() = v1p;
+    v2p->next() = v2n;
+    v2n->prev() = v2p;
+    fv1->face()->update_all();
+    fv2->face()->update_all();
+
+    // bool iterating = true;
+    // face_vertex_ptr fvb = fv2->vnext();
+    // face_vertex_ptr fve = fv2->vprev();
+
+    v1->update_all();
+    v2->update_all();
+    /*
+    while (iterating) {
+      iterating = fvb != fve;
+      v2->remove_face_vertex(fvb);
+      v1->add_face_vertex(fvb);
+      fvb = fvb->vnext();
+    }
+
+    v1->front() = fvb;
+    */
+    std::cout << e << " " << fv1 << " " << fv2 << std::endl;
+
+    std::cout << "d0" << std::endl;
+    v1->remove_face_vertex(fv1);
+    delete fv1;
+
+    std::cout << "d1" << std::endl;
+    v2->remove_face_vertex(fv2);
+    delete fv2;
+
+    std::cout << "update_v1"
+              << " " << v1->front() << std::endl;
+    v1->update_all();
+
+    std::cout << "update_v2"
+              << " " << v2->front() << std::endl;
+    v2->update_all();
+    // std::cout << "output: " << std::endl;
+    // v1->print();
+    // v2->print();
+
+    std::cout << "d2" << std::endl;
+    obj->remove_edge(e->position_in_set());
+
+    std::cout << "d3" << std::endl;
+    obj->remove_vertex(v2->position_in_set());
+
+    return v1;
+  }
+#endif
+};
+
+template <typename SPACE> class edge_flip {
+  M2_TYPEDEFS;
+
+public:
+  edge_flip() {}
+  ~edge_flip() {}
+
+  edge_ptr operator()(edge_ptr e1) {
     // specialized for triangle meshes
     face_vertex_ptr fv10 = e1->v1();
     face_vertex_ptr fv11 = fv10->prev();
@@ -111,10 +364,13 @@ public:
 
     face_vertex_ptr fv11t = e11->other(fv11);
     face_vertex_ptr fv21t = e21->other(fv21);
+
     e11->other(fv11) = e12->other(fv12);
     e11->other(fv11)->edge() = e11;
+    
     e21->other(fv21) = e22->other(fv22);
     e21->other(fv21)->edge() = e21;
+    
     e12->other(fv12) = fv21t;
     fv21t->edge() = e12;
     e22->other(fv22) = fv11t;
@@ -138,10 +394,167 @@ public:
   }
 }; // Class Modify
 
-#if 0
-template <typename SPACE> class merge_faces : public default_interface<SPACE> {
+template <typename SPACE>
+class triangle_operations_base : public default_interface<SPACE> {
 public:
   M2_TYPEDEFS;
+
+  triangle_operations_base(const surf_ptr &surf, real max)
+      : default_interface<SPACE>(), _thresh(max), _surf(surf) {}
+
+  void reset_flags() {
+    //_surf->reset_flags();
+
+    edge_array edges = _surf->get_edges();
+    for (int i = 0; i < edges.size(); i++) {
+      if (!edges[i])
+        continue;
+      edges[i]->flags[0] = 0;
+      edges[i]->flags[1] = 0;
+    }
+
+    vertex_array vertices = _surf->get_vertices();
+    for (int i = 0; i < vertices.size(); i++) {
+      if (!vertices[i])
+        continue;
+      vertices[i]->topologyChange = -1;
+    }
+
+    std::cout << "done:" << std::endl;
+  }
+
+  struct {
+    bool operator()(edge_ptr ei, edge_ptr ej) {
+      return (ci::length<SPACE>(ei) > ci::length<SPACE>(ej));
+    }
+  } mEdgeSorterGreater;
+
+  struct {
+    bool operator()(edge_ptr ei, edge_ptr ej) {
+      return (ci::length<SPACE>(ei) > ci::length<SPACE>(ej));
+    }
+  } mEdgeSorterLesser;
+
+  surf_ptr _surf;
+  real _thresh = 0.1;
+};
+
+template <typename SPACE>
+class edge_flipper : public triangle_operations_base<SPACE> {
+  M2_TYPEDEFS;
+
+public:
+  edge_flipper(const surf_ptr &surf)
+      : triangle_operations_base<SPACE>(surf, 0.0) {}
+
+  bool flip() {
+    // TIMER function//TIMER(__FUNCTION__);
+    edge_array &edges = this->_surf->get_edges();
+    m2::construct<SPACE> cons;
+    bool flipped = false;
+    edge_array permEdges;
+    for (int i = 0; i < edges.size(); i++) {
+      if (!this->_surf->has_edge(i))
+        continue;
+      edge_ptr e = edges[i];
+      if (e->v1()->face()->size() == 3 && e->v2()->face()->size() == 3)
+        permEdges.push_back(edges[i]);
+    }
+
+    for (int i = 0; i < permEdges.size(); i++) {
+      int card = rand() % permEdges.size();
+      edge_ptr et = permEdges[i];
+      permEdges[i] = permEdges[card];
+      permEdges[card] = et;
+    }
+
+    for (int i = 0; i < permEdges.size(); i++) {
+      edge_ptr e = permEdges[i];
+      bool pinned = e->v1()->vertex()->pinned == true &&
+                    e->v2()->vertex()->pinned == true;
+      bool notPinned = e->v1()->vertex()->pinned != true &&
+                       e->v2()->vertex()->pinned != true;
+      if (pinned)
+        continue;
+      if (notPinned)
+        continue;
+
+      // if(e->v1()->vertex()->size() < 4) continue;
+      // if(e->v2()->vertex()->size() < 4) continue;
+
+      face_vertex_ptr v0 = e->v1();
+      face_vertex_ptr v1 = v0->prev();
+      face_vertex_ptr v2 = e->v2();
+      face_vertex_ptr v3 = v2->prev();
+
+      coordinate_type c0 = this->coordinate(v0);
+      coordinate_type c1 = this->coordinate(v1);
+      coordinate_type c2 = this->coordinate(v2);
+      coordinate_type c3 = this->coordinate(v3);
+
+      face_vertex_ptr fvEdge = NULL;
+      T m01 = 1.0 / (c0 - c1).norm();
+      T m12 = 1.0 / (c1 - c2).norm();
+      T m23 = 1.0 / (c2 - c3).norm();
+      T m30 = 1.0 / (c3 - c0).norm();
+
+      T cos0 = (c1 - c0).dot(c3 - c0) * m01 * m30;
+      T cos1 = (c0 - c1).dot(c2 - c1) * m01 * m12;
+      T cos2 = (c1 - c2).dot(c3 - c2) * m12 * m23;
+      T cos3 = (c0 - c3).dot(c2 - c3) * m30 * m23;
+      // half angle cos^2(2a) = 0.5*(1+cos(a))
+      T cSame = acos(cos1) + acos(cos3); // corresponds to flipped edge
+      T cFlip = acos(cos0) + acos(cos2); // corresponds to flipped edge
+      // T cSame =  (M_PI - (acos(cos1) + acos(cos3))); //corresponds to flipped
+      // edge
+
+      T eFlip = cFlip * cFlip;
+      T eSame = cSame * cSame;
+#if 0
+	T sin0 = va::cross(c1-c0,c3-c0).norm();
+	T sin1 = va::cross(c0-c1,c2-c1).norm();
+	T sin2 = va::cross(c1-c2,c3-c2).norm();
+	T sin3 = va::cross(c0-c3,c2-c3).norm();
+	bool div0 = (sin0 < 1e-12 || sin1 < 1e-12 || sin2 < 1e-12 || sin3 < 1e-12);
+	if(!div0){
+	  //curvature penalty
+	  T cot0 = cos0/sin0;
+	  T cot1 = cos1/sin1;
+	  T cot2 = cos2/sin2;
+	  T cot3 = cos3/sin3; 
+	  //if we flip we change this much	  
+
+	  T eCurveFlip = (cot1 + cot3)*(cot1 + cot3) + (cot0 + cot2)*(cot0 + cot2);
+	  T eCurveSame = 0.0;
+
+	  T C = 0.00000001;
+	  eFlip += C*eCurveFlip;
+	  eSame += C*eCurveSame;
+	}
+#endif
+
+      // if(cSame > M_PI){
+      if (cFlip < cSame) {
+        edge_flip<SPACE> flip;
+        flip(e);
+        // e->v1()->data *= -1;
+        // e->v2()->data *= -1;
+        flipped = true;
+      }
+    }
+    return flipped;
+  }
+
+}; // set_operations
+
+#if 1
+template <typename SPACE>
+class face_merger : public triangle_operations_base<SPACE> {
+public:
+  M2_TYPEDEFS;
+
+  face_merger(const surf_ptr &surf, real max)
+      : triangle_operations_base<SPACE>(surf, max) {}
 
   std::vector<edge_ptr> getSharedEdges(face_ptr fA, face_ptr fB) {
 
@@ -174,8 +587,8 @@ public:
       return;
     edge_ptr e = edges[0];
 
-    std::cout << "shared_edge: " << fA->position_in_set() << " "
-              << fB->position_in_set() << std::endl;
+    //std::cout << "shared_edge: " << fA->position_in_set() << " "
+    //          << fB->position_in_set() << std::endl;
     face_vertex_ptr fvA0 = e->v1();
     face_vertex_ptr fvA1 = fvA0->next();
     face_vertex_ptr fvA2 = fvA1->next();
@@ -235,8 +648,8 @@ public:
   }
 
   void joinFaceNoSharedEdges(face_ptr fA, face_ptr fB, surf_ptr mesh) {
-    std::cout << "no shared_edge: " << fA->position_in_set() << " "
-              << fB->position_in_set() << std::endl;
+    //std::cout << "no shared_edge: " << fA->position_in_set() << " "
+    //          << fB->position_in_set() << std::endl;
 
     face_vertex_ptr fvA0 = fA->fbegin();
     face_vertex_ptr fvA1 = fvA0->next();
@@ -320,8 +733,8 @@ public:
     face_vertex_ptr fvB1 = fvB0->prev();
     face_vertex_ptr fvB2 = fvB1->prev();
 
-    fA->print_vert_ids();
-    fB->print_vert_ids(true);
+    //fA->print_vert_ids();
+    //fB->print_vert_ids(true);
 
     coordinate_type ca0 = this->coordinate(fvA0);
     coordinate_type ca1 = this->coordinate(fvA1);
@@ -342,7 +755,7 @@ public:
            ((cb0 - ca2).squaredNorm() + (cb1 - ca0).squaredNorm() +
             (cb2 - ca1).squaredNorm());
 
-    std::cout << " distance: " << d0 << " " << d1 << " " << d2 << std::endl;
+    //std::cout << " distance: " << d0 << " " << d1 << " " << d2 << std::endl;
 
     face_vertex_ptr fvAb = fvA0;
     fvAb = (d1 < d0) && (d1 < d2) ? fvA1 : fvAb;
@@ -364,18 +777,19 @@ public:
       if (vA != vB) {
         coordinate_type cA = this->coordinate(vA);
         coordinate_type cB = this->coordinate(vB);
-        this->coordinate(0.5 * (cA + cB), vA);
+        coordinate_type c = 0.5 * (cA + cB);
+        this->coordinate(c, vA);
       }
       fvA = fvA->next();
       fvB = fvB->prev();
     }
   }
 
-  void getNearest(surf_ptr mesh) {
+  void merge() {
 
     // using namespace nanogui;
 
-    std::vector<face_ptr> faces = mesh->get_faces();
+    std::vector<face_ptr> faces = this->_surf->get_faces();
     face_ptr f = faces[0];
 
     std::vector<triangle_type> tris;
@@ -393,7 +807,7 @@ public:
       return A.dist(B);
     };
 
-    T tol = 0.025;
+    T tol = this->_thresh;
 
     vector<triangle_pair> collected;
     // for (int i = 0; i < 1; i++) {
@@ -415,25 +829,27 @@ public:
     collected.erase(it, collected.end());
     std::cout << " unique list: " << collected.size() << std::endl;
 
-    bool trimming = true;
-    while (trimming) {
-      T d = collected.back().dist();
-      if (d > tol)
-        collected.pop_back();
-      else
-        trimming = false;
-    }
-    std::cout << " trimmed list: " << collected.size() << std::endl;
-
     collected.erase(std::remove_if(collected.begin(), collected.end(),
-                                   [faces](auto p) {
+                                   [faces, tol](auto p) {
                                      face_ptr fA = faces[p.A.faceId];
                                      face_ptr fB = faces[p.B.faceId];
+
+                                     coordinate_type NA = ci::normal<SPACE>(fA);
+                                     coordinate_type NB = ci::normal<SPACE>(fB);
+                                     real angle = va::dot(NA, NB);
+                                     
+                                     if (angle > -0.90)
+                                       return true;
+
+                                     T d = p.dist();
+                                     if (d > tol)
+                                       return true;
 
                                      if (fA->flag > 0)
                                        return true;
                                      if (fB->flag > 0)
                                        return true;
+
                                      fA->flag = 1;
                                      fB->flag = 1;
                                      return false;
@@ -448,46 +864,62 @@ public:
       face_ptr fA = faces[p.A.faceId];
       face_ptr fB = faces[p.B.faceId];
 
-      std::cout << i << " " << fA->size() << " " << fB->size() << std::endl;
+      //std::cout << i << " " << fA->size() << " " << fB->size() << std::endl;
+      //std::cout << " set_pos: " << fA->position_in_set() << " "
+      //          << fB->position_in_set() << std::endl;
 
       int shared = fA->count_shared_vertices(fB);
 
       if (shared == 1) {
-        std::cout << " shared == 1, punting!" << std::endl;
+        //std::cout << " shared == 1, punting!" << std::endl;
         continue;
       }
-      std::cout << " shared: " << shared << std::endl;
+      //std::cout << " shared: " << shared << std::endl;
 
       alignFaces(fA, fB);
       averageVerts(fA, fB);
 
       // continue;
 
-      fA->print_vert_ids();
-      fB->print_vert_ids(true);
-      fA->print_shared_edge();
-      fB->print_shared_edge();
+      //fA->print_vert_ids();
+      //fB->print_vert_ids(true);
+      //fA->print_shared_edge();
+      //fB->print_shared_edge();
 
       fA->flag_vertices();
       if (shared == 0) {
         int adjacent_shared = fA->count_adjacent_shared_vertices(fB);
         std::cout << " adjacent shared: " << shared << std::endl;
         if (adjacent_shared == 0)
-          joinFaceNoSharedEdges(fA, fB, mesh);
+          joinFaceNoSharedEdges(fA, fB, this->_surf);
 
       } else if (shared == 2)
-        joinFaceOneSharedEdge(fA, fB, mesh);
+        joinFaceOneSharedEdge(fA, fB, this->_surf);
+      //std::cout << " ============= " << std::endl;
     };
 
-    mesh->verify();
-    mesh->update_all();
-    mesh->pack();
+    this->_surf->verify();
+    this->_surf->update_all();
+    this->_surf->pack();
+    
+    for (auto f : this->_surf->get_faces()) {
+      f->flag = 0;
+    }
+    for (auto v : this->_surf->get_vertices()) {
+      v->flag = 0;
+    }
   }
 };
+#endif
 
-template <typename SPACE> class split_edges : public default_interface<SPACE> {
+#if 1
+template <typename SPACE>
+class edge_splitter : public triangle_operations_base<SPACE> {
 public:
   M2_TYPEDEFS;
+
+  edge_splitter(const surf_ptr &surf, real max)
+      : triangle_operations_base<SPACE>(surf, max) {}
 
   edge_ptr subdivideFace(face_vertex_ptr fv) {
 
@@ -500,117 +932,44 @@ public:
     face_vertex_ptr fv2 = fv->next();
     face_vertex_ptr fv3 = fv2->next();
     face_vertex_ptr fv4 = fv3->next();
-#if 1
-    coordinate_type e21 = this->coordinate(fv2) - this->coordinate(fv1);
-    coordinate_type e32 = this->coordinate(fv3) - this->coordinate(fv2);
-    coordinate_type e43 = this->coordinate(fv4) - this->coordinate(fv3);
-    coordinate_type e14 = this->coordinate(fv1) - this->coordinate(fv4);
-    coordinate_type e13 = this->coordinate(fv1) - this->coordinate(fv3);
-
-    T e1 = fv1->data;
-    T e2 = fv2->data;
-    T e3 = fv3->data;
-    T e4 = fv4->data;
-    coordinate_type gamma0 = e2 * e21 + e3 * e32 + e4 * e43 + e1 * e14;
-    Eigen::MatrixXd E(5, 6);
-    E = Eigen::MatrixXd::Zero(5, 6);
-    for (int i = 0; i < 3; i++) {
-      E(i, 0) = e21[i];
-      E(i, 1) = e13[i];
-      E(i, 2) = e32[i];
-      E(i, 3) = e14[i];
-      E(i, 4) = e43[i];
-      E(i, 5) = -e13[i];
-    }
-    E(3, 0) = 1;
-    E(3, 1) = 1;
-    E(3, 2) = 1;
-    E(4, 3) = 1;
-    E(4, 4) = 1;
-    E(4, 5) = 1;
-    Eigen::VectorXd b(5);
-    b(0) = gamma0[0];
-    b(1) = gamma0[1];
-    b(2) = gamma0[2];
-    b(3) = 0;
-    b(4) = 0;
-    // b = E.transpose()*b;
-    // Eigen::MatrixXd EtE(3,3);
-    // EtE = E.transpose()*E;
-    // Eigen::VectorXd g = EtE.ldlt().solve(b);
-    Eigen::VectorXd g =
-        E.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(b);
 
     m2::construct<SPACE> cons;
-    edge_ptr enew = cons.insert_edge(mMesh, fv1, fv3);
-    enew->v1()->data = g(1);
-    enew->v2()->data = g(5);
-    fv3->data = g(0);
-    fv2->data = g(2);
-    fv1->data = g(3);
-    fv4->data = g(4);
-#else
-    m2::construct<SPACE> cons;
-    edge_ptr enew = cons.insert_edge(mMesh, fv1, fv3);
+    edge_ptr enew = cons.insert_edge(this->_surf, fv1, fv3);
 
-    // enew->v1()->face()->data = e1;
-    // enew->v2()->face()->data = e2;
-
-    // enew->v1()->face()->data = e3;
-    // enew->v2()->face()->data = e4;
-    enew->v1()->data = 0.0;
-    enew->v2()->data = 0.0;
-#endif
     return enew;
   }
 
-  void split_edge(edge_ptr e) {
+  void split_edge(int i, edge_ptr e) {
     // TIMER function//TIMER(__FUNCTION__);
     face_vertex_ptr fv1 = e->v1();
     face_vertex_ptr fv2 = e->v2();
     T circ1 = fv1->data;
     T circ2 = fv2->data;
-    edge_splitter<SPACE> split;
+    edge_split<SPACE> split;
     // coordinate_type c = getButterflyWeight(e);
-    vertex_ptr nv = split.split(mMesh, e);
+    vertex_ptr nv = split(this->_surf, e);
+    nv->topologyChange = i;
+    // std::cout << "nsplit:" << i << " " << nv->position_in_set()
+    //          << std::endl;
 
     // nv->coordinate() = c;
-    fv1->data = circ2;
-    fv2->data = circ1;
-    fv1->next()->data = circ2;
-    fv2->next()->data = circ1;
+    fv1->edge()->flags[0] = 1;
+    fv2->edge()->flags[0] = 1;
 
-    nv->winding =
-        0.5 * (e->v1()->vertex()->winding + e->v2()->vertex()->winding);
-    subdivideFace(fv1->next());
-    subdivideFace(fv2->next());
+    edge_ptr e11 = subdivideFace(fv1->next());
+    edge_ptr e21 = subdivideFace(fv2->next());
+
+    e11->flags[1] = 0;
+    e21->flags[1] = 0;
   }
 
-  struct edge_sort {
-    bool operator()(edge_ptr ei, edge_ptr ej) {
-      return (ci::length<SPACE>(ei) < ci::length<SPACE>(ej));
-    }
-  } mEdgeSorter;
+  edge_array get_edges_to_split() {
+    edge_array &edges = this->_surf->get_edges();
 
-  bool split_edges() {
-    // TIMER function//TIMER(__FUNCTION__);
-    edge_array &edges = mMesh->get_edges();
-    vector<vertex_ptr> &verts = mMesh->get_vertices();
-
-    face_array &faces = mMesh->get_faces();
-    int N = faces.size();
-
-    bool topology_change = false;
-    vector<T> edgeWeights;
-    vector<T> vertexWeights;
-    mMesh->update_all();
-    mMesh->reset_flags();
-    mMesh->pack();
-
-    vector<edge_ptr> edgesToSplit;
+    edge_array edgesToSplit;
 #if 1
     for (int i = 0; i < edges.size(); i++) {
-      if (!mMesh->has_edge(i))
+      if (!this->_surf->has_edge(i))
         continue;
       edge_ptr ei = edges[i];
       bool pinned = ei->v1()->vertex()->pinned == true &&
@@ -618,80 +977,100 @@ public:
       if (pinned)
         continue;
       T l = this->length(ei);
-      if (l > 1.75 * minLength) {
+      if (l > this->_thresh) {
         edgesToSplit.push_back(ei);
         continue;
       }
     }
 #endif
 
-    std::cout << " - sorting " << edgesToSplit.size() << " edges, ";
-    std::sort(edgesToSplit.begin(), edgesToSplit.end(), mEdgeSorter);
+    std::cout << " - sorting " << edgesToSplit.size() << " edges" << std::endl;
+    std::sort(edgesToSplit.begin(), edgesToSplit.end(),
+              this->mEdgeSorterGreater);
+    return edgesToSplit;
+  }
+
+  bool split_edges(edge_array edgesToSplit) {
+    // TIMER function//TIMER(__FUNCTION__);
+
     std::cout << "splitting " << edgesToSplit.size() << " edges" << std::endl;
-    for (int i = edgesToSplit.size(); i > 0; i--) {
-      this->split_edge(edgesToSplit[i - 1]);
+
+    for (int i = 0; i < edgesToSplit.size(); i++) {
+      this->split_edge(i, edgesToSplit[i]);
     }
 
-    return topology_change;
+    return edgesToSplit.size() > 0;
   }
 };
+#endif
 
+#if 1
 template <typename SPACE>
-class collapse_edge : public default_interface<SPACE> {
+class edge_collapser : public triangle_operations_base<SPACE> {
 public:
   M2_TYPEDEFS;
 
-  bool collapse_edges() {
-    // TIMER function//TIMER(__FUNCTION__);
-    bool topology_change = false;
-    edge_array collectedEdges;
-    vector<edge_ptr> &edges = mMesh->get_edges();
-    mMesh->reset_flags();
-    for (int i = 0; i < edges.size(); i++) {
+  edge_collapser(const surf_ptr &surf, real max)
+      : triangle_operations_base<SPACE>(surf, max) {}
 
-      if (!mMesh->has_edge(i))
+  edge_array get_edges_to_collapse() {
+    edge_array &edges = this->_surf->get_edges();
+
+    edge_array edgeToCollapse;
+#if 1
+    for (int i = 0; i < edges.size(); i++) {
+      if (!this->_surf->has_edge(i))
         continue;
-      edge_ptr e = edges[i];
-      if (e->flag == 1)
+      edge_ptr ei = edges[i];
+
+      face_vertex_ptr fv1 = ei->v1();
+      face_vertex_ptr fv2 = ei->v2();
+      fv1->next()->edge()->flags[0] = true;
+      fv2->next()->edge()->flags[0] = true;
+
+      bool pinned = ei->v1()->vertex()->pinned == true &&
+                    ei->v2()->vertex()->pinned == true;
+      if (pinned)
         continue;
-      if (e->v1()->vertex()->flag == 1)
+
+      T l = this->length(ei);
+      if (l < this->_thresh) {
+        edgeToCollapse.push_back(ei);
         continue;
-      if (e->v2()->vertex()->flag == 1)
-        continue;
-      if (e->v2()->vertex()->pinned)
-        continue;
-      T dist = this->length(e);
-      if (dist < minCollapseLength) {
-        e->v1()->vertex()->flag = 1;
-        e->v2()->vertex()->flag = 1;
-        collectedEdges.push_back(e);
       }
     }
+#endif
 
-    std::cout << " - deleting: " << collectedEdges.size() << " Tiny edges"
+    std::cout << " - sorting " << edgeToCollapse.size() << " edges"
+              << std::endl;
+    std::sort(edgeToCollapse.begin(), edgeToCollapse.end(),
+              this->mEdgeSorterLesser);
+
+    edgeToCollapse.erase(std::remove_if(edgeToCollapse.begin(),
+                                        edgeToCollapse.end(),
+                                        [](edge_ptr e) { return e->flags[0]; }),
+                         edgeToCollapse.end());
+
+    return edgeToCollapse;
+  }
+
+  bool collapse_edges(edge_array edgeToCollapse) {
+    // TIMER function//TIMER(__FUNCTION__);
+    std::cout << " - deleting: " << edgeToCollapse.size() << " Tiny edges"
               << std::endl;
 
-    for (int i = 0; i < collectedEdges.size(); i++) {
-      construct<SPACE> cons;
-      if (!collectedEdges[i])
+    for (int i = 0; i < edgeToCollapse.size(); i++) {
+      edge_collapse<SPACE> collapser;
+      std::cout << " i: " << i << std::endl;
+      if (!edgeToCollapse[i])
         continue;
-      edge_ptr e = collectedEdges[i];
-      coordinate_type avg = 0.5 * (this->coordinate(e->v1()->vertex()) +
-                                   this->coordinate(e->v2()->vertex()));
-      this->coordinate(avg, e->v1()->vertex());
-      // face_ptr nf = cons.delete_vertex_primitive(mMesh,e->v2()->vertex());
-      // cons.collapse_edge_primitive(mMesh,e);
-      cons.collapse_edge(mMesh, e);
-      topology_change = true;
+      edge_ptr e = edgeToCollapse[i];
+      vertex_ptr nv = collapser(this->_surf, e);
+      if (nv)
+        nv->topologyChange = i;
     }
-    if (topology_change) {
-      m2::remesh<SPACE> rem;
-      rem.triangulate(mMesh);
-      mMesh->pack();
-      mMesh->update_all();
-      mMesh->reset_flags();
-    }
-    return topology_change;
+    this->_surf->pack();
+    return edgeToCollapse.size() > 0;
   }
 };
 #endif

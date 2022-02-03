@@ -149,6 +149,7 @@ public:
   CTYPE operator[](int i) const { return p[i]; }
 
   CTYPE normal() {
+
     CTYPE e1 = p[1] - p[0];
     CTYPE e2 = p[2] - p[0];
     CTYPE N = m2::va::cross(e1, e2);
@@ -353,12 +354,18 @@ public:
 typedef euclidean_space<double> space3;
 
 namespace z {
+
 template <typename T> T zero() { return T(0.0); }
+template <typename T> T one() { return T(1.0); }
 
 template <> double zero<double>() { return 0.0; }
+template <> double one<double>() { return 1.0; }
 
 template <> Eigen::Matrix<double, 3, 1> zero<Eigen::Matrix<double, 3, 1>>() {
   return Eigen::Matrix<double, 3, 1>(0, 0, 0);
+}
+template <> Eigen::Matrix<double, 3, 1> one<Eigen::Matrix<double, 3, 1>>() {
+  return Eigen::Matrix<double, 3, 1>(1, 1, 1);
 }
 
 } // namespace z

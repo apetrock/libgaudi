@@ -9,6 +9,78 @@ project(
 
 cmake_minimum_required(VERSION 3.10)
 
+# Build Types
+set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}
+    CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel tsan asan lsan msan ubsan"
+    FORCE)
+
+# ThreadSanitizer
+set(CMAKE_C_FLAGS_TSAN
+    "-fsanitize=thread -g -O1"
+    CACHE STRING "Flags used by the C compiler during ThreadSanitizer builds."
+    FORCE)
+set(CMAKE_CXX_FLAGS_TSAN
+    "-fsanitize=thread -g -O1"
+    CACHE STRING "Flags used by the C++ compiler during ThreadSanitizer builds."
+    FORCE)
+
+# AddressSanitize
+set(CMAKE_C_FLAGS_ASAN
+    "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g3 -O1"
+    CACHE STRING "Flags used by the C compiler during AddressSanitizer builds."
+    FORCE)
+set(CMAKE_CXX_FLAGS_ASAN
+    "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g3 -O1"
+    CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
+    FORCE)
+
+if(CMAKE_BUILD_TYPE STREQUAL "ASAN")
+  set(
+    ASAN_OPTIONS
+    symbolize=1
+  )
+  message("Set ASAN_OPTIONS to: ${ASAN_OPTIONS}")
+
+  find_program(LLVM_SYMB_PATH llvm-symbolizer)
+  set(
+    ASAN_SYMBOLIZER_PATH
+    ${LLVM_SYMB_PATH}
+  )
+  message("Set ASAN_SYMBOLIZER_PATH to: ${ASAN_SYMBOLIZER_PATH}")
+endif()
+
+# LeakSanitizer
+set(CMAKE_C_FLAGS_LSAN
+    "-fsanitize=leak -fno-omit-frame-pointer -g -O1"
+    CACHE STRING "Flags used by the C compiler during LeakSanitizer builds."
+    FORCE)
+set(CMAKE_CXX_FLAGS_LSAN
+    "-fsanitize=leak -fno-omit-frame-pointer -g -O1"
+    CACHE STRING "Flags used by the C++ compiler during LeakSanitizer builds."
+    FORCE)
+
+# MemorySanitizer
+set(CMAKE_C_FLAGS_MSAN
+    "-fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer -g -O2"
+    CACHE STRING "Flags used by the C compiler during MemorySanitizer builds."
+    FORCE)
+set(CMAKE_CXX_FLAGS_MSAN
+    "-fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer -g -O2"
+    CACHE STRING "Flags used by the C++ compiler during MemorySanitizer builds."
+    FORCE)
+
+# UndefinedBehaviour
+set(CMAKE_C_FLAGS_UBSAN
+    "-fsanitize=undefined"
+    CACHE STRING "Flags used by the C compiler during UndefinedBehaviourSanitizer builds."
+    FORCE)
+set(CMAKE_CXX_FLAGS_UBSAN
+    "-fsanitize=undefined"
+    CACHE STRING "Flags used by the C++ compiler during UndefinedBehaviourSanitizer builds."
+    FORCE)
+
+
+
 # Only do these if this is the main project, and not if it is included through add_subdirectory
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 
@@ -41,16 +113,6 @@ include(FetchContent)
 if(${CMAKE_VERSION} VERSION_LESS 3.14)
   include(cmake/add_FetchContent_MakeAvailable.cmake)
 endif()
-
-
-# Formatting library
-FetchContent_Declare(
-  fmtlib
-  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-  GIT_TAG 5.3.0)
-FetchContent_MakeAvailable(fmtlib)
-# Adds fmt::fmt
-
 
 set(EIGEN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen-3.4.0")
 set(SPECTRA_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/spectra/include")

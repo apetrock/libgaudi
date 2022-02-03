@@ -1408,7 +1408,7 @@ public:
 
         // leafIds.push_back(cNodeId);
       }
-      delete lPerm;
+      //delete lPerm;
     }
   }
 
