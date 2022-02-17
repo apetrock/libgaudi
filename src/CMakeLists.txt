@@ -5,14 +5,11 @@
 # file(GLOB HEADER_LIST CONFIGURE_DEPENDS "${ModernCMakeExample_SOURCE_DIR}/include/modern/*.hpp")
 
 set(HEADER_LIST "${Gaudi_SOURCE_DIR}/include/SIMPLE_PARSER.h"
-                "${Gaudi_SOURCE_DIR}/include/TIMER.h"
-                #"${Gaudi_SOURCE_DIR}/include/manifold/debugger.h"
-                "${Gaudi_SOURCE_DIR}/include/manifold/manifold_singleton.h")
+                "${Gaudi_SOURCE_DIR}/include/TIMER.h")
 
 # Make an automatic library - will be static or dynamic based on user setting
 add_library(libGaudi SIMPLE_PARSER.cpp 
                      #TIMER.cpp manifold/debugger.cpp
-                     manifold/manifold_singleton.cpp 
                      ${HEADER_LIST})
 
 # We need this directory, and users of our library will need it too

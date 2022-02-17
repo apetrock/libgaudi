@@ -306,6 +306,18 @@ get_tris(typename surf<SPACE>::face_ptr f) {
 ///////////////////////
 
 template <typename SPACE>
+typename SPACE::real norm(typename surf<SPACE>::vertex_ptr v0,
+                                       typename surf<SPACE>::vertex_ptr v1) {
+  using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
+  using coordinate_type = typename SPACE::coordinate_type;
+  using T = typename SPACE::real;
+
+  coordinate_type c0 = get_coordinate<SPACE>(v0);
+  coordinate_type c1 = get_coordinate<SPACE>(v1);
+  return m2::va::norm(coordinate_type(c0 - c1));
+}
+
+template <typename SPACE>
 typename SPACE::coordinate_type normal(typename surf<SPACE>::vertex_ptr v) {
   using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
   using coordinate_type = typename SPACE::coordinate_type;
@@ -336,6 +348,7 @@ typename SPACE::real area(typename surf<SPACE>::vertex_ptr v) {
 
 template <typename SPACE>
 typename SPACE::real thinness(typename surf<SPACE>::face_vertex_ptr v) {
+  //this isn't a terrible idea, but should get replaced with an SVD
   using vertex_ptr = typename surf<SPACE>::vertex_ptr;
   using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
   using T = typename SPACE::real;
@@ -524,6 +537,24 @@ get_vertex_normals(typename surf<SPACE>::surf_ptr s) {
   }
 
   return coords;
+}
+template <typename SPACE>
+std::vector<typename surf<SPACE>::triangle_type>
+get_tris(std::vector<typename surf<SPACE>::face_ptr> faces) {
+  using triangle_type = typename surf<SPACE>::triangle_type;
+  std::vector<triangle_type> tris;
+
+  for (auto f : faces) {
+    std::vector<triangle_type> ftris = m2::ci::get_tris<SPACE>(f);
+    tris.insert(tris.end(), ftris.begin(), ftris.end());
+  }
+  return tris;
+}
+
+template <typename SPACE>
+std::vector<typename surf<SPACE>::triangle_type>
+get_tris(typename surf<SPACE>::surf_ptr s) {
+  return get_faces(s->get_faces());
 }
 
 } // namespace ci

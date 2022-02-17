@@ -347,7 +347,7 @@ public:
     face_ptr fout;
     int sw = 0;
 
-    //std::cout << e << " " << f1 << " " << f2 << std::endl;
+    // std::cout << e << " " << f1 << " " << f2 << std::endl;
 
     if (f1 == f2) {
       face_ptr f1 = disconnect_face(obj_in, e);
@@ -486,6 +486,9 @@ public:
 #endif
 
     if (v1n == v2a && v2n == v1a) { // two face vertices
+      std::cout << "A " << v1->calc_size() << " " << v2->calc_size()
+                << std::endl;
+
       face_ptr f1 = v1a->face();
 
       if (v1a != v2a) {
@@ -507,6 +510,8 @@ public:
     }
 
     else if (v1n == v2a) { // dangling point
+      std::cout << "B " << v1->calc_size() << " " << v2->calc_size()
+                << std::endl;
       face_ptr f1 = v1a->face();
 
       // connect up stuff.
@@ -518,25 +523,29 @@ public:
       f1->update_all();
 
       if (v1a != v2a) {
-
+        std::cout << "B.1" << std::endl;
         obj_in->remove_edge(e->position_in_set());
         v1->remove_face_vertex(v1a);
         v2->remove_face_vertex(v2a);
         delete v1a;
         delete v2a;
       } else {
-
+        std::cout << "B.2" << std::endl;
         obj_in->remove_edge(e->position_in_set());
         v1->remove_face_vertex(v1a);
         delete v1a;
       }
 
       v1->front() = v2n;
-
+      v1->update_all();
+      v1->verify();
+      // v2->verify();
       return f1;
     }
 
     else if (v2n == v1a) { // dangling point
+      std::cout << "C " << v1->calc_size() << " " << v2->calc_size()
+                << std::endl;
       face_ptr f1 = v2a->face();
       face_vertex_ptr fvb = f1->fbegin();
       face_vertex_ptr fve = f1->fend();
@@ -551,6 +560,7 @@ public:
 
       if (v1a != v2a) {
 
+        std::cout << "C.1" << std::endl;
         obj_in->remove_edge(e->position_in_set());
         v1->remove_face_vertex(v1a);
         v2->remove_face_vertex(v2a);
@@ -558,14 +568,19 @@ public:
         delete v1a;
         delete v2a;
       } else {
+        std::cout << "C.1" << std::endl;
         v1->remove_face_vertex(v1a);
         obj_in->remove_edge(e->position_in_set());
         delete v1a;
       }
 
       v2->front() = v1n;
+      v2->update_all();
+      v2->verify();
+
       return f1;
     } else { // full pipe
+      std::cout << "D" << std::endl;
 
       face_ptr f1 = v1a->face();
 
@@ -939,8 +954,14 @@ public:
 
   bool delete_degenerates(surf_ptr obj, vertex_ptr v, real tol = 1e-8) {
     vector<vertex_ptr> vertDegenerates;
-    if(v->calc_size() < 3){
-      //std::cout << " deleting: " << v->position_in_set() << std::endl;
+    if (v->calc_size() < 3) {
+      // std::cout << " deleting: " << v->position_in_set() << std::endl;
+      this->delete_vertex_primitive(obj, v);
+      return true;
+    }
+    /*
+    if (v->flags[2]) {
+      std::cout << " deleting flagged: " << v->position_in_set() << std::endl;
       this->delete_vertex_primitive(obj, v);
       return true;
     }
@@ -948,28 +969,29 @@ public:
       this->delete_vertex_primitive(obj, v);
       return true;
     }
+    */
     return false;
   };
 
   bool delete_degenerates(surf_ptr obj, edge_ptr e) {
-    if (m2::ci::length<SPACE>(e) == 0) {
+
+    if (e->v1() == e->v2()) {
       // std::cout << " deleting 1: " << e->position_in_set() << std::endl;
       this->delete_edge(obj, e);
       return true;
     }
 
-    if(e->v1()->face()->size() < 3){
-      //std::cout << " deleting 1: " << e->position_in_set() << std::endl;
+    if (e->v1()->face()->size() < 3) {
+      // std::cout << " deleting 1: " << e->position_in_set() << std::endl;
       this->delete_edge(obj, e);
       return true;
     }
     if (e->v2()->face()->size() < 3) {
-      //std::cout << " deleting 2: " << e->position_in_set() << std::endl;
+      // std::cout << " deleting 2: " << e->position_in_set() << std::endl;
       this->delete_edge(obj, e);
       return true;
     }
     return false;
-
   };
 
   vertex_ptr collapse_edge_triangle(surf_ptr obj, edge_ptr e) {
@@ -1152,7 +1174,7 @@ public:
     coordinate_type c2 = this->coordinate(v2);
     coordinate_type cp = 0.5 * (c1 + c2);
     this->coordinate(cp, v1);
-    
+
     /*
     if (v2->size() == 3) {
 
@@ -1201,7 +1223,6 @@ public:
     bool iterating = true;
     face_vertex_ptr fvb = fv2->vnext();
     face_vertex_ptr fve = fv2->vprev();
-
 
     while (iterating) {
       iterating = fvb != fve;

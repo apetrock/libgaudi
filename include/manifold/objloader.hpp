@@ -362,7 +362,7 @@ public:
 };
 
 template <typename SPACE>
-void writeOBJ(m2::surf<SPACE> &obj, string filename) {
+void write_obj(m2::surf<SPACE> &obj, string filename) {
   M2_TYPEDEFS;
   cout << " Writing file " << filename.c_str() << " ...";
   flush(cout);
@@ -371,9 +371,7 @@ void writeOBJ(m2::surf<SPACE> &obj, string filename) {
   vector<face_ptr> faces = obj.get_faces();
   // dump vertex positions
   for (unsigned int x = 0; x < vertices.size(); x++) {
-    coordinate_type vertex = vertices[x]->coordinate();
-    if (vertices[x]->position_in_set() == 14637)
-      vertices[x]->print();
+    coordinate_type vertex = ci::get_coordinate<SPACE>(vertices[x]);
     fout << "v " << vertex[0] << " " << vertex[1] << " " << vertex[2] << endl;
   }
 
@@ -394,7 +392,7 @@ void writeOBJ(m2::surf<SPACE> &obj, string filename) {
 }
 
 template <typename SPACE>
-void writePBRT(m2::surf<SPACE> &obj, const char *filename) {
+void write_pbrt(m2::surf<SPACE> &obj, const char *filename) {
   M2_TYPEDEFS;
   FILE *file = fopen(filename, "w");
 

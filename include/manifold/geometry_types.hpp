@@ -148,7 +148,7 @@ public:
   CTYPE &operator[](int i) { return p[i]; }
   CTYPE operator[](int i) const { return p[i]; }
 
-  CTYPE normal() {
+  CTYPE normal() const {
 
     CTYPE e1 = p[1] - p[0];
     CTYPE e2 = p[2] - p[0];
@@ -157,9 +157,9 @@ public:
     return N;
   }
 
-  CTYPE center() { return 0.33333 * (p[0] + p[1] + p[2]); }
+  CTYPE center() const { return 0.33333 * (p[0] + p[1] + p[2]); }
 
-  T area() {
+  T area() const {
     T out = 0;
     CTYPE c0 = p[0];
     CTYPE c1 = p[1];
@@ -194,6 +194,12 @@ public:
   }
 
   T distanceFrom(CTYPE point) { return distance_from_triangle(p, point); }
+
+  T angle(const triangle &B) const {
+    CTYPE NA = this->normal();
+    CTYPE NB = B.normal();
+    return m2::va::dot(NA, NB);
+  }
 
   T avgSqdDist(const triangle &B) const {
 

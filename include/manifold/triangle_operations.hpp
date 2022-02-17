@@ -9,9 +9,16 @@
 #ifndef __M2TRIOPS__
 #define __M2TRIOPS__
 #include "m2Includes.h"
+#include "manifold/m2.hpp"
+#include <algorithm>
 #include <cmath>
 
 namespace m2 {
+
+template <typename SPACE>
+
+// forward declaration
+class edge_collapser;
 
 template <typename SPACE> class edge_split {
   M2_TYPEDEFS;
@@ -367,10 +374,10 @@ public:
 
     e11->other(fv11) = e12->other(fv12);
     e11->other(fv11)->edge() = e11;
-    
+
     e21->other(fv21) = e22->other(fv22);
     e21->other(fv21)->edge() = e21;
-    
+
     e12->other(fv12) = fv21t;
     fv21t->edge() = e12;
     e22->other(fv22) = fv11t;
@@ -450,7 +457,7 @@ public:
   bool flip() {
     // TIMER function//TIMER(__FUNCTION__);
     edge_array &edges = this->_surf->get_edges();
-    m2::construct<SPACE> cons;
+
     bool flipped = false;
     edge_array permEdges;
     for (int i = 0; i < edges.size(); i++) {
@@ -469,11 +476,13 @@ public:
     }
 
     for (int i = 0; i < permEdges.size(); i++) {
+      // std::cout << "A" << std::endl;
       edge_ptr e = permEdges[i];
       bool pinned = e->v1()->vertex()->pinned == true &&
                     e->v2()->vertex()->pinned == true;
       bool notPinned = e->v1()->vertex()->pinned != true &&
                        e->v2()->vertex()->pinned != true;
+      // std::cout << "B" << std::endl;
       if (pinned)
         continue;
       if (notPinned)
@@ -510,28 +519,6 @@ public:
 
       T eFlip = cFlip * cFlip;
       T eSame = cSame * cSame;
-#if 0
-	T sin0 = va::cross(c1-c0,c3-c0).norm();
-	T sin1 = va::cross(c0-c1,c2-c1).norm();
-	T sin2 = va::cross(c1-c2,c3-c2).norm();
-	T sin3 = va::cross(c0-c3,c2-c3).norm();
-	bool div0 = (sin0 < 1e-12 || sin1 < 1e-12 || sin2 < 1e-12 || sin3 < 1e-12);
-	if(!div0){
-	  //curvature penalty
-	  T cot0 = cos0/sin0;
-	  T cot1 = cos1/sin1;
-	  T cot2 = cos2/sin2;
-	  T cot3 = cos3/sin3; 
-	  //if we flip we change this much	  
-
-	  T eCurveFlip = (cot1 + cot3)*(cot1 + cot3) + (cot0 + cot2)*(cot0 + cot2);
-	  T eCurveSame = 0.0;
-
-	  T C = 0.00000001;
-	  eFlip += C*eCurveFlip;
-	  eSame += C*eCurveSame;
-	}
-#endif
 
       // if(cSame > M_PI){
       if (cFlip < cSame) {
@@ -556,46 +543,134 @@ public:
   face_merger(const surf_ptr &surf, real max)
       : triangle_operations_base<SPACE>(surf, max) {}
 
-  std::vector<edge_ptr> getSharedEdges(face_ptr fA, face_ptr fB) {
+  void joinFaces(face_ptr fA, face_ptr fB, surf_ptr mesh) {
+    // std::cout << "no shared_edge: " << fA->position_in_set() << " "
+    //          << fB->position_in_set() << std::endl;
+    face_vertex_ptr fvb0 = fB->fbegin()->prev();
+    std::vector<face_vertex_ptr> fv_to_delete;
+    std::vector<edge_ptr> e_to_delete;
 
-    std::vector<edge_ptr> edges;
+    face_vertex_ptr fvA0 = fA->fbegin();
+    face_vertex_ptr fvA1 = fvA0->next();
+    face_vertex_ptr fvA2 = fvA1->next();
 
-    face_vertex_ptr fvA = fA->fbegin();
-    face_vertex_ptr fvAe = fA->fend();
-    bool itA = true;
-    while (itA) {
-      itA = fvA != fvAe;
-      edge_ptr eA = fvA->edge();
-      face_vertex_ptr fvB = fB->fbegin();
-      face_vertex_ptr fvBe = fB->fend();
-      bool itB = true;
-      while (itB) {
-        itB = fvB != fvBe;
-        fvB = fvB->next();
-        edge_ptr eB = fvB->edge();
-        if (eA == eB)
-          edges.push_back(eA);
+    face_vertex_ptr fvB0 = fB->fbegin()->prev();
+    face_vertex_ptr fvB1 = fvB0->prev();
+    face_vertex_ptr fvB2 = fvB1->prev();
+
+    vertex_ptr vA0 = fvA0->vertex();
+    vertex_ptr vA1 = fvA1->vertex();
+    vertex_ptr vA2 = fvA2->vertex();
+    vertex_ptr vB0 = fvB0->vertex();
+    vertex_ptr vB1 = fvB1->vertex();
+    vertex_ptr vB2 = fvB2->vertex();
+
+    std::cout << " vA0: " << vA0->position_in_set() << " "
+              << vB0->position_in_set() << std::endl;
+    std::cout << " vA1: " << vA1->position_in_set() << " "
+              << vB1->position_in_set() << std::endl;
+    std::cout << " vA2: " << vA2->position_in_set() << " "
+              << vB2->position_in_set() << std::endl;
+
+    m2::for_each_face<SPACE>(fA, [&](face_vertex_ptr fva0) {
+      face_vertex_ptr fvb1 = fvb0->next();
+
+      vertex_ptr vA0 = fva0->vertex();
+      vertex_ptr vB0 = fvb0->vertex();
+      vertex_ptr vB1 = fvb1->vertex();
+
+      edge_ptr ea = fva0->edge();
+      edge_ptr eb = fvb0->edge();
+
+      if (ea != eb) {
+        e_to_delete.push_back(eb);
+        vA0->front() = fvB0->coedge();
+        vB0->remove_face_vertex(fva0);
+        vA0->remove_face_vertex(fvb0);
+
+        fv_to_delete.push_back(fva0);
+        fv_to_delete.push_back(fvb0);
+        std::cout << fva0 << " " << fva0->coedge() << std::endl;
+        std::cout << fvb0 << " " << fvb0->coedge() << std::endl;
+        ea->set(fva0->coedge(), fvb0->coedge());
       }
-      fvA = fvA->next();
-    }
-    return edges;
+
+      fvb0 = fvb0->prev();
+    });
+
+    edge_ptr eA0 = fvA0->edge();
+    edge_ptr eA1 = fvA1->edge();
+    edge_ptr eA2 = fvA2->edge();
+
+    vA0->update_all();
+    vA1->update_all();
+    vA2->update_all();
+
+    vA0->print();
+    vA1->print();
+    vA2->print();
+
+    std::for_each(e_to_delete.begin(), e_to_delete.end(), [&mesh](edge_ptr e) {
+      mesh->remove_edge(e->position_in_set());
+    });
+    std::for_each(fv_to_delete.begin(), fv_to_delete.end(),
+                  [&mesh](face_vertex_ptr fv) { delete fv; });
+
+    mesh->remove_face(fA->position_in_set());
+    mesh->remove_face(fB->position_in_set());
+
+    std::cout << "vA0 ver" << std::endl;
+    vA0->verify();
+    std::cout << "vA1 ver" << std::endl;
+    vA1->verify();
+    std::cout << "vA2 ver" << std::endl;
+    vA2->verify();
+
+    eA0->v1()->face()->verify();
+    eA0->v2()->face()->verify();
+    eA1->v1()->face()->verify();
+    eA1->v2()->face()->verify();
+    eA2->v1()->face()->verify();
+    eA2->v2()->face()->verify();
   }
 
   void joinFaceOneSharedEdge(face_ptr fA, face_ptr fB, surf_ptr mesh) {
-    std::vector<edge_ptr> edges = getSharedEdges(fA, fB);
+    std::vector<edge_ptr> edges = get_shared_edges(fA, fB);
     if (edges.empty())
       return;
     edge_ptr e = edges[0];
 
-    //std::cout << "shared_edge: " << fA->position_in_set() << " "
+    // std::cout << "shared_edge: " << fA->position_in_set() << " "
     //          << fB->position_in_set() << std::endl;
     face_vertex_ptr fvA0 = e->v1();
     face_vertex_ptr fvA1 = fvA0->next();
     face_vertex_ptr fvA2 = fvA1->next();
 
-    face_vertex_ptr fvB0 = e->v2();
-    face_vertex_ptr fvB1 = fvB0->prev();
+    face_vertex_ptr fvB1 = e->v2();
     face_vertex_ptr fvB2 = fvB1->prev();
+    face_vertex_ptr fvB0 = fvB2->prev();
+
+    vertex_ptr vA0 = fvA0->vertex();
+    vertex_ptr vA1 = fvA1->vertex();
+    vertex_ptr vA2 = fvA2->vertex();
+
+    vertex_ptr vB0 = fvB0->vertex();
+    vertex_ptr vB1 = fvB1->vertex();
+    vertex_ptr vB2 = fvB2->vertex();
+
+    if (vA0 == vA1)
+      return;
+    if (vA0 == vA2)
+      return;
+    if (vA1 == vA2)
+      return;
+
+    if (vB0 == vB1)
+      return;
+    if (vB0 == vB2)
+      return;
+    if (vB1 == vB2)
+      return;
 
     fvA0->vertex()->remove_face_vertex(fvA0);
     fvA1->vertex()->remove_face_vertex(fvA1);
@@ -604,26 +679,79 @@ public:
     fvB0->vertex()->remove_face_vertex(fvB0);
     fvB1->vertex()->remove_face_vertex(fvB1);
     fvB2->vertex()->remove_face_vertex(fvB2);
-
-    vertex_ptr vA0 = fvA0->vertex();
-    vertex_ptr vA2 = fvA2->vertex();
-    vertex_ptr vB0 = fvB0->vertex();
-    vertex_ptr vB1 = fvB1->vertex();
-
-    vA0->front() = fvA0->vprev();
-    vB0->front() = fvB0->vprev();
-
-    vA2->add_face_vertex(fvB2->coedge());
-    vA2->update_all();
-
+    /*
+    std::cout << " va0: " << vA0->position_in_set() << " "
+              << fvA2->coedge()->vertex()->position_in_set() << std::endl;
+    std::cout << " va1: " << vA1->position_in_set() << " "
+              << fvA0->coedge()->vertex()->position_in_set() << std::endl;
+    std::cout << " va2: " << vA2->position_in_set() << " "
+              << fvA1->coedge()->vertex()->position_in_set() << std::endl;
+    */
     edge_ptr eA1 = fvA1->edge();
     edge_ptr eA2 = fvA2->edge();
+
+    edge_ptr eB0 = fvB0->edge();
     edge_ptr eB1 = fvB1->edge();
     edge_ptr eB2 = fvB2->edge();
 
-    eA1->set(fvA1->coedge(), fvB1->coedge());
-    eA2->set(fvA2->coedge(), fvB2->coedge());
+    if (vA2 != vB2) {
+      std::cout << " not adding " << std::endl;
+      mesh->remove_vertex(vB2->position_in_set());
+    } else {
+      std::cout << " adding new vertex" << std::endl;
+      vertex_ptr vB2p = new vertex_type(*vA2);
+      vB2p->front() = fvB0->coedge();
+      vB2p->update_all();
+      mesh->push_vertex(vB2p);
+    }
 
+    /*
+    std::cout << "fvA: " << fvA0->vertex()->position_in_set() << " "
+              << fvA1->vertex()->position_in_set() << " "
+              << fvA2->vertex()->position_in_set() << std::endl;
+
+    std::cout << "fvB: " << fvB0->vertex()->position_in_set() << " "
+              << fvB1->vertex()->position_in_set() << " "
+              //<< fvB2->vertex()->position_in_set()
+              << std::endl;
+
+    std::cout << "coA: " << fvA0->coedge()->vertex()->position_in_set() << " "
+              << fvA1->coedge()->vertex()->position_in_set() << " "
+              << fvA2->coedge()->vertex()->position_in_set() << std::endl;
+    std::cout << "coB: " << fvB0->coedge()->vertex()->position_in_set() << " "
+              << fvB1->coedge()->vertex()->position_in_set() << " "
+              << fvB2->coedge()->vertex()->position_in_set() << std::endl;
+    */
+
+    eA1->set(fvA1->coedge(), fvB2->coedge());
+    eA2->set(fvA2->coedge(), fvB0->coedge());
+
+    vA0->front() = fvA2->coedge();
+    vA1->front() = fvB2->coedge();
+    vA2->front() = fvA1->coedge();
+
+    vA0->update_all();
+    vA1->update_all();
+    vA2->update_all();
+    /*
+    std::cout << vA0->position_in_set() << " " << vA1->position_in_set() << " "
+              << vA2->position_in_set() << std::endl;
+
+    std::cout << eA1->v1()->vertex()->position_in_set() << " "
+              << eA1->v2()->vertex()->position_in_set() << std::endl;
+
+    std::cout << eA2->v1()->vertex()->position_in_set() << " "
+              << eA2->v2()->vertex()->position_in_set() << std::endl;
+
+
+
+    std::cout << eA1->v1() << " " << eA1->v2() << std::endl;
+    std::cout << eA2->v1() << " " << eA2->v2() << std::endl;
+    std::cout << fvA0 << " " << fvA1 << " " << fvA2 << " " << fvB0 << " "
+              << fvB1 << " " << fvB2 << std::endl;
+    std::cout << fvA0 << " " << fvA1 << " " << fvA2 << " " << fvB0 << " "
+              << fvB1 << " " << fvB2 << std::endl;
+ */
     delete fvA0;
     delete fvA1;
     delete fvA2;
@@ -631,16 +759,17 @@ public:
     delete fvB1;
     delete fvB2;
 
-    mesh->remove_edge(e->position_in_set());
+    mesh->remove_edge(eB0->position_in_set());
     mesh->remove_edge(eB1->position_in_set());
+
     mesh->remove_edge(eB2->position_in_set());
     mesh->remove_face(fA->position_in_set());
     mesh->remove_face(fB->position_in_set());
-    mesh->remove_vertex(vB1->position_in_set());
 
     vA0->verify();
+    vA1->verify();
     vA2->verify();
-    vB0->verify();
+
     eA1->v1()->face()->verify();
     eA1->v2()->face()->verify();
     eA2->v1()->face()->verify();
@@ -648,7 +777,7 @@ public:
   }
 
   void joinFaceNoSharedEdges(face_ptr fA, face_ptr fB, surf_ptr mesh) {
-    //std::cout << "no shared_edge: " << fA->position_in_set() << " "
+    // std::cout << "no shared_edge: " << fA->position_in_set() << " "
     //          << fB->position_in_set() << std::endl;
 
     face_vertex_ptr fvA0 = fA->fbegin();
@@ -675,13 +804,9 @@ public:
     vB1->remove_face_vertex(fvB1);
     vB2->remove_face_vertex(fvB2);
 
-    vA0->add_face_vertex(fvB0->coedge());
-    vA1->add_face_vertex(fvB1->coedge());
-    vA2->add_face_vertex(fvB2->coedge());
-
-    vA0->update_all();
-    vA1->update_all();
-    vA2->update_all();
+    vA0->front() = fvB0->coedge();
+    vA1->front() = fvB1->coedge();
+    vA2->front() = fvB2->coedge();
 
     edge_ptr eA0 = fvA0->edge();
     edge_ptr eA1 = fvA1->edge();
@@ -691,9 +816,91 @@ public:
     edge_ptr eB1 = fvB1->edge();
     edge_ptr eB2 = fvB2->edge();
 
+    std::cout << "== edge verts ==" << std::endl;
+    std::cout << eA0->v1()->vertex()->position_in_set() << " "
+              << eA0->v2()->vertex()->position_in_set() << std::endl;
+    std::cout << eA1->v1()->vertex()->position_in_set() << " "
+              << eA1->v2()->vertex()->position_in_set() << std::endl;
+    std::cout << eA2->v1()->vertex()->position_in_set() << " "
+              << eA2->v2()->vertex()->position_in_set() << std::endl;
+
+    std::cout << eB0->v1()->vertex()->position_in_set() << " "
+              << eB0->v2()->vertex()->position_in_set() << std::endl;
+    std::cout << eB1->v1()->vertex()->position_in_set() << " "
+              << eB1->v2()->vertex()->position_in_set() << std::endl;
+    std::cout << eB2->v1()->vertex()->position_in_set() << " "
+              << eB2->v2()->vertex()->position_in_set() << std::endl;
+    std::cout << "== ========= ==" << std::endl;
+
+    std::cout << vA0->calc_size() << " " << vA1->calc_size() << " "
+              << vA2->calc_size() << std::endl;
+
+    std::cout << vB0->calc_size() << " " << vB1->calc_size() << " "
+              << vB2->calc_size() << std::endl;
+
+    std::cout << bool(vB0 == vA0) << " " << bool(vB1 == vA1) << " "
+              << bool(vB2 == vA2) << std::endl;
+
+    std::cout << bool(vB0 == vA1) << " " << bool(vB1 == vA2) << " "
+              << bool(vB2 == vA0) << std::endl;
+
+    std::cout << bool(vB0 == vA2) << " " << bool(vB1 == vA0) << " "
+              << bool(vB2 == vA1) << std::endl;
+
     eA0->set(fvA0->coedge(), fvB0->coedge());
     eA1->set(fvA1->coedge(), fvB1->coedge());
     eA2->set(fvA2->coedge(), fvB2->coedge());
+
+    std::cout << "== edge verts 2==" << std::endl;
+    std::cout << eA0->v1()->vertex()->position_in_set() << " "
+              << eA0->v2()->vertex()->position_in_set() << std::endl;
+    std::cout << eA1->v1()->vertex()->position_in_set() << " "
+              << eA1->v2()->vertex()->position_in_set() << std::endl;
+    std::cout << eA2->v1()->vertex()->position_in_set() << " "
+              << eA2->v2()->vertex()->position_in_set() << std::endl;
+
+    std::cout << eB0->v1()->vertex()->position_in_set() << " "
+              << eB0->v2()->vertex()->position_in_set() << std::endl;
+    std::cout << eB1->v1()->vertex()->position_in_set() << " "
+              << eB1->v2()->vertex()->position_in_set() << std::endl;
+    std::cout << eB2->v1()->vertex()->position_in_set() << " "
+              << eB2->v2()->vertex()->position_in_set() << std::endl;
+    std::cout << "== ========= ==" << std::endl;
+
+    vA0->update_all();
+    vA0->print();
+    vA1->update_all();
+
+    vA2->update_all();
+    vA2->print();
+
+    std::cout << vA0->position_in_set() << " " << vA1->position_in_set() << " "
+              << vA2->position_in_set() << std::endl;
+
+    std::cout << vB0->position_in_set() << " " << vB1->position_in_set() << " "
+              << vB2->position_in_set() << std::endl;
+
+    std::cout << vA0->calc_size() << " " << vA1->calc_size() << " "
+              << vA2->calc_size() << std::endl;
+
+    std::cout << vB0->calc_size() << " " << vB1->calc_size() << " "
+              << vB2->calc_size() << std::endl;
+
+    std::cout << bool(vB0 == vA0) << " " << bool(vB1 == vA1) << " "
+              << bool(vB2 == vA2) << std::endl;
+
+    std::cout << bool(vB0 == vA1) << " " << bool(vB1 == vA2) << " "
+              << bool(vB2 == vA0) << std::endl;
+
+    std::cout << bool(vB0 == vA2) << " " << bool(vB1 == vA0) << " "
+              << bool(vB2 == vA1) << std::endl;
+
+    std::cout << ci::norm<SPACE>(vB0, vA0) << " " << ci::norm<SPACE>(vB1, vA1)
+              << " " << ci::norm<SPACE>(vB2, vA2) << std::endl;
+    std::cout << ci::norm<SPACE>(vB0, vA1) << " " << ci::norm<SPACE>(vB1, vA2)
+              << " " << ci::norm<SPACE>(vB2, vA0) << std::endl;
+    std::cout << ci::norm<SPACE>(vB0, vA2) << " " << ci::norm<SPACE>(vB1, vA0)
+              << " " << ci::norm<SPACE>(vB2, vA1) << std::endl;
 
     delete fvA0;
     delete fvA1;
@@ -706,12 +913,28 @@ public:
     mesh->remove_edge(eB1->position_in_set());
     mesh->remove_edge(eB2->position_in_set());
 
-    mesh->remove_vertex(vB0->position_in_set());
-    mesh->remove_vertex(vB1->position_in_set());
-    mesh->remove_vertex(vB2->position_in_set());
+    if (vB0 != vA0 && vB0 != vA1 && vB0 != vA2) {
+      std::cout << "rm vb0 " << vB0->position_in_set() << std::endl;
+      mesh->remove_vertex(vB0->position_in_set());
+    }
+    if (vB1 != vA0 && vB1 != vA1 && vB1 != vA2) {
+      std::cout << "rm vb1 " << vB1->position_in_set() << std::endl;
+      mesh->remove_vertex(vB1->position_in_set());
+    }
+    if (vB2 != vA0 && vB2 != vA1 && vB2 != vA2) {
+      std::cout << "rm vb2 " << vB2->position_in_set() << std::endl;
+      mesh->remove_vertex(vB2->position_in_set());
+    }
 
     mesh->remove_face(fA->position_in_set());
     mesh->remove_face(fB->position_in_set());
+
+    std::cout << "vA0 ver" << std::endl;
+    vA0->verify();
+    std::cout << "vA1 ver" << std::endl;
+    vA1->verify();
+    std::cout << "vA2 ver" << std::endl;
+    vA2->verify();
 
     eA0->v1()->face()->verify();
     eA0->v2()->face()->verify();
@@ -719,6 +942,29 @@ public:
     eA1->v2()->face()->verify();
     eA2->v1()->face()->verify();
     eA2->v2()->face()->verify();
+  }
+
+  std::vector<edge_ptr> get_bridged_edges(face_ptr fA, face_ptr fB) {
+    std::vector<edge_ptr> collected;
+
+    m2::set_vertex_flag<SPACE>(fA, 0, 0);
+    m2::set_vertex_flag<SPACE>(fB, 0, 1);
+
+    std::cout << std::endl;
+    m2::for_each_face<SPACE>(fA, [&](face_vertex_ptr fv) {
+      vertex_ptr v = fv->vertex();
+
+      m2::for_each_vertex<SPACE>(v, [&](face_vertex_ptr fvv) {
+        if (fvv->coedge()->vertex()->flags[0]) {
+          collected.push_back(fvv->edge());
+        }
+      });
+      std::cout << std::endl;
+    });
+
+    m2::set_vertex_flag<SPACE>(fA, 0, 0);
+    m2::set_vertex_flag<SPACE>(fB, 0, 0);
+    return collected;
   }
 
   void alignFaces(face_ptr fA, face_ptr fB) {
@@ -733,9 +979,15 @@ public:
     face_vertex_ptr fvB1 = fvB0->prev();
     face_vertex_ptr fvB2 = fvB1->prev();
 
-    //fA->print_vert_ids();
-    //fB->print_vert_ids(true);
+    /*
+    vertex_ptr vA0 = fvA0->vertex();
+    vertex_ptr vA1 = fvA1->vertex();
+    vertex_ptr vA2 = fvA2->vertex();
 
+    vertex_ptr vB0 = fvB0->vertex();
+    vertex_ptr vB1 = fvB1->vertex();
+    vertex_ptr vB2 = fvB2->vertex();
+    */
     coordinate_type ca0 = this->coordinate(fvA0);
     coordinate_type ca1 = this->coordinate(fvA1);
     coordinate_type ca2 = this->coordinate(fvA2);
@@ -755,11 +1007,15 @@ public:
            ((cb0 - ca2).squaredNorm() + (cb1 - ca0).squaredNorm() +
             (cb2 - ca1).squaredNorm());
 
-    //std::cout << " distance: " << d0 << " " << d1 << " " << d2 << std::endl;
+    // std::cout << " distance: " << d0 << " " << d1 << " " << d2 << std::endl;
 
     face_vertex_ptr fvAb = fvA0;
-    fvAb = (d1 < d0) && (d1 < d2) ? fvA1 : fvAb;
-    fvAb = (d2 < d0) && (d2 < d1) ? fvA2 : fvAb;
+    T db = d0;
+
+    fvAb = (db < d1) ? fvAb : fvA1;
+    db = (db < d1) ? db : d1;
+    fvAb = (db < d2) ? fvAb : fvA2;
+    db = (db < d2) ? db : d2;
 
     fA->front() = fvAb;
     fB->front() = fvB0;
@@ -774,6 +1030,8 @@ public:
       itf = fvA != fvAe;
       vertex_ptr vA = fvA->vertex();
       vertex_ptr vB = fvB->vertex();
+      std::cout << vA->position_in_set() << " " << vB->position_in_set()
+                << std::endl;
       if (vA != vB) {
         coordinate_type cA = this->coordinate(vA);
         coordinate_type cB = this->coordinate(vB);
@@ -785,20 +1043,43 @@ public:
     }
   }
 
-  void merge() {
-
-    // using namespace nanogui;
-
-    std::vector<face_ptr> faces = this->_surf->get_faces();
-    face_ptr f = faces[0];
-
-    std::vector<triangle_type> tris;
-
-    std::for_each(faces.begin(), faces.end(), [&tris](const face_ptr &f) {
-      std::vector<triangle_type> ftris = m2::ci::get_tris<SPACE>(f);
-      tris.insert(tris.end(), ftris.begin(), ftris.end());
+  int min_valence(face_ptr f) {
+    int mv = 999;
+    m2::for_each_face<SPACE>(f, [&mv](face_vertex_ptr fv) {
+      typename SPACE::real li = 0.0;
+      int v = fv->vertex()->calc_size();
+      mv = v < mv ? v : mv;
     });
+    return mv;
+  }
 
+  std::vector<edge_ptr> get_shared_edges(face_ptr fA, face_ptr fB) {
+    std::vector<edge_ptr> shared;
+    face_vertex_ptr fvA = fA->fbegin();
+    face_vertex_ptr fvAe = fA->fend();
+    bool itA = true;
+    while (itA) {
+      itA = fvA != fvAe;
+      edge_ptr eA = fvA->edge();
+      face_vertex_ptr fvB = fB->fbegin();
+      face_vertex_ptr fvBe = fB->fend();
+      bool itB = true;
+      while (itB) {
+        itB = fvB != fvBe;
+        edge_ptr eB = fvB->edge();
+        if (eA == eB) {
+          shared.push_back(eB);
+        };
+        fvB = fvB->next();
+      }
+      fvA = fvA->next();
+    }
+    return shared;
+  }
+
+  vector<triangle_pair> get_face_pairs_to_merge(std::vector<face_ptr> &faces) {
+    std::vector<triangle_type> tris = m2::ci::get_tris<SPACE>(
+        faces); // get tris is a good thing to pass to namespace ci
     m2::aabb_tree<SPACE, triangle_type> tree(tris);
 
     std::cout << "tree.nodes.size(): " << tree.nodes.size() << std::endl;
@@ -834,79 +1115,171 @@ public:
                                      face_ptr fA = faces[p.A.faceId];
                                      face_ptr fB = faces[p.B.faceId];
 
-                                     coordinate_type NA = ci::normal<SPACE>(fA);
-                                     coordinate_type NB = ci::normal<SPACE>(fB);
-                                     real angle = va::dot(NA, NB);
-                                     
-                                     if (angle > -0.90)
-                                       return true;
-
                                      T d = p.dist();
                                      if (d > tol)
                                        return true;
 
-                                     if (fA->flag > 0)
+                                     if (fA->flags[0] > 0)
                                        return true;
-                                     if (fB->flag > 0)
+                                     if (fB->flags[0] > 0)
                                        return true;
 
-                                     fA->flag = 1;
-                                     fB->flag = 1;
+                                     fA->flags[0] = 1;
+                                     fB->flags[0] = 1;
                                      return false;
                                    }),
                     collected.end());
 
-    std::cout << " flagged duplicates list: " << collected.size() << std::endl;
+    std::cout << " merging " << collected.size() << " tris!" << std::endl;
+    return collected;
+  }
 
-    for (int i = 0; i < collected.size(); i++) {
-      // /for (int i = 0; i < 3; i++) {
-      auto p = collected[i];
+  std::vector<triangle_pair>
+  collapse_bridges(std::vector<triangle_pair> &collected,
+                   std::vector<face_ptr> &faces) {
+    std::vector<edge_ptr> edgeToCollapse;
+    // collect bridges
+    for (auto p : collected) {
       face_ptr fA = faces[p.A.faceId];
       face_ptr fB = faces[p.B.faceId];
 
-      //std::cout << i << " " << fA->size() << " " << fB->size() << std::endl;
-      //std::cout << " set_pos: " << fA->position_in_set() << " "
-      //          << fB->position_in_set() << std::endl;
+      std::vector<edge_ptr> i_bridges = get_bridged_edges(fA, fB);
 
-      int shared = fA->count_shared_vertices(fB);
+      // copy edges to collection if they haven't been already been flagged
+      std::copy_if(i_bridges.begin(), i_bridges.end(),
+                   std::back_inserter(edgeToCollapse), [](edge_ptr e) {
+                     // this is nice symmetry that lets you skip every other edge
+                     bool insert = !(e->flags[0] | e->v1()->face()->flags[1] |
+                                     e->v2()->face()->flags[1]);
+                     if (insert) {
+                       e->v1()->face()->flags[1] = 1;
+                       e->v2()->face()->flags[1] = 1;
+                       e->flags[0] = 1;
+                     }
 
-      if (shared == 1) {
-        //std::cout << " shared == 1, punting!" << std::endl;
+                     return insert;
+                   });
+    }
+
+    std::vector<triangle_pair> newCollect;
+    std::copy_if(collected.begin(), collected.end(),
+                 std::back_inserter(newCollect), [faces](triangle_pair p) {
+                   std::cout << "A/B id: " << p.A.faceId << " " << p.B.faceId
+                             << std::endl;
+                   face_ptr fA = faces[p.A.faceId];
+                   face_ptr fB = faces[p.B.faceId];
+                   return (!(fA->flags[1] | fB->flags[1]));
+                 });
+
+    // clear flags
+    std::for_each(edgeToCollapse.begin(), edgeToCollapse.end(),
+                  [](edge_ptr &e) {
+                    e->flags[0] = 0;
+                    e->v1()->face()->flags[1] = 0;
+                    e->v2()->face()->flags[1] = 0;
+                  });
+
+    std::vector<coordinate_type> coords(edgeToCollapse.size());
+    int i = 0;
+    for (auto e : edgeToCollapse) {
+      vertex_ptr v0 = e->v1()->vertex();
+      vertex_ptr v1 = e->v2()->vertex();
+      coordinate_type c0 = m2::ci::get_coordinate<SPACE>(v0);
+      coordinate_type c1 = m2::ci::get_coordinate<SPACE>(v1);
+      coords[i] = 0.5 * c0 + 0.5 * c1;
+      i++;
+    }
+
+    m2::edge_collapser<SPACE> collapser(this->_surf, 0.0);
+
+    std::cout << "shared edges: " << edgeToCollapse.size() << std::endl;
+    collapser.collapse_edges(edgeToCollapse);
+    vertex_array vertices = this->_surf->get_vertices();
+
+    std::cout << "assigning calc'd vertex values" << std::endl;
+
+    for (auto v : vertices) {
+      if (!v)
         continue;
+      int topologyChange = v->topologyChange;
+      if (topologyChange < 0)
+        continue;
+      m2::ci::set_coordinate<SPACE>(coords[topologyChange], v);
+    }
+
+    std::cout << "new collect size: " << newCollect.size() << std::endl;
+    return newCollect;
+  }
+
+  bool merge_collected(std::vector<triangle_pair> &collected,
+                       std::vector<face_ptr> &faces) {
+
+    bool merging = true;
+    int phase = 0;
+    while (merging && collected.size()) {
+
+      collected = collapse_bridges(collected, faces);
+
+      std::sort(collected.begin(), collected.end(), std::less<triangle_pair>());
+
+      std::cout << "merging " << phase
+                << ", triangle pair count: " << collected.size() << std::endl;
+
+      std::vector<triangle_pair> new_collect;
+
+      for (auto p : collected) {
+
+        face_ptr fA = faces[p.A.faceId];
+        face_ptr fB = faces[p.B.faceId];
+
+        int shared_vertices = fA->count_shared_vertices(fB);
+        int shared_edges = fA->count_shared_edges(fB);
+
+        // std::cout << " shared: " << shared << std::end
+        coordinate_type NA = ci::normal<SPACE>(fA);
+        coordinate_type NB = ci::normal<SPACE>(fB);
+        real angle = va::dot(NA, NB);
+        T d = p.dist();
+        std::cout << "dist/angle: " << d << " / " << angle << std::endl;
+
+        alignFaces(fA, fB);
+        std::cout << "popping hole " << shared_vertices << std::endl;
+        averageVerts(fA, fB);
+        fA->flag_edges(2);
+        fB->flag_edges(2);
+        joinFaces(fA, fB, this->_surf);
+        merging = true;
       }
-      //std::cout << " shared: " << shared << std::endl;
-
-      alignFaces(fA, fB);
-      averageVerts(fA, fB);
-
-      // continue;
-
-      //fA->print_vert_ids();
-      //fB->print_vert_ids(true);
-      //fA->print_shared_edge();
-      //fB->print_shared_edge();
-
-      fA->flag_vertices();
-      if (shared == 0) {
-        int adjacent_shared = fA->count_adjacent_shared_vertices(fB);
-        std::cout << " adjacent shared: " << shared << std::endl;
-        if (adjacent_shared == 0)
-          joinFaceNoSharedEdges(fA, fB, this->_surf);
-
-      } else if (shared == 2)
-        joinFaceOneSharedEdge(fA, fB, this->_surf);
-      //std::cout << " ============= " << std::endl;
-    };
+      collected = new_collect;
+    }
 
     this->_surf->verify();
     this->_surf->update_all();
     this->_surf->pack();
-    
+
+    this->reset_flags();
+    return merging;
+  }
+
+  bool merge() {
+    std::vector<face_ptr> faces = this->_surf->get_faces();
+    vector<triangle_pair> collected = get_face_pairs_to_merge(faces);
+    return this->merge_collected(collected, faces);
+  }
+
+  void reset_flags() {
+
     for (auto f : this->_surf->get_faces()) {
-      f->flag = 0;
+      f->flags[0] = 0;
     }
+
     for (auto v : this->_surf->get_vertices()) {
-      v->flag = 0;
+      v->flags[0] = 0;
+      v->flags[1] = 0;
+    }
+
+    for (auto e : this->_surf->get_edges()) {
+      e->flags[2] = 0;
     }
   }
 };
@@ -1074,6 +1447,5 @@ public:
   }
 };
 #endif
-
 }; // namespace m2
 #endif

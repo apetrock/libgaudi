@@ -1039,7 +1039,7 @@ public:
   pole_node &operator=(const pole_node &rhs) {
     // this = new pole_node();
     if (this != &rhs) {
-      children = new int[8];
+      //children = new int[8];
       center = rhs.center;
       centerOfMass = rhs.centerOfMass;
       half = rhs.half;

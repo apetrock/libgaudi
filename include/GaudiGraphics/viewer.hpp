@@ -11,7 +11,6 @@
 #include <memory>
 #include <string>
 
-
 namespace gg {
 using namespace GaudiMath;
 
@@ -28,10 +27,18 @@ public:
   Scene() {
     // init();
   }
-  virtual void onAnimate(){};
-  virtual void onDraw(gg::Viewer & viewer){};
-};
+  virtual void onAnimate(int frame){};
+  virtual void save(int frame){};
+  virtual void onDraw(gg::Viewer &viewer){};
 
+  virtual void _save() { this->save(_frame); };
+  virtual void _onAnimate() {
+    _frame++;
+    this->onAnimate(_frame);
+  };
+
+  int _frame = 0;
+};
 
 class Viewer {
 public:
@@ -44,9 +51,10 @@ public:
   Viewer(Vec2i sz) { init(sz); }
 
   ~Viewer() {}
-  
+
   Mat4 makeProjectionMatrix(Real fovY, Real aspectRatio, Real zNear,
                             Real zFar) {
+    std::cout << "aspect ration: " << aspectRatio << std::endl;
     Real yScale = tan(M_PI_2 - fovY / 2.0);
     Real xScale = yScale / aspectRatio;
     Mat4 M;
@@ -60,7 +68,7 @@ public:
 
   void init(Vec2i size) {
 
-    mProject = this->makeProjectionMatrix(60.0 * M_PI / 180.0, 1.0, 0.1, 20);
+    mProject = this->makeProjectionMatrix(60.0 * M_PI / 180.0, double(size[0]) / double(size[1]), 0.1, 20);
     mModelView.setIdentity();
     mModelViewOld.setIdentity();
 
@@ -133,45 +141,83 @@ protected:
   Vec4 mDragStart;
 
   nanogui::Arcball *ball;
-}; //viewer
+}; // viewer
+
+class FrameGrabber;
+using FrameGrabberPtr = std::shared_ptr<FrameGrabber>;
+
+class FrameGrabber {
+public:
+  static FrameGrabberPtr create(int width, int height) {
+    return std::make_shared<FrameGrabber>(width, height);
+  }
+
+  FrameGrabber(int width, int height) : _width(width), _height(height) {
+
+    // start ffmpeg telling it to expect raw rgba 720p-60hz frames
+    // -i - tells it to read frames from stdin
+    const char *cmd = "ffmpeg -r 60 -f rawvideo -pix_fmt rgba -s 1280x720 -i - "
+                      "-threads 0 -preset fast -y -pix_fmt yuv420p -crf 21 -vf "
+                      "vflip output.mp4";
+
+    // open pipe to ffmpeg's stdin in binary write mode
+    ffmpeg = popen(cmd, "w");
+    _buffer = new int[_width * _height];
+  }
+
+  ~FrameGrabber() { pclose(ffmpeg); }
+
+  void onFrame() {
+    std::cout << "grabbing frame" << std::endl;
+    glReadPixels(0, 0, _width, _height, GL_RGBA, GL_UNSIGNED_BYTE,
+                 this->_buffer);
+    fwrite(_buffer, sizeof(int) * _width * _height, 1, this->ffmpeg);
+  }
+
+private:
+  int _width, _height;
+  int *_buffer;
+  FILE *ffmpeg;
+};
 
 class SimpleApp;
 using SimpleAppPtr = std::shared_ptr<SimpleApp>;
 
 class SimpleApp : public nanogui::Screen {
 public:
-  
-  static SimpleAppPtr create() {
-    return std::make_shared<SimpleApp>();
+  static SimpleAppPtr create(int w = 1280, int h = 720) {
+    return std::make_shared<SimpleApp>(w, h);
   }
 
   typedef double Real;
 
-  SimpleApp()
-      : nanogui::Screen(Eigen::Vector2i(800, 800), "simple app") {
+  SimpleApp(int w = 1280, int h = 720)
+      : _width(w), _height(h), nanogui::Screen(Eigen::Vector2i(w, h),
+                        "App Simple") {
     using namespace nanogui;
 
     // now for GUI
-    //Window *window = new Window(this, "coordinates");
-    //window->setPosition(Vector2i(15, 15));
-    //window->setLayout(new GroupLayout());
+    // Window *window = new Window(this, "coordinates");
+    // window->setPosition(Vector2i(15, 15));
+    // window->setLayout(new GroupLayout());
 
     performLayout(mNVGContext);
 
     _viewer = gg::Viewer::create(mSize);
+    
+    std::cout << "size: " << mSize << std::endl;
 
-   glEnable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_TEST);
     // Accept fragment if it closer to the camera than the former one
     glDepthFunc(GL_LESS);
     // Cull triangles which normal is not towards the camera
     glEnable(GL_CULL_FACE);
+    _frameGrabber = FrameGrabber::create(_width, _height);
   }
 
   ~SimpleApp() {}
 
-  void setScene(ScenePtr scene){
-    mScene = scene;
-  }
+  void setScene(ScenePtr scene) { mScene = scene; }
   ///////////////////////////
   //  events
   ///////////////////////////
@@ -205,6 +251,14 @@ public:
       this->drawContents();
     }
 
+    if (key == GLFW_KEY_O && action == GLFW_PRESS) {
+      if (mScene)
+        mScene->_save();
+    }
+
+    if (key == GLFW_KEY_Q && action == GLFW_PRESS) {
+      nanogui::leave();
+    }
     return false;
   }
 
@@ -213,29 +267,35 @@ public:
   ///////////////////////////
 
   virtual void draw(NVGcontext *ctx) {
-    //if (false)
+    // if (false)
     Screen::draw(ctx);
   }
 
   virtual void animate() {
-    if (mScene)
-      mScene->onAnimate();
+    if (mScene){
+      mScene->_onAnimate();
+    }
   }
-
 
   virtual void drawContents() {
     using namespace nanogui;
     glfwGetTime();
 
-    if (this->_animate)
+    if (this->_animate){
       this->animate();
+    }
 
     glEnable(GL_DEPTH_TEST);
-    
+
     if (mScene)
       mScene->onDraw(*_viewer);
 
     glDisable(GL_DEPTH_TEST);
+
+    if (this->_animate) {
+      _frameGrabber->onFrame();
+    }
+
     _frame++;
   }
 
@@ -244,8 +304,11 @@ private:
   unsigned int _frame = 0;
   ScenePtr mScene;
   gg::ViewerPtr _viewer;
-  
-}; //Simple App
 
-} // namespace GaudiGraphics
+  int _width, _height;
+  FrameGrabberPtr _frameGrabber;
+
+}; // Simple App
+
+} // namespace gg
 #endif

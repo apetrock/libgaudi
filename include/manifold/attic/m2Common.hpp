@@ -18,8 +18,7 @@
 #include <GLUT/glut.h>
 #include <OpenGL/OpenGL.h>
 #include <OpenGL/gl.h>
-#include <OpenGL/glu.h>			// Header File For The GLu32 Library
-#include "manifold_singleton.h"
+#include <OpenGL/glu.h>	
 
 #include "al_Vec.hpp"
 #include "al_Quat.hpp"

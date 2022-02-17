@@ -12,12 +12,13 @@
 
 #include <algorithm>
 #include <assert.h>
+#include <bitset>
+#include <cstddef>
 #include <iostream>
 #include <list>
 #include <math.h>
 #include <stack>
 #include <vector>
-#include <bitset>
 
 #ifdef __APPLE__
 #include <OpenGL/gl.h>
@@ -37,7 +38,6 @@
 #include <memory>
 
 #include "geometry_types.hpp"
-#include "manifold_singleton.h"
 #include "vec_addendum.h"
 
 // this typedef list is ugly but useful!!!
@@ -154,6 +154,7 @@ public:
   triangle_type A;
   triangle_type B;
   mutable T _norm = -1;
+  mutable T _angle = -3;
 
   face_triangle_pair(const triangle_type &a, const triangle_type &b) {
     A = a;
@@ -169,6 +170,17 @@ public:
 
     return _norm;
   };
+
+  T angle() const {
+    if (A.faceId == B.faceId)
+      return std::numeric_limits<T>::infinity();
+
+    if (_angle < -2) {
+      _angle = A.angle(B);
+    }
+
+    return _angle;
+  };
 };
 
 template <typename SPACE>
@@ -182,6 +194,7 @@ template <typename SPACE>
 inline bool operator<(const face_triangle_pair<SPACE> &lhs,
                       const face_triangle_pair<SPACE> &rhs) {
   return lhs.dist() < rhs.dist();
+  // return lhs.angle() < rhs.angle();
 }
 
 struct colorRGB {
@@ -243,8 +256,7 @@ public:
     data_node() { flags.reset(); }
 
     data_node(const data_node &other)
-        : _ddata(other._ddata), _size(other._size), flags(other.flags) {
-    }
+        : _ddata(other._ddata), _size(other._size), flags(other.flags) {}
 
     std::any &operator[](ITYPE i) { return _ddata[static_cast<int>(i)]; }
 
@@ -277,7 +289,7 @@ public:
 
     std::bitset<8> flags;
     int topologyChange = -1; // needs to be changed to stored value
-    
+
   private:
     std::any _ddata[static_cast<int>(ITYPE::MAXINDEX)];
     bool dirty[static_cast<int>(ITYPE::MAXINDEX)];
@@ -291,8 +303,6 @@ public:
       fv1 = NULL;
       fv2 = NULL;
       mSetPosition = -1;
-      m2::ID &manager = m2::ID::get_instance();
-      mID = manager.new_edge_id();
       flag = 0;
       delete_flag = 0;
     };
@@ -309,8 +319,6 @@ public:
 
     edge_ref operator=(edge_ref rhs) {
       edge_ptr out = new edge_type(*rhs.fv1, *rhs.fv2);
-      m2::ID &manager = m2::ID::get_instance();
-      out->mID = manager.new_edge_id();
       return *out;
     }
 
@@ -322,14 +330,12 @@ public:
     int group() const { return mGroup; }
     int &group() { return mGroup; }
 
-    size_t ID() const { return this->mID; }
-
     face_vertex_ptr &v1() { return fv1; }
     face_vertex_ptr v1() const { return fv1; }
     face_vertex_ptr &v2() { return fv2; }
     face_vertex_ptr v2() const { return fv2; }
 
-    face_vertex_ptr& other(const face_vertex_ptr &cv) {
+    face_vertex_ptr &other(const face_vertex_ptr &cv) {
       if (cv == fv1) {
         return fv2;
       } else
@@ -430,7 +436,6 @@ public:
     face_vertex_ptr fv2;
 
   protected:
-    size_t mID;
     int mSetPosition;
     int mGroup;
 
@@ -444,8 +449,6 @@ public:
 
   public:
     face() {
-      m2::ID &manager = m2::ID::get_instance();
-      mID = manager.new_face_id();
       flag = 0;
       color.r = 0.4 + randd(0.1);
       color.g = 0.4 + randd(0.1);
@@ -464,9 +467,6 @@ public:
 
     face(vertex_ref pnt) {
       // this makes a the face in a hypersphere from one point
-      m2::ID &manager = m2::ID::get_instance();
-      mID = manager.new_face_id();
-
       face_vertex_ptr nfv = new face_vertex_type();
       mSize = 1;
       mArea = 0.0;
@@ -495,9 +495,6 @@ public:
 
     face(face_vertex_ptr &fv0, face_vertex_ptr &fv1, face_vertex_ptr &fv2) {
       // this makes a the face in a hypersphere from one point
-      m2::ID &manager = m2::ID::get_instance();
-      mID = manager.new_face_id();
-
       face_vertex_ptr nfv = new face_vertex_type();
       mSize = 1;
       mArea = 0.0;
@@ -543,8 +540,6 @@ public:
 
     face_ref operator=(const face_ref rhs) {
       face_ptr out = new face_type();
-      m2::ID &manager = m2::ID::get_instance();
-      out->mID = manager.new_face_id();
       out->mNormal = rhs.mNormal;
       out->mCenter = rhs.mCenter;
       out->mVertices = rhs.mVertices;
@@ -685,12 +680,36 @@ public:
         while (itB) {
           itB = fvB != fvBe;
           vertex_ptr vB = fvB->vertex();
+
           shared_vertices += int(vA == vB);
           fvB = fvB->next();
         }
         fvA = fvA->next();
       }
       return shared_vertices;
+    }
+
+    int count_shared_edges(face_ptr fB) {
+      int shared_edges = 0;
+
+      face_vertex_ptr fvA = this->fbegin();
+      face_vertex_ptr fvAe = this->fend();
+      bool itA = true;
+      while (itA) {
+        itA = fvA != fvAe;
+        edge_ptr eA = fvA->edge();
+        face_vertex_ptr fvB = fB->fbegin();
+        face_vertex_ptr fvBe = fB->fend();
+        bool itB = true;
+        while (itB) {
+          itB = fvB != fvBe;
+          edge_ptr eB = fvB->edge();
+          shared_edges += int(eA == eB);
+          fvB = fvB->next();
+        }
+        fvA = fvA->next();
+      }
+      return shared_edges;
     }
 
     int count_adjacent_shared_vertices(face_ptr fB) {
@@ -771,6 +790,18 @@ public:
       }
     }
 
+    void flag_edges(int flag) {
+      face_vertex_ptr fvA = this->fbegin();
+      face_vertex_ptr fvAe = this->fend();
+      bool has = false;
+      bool itf = true;
+      while (itf) {
+        itf = fvA != fvAe;
+        fvA->edge()->flags[flag] = 1;
+        fvA = fvA->next();
+      }
+    }
+
     void print_vert_ids(bool reverse = false) {
       face_vertex_ptr fvA = this->fbegin();
       face_vertex_ptr fvAe = reverse ? this->fendr() : this->fend();
@@ -797,8 +828,6 @@ public:
       std::cout << std::endl;
     }
 
-    size_t ID() const { return this->mID; }
-
     int group() const { return mGroup; }
     int &group() { return mGroup; }
 
@@ -810,7 +839,7 @@ public:
     coordinate_type mCenter;
     coordinate_type mNormal;
     T mArea;
-    int mID;
+
     int mSize;
 
     int mSetPosition;
@@ -834,14 +863,12 @@ public:
       mEdge = NULL;
       mFace = NULL;
 
-      m2::ID &manager = m2::ID::get_instance();
-      mID = manager.new_face_vertex_id();
       fID = 0;
       flag = 0;
       data = 0;
     }
 
-    face_vertex(const face_vertex_ref rhs) {
+    face_vertex(face_vertex_ref rhs) {
       this->mEdge = rhs.mEdge;
       //			mEdge->set_this(&rhs,this);
       this->mFace = rhs.mFace;
@@ -851,9 +878,6 @@ public:
       this->data = rhs.data;
       fID = 0;
 
-      m2::ID &manager = m2::ID::get_instance();
-      mID = manager.new_face_vertex_id();
-
       flag = 0;
     }
 
@@ -861,14 +885,14 @@ public:
         // mVertex->remove_face_vertex(mVertexPosition);
     };
 
-    bool operator==(const face_vertex_ref rhs) {
-      if (mID == rhs.mID) {
+    bool operator==(face_vertex_ref rhs) {
+      if (mEdge == rhs.mEdge && mFace == rhs.mFace && mVertex == rhs.mVertex) {
         return true;
       } else
         return false;
     }
 
-    face_vertex_ref operator=(const face_vertex_ref rhs) {
+    face_vertex_ref operator=(face_vertex_ref rhs) {
       face_vertex_ptr out = new face_vertex_type(rhs);
       out->mEdge->update_vertex(&rhs, this);
       return *out;
@@ -953,8 +977,6 @@ public:
     vertex_ptr &vertex() { return mVertex; }
     vertex_ptr vertex() const { return mVertex; }
 
-    int vertex_ID() const { return mVertex->ID(); }
-    int ID() const { return this->mID; }
     int face_ID() const { return this->mFacePosition; }
     int &face_ID() { return this->mFacePosition; }
 
@@ -969,7 +991,6 @@ public:
 
   protected:
     int mGroup;
-    int mID;
     int fID;
 
     face_vertex_ptr nxt_face;
@@ -996,9 +1017,6 @@ public:
 
     vertex() {
       int graphColor = -1;
-
-      m2::ID &manager = m2::ID::get_instance();
-      mID = manager.new_vertex_id();
 
       flag = 0;
       mSize = 0;
@@ -1033,6 +1051,9 @@ public:
     int ID() const { return mSetPosition; }
 
     int calc_size() {
+      if (!mFront)
+        return 0;
+
       face_vertex_ptr fvb = this->fbegin();
       face_vertex_ptr fve = this->fend();
       bool iterating = true;
@@ -1066,15 +1087,8 @@ public:
     }
 
     void remove_face_vertex(face_vertex_ptr fv) {
-      // mFront = fv->vnext();
       mSize--;
-      // mFaceVertices.erase(it);
-
-      // if (mFaceVertices[in]) {
-      // 	face_vertex_ptr fv = mFaceVertices[in];
-      // 	mFaceVertices[in] = NULL;
-      // 	mRecycle.push_back(in);
-      // }
+      // mFront = NULL;
     }
 
     void update_all() {
@@ -1150,11 +1164,17 @@ public:
       face_vertex_ptr itb = this->fbegin();
       face_vertex_ptr ite = this->fend();
       bool iterating = true;
+      int i = 0;
       while (iterating) {
         iterating = itb != ite;
-        if (itb->vertex() != this)
-          std::cout << " asserted: " << position_in_set() << std::endl;
-        assert(itb->vertex() == this);
+        if (itb->vertex() != this) {
+          std::cout << i++ << " asserted: " << position_in_set() << " v- "
+                    << itb->vertex()->position_in_set() << " "
+                    << " e- " << itb->edge()->position_in_set() << std::endl;
+          std::cout << "          e eq: "
+                    << bool(itb->edge()->v1() == itb->edge()->v2())
+                    << std::endl;
+        }
         itb = itb->vnext();
       }
     }
@@ -1167,11 +1187,13 @@ public:
       bool iterating = true;
       std::cout << " - vertex: " << mSetPosition << ", size: " << this->mSize
                 << std::endl;
-      std::cout << " edges: ";
+      int i = 0;
       while (iterating) {
         iterating = itb != ite;
         // std::cout << itb->next()->vertex()->position_in_set() << ", ";
-        std::cout << itb->edge()->position_in_set() << ", ";
+        std::cout << "   " << i++ << ": v- " << itb->vertex()->position_in_set()
+                  << " - e- " << itb->edge()->position_in_set() << ": vn- "
+                  << itb->next()->vertex()->position_in_set() << std::endl;
         itb = itb->vnext();
       }
       std::cout << std::endl;
@@ -1180,11 +1202,10 @@ public:
   protected:
     face_vertex_ptr mFront = NULL;
 
-    size_t mID;
     int mSetPosition;
     int mSize;
     int mGroup;
-   
+
   public:
     int pinned;
     unsigned int flag;
@@ -1204,7 +1225,7 @@ public:
     manual_clean_up = false;
     // mFaces.clear();
     // mVertices.clear();
-    // mEdges.clear();
+    // mEdges.clear();cl
     mFaces.resize(rhs.mFaces.size());
     mVertices.resize(rhs.mVertices.size());
     mEdges.resize(rhs.mEdges.size());
@@ -2050,9 +2071,7 @@ void for_each_face(
     iterating = fvb != fve;
     func(fvb);
     fvb = fvb->next();
-
   }
-
 }
 
 template <typename SPACE>
@@ -2097,6 +2116,26 @@ void for_each_face_reverse(
     func(fvb);
     fvb = fvb->prev();
   }
+}
+
+template <typename SPACE>
+void set_vertex_flag(typename surf<SPACE>::face_ptr f, int flag, int val) {
+  using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
+
+  m2::for_each_face<SPACE>(f, [&](face_vertex_ptr fv) {
+    fv->vertex()->flags[flag] = val;
+    std::cout << fv->vertex()->position_in_set() << " ";
+  });
+}
+
+template <typename SPACE>
+void set_vertex_flag(typename surf<SPACE>::vertex_ptr v, int flag, int val) {
+  using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
+
+  m2::for_each_vertex<SPACE>(v, [&](face_vertex_ptr fv) {
+    fv->vertex()->flags[flag] = val;
+    std::cout << fv->vertex()->position_in_set() << " ";
+  });
 }
 
 } // namespace m2

@@ -184,6 +184,10 @@ public:
     return space3::vec3(r, g, b);
   }
 
+  space3::vec3 grey(double d) {
+    return space3::vec3(0.5, 0.5, 0.5);
+  }
+
   template <typename SPACE>
   void print_vecs(const std::vector<typename SPACE::vec3> &p0,
                   const std::vector<typename SPACE::vec3> &p1) {
@@ -197,9 +201,9 @@ public:
       const auto &p = p0[i];
       const auto &a = p1[i];
 
-      auto pa = p + 0.1 * a / mx;
+      auto pa = p + 0.05 * a / mx;
       // std::cout << a.transpose() << std::endl;
-      auto c = rainbow(m2::va::norm(a));
+      auto c = grey(m2::va::norm(a));
       _debugLines->pushLine(Vec4(p[0], p[1], p[2], 1.0),
                             Vec4(pa[0], pa[1], pa[2], 1.0),
                             Vec4(c[0], c[1], c[2], 1.0));
@@ -233,8 +237,11 @@ public:
         rxa += l * ra;
         rxb += l * rb;
       });
+      //rxa = rxa - 0.25;
+      //rxb = rxb - 0.25;
+      //rx[i] = rxa * rxb * rxb;
+      rx[i] = 3.0 * rxb - rxa;
 
-      rx[i] = 1.0 * rxa - 0.5 * rxb;
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
     std::cout << "calc_normal 2" << std::endl;
@@ -503,9 +510,11 @@ public:
                  const std::vector<typename SPACE::real> &rxB) {
     using namespace m2;
     M2_TYPEDEFS;
-    face_merger<SPACE> merger(surf, 1.0 * _min);
-    merger.merge();
-    merger.merge();
+    face_merger<SPACE> merger(surf, 2.0 * _min);
+    bool merging = true;
+
+    merging = merger.merge();
+    
   }
 
   template <typename SPACE>
@@ -529,10 +538,11 @@ public:
 
     while (deleting) {
       for (auto v : _meshGraph->get_vertices()) {
-        deleting = cons.delete_degenerates(_meshGraph, v, 0.1 * _min * _min);
+        deleting = cons.delete_degenerates(_meshGraph, v, 0.5 * _min * _min);
       }
       _meshGraph->pack();
       for (auto e : _meshGraph->get_edges()) {
+
         deleting |= cons.delete_degenerates(_meshGraph, e);
       }
       _meshGraph->pack();
@@ -540,18 +550,21 @@ public:
 
     m2::remesh<SPACE> rem;
     rem.triangulate(_meshGraph);
+    _meshGraph->pack();
   }
 
   template <typename SPACE>
   std::vector<typename SPACE::real>
-  diffuse(m2::surf<SPACE> *surf, const std::vector<typename SPACE::real> &rx,
-          rxd3::real dt, typename SPACE::real C) {
+  diffuse(m2::surf<SPACE> *surf, 
+          const std::vector<typename SPACE::real> &u,
+          const std::vector<typename SPACE::real> &f, rxd3::real dt,
+          typename SPACE::real C) {
 
     using namespace m2;
     M2_TYPEDEFS;
     m2::laplacian<SPACE, real> M(surf);
 
-    auto diffMult = [&M, rx, dt, C, surf](const std::vector<real> &X) {
+    auto diffMult = [&M, dt, C, surf](const std::vector<real> &X) {
       std::vector<real> MX = M.multM(X);
       std::vector<real> CX = M.multC(X);
 
@@ -562,11 +575,58 @@ public:
       return MX;
     };
 
-    m2::gradient_descent<SPACE> solver;
-    std::vector<typename SPACE::real> rxt = M.multM(rx);
+    std::vector<typename SPACE::real> u_f(u);
+
+    for (int i = 0; i < u_f.size(); i++) {
+      u_f[i] = u[i] + dt * f[i];
+    }
+
+    std::vector<typename SPACE::real> au_f = M.multM(u_f);
 
     int its;
-    std::vector<real> x = solver.solveConjugateGradient(rxt, diffMult, its);
+    m2::gradient_descent<SPACE> solver;
+    std::vector<real> x = solver.solveConjugateGradient(au_f, diffMult, its);
+
+    return x;
+  }
+
+  template <typename SPACE>
+  std::vector<typename SPACE::real>
+  diffuse_second_order(m2::surf<SPACE> *surf, const std::vector<typename SPACE::real> &u,
+          const std::vector<typename SPACE::real> &f, rxd3::real dt,
+          typename SPACE::real C) {
+
+    using namespace m2;
+    M2_TYPEDEFS;
+    m2::laplacian<SPACE, real> M(surf);
+
+    auto diffMult = [&M, dt, C, surf](const std::vector<real> &X) {
+      std::vector<real> MX = M.multM(X);
+      std::vector<real> CX = M.multC(X);
+
+      int i = 0;
+      for (int i = 0; i < MX.size(); i++) {
+        MX[i] = MX[i] - 0.5 * dt * C * CX[i];
+      }
+      return MX;
+    };
+
+    std::vector<typename SPACE::real> u_f(u);
+
+    for (int i = 0; i < u_f.size(); i++) {
+      u_f[i] = u[i] + dt * f[i];
+    }
+
+    std::vector<typename SPACE::real> au_f = M.multM(u_f);
+    std::vector<typename SPACE::real> lu = M.multC(u);
+    
+    for (int i = 0; i < u_f.size(); i++) {
+      au_f[i] += 0.5 * dt * C * lu[i];
+    }
+
+    int its;
+    m2::gradient_descent<SPACE> solver;
+    std::vector<real> x = solver.solveConjugateGradient(au_f, diffMult, its);
 
     return x;
   }
@@ -574,20 +634,82 @@ public:
   template <typename SPACE>
   void curvature_to_rx(m2::surf<SPACE> *surf,
                        std::vector<typename SPACE::real> &rxA,
-                       std::vector<typename SPACE::real> &rxB,
-                       typename SPACE::real C) {
+                       std::vector<typename SPACE::real> &rxB) {
     using namespace m2;
     M2_TYPEDEFS;
     m2::cotan_curvature<SPACE> curve(surf);
     std::vector<real> K = curve();
 
+    const auto [min, max] = std::minmax_element(K.begin(), K.end());
+    std::for_each(K.begin(), K.end(), [min, max](auto & e){
+      e = (e - *min) / (*max - *min);
+    });
+
+
+    std::random_device rd;
+    std::mt19937 e2(rd());
+    std::uniform_real_distribution<> dist(0.1, 1);
     int i = 0;
-    for (auto k : K) {
-      //std::cout << k << std::endl;
-      rxA[i] += rxA[i] * C / k;
-      rxB[i] += rxB[i] * C * k;
+
+    auto vertices = surf->get_vertices();
+    coordinate_array coords;
+    for (auto v : vertices) {
+      if (dist(e2) > 0.95 && K[i] < 0.1 && rxA[i] > 0.95) {
+        coords.push_back(ci::get_coordinate<SPACE>(v));
+      }
       i++;
     }
+
+    i = 0;
+    int N = coords.size();
+    for (auto cj : coords) {
+      i = 0;
+      for (auto v : vertices) {
+        coordinate_type ci = ci::get_coordinate<SPACE>(v);
+        coordinate_type dc = cj - ci;
+        real dist = va::norm(dc);
+        // std::cout << ci.transpose() << " " << cj.transpose() << std::endl;
+        real C = 1.0 * _max;
+        T d2 = dist * dist * dist;
+        T l2 = C * C * C;
+
+        T kappa = exp(-0.5 * d2 / l2);
+        rxB[i] += (kappa);
+        rxA[i] = (1.0 - kappa) * rxA[i];
+        i++;
+      }
+    }
+    /*
+    double mx = 0.0;
+    for (int i = 0; i < rxB.size(); i++) {
+      mx = std::max(mx, rxA[i]);
+      mx = std::max(mx, rxB[i]);
+    }
+
+    for (int i = 0; i < rxB.size(); i++) {
+      rxB[i] /= mx;
+      rxA[i] += (1.0 - rxB[i]);
+    }
+    */
+    /*
+    mx = 0.0;
+    for (int i = 0; i < rxB.size(); i++) {
+      mx = std::max(mx, rxA[i]);
+      mx = std::max(mx, rxB[i]);
+    }
+
+    for (auto k : K) {
+      if(k< 1e-6) continue; 
+      //std::cout << k << std::endl;
+      real k2 = k * k + 0.1;
+      //k2 = std::min(k2, real(10.0));
+      //k2 = std::max(k2, real(0.1));
+
+      rxB[i] += rxA[i] *  C / k2 * dist(e2); //if low curvature and lots of A add some B
+      rxA[i] += rxB[i] *  C / k2 * dist(e2); //if high curvature and lots of B add some A
+      i++;
+    }
+    */
   }
 
   template <typename SPACE> void initRxMesh(m2::surf<SPACE> *surf) {
@@ -601,11 +723,11 @@ public:
     std::uniform_real_distribution<> dist(0, 1);
     std::vector<typename SPACE::real> rxA(vertices.size());
     std::vector<typename SPACE::real> rxB(vertices.size());
-#if 1
+#if 0
     int i = 0;
     coordinate_array coords;
     for (auto v : vertices) {
-      if (dist(e2) > 0.85) {
+      if (dist(e2) > 0.80) {
         coords.push_back(ci::get_coordinate<SPACE>(v));
       }
       rxA[i] = 0.0;
@@ -622,7 +744,7 @@ public:
         coordinate_type dc = cj - ci;
         real dist = va::norm(dc);
         // std::cout << ci.transpose() << " " << cj.transpose() << std::endl;
-        real C = 1.5 * _max;
+        real C = 1.0 * _max;
         T d2 = dist * dist * dist;
         T l2 = C * C * C;
 
@@ -654,6 +776,9 @@ public:
     int i = 0;
     coordinate_array coords;
     for (auto v : vertices) {
+      rxA[i] = 1.0;
+      rxB[i] = 0.0;
+      /*
       if (dist(e2) > 0.85) {
         coords.push_back(ci::get_coordinate<SPACE>(v));
         typename SPACE::real t = dist(e2);
@@ -663,6 +788,7 @@ public:
         rxA[i] = 1.0;
         rxB[i] = 0.0;
       }
+      */
       i++;
     }
 /*
@@ -693,7 +819,7 @@ public:
 
   void reset() { this->initRxMesh(_meshGraph); }
 
-  virtual void onAnimate() {
+  virtual void onAnimate(int frame) {
 
     std::cout << "====== " << std::endl;
     std::cout << " verts: " << _meshGraph->get_vertices().size() << std::endl;
@@ -708,10 +834,14 @@ public:
     cacheBary<rxd3>(_meshGraph);
 
     std::cout << "ugly smoothing " << std::endl;
-    smoothMesh(_meshGraph, 0.001, 10);
+    smoothMesh(_meshGraph, 0.01, 10);
     // gg::fillBuffer(_meshGraph, _obj);
     std::vector<rxd3::real> rxA = getRx(_meshGraph, rxd3::vertex_index::RXA);
     std::vector<rxd3::real> rxB = getRx(_meshGraph, rxd3::vertex_index::RXB);
+    std::vector<rxd3::real> fA(rxA);
+    std::vector<rxd3::real> fB(rxB);
+
+    curvature_to_rx(_meshGraph, rxA, rxB);
 
     double An = 0.0, Bn = 0.0;
     double Du = rxParams.Du;
@@ -729,32 +859,26 @@ public:
     std::cout << " dt: " << dt << std::endl;
 #if 1
     for (int i = 0; i < rxA.size(); i++) {
-
       double u = rxA[i];
       double v = rxB[i];
 
-      // double up  = u + dt * Du * Lu;
-      // double vp  = v + dt * Dv * Lv;
-      // double up  = u;
-      // double vp  = v;
       double rx = u * v * v;
-      double up = u + dt * (-rx + F * (1.0 - u));
-      double vp = v + dt * (rx - (F + k) * v);
+      double up = (-rx + F * (1.0 - u));
+      double vp = (rx - (F + k) * v);
 
-      rxA[i] = up;
-      rxB[i] = vp;
-      An += rxA[i];
-      Bn += rxB[i];
+      fA[i] = up;
+      fB[i] = vp;
     }
 
-    curvature_to_rx(_meshGraph, rxA, rxB, 0.001);
 
-    rxA = diffuse<rxd3>(_meshGraph, rxA, dt, Du);
-    rxB = diffuse<rxd3>(_meshGraph, rxB, dt, Dv);
+    rxA = diffuse_second_order<rxd3>(_meshGraph, rxA, fA, dt, Du);
+    rxB = diffuse_second_order<rxd3>(_meshGraph, rxB, fB, dt, Dv);
 
     for (int i = 0; i < rxA.size(); i++) {
       rxA[i] = std::clamp(rxA[i], 0.0, 1.0);
       rxB[i] = std::clamp(rxB[i], 0.0, 1.0);
+      An += rxA[i];
+      Bn += rxB[i];
     }
 
     std::cout << "rx stage norm: " << An / double(rxA.size()) << " "
@@ -765,13 +889,17 @@ public:
 
     setRx(_meshGraph, rxA, rxd3::vertex_index::RXA);
     setRx(_meshGraph, rxB, rxd3::vertex_index::RXB);
-#endif
     setRxColor(_meshGraph);
+
     auto colors = getRxColors(_meshGraph);
     // mod.centerGeometry(*_meshGraph);
     gg::fillBuffer(_meshGraph, _obj, colors);
+#endif
+
+
 
 #if 1
+
     std::vector<rxd3::vec3> positions =
         m2::ci::get_coordinates<rxd3>(_meshGraph);
     std::vector<rxd3::vec3> normals = calcNormals<rxd3>(positions);
@@ -787,25 +915,31 @@ public:
     for (int i = 0; i < normals.size(); i++) {
       Nn += m2::va::norm<rxd3::real>(normals[i]);
       NRxn += m2::va::norm<rxd3::real>(normals[i]);
-      positions[i] += 0.0005 * normals[i];
+      positions[i] += 0.01 * normals[i];
     }
 
     std::cout << "pos stage norm: " << Nn / double(rxA.size()) << " "
               << NRxn / double(rxB.size()) << std::endl;
 
     m2::ci::set_coordinates<rxd3>(positions, _meshGraph);
-
+    
 #endif
 
     splitEdges(_meshGraph, rxA, rxB);
     delete_degenerates(_meshGraph, rxA, rxB);
     collapsEdges(_meshGraph, rxA, rxB);
     delete_degenerates(_meshGraph, rxA, rxB);
-    // mergeTris(_meshGraph, rxA, rxB);
-    // delete_degenerates(_meshGraph, rxA, rxB);
+    mergeTris(_meshGraph, rxA, rxB);
+    delete_degenerates(_meshGraph, rxA, rxB);
     flipEdges(_meshGraph, rxA, rxB);
     delete_degenerates(_meshGraph, rxA, rxB);
     // get rid of some of this degenerate handling :P
+  }
+  
+  virtual void save(int frame) { 
+    std::stringstream ss;
+    ss << "rxdiff." << frame << ".obj";
+    m2::write_obj<rxd3>(*_meshGraph, ss.str());
   }
 
   virtual void onDraw(gg::Viewer &viewer) {
@@ -820,18 +954,19 @@ public:
   }
 
   struct {
-    double dt = 0.5;
-    double Du = 3e-5, Dv = 0.025;
-    double k = 0.061, F = 0.07;
-     //double k = 0.06, F = 0.082;
+    double dt = 2.0;
+    double Du = 3.0e-5, Dv = 0.025;
+    // double k = 0.061, F = 0.070; //pretty good one
+     double k = 0.061, F = 0.074; 
+    // double k = 0.06, F = 0.082;
     // double k = 0.06132758, F = 0.037;
-    // double k = 0.0542, F = 0.0223;
-    // double k = 0.056, F = 0.098; //interesting?
-    // double k = 0.0613, F = 0.06; // uskatish
+    //double k = 0.059, F = 0.03;
+    //double k = 0.056, F = 0.098; //interesting?
+    //double k = 0.0613, F = 0.06; // uskatish
     // double, k = 0.0550, F = 0.1020 //interesting?
     // double k = 0.0628, F = 0.0567;
     // double k = 0.061, F = 0.42;
-    // double k = 0.045, F = 0.01; // waves
+  //double k = 0.045, F = 0.01; // waves
 
   } rxParams;
 
