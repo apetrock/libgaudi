@@ -10,6 +10,7 @@
 #ifndef __LAPLACE_MAT__
 #define __LAPLACE_MAT__
 
+#include <cassert>
 #include <iomanip>
 #include <iostream>
 
@@ -120,6 +121,7 @@ public:
 
         u += K * (uj - ui);
       });
+
       L[i] = u / area;
 
       i++;

@@ -155,14 +155,16 @@ public:
     mod.centerGeometry(*_meshGraph);
 
     int N = 0;
-    double l0 = m2::ci::geometric_mean_length<rxd3>(_meshGraph);
-    l0 *= 0.5;
+    _integrator = new m2::surf_integrator<rxd3>(_meshGraph, 0.5, 3.0, 1.0);
 
-    _min = 0.5 * l0;
-    _max = 3.0 * _min;
+    _integrator->add_default_vertex_policy<typename rxd3::real>(
+        rxd3::vertex_index::RXA);
+    _integrator->add_default_vertex_policy<typename rxd3::real>(
+        rxd3::vertex_index::RXB);
+    _max = _integrator->_max;
+    _min = _integrator->_min;
 
-    std::cout << "avg length: " << l0 << std::endl;
-    std::cout << "--int rx" << std::endl;
+    std::cout << "--init rx" << std::endl;
 
     initRxMesh(_meshGraph);
 
@@ -270,42 +272,7 @@ public:
   }
 #endif
 
-  template <typename SPACE> void cacheBary(m2::surf<rxd3> *surf) {
-    M2_TYPEDEFS;
-    int i = 0;
-    for (auto f : surf->get_faces()) {
 
-      if (!surf->has_face(i++))
-        continue;
-
-      if (f->size() < 3) {
-        std::cout << " bary_size: " << std::endl;
-        std::cout << "   face: " << f->size() << std::endl;
-        std::cout << "   vert: " << f->fbegin()->vertex()->size() << std::endl;
-        std::cout << "   edge: " << f->fbegin()->edge() << std::endl;
-        f->print();
-        f->fbegin()->vertex()->print();
-        continue;
-      }
-
-      typename SPACE::coordinate_type c = m2::ci::center<SPACE>(f);
-      typename SPACE::coordinate_type l = m2::ci::point_to_bary<SPACE>(f, c);
-
-      assert(!isnan(l[0]));
-      assert(!isnan(l[1]));
-      assert(!isnan(l[2]));
-
-      int i = 0;
-      m2::for_each_face<SPACE>(f, [l, i](face_vertex_ptr fv) mutable {
-        typename SPACE::real li = 0.0;
-        if (i < 3)
-          li = l[i];
-        fv->template set<typename SPACE::real>(SPACE::face_vertex_index::BARY,
-                                               li);
-        i++;
-      });
-    }
-  }
 
   template <typename SPACE> void setRxColor(m2::surf<SPACE> *surf) {
     M2_TYPEDEFS;
@@ -364,249 +331,6 @@ public:
       v->template set<typename rxd3::real>(id, rx[i]);
       i++;
     }
-  }
-
-  template <typename SPACE>
-  void smoothMesh(m2::surf<SPACE> *surf, typename SPACE::real C, int N) {
-    using namespace m2;
-    M2_TYPEDEFS;
-    m2::area_laplacian<SPACE, coordinate_type> M(surf);
-    int i = 0;
-
-    for (int k = 0; k < N; k++) {
-      coordinate_array coords = m2::ci::get_coordinates<SPACE>(surf);
-      coordinate_array normals = m2::ci::get_vertex_normals<SPACE>(surf);
-      coordinate_array ncoords = M.mult(coords);
-
-      for (int i = 0; i < coords.size(); i++) {
-        coordinate_type cp = va::orthogonal_project(normals[i], ncoords[i]);
-
-        if (isnan(cp[0])) {
-          std::cout << "cp: " << cp.transpose() << std::endl;
-          std::cout << "no: " << normals[i].transpose() << std::endl;
-          std::cout << "nc: " << ncoords[i].transpose() << std::endl;
-          std::cout << " c: " << coords[i].transpose() << std::endl;
-        }
-
-        coords[i] = coords[i] + C * cp;
-        assert(!isnan(coords[i][0]));
-        assert(!isnan(coords[i][1]));
-        assert(!isnan(coords[i][2]));
-      }
-      m2::ci::set_coordinates<SPACE>(coords, surf);
-    }
-  }
-
-  template <typename SPACE>
-  void splitEdges(m2::surf<SPACE> *surf,
-                  const std::vector<typename SPACE::real> &rxA,
-                  const std::vector<typename SPACE::real> &rxB) {
-
-    using namespace m2;
-    M2_TYPEDEFS;
-
-    m2::edge_splitter<SPACE> splitter(surf, _max);
-
-    splitter.reset_flags();
-
-    edge_array edgesToSplit = splitter.get_edges_to_split();
-    std::cout << "calculating new vals" << std::endl;
-
-    std::vector<real> rxAv(edgesToSplit.size());
-    std::vector<real> rxBv(edgesToSplit.size());
-    std::vector<coordinate_type> coords(edgesToSplit.size());
-
-    int i = 0;
-    for (auto e : edgesToSplit) {
-
-      vertex_ptr v0 = e->v1()->vertex();
-      vertex_ptr v1 = e->v2()->vertex();
-
-      real rA0 = v0->template get<real>(SPACE::vertex_index::RXA);
-      real rB0 = v1->template get<real>(SPACE::vertex_index::RXB);
-      real rA1 = v0->template get<real>(SPACE::vertex_index::RXA);
-      real rB1 = v1->template get<real>(SPACE::vertex_index::RXB);
-
-      rxAv[i] = 0.5 * rA0 + 0.5 * rA1;
-      rxBv[i] = 0.5 * rB0 + 0.5 * rB1;
-      coordinate_type c0 = m2::ci::get_coordinate<SPACE>(v0);
-      coordinate_type c1 = m2::ci::get_coordinate<SPACE>(v1);
-
-      coords[i] = 0.5 * c0 + 0.5 * c1;
-
-      i++;
-    }
-
-    std::cout << "splitting: " << edgesToSplit.size() << " edges" << std::endl;
-    splitter.split_edges(edgesToSplit);
-
-    vertex_array vertices = surf->get_vertices();
-
-    std::cout << "assigning calc'd vertex values" << std::endl;
-
-    for (auto v : vertices) {
-      if (!v)
-        continue;
-      int topologyChangeId = v->topologyChangeId;
-      if (topologyChangeId < 0)
-        continue;
-      // std::cout << "split:" << topologyChangeId << " " <<
-      // v->position_in_set()
-      // << std::endl;
-      v->template set<typename rxd3::real>(rxd3::vertex_index::RXA,
-                                           rxAv[topologyChangeId]);
-      v->template set<typename rxd3::real>(rxd3::vertex_index::RXB,
-                                           rxBv[topologyChangeId]);
-      m2::ci::set_coordinate<SPACE>(coords[topologyChangeId], v);
-      v->topologyChangeId = -1;
-    }
-  }
-
-  template <typename SPACE>
-  void collapsEdges(m2::surf<SPACE> *surf,
-                    const std::vector<typename SPACE::real> &rxA,
-                    const std::vector<typename SPACE::real> &rxB) {
-
-    using namespace m2;
-    M2_TYPEDEFS;
-
-    m2::edge_collapser<SPACE> collapser(surf, _min);
-
-    collapser.reset_flags();
-
-    edge_array edgeToCollapse = collapser.get_edges_to_collapse();
-    std::cout << "calculating new vals" << std::endl;
-
-    std::vector<real> rxAv(edgeToCollapse.size());
-    std::vector<real> rxBv(edgeToCollapse.size());
-    std::vector<coordinate_type> coords(edgeToCollapse.size());
-
-    int i = 0;
-    for (auto e : edgeToCollapse) {
-
-      vertex_ptr v0 = e->v1()->vertex();
-      vertex_ptr v1 = e->v2()->vertex();
-      int i0 = v0->position_in_set();
-      int i1 = v1->position_in_set();
-
-      real rA0 = v0->template get<real>(SPACE::vertex_index::RXA);
-      real rB0 = v1->template get<real>(SPACE::vertex_index::RXB);
-      real rA1 = v0->template get<real>(SPACE::vertex_index::RXA);
-      real rB1 = v1->template get<real>(SPACE::vertex_index::RXB);
-      rxAv[i] = 0.5 * rA0 + 0.5 * rA1;
-      rxBv[i] = 0.5 * rB0 + 0.5 * rB1;
-      coordinate_type c0 = m2::ci::get_coordinate<SPACE>(v0);
-      coordinate_type c1 = m2::ci::get_coordinate<SPACE>(v1);
-
-      coords[i] = 0.5 * c0 + 0.5 * c1;
-
-      i++;
-    }
-
-    std::cout << "collapsing: " << edgeToCollapse.size() << " edges"
-              << std::endl;
-    collapser.collapse_edges(edgeToCollapse);
-
-    vertex_array vertices = surf->get_vertices();
-
-    std::cout << "assigning calc'd vertex values" << std::endl;
-
-    for (auto v : vertices) {
-      if (!v)
-        continue;
-      int topologyChangeId = v->topologyChangeId;
-      if (topologyChangeId < 0)
-        continue;
-      // std::cout << "split:" << topologyChangeId << " " <<
-      // v->position_in_set()
-      // << std::endl;
-      v->template set<typename rxd3::real>(rxd3::vertex_index::RXA,
-                                           rxAv[topologyChangeId]);
-      v->template set<typename rxd3::real>(rxd3::vertex_index::RXB,
-                                           rxBv[topologyChangeId]);
-      m2::ci::set_coordinate<SPACE>(coords[topologyChangeId], v);
-    }
-  }
-
-  template <typename SPACE>
-  void mergeTris(m2::surf<SPACE> *surf,
-                 const std::vector<typename SPACE::real> &rxA,
-                 const std::vector<typename SPACE::real> &rxB) {
-    using namespace m2;
-    M2_TYPEDEFS;
-    face_merger<SPACE> merger(surf, 2.0 * _min);
-    bool merging = true;
-
-    merging = merger.merge();
-  }
-
-  template <typename SPACE>
-  void mergeEdges(m2::surf<SPACE> *surf,
-                  const std::vector<typename SPACE::real> &rxA,
-                  const std::vector<typename SPACE::real> &rxB) {
-    using namespace m2;
-    M2_TYPEDEFS;
-    edge_merger<SPACE> merger(surf, 10.0*_min);
-    bool merging = true;
-
-    merging = merger.merge();
-  }
-
-  template <typename SPACE>
-  void flipEdges(m2::surf<SPACE> *surf,
-                 const std::vector<typename SPACE::real> &rxA,
-                 const std::vector<typename SPACE::real> &rxB) {
-    using namespace m2;
-    M2_TYPEDEFS;
-    edge_flipper<SPACE> flipper(surf);
-    flipper.flip();
-  }
-
-  template <typename SPACE>
-  void delete_degenerates(m2::surf<SPACE> *surf,
-                          const std::vector<typename SPACE::real> &rxA,
-                          const std::vector<typename SPACE::real> &rxB) {
-    using namespace m2;
-    M2_TYPEDEFS;
-    m2::construct<SPACE> cons;
-
-    bool testing = true;
-    int i;
-
-    while (testing) {
-      i = 0;
-      bool deleting = false;
-      for (auto e : _meshGraph->get_edges()) {
-        if (!_meshGraph->has_edge(i++))
-          continue;
-        // std::cout << i << std::endl;
-        deleting |= cons.delete_degenerates(_meshGraph, e);
-      }
-      testing = deleting;
-
-      i = 0;
-      deleting = false;
-      for (auto v : _meshGraph->get_vertices()) {
-        if (!_meshGraph->has_vertex(i++))
-          continue;
-        deleting = cons.delete_degenerates(_meshGraph, v);
-      }
-      testing != deleting;
-    }
-    
-    i = 0;
-    for (auto f : _meshGraph->get_faces()) {
-      if (!_meshGraph->has_face(i++))
-        continue;
-      face_vertex_ptr fv = f->get_front();
-      if (f->is_null() && fv->vertex()->size() > 1) {
-        surf->remove_face(f->position_in_set());
-        delete (fv);
-      }
-    }
-
-    m2::remesh<SPACE> rem;
-    rem.triangulate(_meshGraph);
   }
 
   template <typename SPACE>
@@ -777,95 +501,15 @@ public:
     std::uniform_real_distribution<> dist(0, 1);
     std::vector<typename SPACE::real> rxA(vertices.size());
     std::vector<typename SPACE::real> rxB(vertices.size());
-#if 0
-    int i = 0;
-    coordinate_array coords;
-    for (auto v : vertices) {
-      if (dist(e2) > 0.80) {
-        coords.push_back(ci::get_coordinate<SPACE>(v));
-      }
-      rxA[i] = 0.0;
-      rxB[i] = 0.0;
-      i++;
-    }
 
-    i = 0;
-    int N = coords.size();
-    for (auto cj : coords) {
-      i = 0;
-      for (auto v : vertices) {
-        coordinate_type ci = ci::get_coordinate<SPACE>(v);
-        coordinate_type dc = cj - ci;
-        real dist = va::norm(dc);
-        // std::cout << ci.transpose() << " " << cj.transpose() << std::endl;
-        real C = 1.0 * _max;
-        T d2 = dist * dist * dist;
-        T l2 = C * C * C;
-
-        T kappa = exp(-0.5 * d2 / l2);
-
-        rxB[i] += (kappa);
-        i++;
-      }
-    }
-    double mx = 0.0;
-    for (int i = 0; i < rxB.size(); i++) {
-      mx = std::max(mx, rxA[i]);
-      mx = std::max(mx, rxB[i]);
-    }
-    std::cout << " max: " << mx << std::endl;
-    for (int i = 0; i < rxB.size(); i++) {
-      rxB[i] /= mx;
-      rxA[i] += (1.0 - rxB[i]);
-    }
-
-    mx = 0.0;
-    for (int i = 0; i < rxB.size(); i++) {
-      mx = std::max(mx, rxA[i]);
-      mx = std::max(mx, rxB[i]);
-    }
-    std::cout << " max: " << mx << std::endl;
-
-#else
     int i = 0;
     coordinate_array coords;
     for (auto v : vertices) {
       rxA[i] = 1.0;
       rxB[i] = 0.0;
-      /*
-      if (dist(e2) > 0.85) {
-        coords.push_back(ci::get_coordinate<SPACE>(v));
-        typename SPACE::real t = dist(e2);
-        rxA[i] = 0.0;
-        rxB[i] = 1.0;
-      } else {
-        rxA[i] = 1.0;
-        rxB[i] = 0.0;
-      }
-      */
       i++;
     }
-/*
-    std::vector<typename SPACE::real> rxAn(rxA);
-    std::vector<typename SPACE::real> rxBn(rxB);
-    for (int k = 0; k < 3; k++) {
 
-      for (auto v : vertices) {
-        typename SPACE::real mx = 0.0;
-        m2::for_each_vertex<SPACE>(v, [&mx, &rxB](face_vertex_ptr fv) mutable {
-          int j = fv->next()->vertex()->position_in_set();
-          mx = max(rxB[j], mx);
-        });
-
-        int i = v->position_in_set();
-        rxBn[i] = mx;
-        rxAn[i] = 1.0 - mx;
-      }
-      std::swap(rxA, rxAn);
-      std::swap(rxB, rxBn);
-    }
-*/
-#endif
 
     setRx(surf, rxA, SPACE::vertex_index::RXA);
     setRx(surf, rxB, SPACE::vertex_index::RXB);
@@ -875,6 +519,8 @@ public:
 
   virtual void onAnimate(int frame) {
 
+    _integrator->integrate();
+    
     std::cout << "====== " << std::endl;
     std::cout << " verts: " << _meshGraph->get_vertices().size() << std::endl;
     std::cout << " edges: " << _meshGraph->get_edges().size() << std::endl;
@@ -885,11 +531,6 @@ public:
     _meshGraph->update_all();
     _meshGraph->reset_flags();
     _meshGraph->pack();
-    cacheBary<rxd3>(_meshGraph);
-
-    std::cout << "ugly smoothing " << std::endl;
-    smoothMesh(_meshGraph, 0.1, 10);
-    std::cout << "done " << std::endl;
     // gg::fillBuffer(_meshGraph, _obj);
     std::cout << "get rx " << std::endl;
     std::vector<rxd3::real> rxA = getRx(_meshGraph, rxd3::vertex_index::RXA);
@@ -946,13 +587,12 @@ public:
 
     setRx(_meshGraph, rxA, rxd3::vertex_index::RXA);
     setRx(_meshGraph, rxB, rxd3::vertex_index::RXB);
-    setRxColor(_meshGraph);
 
-    auto colors = getRxColors(_meshGraph);
     // mod.centerGeometry(*_meshGraph);
-    gg::fillBuffer(_meshGraph, _obj, colors);
 #endif
-
+    setRxColor(_meshGraph);
+    auto colors = getRxColors(_meshGraph);
+    gg::fillBuffer(_meshGraph, _obj, colors);
 #if 1
 
     std::vector<rxd3::vec3> positions =
@@ -979,18 +619,6 @@ public:
     m2::ci::set_coordinates<rxd3>(positions, _meshGraph);
 
 #endif
-
-    // mergeTris(_meshGraph, rxA, rxB);
-    mergeEdges(_meshGraph, rxA, rxB);
-
-    delete_degenerates(_meshGraph, rxA, rxB);
-    splitEdges(_meshGraph, rxA, rxB);
-    delete_degenerates(_meshGraph, rxA, rxB);
-    collapsEdges(_meshGraph, rxA, rxB);
-    delete_degenerates(_meshGraph, rxA, rxB);
-    flipEdges(_meshGraph, rxA, rxB);
-    delete_degenerates(_meshGraph, rxA, rxB);
-    // get rid of some of this degenerate handling :P
   }
 
   virtual void save(int frame) {
@@ -1037,6 +665,7 @@ private:
 
   gg::BufferObjectPtr _obj = NULL;
   m2::surf<rxd3> *_meshGraph;
+  m2::surf_integrator<rxd3> *_integrator;
 };
 
 std::string GetCurrentWorkingDir(void) {

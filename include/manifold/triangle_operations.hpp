@@ -10,11 +10,14 @@
 #define __M2TRIOPS__
 #include "m2Includes.h"
 #include "manifold/construct.hpp"
+#include "manifold/laplacian.hpp"
 #include "manifold/m2.hpp"
+#include "manifold/remesh.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <set>
+#include <vector>
 
 namespace m2 {
 
@@ -157,7 +160,7 @@ public:
       delete vb2;
 
     v1->update_all();
-    //obj->verify();
+    // obj->verify();
     return v1;
   }
 
@@ -311,6 +314,10 @@ public:
     std::cout << "done:" << std::endl;
   }
 
+  virtual edge_array get_edges() { return edge_array(); }
+  virtual bool op(edge_array edges) { return true; }
+  virtual bool op() { return true; }
+
   struct {
     bool operator()(edge_ptr ei, edge_ptr ej) {
       return (ci::length<SPACE>(ei) > ci::length<SPACE>(ej));
@@ -334,8 +341,8 @@ class edge_flipper : public triangle_operations_base<SPACE> {
 public:
   edge_flipper(const surf_ptr &surf)
       : triangle_operations_base<SPACE>(surf, 0.0) {}
-  
-  bool skip_edge(edge_ptr e){
+
+  bool skip_edge(edge_ptr e) {
     if (e->is_degenerate())
       return true;
 
@@ -354,7 +361,7 @@ public:
       return true;
   }
 
-  bool flip() {
+  virtual bool op() {
     // TIMER function//TIMER(__FUNCTION__);
     edge_array &edges = this->_surf->get_edges();
 
@@ -530,7 +537,7 @@ public:
       mesh->remove_vertex(vB1->position_in_set());
     }
 
-    //this->_surf->verify();
+    // this->_surf->verify();
   }
 
   void clipEar(edge_ptr e, surf_ptr mesh) {
@@ -784,7 +791,7 @@ public:
     return merging;
   }
 
-  bool merge() {
+  virtual bool op() {
     std::vector<edge_ptr> edges = this->_surf->get_edges();
     vector<line_pair> collected = get_edge_pairs_to_merge(edges);
     return this->merge_collected(collected, edges);
@@ -1666,7 +1673,7 @@ public:
     e21->flags[1] = 0;
   }
 
-  edge_array get_edges_to_split() {
+  virtual edge_array get_edges() {
     edge_array &edges = this->_surf->get_edges();
 
     edge_array edgesToSplit;
@@ -1693,7 +1700,7 @@ public:
     return edgesToSplit;
   }
 
-  bool split_edges(edge_array edgesToSplit) {
+  virtual bool op(edge_array edgesToSplit) {
     // TIMER function//TIMER(__FUNCTION__);
 
     std::cout << "splitting " << edgesToSplit.size() << " edges" << std::endl;
@@ -1716,7 +1723,7 @@ public:
   edge_collapser(const surf_ptr &surf, real max)
       : triangle_operations_base<SPACE>(surf, max) {}
 
-  edge_array get_edges_to_collapse() {
+  virtual edge_array get_edges() {
     edge_array &edges = this->_surf->get_edges();
 
     edge_array edgeToCollapse;
@@ -1766,7 +1773,7 @@ public:
     return edgeToCollapse;
   }
 
-  bool collapse_edges(edge_array edgeToCollapse) {
+  virtual bool op(edge_array edgeToCollapse) {
     // TIMER function//TIMER(__FUNCTION__);
     std::cout << " - deleting: " << edgeToCollapse.size() << " edges"
               << std::endl;
@@ -1783,6 +1790,294 @@ public:
     return edgeToCollapse.size() > 0;
   }
 };
+
+#endif
+#if 1
+template <typename SPACE>
+class degenerate_deleter : public triangle_operations_base<SPACE> {
+public:
+  M2_TYPEDEFS;
+
+  degenerate_deleter(const surf_ptr &surf)
+      : triangle_operations_base<SPACE>(surf, 0.0) {}
+
+  bool op() {
+    m2::construct<SPACE> cons;
+
+    bool testing = true;
+    int i;
+
+    while (testing) {
+      i = 0;
+      bool deleting = false;
+      for (auto e : this->_surf->get_edges()) {
+        if (!this->_surf->has_edge(i++))
+          continue;
+        // std::cout << i << std::endl;
+        deleting |= cons.delete_degenerates(this->_surf, e);
+      }
+      testing = deleting;
+
+      i = 0;
+      deleting = false;
+      for (auto v : this->_surf->get_vertices()) {
+        if (!this->_surf->has_vertex(i++))
+          continue;
+        deleting = cons.delete_degenerates(this->_surf, v);
+      }
+      testing |= deleting;
+    }
+
+    i = 0;
+    for (auto f : this->_surf->get_faces()) {
+      if (!this->_surf->has_face(i++))
+        continue;
+      face_vertex_ptr fv = f->get_front();
+      if (f->is_null() && fv->vertex()->size() > 1) {
+        this->_surf->remove_face(f->position_in_set());
+        delete (fv);
+      }
+    }
+
+    m2::remesh<SPACE> rem;
+    rem.triangulate(this->_surf);
+  }
+};
+#endif
+
+#if 1
+
+template <typename SPACE> class vertex_policy {
+public:
+  M2_TYPEDEFS;
+
+  vertex_policy(typename SPACE::vertex_index id) : _id(id) {}
+  virtual void calc(int i, vertex_ptr &v0, vertex_ptr &v1) = 0;
+  virtual void apply(int i, vertex_ptr &v) = 0;
+  virtual void reserve(long N) = 0;
+  virtual void clear() = 0;
+  typename SPACE::vertex_index _id;
+};
+
+template <typename SPACE, typename TYPE>
+class vertex_policy_t : public vertex_policy<SPACE> {
+public:
+  M2_TYPEDEFS;
+
+  vertex_policy_t(typename SPACE::vertex_index id) : vertex_policy<SPACE>(id) {
+    std::cout << " id: " << int(this->_id) << std::endl;
+  }
+
+  virtual void calc(int i, vertex_ptr &v0, vertex_ptr &v1) {
+    TYPE t0 = v0->template get<TYPE>(this->_id);
+    TYPE t1 = v1->template get<TYPE>(this->_id);
+    _vals[i] = 0.5 * t0 + 0.5 * t1;
+  }
+
+  virtual void apply(int i, vertex_ptr &v) {
+    v->template set<TYPE>(this->_id, _vals[i]);
+  }
+
+  virtual void reserve(long N) { _vals = std::vector<TYPE>(N); }
+
+  virtual void clear() { _vals.clear(); }
+
+  std::vector<TYPE> _vals;
+};
+
+template <typename SPACE> class surf_integrator {
+public:
+  M2_TYPEDEFS;
+
+  surf_integrator(const surf_ptr &surf, real min = 0.5, real max = 3.0,
+                  real merge = 1.0)
+      : _surf(surf) {
+
+    this->add_default_vertex_policy<coordinate_type>(
+        SPACE::vertex_index::COORDINATE);
+
+    double l0 = m2::ci::geometric_mean_length<SPACE>(_surf);
+    l0 *= 0.5;
+    std::cout << " integrator avg length: " << l0 << std::endl;
+    _min = min * l0;
+    _max = max * _min;
+    _merge = merge * min;
+  }
+
+  void add_vertex_policy(vertex_policy<SPACE> *policy) {
+    _policies.push_back(policy);
+  }
+
+  template <typename TYPE>
+  void add_default_vertex_policy(typename SPACE::vertex_index id) {
+    _policies.push_back(new vertex_policy_t<SPACE, TYPE>(id));
+  }
+
+  void cacheBary(m2::surf<SPACE> *surf) {
+    M2_TYPEDEFS;
+    int i = 0;
+    for (auto f : surf->get_faces()) {
+
+      if (!surf->has_face(i++))
+        continue;
+
+      if (f->size() < 3) {
+        std::cout << " bary_size: " << std::endl;
+        std::cout << "   face: " << f->size() << std::endl;
+        std::cout << "   vert: " << f->fbegin()->vertex()->size() << std::endl;
+        std::cout << "   edge: " << f->fbegin()->edge() << std::endl;
+        f->print();
+        f->fbegin()->vertex()->print();
+        continue;
+      }
+
+      typename SPACE::coordinate_type c = m2::ci::center<SPACE>(f);
+      typename SPACE::coordinate_type l = m2::ci::point_to_bary<SPACE>(f, c);
+
+      assert(!isnan(l[0]));
+      assert(!isnan(l[1]));
+      assert(!isnan(l[2]));
+
+      int i = 0;
+      m2::for_each_face<SPACE>(f, [l, i](face_vertex_ptr fv) mutable {
+        typename SPACE::real li = 0.0;
+        if (i < 3)
+          li = l[i];
+        fv->template set<typename SPACE::real>(SPACE::face_vertex_index::BARY,
+                                               li);
+        i++;
+      });
+    }
+  }
+
+  void smoothMesh(typename SPACE::real C, int N) {
+
+    this->cacheBary(this->_surf);
+
+    m2::area_laplacian<SPACE, coordinate_type> M(this->_surf);
+    int i = 0;
+
+    for (int k = 0; k < N; k++) {
+      coordinate_array coords = m2::ci::get_coordinates<SPACE>(this->_surf);
+      coordinate_array normals = m2::ci::get_vertex_normals<SPACE>(this->_surf);
+      coordinate_array ncoords = M.mult(coords);
+
+      for (int i = 0; i < coords.size(); i++) {
+        coordinate_type cp = va::orthogonal_project(normals[i], ncoords[i]);
+
+        if (isnan(cp[0])) {
+          std::cout << "cp: " << cp.transpose() << std::endl;
+          std::cout << "no: " << normals[i].transpose() << std::endl;
+          std::cout << "nc: " << ncoords[i].transpose() << std::endl;
+          std::cout << " c: " << coords[i].transpose() << std::endl;
+        }
+
+        coords[i] = coords[i] + C * cp;
+        assert(!isnan(coords[i][0]));
+        assert(!isnan(coords[i][1]));
+        assert(!isnan(coords[i][2]));
+      }
+      m2::ci::set_coordinates<SPACE>(coords, this->_surf);
+    }
+  }
+
+  void operate_edges(triangle_operations_base<SPACE> &op) {
+
+    op.reset_flags();
+    edge_array edges_to_op = op.get_edges();
+
+    std::cout << "calculating new vals" << std::endl;
+    for (auto p : _policies) {
+      p->reserve(edges_to_op.size());
+    }
+    int i = 0;
+    for (auto e : edges_to_op) {
+      vertex_ptr v0 = e->v1()->vertex();
+      vertex_ptr v1 = e->v2()->vertex();
+      for (auto p : _policies) {
+        p->calc(i, v0, v1);
+      }
+      i++;
+    }
+    std::cout << "op: " << edges_to_op.size() << " edges" << std::endl;
+
+    op.op(edges_to_op);
+
+    vertex_array vertices = _surf->get_vertices();
+
+    std::cout << "assigning calc'd vertex values" << std::endl;
+
+    for (auto v : vertices) {
+      if (!v)
+        continue;
+      int topologyChangeId = v->topologyChangeId;
+      if (topologyChangeId < 0)
+        continue;
+
+      for (auto p : _policies) {
+        p->apply(topologyChangeId, v);
+      }
+      v->topologyChangeId = -1;
+    }
+
+    for (auto p : _policies) {
+      p->clear();
+    }
+  }
+
+  void splitEdges() {
+
+    m2::edge_splitter<SPACE> splitter(_surf, _max);
+    this->operate_edges(splitter);
+  }
+
+  void collapsEdges() {
+    using namespace m2;
+    M2_TYPEDEFS;
+    std::cout << "-- collapsing --" << std::endl;
+    m2::edge_collapser<SPACE> collapser(_surf, _min);
+    this->operate_edges(collapser);
+  }
+
+  void mergeEdges() {
+    std::cout << "-- merging --" << std::endl;
+    edge_merger<SPACE> merger(this->_surf, _merge);
+    bool merging = true;
+    merging = merger.op();
+  }
+
+  void flipEdges() {
+    edge_flipper<SPACE> flipper(this->_surf);
+    flipper.op();
+  }
+
+  void delete_degenerates() {
+    m2::construct<SPACE> cons;
+    degenerate_deleter<SPACE> zapper(this->_surf);
+    zapper.op();
+  }
+
+  bool integrate() { // mergeTris(_meshGraph, rxA, rxB);
+
+    // mergeEdges();
+    delete_degenerates();
+    splitEdges();
+    delete_degenerates();
+    collapsEdges();
+    delete_degenerates();
+    flipEdges();
+    delete_degenerates();
+    std::cout << "ugly smoothing " << std::endl;
+    this->_surf->pack();
+    smoothMesh(0.01, 10);
+    std::cout << "done " << std::endl;
+  }
+  m2::surf<SPACE> *_surf;
+  real _min = 0.5, _max = 3.0, _merge = 1.0;
+
+  std::vector<vertex_policy<SPACE> *> _policies;
+};
+
 #endif
 }; // namespace m2
 #endif
