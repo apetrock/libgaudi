@@ -28,10 +28,10 @@ public:
     surf_ptr tcube = new surf_type();
     construct<SPACE> cons;
     subdivide<SPACE> subd;
-    face_vertex_ptr fv0 = tcube->insert_vertex()->front();
-    face_vertex_ptr fv1 = tcube->insert_vertex()->front();
-    face_vertex_ptr fv2 = tcube->insert_vertex()->front();
-    face_vertex_ptr fv3 = tcube->insert_vertex()->front();
+    face_vertex_ptr fv0 = tcube->insert_vertex()->get_front();
+    face_vertex_ptr fv1 = tcube->insert_vertex()->get_front();
+    face_vertex_ptr fv2 = tcube->insert_vertex()->get_front();
+    face_vertex_ptr fv3 = tcube->insert_vertex()->get_front();
     this->coordinate(coordinate_type(-x * 0.5, -y * 0.5, -z * 0.5), fv0);
     this->coordinate(coordinate_type(x * 0.5, -y * 0.5, -z * 0.5), fv1);
     this->coordinate(coordinate_type(x * 0.5, y * 0.5, -z * 0.5), fv2);
@@ -50,9 +50,9 @@ public:
     construct<SPACE> cons;
     subdivide<SPACE> subd;
 
-    face_vertex_ptr fv0 = out->insert_vertex()->front();
-    face_vertex_ptr fv1 = out->insert_vertex()->front();
-    face_vertex_ptr fv2 = out->insert_vertex()->front();
+    face_vertex_ptr fv0 = out->insert_vertex()->get_front();
+    face_vertex_ptr fv1 = out->insert_vertex()->get_front();
+    face_vertex_ptr fv2 = out->insert_vertex()->get_front();
     this->coordinate(coordinate_type(diff, 1.0, 0.0), fv0);
     this->coordinate(coordinate_type(diff, -0.6, -0.6), fv1);
     this->coordinate(coordinate_type(diff, -0.6, 0.6), fv2);
@@ -66,9 +66,9 @@ public:
     // cons.insert_edge(out, fv1->vnext(), fv0);
     // cons.insert_edge(out, fv0, fv2->vnext());
 
-    face_vertex_ptr fv3 = out->insert_vertex()->front();
-    face_vertex_ptr fv4 = out->insert_vertex()->front();
-    face_vertex_ptr fv5 = out->insert_vertex()->front();
+    face_vertex_ptr fv3 = out->insert_vertex()->get_front();
+    face_vertex_ptr fv4 = out->insert_vertex()->get_front();
+    face_vertex_ptr fv5 = out->insert_vertex()->get_front();
     this->coordinate(coordinate_type(-diff, 1.0, 0.0), fv3);
     this->coordinate(coordinate_type(-diff, -0.6, -0.6), fv4);
     this->coordinate(coordinate_type(-diff, -0.6, 0.6), fv5);

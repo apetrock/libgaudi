@@ -5,6 +5,11 @@
 
 namespace m2 {
 namespace ci {
+
+// pre declare function
+template <typename SPACE>
+typename SPACE::coordinate_type normal(typename surf<SPACE>::face_ptr f);
+
 ///////////////////////
 // get/set coordinates
 ///////////////////////
@@ -132,6 +137,20 @@ typename SPACE::real cotan(typename surf<SPACE>::edge_ptr e) {
   return cotan<SPACE>(fv1p) + cotan<SPACE>(fv2p);
 }
 
+template <typename SPACE>
+typename surf<SPACE>::line_type get_line(typename surf<SPACE>::edge_ptr e) {
+  using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
+  using line_type = typename surf<SPACE>::line_type;
+  using coordinate_type = typename SPACE::coordinate_type;
+
+  coordinate_type v0 = get_coordinate<SPACE>(e->v1());
+  coordinate_type v1 = get_coordinate<SPACE>(e->v2());
+  int i0 = e->v1()->vertex()->position_in_set();
+  int i1 = e->v2()->vertex()->position_in_set();
+
+  return line_type(v0, v1, i0, i1, e->position_in_set());
+}
+
 ///////////////////////
 // Face Operations
 ///////////////////////
@@ -142,6 +161,8 @@ typename SPACE::real area(typename surf<SPACE>::face_ptr f) {
   using coordinate_type = typename SPACE::coordinate_type;
 
   typename SPACE::real a = 0.0;
+  if (f->size() < 3)
+    return 0.0;
   coordinate_type c0 = get_coordinate<SPACE>(f->fbegin());
 
   for_each_face<SPACE>(f, [&a, c0](face_vertex_ptr itb) {
@@ -307,7 +328,7 @@ get_tris(typename surf<SPACE>::face_ptr f) {
 
 template <typename SPACE>
 typename SPACE::real norm(typename surf<SPACE>::vertex_ptr v0,
-                                       typename surf<SPACE>::vertex_ptr v1) {
+                          typename surf<SPACE>::vertex_ptr v1) {
   using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
   using coordinate_type = typename SPACE::coordinate_type;
   using T = typename SPACE::real;
@@ -348,7 +369,7 @@ typename SPACE::real area(typename surf<SPACE>::vertex_ptr v) {
 
 template <typename SPACE>
 typename SPACE::real thinness(typename surf<SPACE>::face_vertex_ptr v) {
-  //this isn't a terrible idea, but should get replaced with an SVD
+  // this isn't a terrible idea, but should get replaced with an SVD
   using vertex_ptr = typename surf<SPACE>::vertex_ptr;
   using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
   using T = typename SPACE::real;
@@ -412,6 +433,8 @@ typename SPACE::real geometric_mean_length(typename surf<SPACE>::surf_ptr s) {
   real sum = 0;
   int N = 0;
   for (auto e : s->get_edges()) {
+    if (!e)
+      continue;
     sum += log(m2::ci::length<SPACE>(e));
     N++;
   }
@@ -426,6 +449,8 @@ typename SPACE::real mean_length(typename surf<SPACE>::surf_ptr s) {
   int N = 0;
   for (auto e : s->get_edges()) {
     real dist = m2::ci::length<SPACE>(e);
+    if (!e)
+      continue;
     // std::cout << N << " " << dist << std::endl;
     if (dist == 0)
       std::cout << "zero" << std::endl;
@@ -494,7 +519,13 @@ get_coordinates(typename surf<SPACE>::surf_ptr s) {
   std::vector<typename SPACE::coordinate_type> coords;
 
   auto verts = s->get_vertices();
+  int i = 0;
   for (auto v : s->get_vertices()) {
+    if (!s->has_vertex(i++))
+      continue;
+    if (v->is_degenerate()) {
+      std::cout << " damno! " << v->size() << std::endl;
+    }
     coords.push_back(get_coordinate<SPACE>(v));
   }
 
@@ -508,7 +539,12 @@ void set_coordinates(const std::vector<typename SPACE::coordinate_type> &coords,
 
   auto verts = s->get_vertices();
   int i = 0;
+  int j = 0;
+
   for (auto c : coords) {
+    if (!s->has_vertex(j++))
+      continue;
+
     set_coordinate<SPACE>(c, verts[i++]);
   }
 }
@@ -538,6 +574,28 @@ get_vertex_normals(typename surf<SPACE>::surf_ptr s) {
 
   return coords;
 }
+
+template <typename SPACE>
+std::vector<typename surf<SPACE>::line_type>
+get_lines(std::vector<typename surf<SPACE>::edge_ptr> edges) {
+  using line_type = typename surf<SPACE>::line_type;
+  std::vector<line_type> lines;
+
+  for (auto e : edges) {
+    if (!e)
+      continue;
+    line_type line = m2::ci::get_line<SPACE>(e);
+    lines.push_back(line);
+  }
+  return lines;
+}
+
+template <typename SPACE>
+std::vector<typename surf<SPACE>::triangle_type>
+get_lines(typename surf<SPACE>::surf_ptr s) {
+  return get_lines(s->get_edges());
+}
+
 template <typename SPACE>
 std::vector<typename surf<SPACE>::triangle_type>
 get_tris(std::vector<typename surf<SPACE>::face_ptr> faces) {
@@ -545,16 +603,12 @@ get_tris(std::vector<typename surf<SPACE>::face_ptr> faces) {
   std::vector<triangle_type> tris;
 
   for (auto f : faces) {
+    if (!f)
+      continue;
     std::vector<triangle_type> ftris = m2::ci::get_tris<SPACE>(f);
     tris.insert(tris.end(), ftris.begin(), ftris.end());
   }
   return tris;
-}
-
-template <typename SPACE>
-std::vector<typename surf<SPACE>::triangle_type>
-get_tris(typename surf<SPACE>::surf_ptr s) {
-  return get_faces(s->get_faces());
 }
 
 } // namespace ci

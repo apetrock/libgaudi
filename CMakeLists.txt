@@ -26,11 +26,11 @@ set(CMAKE_CXX_FLAGS_TSAN
 
 # AddressSanitize
 set(CMAKE_C_FLAGS_ASAN
-    "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g3 -O1"
+    "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O0"
     CACHE STRING "Flags used by the C compiler during AddressSanitizer builds."
     FORCE)
 set(CMAKE_CXX_FLAGS_ASAN
-    "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g3 -O1"
+    "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O0"
     CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
     FORCE)
 

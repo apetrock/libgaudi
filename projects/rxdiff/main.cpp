@@ -1,5 +1,6 @@
 //#include "nanoguiincludes.h"
 
+#include <exception>
 #if defined(WIN32)
 #include <windows.h>
 #endif
@@ -184,9 +185,7 @@ public:
     return space3::vec3(r, g, b);
   }
 
-  space3::vec3 grey(double d) {
-    return space3::vec3(0.5, 0.5, 0.5);
-  }
+  space3::vec3 grey(double d) { return space3::vec3(0.5, 0.5, 0.5); }
 
   template <typename SPACE>
   void print_vecs(const std::vector<typename SPACE::vec3> &p0,
@@ -201,7 +200,7 @@ public:
       const auto &p = p0[i];
       const auto &a = p1[i];
 
-      auto pa = p + 0.05 * a / mx;
+      auto pa = p + 0.025 * a / mx;
       // std::cout << a.transpose() << std::endl;
       auto c = grey(m2::va::norm(a));
       _debugLines->pushLine(Vec4(p[0], p[1], p[2], 1.0),
@@ -223,6 +222,11 @@ public:
     std::cout << "calc_normal 1" << std::endl;
 
     for (int i = 0; i < faces.size(); i++) {
+      if (!_meshGraph->has_face(i))
+        continue;
+      if (faces[i]->size() < 3)
+        continue;
+
       std::vector<m2::face_triangle<SPACE>> tris =
           m2::ci::get_tris<SPACE>(faces[i]);
       real rxa = 0;
@@ -237,10 +241,10 @@ public:
         rxa += l * ra;
         rxb += l * rb;
       });
-      //rxa = rxa - 0.25;
-      //rxb = rxb - 0.25;
-      //rx[i] = rxa * rxb * rxb;
-      rx[i] = 3.0 * rxb - rxa;
+      // rxa = rxa - 0.25;
+      // rxb = rxb - 0.25;
+      // rx[i] = rxa * rxb * rxb;
+      rx[i] = 2.5 * rxb - rxa;
 
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
@@ -268,7 +272,22 @@ public:
 
   template <typename SPACE> void cacheBary(m2::surf<rxd3> *surf) {
     M2_TYPEDEFS;
+    int i = 0;
     for (auto f : surf->get_faces()) {
+
+      if (!surf->has_face(i++))
+        continue;
+
+      if (f->size() < 3) {
+        std::cout << " bary_size: " << std::endl;
+        std::cout << "   face: " << f->size() << std::endl;
+        std::cout << "   vert: " << f->fbegin()->vertex()->size() << std::endl;
+        std::cout << "   edge: " << f->fbegin()->edge() << std::endl;
+        f->print();
+        f->fbegin()->vertex()->print();
+        continue;
+      }
+
       typename SPACE::coordinate_type c = m2::ci::center<SPACE>(f);
       typename SPACE::coordinate_type l = m2::ci::point_to_bary<SPACE>(f, c);
 
@@ -304,7 +323,8 @@ public:
       typename SPACE::coordinate_type colorA(1.0, 0.0, 0.0);
       typename SPACE::coordinate_type colorB(0.0, 1.0, 0.0);
       typename SPACE::coordinate_type color = avgA * colorA + avgB * colorB;
-      //typename SPACE::coordinate_type color = (1.0 - k) * colorA + k * colorB;
+      // typename SPACE::coordinate_type color = (1.0 - k) * colorA + k *
+      // colorB;
 
       v->template set<typename SPACE::coordinate_type>(
           SPACE::vertex_index::COLOR, color);
@@ -401,14 +421,14 @@ public:
 
       vertex_ptr v0 = e->v1()->vertex();
       vertex_ptr v1 = e->v2()->vertex();
-      int i0 = v0->position_in_set();
-      int i1 = v1->position_in_set();
-      real rxA0 = rxA[i0];
-      real rxA1 = rxA[i1];
-      real rxB0 = rxB[i0];
-      real rxB1 = rxB[i1];
-      rxAv[i] = 0.5 * rxA0 + 0.5 * rxA1;
-      rxBv[i] = 0.5 * rxB0 + 0.5 * rxB1;
+
+      real rA0 = v0->template get<real>(SPACE::vertex_index::RXA);
+      real rB0 = v1->template get<real>(SPACE::vertex_index::RXB);
+      real rA1 = v0->template get<real>(SPACE::vertex_index::RXA);
+      real rB1 = v1->template get<real>(SPACE::vertex_index::RXB);
+
+      rxAv[i] = 0.5 * rA0 + 0.5 * rA1;
+      rxBv[i] = 0.5 * rB0 + 0.5 * rB1;
       coordinate_type c0 = m2::ci::get_coordinate<SPACE>(v0);
       coordinate_type c1 = m2::ci::get_coordinate<SPACE>(v1);
 
@@ -427,16 +447,18 @@ public:
     for (auto v : vertices) {
       if (!v)
         continue;
-      int topologyChange = v->topologyChange;
-      if (topologyChange < 0)
+      int topologyChangeId = v->topologyChangeId;
+      if (topologyChangeId < 0)
         continue;
-      // std::cout << "split:" << topologyChange << " " << v->position_in_set()
+      // std::cout << "split:" << topologyChangeId << " " <<
+      // v->position_in_set()
       // << std::endl;
       v->template set<typename rxd3::real>(rxd3::vertex_index::RXA,
-                                           rxAv[topologyChange]);
+                                           rxAv[topologyChangeId]);
       v->template set<typename rxd3::real>(rxd3::vertex_index::RXB,
-                                           rxBv[topologyChange]);
-      m2::ci::set_coordinate<SPACE>(coords[topologyChange], v);
+                                           rxBv[topologyChangeId]);
+      m2::ci::set_coordinate<SPACE>(coords[topologyChangeId], v);
+      v->topologyChangeId = -1;
     }
   }
 
@@ -466,12 +488,13 @@ public:
       vertex_ptr v1 = e->v2()->vertex();
       int i0 = v0->position_in_set();
       int i1 = v1->position_in_set();
-      real rxA0 = rxA[i0];
-      real rxA1 = rxA[i1];
-      real rxB0 = rxB[i0];
-      real rxB1 = rxB[i1];
-      rxAv[i] = 0.5 * rxA0 + 0.5 * rxA1;
-      rxBv[i] = 0.5 * rxB0 + 0.5 * rxB1;
+
+      real rA0 = v0->template get<real>(SPACE::vertex_index::RXA);
+      real rB0 = v1->template get<real>(SPACE::vertex_index::RXB);
+      real rA1 = v0->template get<real>(SPACE::vertex_index::RXA);
+      real rB1 = v1->template get<real>(SPACE::vertex_index::RXB);
+      rxAv[i] = 0.5 * rA0 + 0.5 * rA1;
+      rxBv[i] = 0.5 * rB0 + 0.5 * rB1;
       coordinate_type c0 = m2::ci::get_coordinate<SPACE>(v0);
       coordinate_type c1 = m2::ci::get_coordinate<SPACE>(v1);
 
@@ -491,16 +514,17 @@ public:
     for (auto v : vertices) {
       if (!v)
         continue;
-      int topologyChange = v->topologyChange;
-      if (topologyChange < 0)
+      int topologyChangeId = v->topologyChangeId;
+      if (topologyChangeId < 0)
         continue;
-      // std::cout << "split:" << topologyChange << " " << v->position_in_set()
+      // std::cout << "split:" << topologyChangeId << " " <<
+      // v->position_in_set()
       // << std::endl;
       v->template set<typename rxd3::real>(rxd3::vertex_index::RXA,
-                                           rxAv[topologyChange]);
+                                           rxAv[topologyChangeId]);
       v->template set<typename rxd3::real>(rxd3::vertex_index::RXB,
-                                           rxBv[topologyChange]);
-      m2::ci::set_coordinate<SPACE>(coords[topologyChange], v);
+                                           rxBv[topologyChangeId]);
+      m2::ci::set_coordinate<SPACE>(coords[topologyChangeId], v);
     }
   }
 
@@ -514,7 +538,18 @@ public:
     bool merging = true;
 
     merging = merger.merge();
-    
+  }
+
+  template <typename SPACE>
+  void mergeEdges(m2::surf<SPACE> *surf,
+                  const std::vector<typename SPACE::real> &rxA,
+                  const std::vector<typename SPACE::real> &rxB) {
+    using namespace m2;
+    M2_TYPEDEFS;
+    edge_merger<SPACE> merger(surf, 10.0*_min);
+    bool merging = true;
+
+    merging = merger.merge();
   }
 
   template <typename SPACE>
@@ -534,29 +569,49 @@ public:
     using namespace m2;
     M2_TYPEDEFS;
     m2::construct<SPACE> cons;
-    bool deleting = true;
 
-    while (deleting) {
-      for (auto v : _meshGraph->get_vertices()) {
-        deleting = cons.delete_degenerates(_meshGraph, v, 0.5 * _min * _min);
-      }
-      _meshGraph->pack();
+    bool testing = true;
+    int i;
+
+    while (testing) {
+      i = 0;
+      bool deleting = false;
       for (auto e : _meshGraph->get_edges()) {
-
+        if (!_meshGraph->has_edge(i++))
+          continue;
+        // std::cout << i << std::endl;
         deleting |= cons.delete_degenerates(_meshGraph, e);
       }
-      _meshGraph->pack();
+      testing = deleting;
+
+      i = 0;
+      deleting = false;
+      for (auto v : _meshGraph->get_vertices()) {
+        if (!_meshGraph->has_vertex(i++))
+          continue;
+        deleting = cons.delete_degenerates(_meshGraph, v);
+      }
+      testing != deleting;
+    }
+    
+    i = 0;
+    for (auto f : _meshGraph->get_faces()) {
+      if (!_meshGraph->has_face(i++))
+        continue;
+      face_vertex_ptr fv = f->get_front();
+      if (f->is_null() && fv->vertex()->size() > 1) {
+        surf->remove_face(f->position_in_set());
+        delete (fv);
+      }
     }
 
     m2::remesh<SPACE> rem;
     rem.triangulate(_meshGraph);
-    _meshGraph->pack();
   }
 
   template <typename SPACE>
   std::vector<typename SPACE::real>
-  diffuse(m2::surf<SPACE> *surf, 
-          const std::vector<typename SPACE::real> &u,
+  diffuse(m2::surf<SPACE> *surf, const std::vector<typename SPACE::real> &u,
           const std::vector<typename SPACE::real> &f, rxd3::real dt,
           typename SPACE::real C) {
 
@@ -592,9 +647,10 @@ public:
 
   template <typename SPACE>
   std::vector<typename SPACE::real>
-  diffuse_second_order(m2::surf<SPACE> *surf, const std::vector<typename SPACE::real> &u,
-          const std::vector<typename SPACE::real> &f, rxd3::real dt,
-          typename SPACE::real C) {
+  diffuse_second_order(m2::surf<SPACE> *surf,
+                       const std::vector<typename SPACE::real> &u,
+                       const std::vector<typename SPACE::real> &f,
+                       rxd3::real dt, typename SPACE::real C) {
 
     using namespace m2;
     M2_TYPEDEFS;
@@ -619,7 +675,7 @@ public:
 
     std::vector<typename SPACE::real> au_f = M.multM(u_f);
     std::vector<typename SPACE::real> lu = M.multC(u);
-    
+
     for (int i = 0; i < u_f.size(); i++) {
       au_f[i] += 0.5 * dt * C * lu[i];
     }
@@ -641,10 +697,8 @@ public:
     std::vector<real> K = curve();
 
     const auto [min, max] = std::minmax_element(K.begin(), K.end());
-    std::for_each(K.begin(), K.end(), [min, max](auto & e){
-      e = (e - *min) / (*max - *min);
-    });
-
+    std::for_each(K.begin(), K.end(),
+                  [min, max](auto &e) { e = (e - *min) / (*max - *min); });
 
     std::random_device rd;
     std::mt19937 e2(rd());
@@ -654,7 +708,7 @@ public:
     auto vertices = surf->get_vertices();
     coordinate_array coords;
     for (auto v : vertices) {
-      if (dist(e2) > 0.95 && K[i] < 0.1 && rxA[i] > 0.95) {
+      if (dist(e2) > 0.97 && K[i] < 0.1 && rxA[i] > 0.97) {
         coords.push_back(ci::get_coordinate<SPACE>(v));
       }
       i++;
@@ -699,15 +753,15 @@ public:
     }
 
     for (auto k : K) {
-      if(k< 1e-6) continue; 
+      if(k< 1e-6) continue;
       //std::cout << k << std::endl;
       real k2 = k * k + 0.1;
       //k2 = std::min(k2, real(10.0));
       //k2 = std::max(k2, real(0.1));
 
-      rxB[i] += rxA[i] *  C / k2 * dist(e2); //if low curvature and lots of A add some B
-      rxA[i] += rxB[i] *  C / k2 * dist(e2); //if high curvature and lots of B add some A
-      i++;
+      rxB[i] += rxA[i] *  C / k2 * dist(e2); //if low curvature and lots of A
+    add some B rxA[i] += rxB[i] *  C / k2 * dist(e2); //if high curvature and
+    lots of B add some A i++;
     }
     */
   }
@@ -834,12 +888,16 @@ public:
     cacheBary<rxd3>(_meshGraph);
 
     std::cout << "ugly smoothing " << std::endl;
-    smoothMesh(_meshGraph, 0.01, 10);
+    smoothMesh(_meshGraph, 0.1, 10);
+    std::cout << "done " << std::endl;
     // gg::fillBuffer(_meshGraph, _obj);
+    std::cout << "get rx " << std::endl;
     std::vector<rxd3::real> rxA = getRx(_meshGraph, rxd3::vertex_index::RXA);
     std::vector<rxd3::real> rxB = getRx(_meshGraph, rxd3::vertex_index::RXB);
     std::vector<rxd3::real> fA(rxA);
     std::vector<rxd3::real> fB(rxB);
+
+    std::cout << "curve to rx " << std::endl;
 
     curvature_to_rx(_meshGraph, rxA, rxB);
 
@@ -870,7 +928,6 @@ public:
       fB[i] = vp;
     }
 
-
     rxA = diffuse_second_order<rxd3>(_meshGraph, rxA, fA, dt, Du);
     rxB = diffuse_second_order<rxd3>(_meshGraph, rxB, fB, dt, Dv);
 
@@ -896,8 +953,6 @@ public:
     gg::fillBuffer(_meshGraph, _obj, colors);
 #endif
 
-
-
 #if 1
 
     std::vector<rxd3::vec3> positions =
@@ -915,28 +970,31 @@ public:
     for (int i = 0; i < normals.size(); i++) {
       Nn += m2::va::norm<rxd3::real>(normals[i]);
       NRxn += m2::va::norm<rxd3::real>(normals[i]);
-      positions[i] += 0.01 * normals[i];
+      positions[i] += 0.005 * normals[i];
     }
 
     std::cout << "pos stage norm: " << Nn / double(rxA.size()) << " "
               << NRxn / double(rxB.size()) << std::endl;
 
     m2::ci::set_coordinates<rxd3>(positions, _meshGraph);
-    
+
 #endif
 
+    // mergeTris(_meshGraph, rxA, rxB);
+    mergeEdges(_meshGraph, rxA, rxB);
+
+    delete_degenerates(_meshGraph, rxA, rxB);
     splitEdges(_meshGraph, rxA, rxB);
     delete_degenerates(_meshGraph, rxA, rxB);
     collapsEdges(_meshGraph, rxA, rxB);
-    delete_degenerates(_meshGraph, rxA, rxB);
-    mergeTris(_meshGraph, rxA, rxB);
     delete_degenerates(_meshGraph, rxA, rxB);
     flipEdges(_meshGraph, rxA, rxB);
     delete_degenerates(_meshGraph, rxA, rxB);
     // get rid of some of this degenerate handling :P
   }
-  
-  virtual void save(int frame) { 
+
+  virtual void save(int frame) {
+    _meshGraph->pack();
     std::stringstream ss;
     ss << "rxdiff." << frame << ".obj";
     m2::write_obj<rxd3>(*_meshGraph, ss.str());
@@ -955,18 +1013,18 @@ public:
 
   struct {
     double dt = 2.0;
-    double Du = 3.0e-5, Dv = 0.025;
+    double Du = 1.0e-4, Dv = 0.025;
     // double k = 0.061, F = 0.070; //pretty good one
-     double k = 0.061, F = 0.074; 
+    double k = 0.061, F = 0.074;
     // double k = 0.06, F = 0.082;
     // double k = 0.06132758, F = 0.037;
-    //double k = 0.059, F = 0.03;
-    //double k = 0.056, F = 0.098; //interesting?
-    //double k = 0.0613, F = 0.06; // uskatish
+    // double k = 0.059, F = 0.03;
+    // double k = 0.056, F = 0.098; //interesting?
+    // double k = 0.0613, F = 0.06; // uskatish
     // double, k = 0.0550, F = 0.1020 //interesting?
     // double k = 0.0628, F = 0.0567;
     // double k = 0.061, F = 0.42;
-  //double k = 0.045, F = 0.01; // waves
+    // double k = 0.045, F = 0.01; // waves
 
   } rxParams;
 
@@ -1014,7 +1072,7 @@ public:
     float Kf = 10.0;
 
     Slider *slider0 = new Slider(window);
-    slider0->setValue(pow(this->scene->rxParams.Du, 1.0/Kd));
+    slider0->setValue(pow(this->scene->rxParams.Du, 1.0 / Kd));
     slider0->setFixedWidth(w);
 
     Slider *slider2 = new Slider(window);
@@ -1030,7 +1088,7 @@ public:
     slider4->setFixedWidth(w);
 
     slider0->setCallback(
-        [this, Kd](float value) { this->scene->rxParams.Du = pow(value,Kd); });
+        [this, Kd](float value) { this->scene->rxParams.Du = pow(value, Kd); });
 
     slider2->setCallback(
         [this, Kf](float value) { this->scene->rxParams.F = value / Kf; });

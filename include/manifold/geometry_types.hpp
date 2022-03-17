@@ -131,6 +131,52 @@ bounding_box<T, CTYPE> makeBoxMinMax(const CTYPE &min, const CTYPE &max) {
   return bb;
 }
 
+template <typename T, typename CTYPE> struct line {
+
+public:
+  static const int size = 3;
+  CTYPE p[2];
+
+  line(){};
+
+  line(CTYPE p0, CTYPE p1) {
+    p[0] = p0;
+    p[1] = p1;
+  };
+
+  CTYPE &operator[](int i) { return p[i]; }
+  CTYPE operator[](int i) const { return p[i]; }
+
+  CTYPE center() const { return 0.5 * (p[0] + p[1]); }
+
+  T distanceFrom(CTYPE point) { return distance_from_line(p, point); }
+
+  T avgSqdDist(const line &B) const {
+
+    const CTYPE &ca0 = this->p[0];
+    const CTYPE &ca1 = this->p[1];
+    const CTYPE &cb0 = B.p[0];
+    const CTYPE &cb1 = B.p[1];
+    T d0 = 1.0 / 2.0 *
+           ((cb0 - ca0).squaredNorm() + (cb1 - ca1).squaredNorm());
+    T d1 = 1.0 / 2.0 *
+           ((cb0 - ca1).squaredNorm() + (cb1 - ca0).squaredNorm());
+
+    return min(d0, d1);
+  };
+
+  bounding_box<T, CTYPE> bbox() {
+    CTYPE min, max;
+    this->getExtents(min, max);
+    return makeBoxMinMax<T, CTYPE>(min, max);
+  }
+
+  void getExtents(CTYPE &min, CTYPE &max) {
+    min = m2::va::min(p[0], p[1]);
+    max = m2::va::max(p[0], p[1]);
+  }
+};
+
 template <typename T, typename CTYPE> struct triangle {
 
 public:
@@ -269,27 +315,6 @@ public:
     glVertex3d(p[0] + dt*v[0],
                p[1] + dt*v[1],
                p[2] + dt*v[2]);
-    glEnd();
-    }
-*/
-};
-
-template <typename T, typename CTYPE> struct line {
-  CTYPE p[2];
-  line(CTYPE p0, CTYPE p1) {
-    p[0] = p0;
-    p[1] = p1;
-  };
-
-  CTYPE &operator[](int i) { return p[i]; }
-  CTYPE operator[](int i) const { return p[i]; }
-
-  CTYPE center() { return 0.5 * (p[0], p[1]); }
-  /*
-  void draw(){
-    glBegin(GL_LINE);
-    glVertex3d(p[0][0],p[0][1],p[0][2]);
-    glVertex3d(p[1][0],p[1][1],p[1][2]);
     glEnd();
     }
 */

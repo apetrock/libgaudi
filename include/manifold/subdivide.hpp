@@ -273,15 +273,13 @@ public:
           fv3->vertex() = vprev;
           fv3->face() = nf;
           vprev->add_face_vertex(fv3);
-          fv0->next() = fv1;
-          fv1->prev() = fv0;
-          fv1->next() = fv2;
-          fv2->prev() = fv1;
-          fv2->next() = fv3;
-          fv3->prev() = fv2;
-          fv3->next() = fv0;
-          fv0->prev() = fv3;
-          nf->fbegin() = fv0;
+          fv0->set_next(fv1);
+          fv1->set_next(fv2);
+          
+          fv2->set_next(fv3);
+          
+          fv3->set_next(fv0);
+          nf->set_front(fv0);
           // now lets find our edges: e0 and e3 come from the edge pile
           // we need to allocate our interior vertices e1 and e2
           // edges out:
@@ -333,8 +331,6 @@ public:
           }
 
           fv3->edge() = e3;
-          nf->size() = 4;
-
           nf->position_in_set() = fcntr;
           nfaces[fcntr] = nf;
           j++;

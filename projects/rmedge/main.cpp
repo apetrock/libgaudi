@@ -116,6 +116,7 @@ public:
     std::cout << "merging faces: " << face0 << " " << face1 << std::endl;
 
     std::vector<face_ptr> faces = surf->get_faces();
+    faces[0]->print();
     std::vector<triangle_pair> pairs;
     pairs.push_back(triangle_pair(m2::ci::get_tris<SPACE>(faces[face0])[0],
                                   m2::ci::get_tris<SPACE>(faces[face1])[0]));
@@ -124,7 +125,16 @@ public:
     merger.merge_collected(pairs, faces);
   }
 
-  void testMergeBridgedFaces() { test_merge<space3>(_meshGraph, 0, 1); }
+  void testMergeBridgedFaces0() { 
+    test_merge<space3>(_meshGraph, 0, 1);
+    //test_merge<space3>(_meshGraph, 0, 1);
+  }
+
+  void testMergeBridgedFaces1() { test_merge<space3>(_meshGraph, 0, 3); }
+  void testMergeBridgedFaces2() { test_merge<space3>(_meshGraph, 2, 3); }
+  void testMergeBridgedFaces3() { test_merge<space3>(_meshGraph, 4, 6); }
+  void testMergeSharedEdgeFaces() { test_merge<space3>(_meshGraph, 1, 3); }
+
   void testMergeSharedVertex() {
     m2::subdivide<space3> sub;
     _meshGraph = &sub.subdivide_control(*_meshGraph);
@@ -134,14 +144,19 @@ public:
 
     test_merge<space3>(_meshGraph, 1, 55);
 
-    //_meshGraph = &sub.subdivide_control(*_meshGraph);
-    //rem.triangulate(_meshGraph);
+    /*
+    _meshGraph = &sub.subdivide_control(*_meshGraph);
+    rem.triangulate(_meshGraph);
+    */
   }
 
   void test() {
-    testMergeBridgedFaces();
-
-    //testMergeSharedVertex();
+    //testMergeBridgedFaces0();
+    //testMergeBridgedFaces1();
+    //testMergeBridgedFaces2();
+    //testMergeBridgedFaces3();
+    //testMergeSharedEdgeFaces();
+    testMergeSharedVertex();
 
     gg::fillBuffer(_meshGraph, _obj);
   }
@@ -149,20 +164,21 @@ public:
   template <typename SPACE>
   void fillWireFrame(m2::surf<space3> *surf, gg::DebugBufferPtr debugLines) {
     M2_TYPEDEFS;
-    edge_ptr e0 = surf->get_edges()[0];
+    return;
+    edge_ptr e0 = surf->get_edges()[10];
     int f0 = e0->v1()->face()->position_in_set();
-    int f1 =
-        e0->v1()->vnext()->vnext()->vnext()->vnext()->face()->position_in_set();
+    int f1 = e0->v1()->vnext()->face()->position_in_set();
 
     std::cout << "f0: " << f0 << std::endl;
     std::cout << "f1: " << f1 << std::endl;
-
+    f0 = 1;
+    f1 = 2;
     for (auto e : surf->get_edges()) {
       if (!e)
         continue;
 
       std::cout << e->v1()->edge()->position_in_set() << " "
-                << e->v1()->vertex()->calc_size() << " "
+                << e->v1()->vertex()->size() << " "
                 << e->v1()->face()->position_in_set() << " "
                 << e->v2()->face()->position_in_set() << std::endl;
       // test 0-6 is good test;
@@ -174,7 +190,7 @@ public:
       }
 
       if (e->v1()->face()->position_in_set() == f1 ||
-          e->v2()->face()->position_in_set() ==f1) {
+          e->v2()->face()->position_in_set() == f1) {
         col = Vec4(0.0, 0.0, 1.0, 1.0);
       }
 

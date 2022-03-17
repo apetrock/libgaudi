@@ -351,7 +351,7 @@ public:
       edge_ptr ne0 = nedges[ite->edge()->position_in_set()];
       fv0->edge() = ne0;
       fv0->face() = nf;
-      nf->fbegin() = fv0;
+      nf->set_front(fv0);
       if (!ne0->v1())
         ne0->v1() = fv0;
       else

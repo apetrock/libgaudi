@@ -89,7 +89,7 @@ public:
 
       in->push_vertex(Vertex1);
     }
-    nf->fbegin() = nfva[0];
+    nf->set_front(nfva[0]);
     nf->update_all();
     in->push_face(nf);
     in->remove_vertex(v->position_in_set());
@@ -185,7 +185,7 @@ public:
         Vertex1->add_face_vertex(newFacei1);
         VertexN->add_face_vertex(newFacei2);
 
-        nfi->fbegin() = newFacei0;
+        nfi->set_front(newFacei0);
         nfi->update_all();
         in->push_face(nfi);
         in->push_vertex(Vertex0);
@@ -200,7 +200,7 @@ public:
         Vertex0->add_face_vertex(oldFace0);
       }
     }
-    nf->fbegin() = nfva[0];
+    nf->set_front(nfva[0]);
     nf->update_all();
     in->push_face(nf);
     in->remove_vertex(v->position_in_set());
@@ -295,7 +295,7 @@ public:
         Vertex1->add_face_vertex(newFacei1);
         VertexN->add_face_vertex(newFacei2);
 
-        nfi->fbegin() = newFacei0;
+        nfi->set_front(newFacei0);
         nfi->update_all();
         in->push_face(nfi);
         in->push_vertex(Vertex0);
@@ -310,7 +310,7 @@ public:
         Vertex0->add_face_vertex(oldFace0);
       }
     }
-    nf->fbegin() = nfva[0];
+    nf->set_front(nfva[0]);
     nf->update_all();
     in->push_face(nf);
     in->remove_vertex(v->position_in_set());

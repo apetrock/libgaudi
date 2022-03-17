@@ -38,14 +38,13 @@
 #include <memory>
 
 #include "geometry_types.hpp"
+#include "trace.hpp"
 #include "vec_addendum.h"
-
 // this typedef list is ugly but useful!!!
 #define M2_TYPEDEFS                                                            \
   typedef typename SPACE::real real;                                           \
   typedef typename SPACE::complex complex;                                     \
   typedef typename SPACE::coordinate_type coordinate_type;                     \
-  typedef typename SPACE::line_type line_type;                                 \
   typedef typename SPACE::swept_point_type swept_point_type;                   \
   typedef typename SPACE::swept_triangle_type swept_triangle_type;             \
   typedef typename SPACE::box_type box_type;                                   \
@@ -53,6 +52,8 @@
   typedef typename SPACE::mat3 mat3;                                           \
   typedef typename SPACE::mat4 mat4;                                           \
   typedef typename SPACE::double_type T;                                       \
+  typedef m2::edge_line<SPACE> line_type;                                      \
+  typedef m2::edge_line_pair<SPACE> line_pair;                                 \
   typedef m2::face_triangle<SPACE> triangle_type;                              \
   typedef m2::face_triangle_pair<SPACE> triangle_pair;                         \
                                                                                \
@@ -102,10 +103,85 @@ using namespace std;
 namespace m2 {
 
 template <typename SPACE> class surf;
-
+template <typename SPACE> struct edge_line;
+template <typename SPACE> struct edge_line_pair;
 template <typename SPACE> struct face_triangle;
-
 template <typename SPACE> struct face_triangle_pair;
+
+template <typename SPACE> struct edge_line : SPACE::line_type {
+
+public:
+  M2_TYPEDEFS;
+
+  int indices[2];
+  int edgeId;
+  edge_line() {
+    indices[0] = -1;
+    indices[1] = -1;
+    edgeId = -1;
+  };
+
+  edge_line(coordinate_type p0, coordinate_type p1, int i0, int i1, int eid) {
+    this->p[0] = p0;
+    this->p[1] = p1;
+    indices[0] = i0;
+    indices[1] = i1;
+    edgeId = eid;
+  };
+
+  T dist(const edge_line &that) const {
+    T d = edgeId == that.edgeId ? std::numeric_limits<T>::infinity()
+                                : sqrt(this->avgSqdDist(that));
+
+    return d;
+  };
+};
+
+template <typename SPACE>
+inline bool operator==(const edge_line<SPACE> &lhs,
+                       const edge_line<SPACE> &rhs) {
+  return (lhs.indices[0] == rhs.indices[0] &&
+          lhs.indices[1] == rhs.indices[1] && lhs.edgeId == rhs.edgeId);
+}
+
+template <typename SPACE> struct edge_line_pair {
+public:
+  M2_TYPEDEFS;
+
+  line_type A;
+  line_type B;
+  mutable T _norm = -1;
+  mutable T _angle = -3;
+
+  edge_line_pair(const line_type &a, const line_type &b) {
+    A = a;
+    B = b;
+  };
+
+  T dist() const {
+    if (A.edgeId == B.edgeId)
+      return std::numeric_limits<T>::infinity();
+
+    if (_norm < 0)
+      _norm = A.dist(B);
+
+    return _norm;
+  };
+};
+
+template <typename SPACE>
+inline bool operator==(const edge_line_pair<SPACE> &lhs,
+                       const edge_line_pair<SPACE> &rhs) {
+  return (lhs.A == rhs.A && lhs.B == rhs.B) ||
+         (lhs.A == rhs.B && lhs.B == rhs.A);
+}
+
+template <typename SPACE>
+inline bool operator<(const edge_line_pair<SPACE> &lhs,
+                      const edge_line_pair<SPACE> &rhs) {
+  return lhs.dist() < rhs.dist();
+  // return lhs.angle() < rhs.angle();
+}
 
 template <typename SPACE> struct face_triangle : SPACE::triangle_type {
 
@@ -256,7 +332,9 @@ public:
     data_node() { flags.reset(); }
 
     data_node(const data_node &other)
-        : _ddata(other._ddata), _size(other._size), flags(other.flags) {}
+        : _ddata(other._ddata), _size(other._size), flags(other.flags) {
+      this->set_dirty();
+    }
 
     std::any &operator[](ITYPE i) { return _ddata[static_cast<int>(i)]; }
 
@@ -264,10 +342,15 @@ public:
       return _ddata[static_cast<int>(i)];
     }
 
-    int size() const { return _size; }
+    int data_size() const { return _size; }
 
     template <typename TYPE> TYPE get(const ITYPE &i) {
-      return std::any_cast<TYPE>(_ddata[static_cast<int>(i)]);
+      int ii = static_cast<int>(i);
+
+      if (!_ddata[ii].has_value()) {
+        _ddata[ii] = z::zero<TYPE>();
+      }
+      return std::any_cast<TYPE>(_ddata[ii]);
     }
 
     template <typename TYPE> void set(const ITYPE &i, const TYPE &d) {
@@ -282,15 +365,29 @@ public:
     void get_dirty(const ITYPE &i) { return dirty[static_cast<int>(i)]; }
 
     void set_dirty() {
-      for (int i = 0; i < size(); i++) {
+      for (int i = 0; i < data_size(); i++) {
         dirty[i] = true;
       }
     }
 
+    virtual void set_changed() {
+      this->set_dirty();
+      this->_topology_changed = true;
+    }
+
+    virtual void _update() = 0;
+
+    virtual void update() {
+      if (_topology_changed)
+        this->_update();
+      _topology_changed = false;
+    }
+
     std::bitset<8> flags;
-    int topologyChange = -1; // needs to be changed to stored value
+    int topologyChangeId = -1; // needs to be changed to stored value
 
   private:
+    bool _topology_changed = false;
     std::any _ddata[static_cast<int>(ITYPE::MAXINDEX)];
     bool dirty[static_cast<int>(ITYPE::MAXINDEX)];
     int _size = static_cast<int>(ITYPE::MAXINDEX);
@@ -334,8 +431,13 @@ public:
     face_vertex_ptr v1() const { return fv1; }
     face_vertex_ptr &v2() { return fv2; }
     face_vertex_ptr v2() const { return fv2; }
+    virtual void _update() {}
 
     face_vertex_ptr &other(const face_vertex_ptr &cv) {
+      // std::cout << " cv " << cv << std::endl;
+      // std::cout << " fv1 " << fv1 << std::endl;
+      // std::cout << " fv2 " << fv2 << std::endl;
+
       if (cv == fv1) {
         return fv2;
       } else
@@ -356,6 +458,14 @@ public:
         return fv1;
     }
 
+    virtual void set_changed() {
+      data_node<typename SPACE::edge_index>::set_changed();
+      if (this->v1())
+        this->v1()->set_changed();
+      if (this->v2())
+        this->v2()->set_changed();
+    }
+
     void set(face_vertex_ptr nfv1, face_vertex_ptr nfv2) {
       // lets be a little careful and make sure we maintain order.
       // its probably not a problem, but...
@@ -370,6 +480,8 @@ public:
 
       fv1 = nfv1;
       fv2 = nfv2;
+
+      this->set_changed();
       nfv1->edge() = this;
       nfv2->edge() = this;
     }
@@ -380,6 +492,8 @@ public:
       else
         fv2 = new_vertex;
       new_vertex->edge() = this;
+
+      this->set_changed();
     }
 
     void set_other(face_vertex_ptr this_vertex, face_vertex_ptr new_vertex) {
@@ -388,6 +502,8 @@ public:
       else
         fv1 = new_vertex;
       new_vertex->edge() = this;
+
+      this->set_changed();
     }
 
     void set_other(face_ptr cv, face_vertex_ptr ov) {
@@ -395,6 +511,23 @@ public:
         return fv2 = ov;
       } else
         fv1 = ov;
+
+      this->set_changed();
+    }
+
+    void set_empty(face_vertex_ptr c) {
+      if (fv1) {
+        fv2 = c;
+      } else
+        fv1 = c;
+      this->set_changed();
+    }
+
+    void swap_corners() {
+      face_vertex_ptr fv1t = this->fv1;
+      face_vertex_ptr fv2t = this->fv2;
+      this->fv1 = fv2t;
+      this->fv2 = fv1t;
     }
 
     void update_vertex(face_vertex_ptr old_, face_vertex_ptr new_) {
@@ -413,7 +546,17 @@ public:
       }
     }
 
+    void print() {
+      std::cout << "e:" << this->position_in_set() << std::endl;
+      std::cout << " -fvs:" << this->v1() << " " << this->v2() << std::endl;
+      std::cout << " -fs:" << this->v1()->face()->position_in_set() << " "
+                << this->v2()->face()->position_in_set() << std::endl;
+      std::cout << " -vs:" << this->v1()->vertex()->position_in_set() << " "
+                << this->v2()->vertex()->position_in_set() << std::endl;
+    };
+
     void verify() {
+      this->update();
       assert(fv1->edge() == this);
       assert(fv2->edge() == this);
     };
@@ -430,6 +573,36 @@ public:
         return 2;
       else
         return 0;
+    }
+
+    bool is_degenerate() {
+      face_vertex_ptr fv0 = this->v1();
+      face_vertex_ptr fv1 = this->v2();
+      vertex_ptr v00 = fv0->vertex();
+      vertex_ptr v01 = fv0->next()->vertex();
+      vertex_ptr v02 = fv0->prev()->vertex();
+
+      vertex_ptr v10 = fv1->vertex();
+      vertex_ptr v11 = fv1->next()->vertex();
+      vertex_ptr v12 = fv1->prev()->vertex();
+      // test these suckers with face vertices, more robusta?
+      if (v00 == v10) {
+        return true;
+      }
+
+      if (v00 == v01 || v00 == v02) {
+        return true;
+      }
+
+      if (v10 == v11 || v10 == v12) {
+        return true;
+      }
+
+      if (fv0->face()->is_degenerate() || fv1->face()->is_degenerate()) {
+        return true;
+      }
+
+      return false;
     }
 
     face_vertex_ptr fv1;
@@ -474,11 +647,9 @@ public:
       nfv->vertex() = &pnt;
       nfv->face() = this;
 
-      nfv->prev() = nfv;
-      nfv->next() = nfv;
-
+      nfv->set_next(nfv);
       fHead = nfv;
-      this->renumber_vertex_IDs();
+      this->update_all();
 
       flag = 0;
 
@@ -498,19 +669,11 @@ public:
       face_vertex_ptr nfv = new face_vertex_type();
       mSize = 1;
       mArea = 0.0;
-      fv0->next() = fv1;
-      fv1->next() = fv2;
-      fv2->next() = fv0;
+      fv0->set_next(fv1);
+      fv1->set_next(fv2);
+      fv2->set_next(fv0);
 
-      fv2->prev() = fv1;
-      fv1->prev() = fv0;
-      fv0->prev() = fv2;
-
-      fv0->face() = this;
-      fv1->face() = this;
-      fv2->face() = this;
-
-      this->fbegin() = fv0;
+      this->set_front(fv0);
 
       data = coordinate_type(0, 0, 0);
       data2 = coordinate_type(0, 0, 0);
@@ -521,30 +684,68 @@ public:
       // std::cout << "erasing face: " << ID() << std::endl;
     }
 
-    int &size() { return mSize; }
-    int size() const { return mSize; }
+    face_ref operator=(face_ref rhs) {
+      face_ptr out = new face_type();
+      out->mNormal = rhs.mNormal;
+      out->mCenter = rhs.mCenter;
+      out->mVertices = rhs.mVertices;
+      return *out;
+    }
+
+    bool is_degenerate() { return this->size() < 3; }
+
+    bool is_null() { return this->size() == 1 && !fHead->edge(); }
 
     int &position_in_set() { return mSetPosition; }
     int position_in_set() const { return mSetPosition; }
 
     // TODO: delete setHead... actually make all fronts() set_fronts()
-    void setHead(face_vertex_ptr head) { fHead = head; }
-    face_vertex_ptr &front() { return fHead; }
+    void set_front(face_vertex_ptr head) {
+      this->set_changed();
+      head->face() = this;
+      fHead = head;
+    }
 
-    face_vertex_ptr &fbegin() { return fHead; }
+    face_vertex_ptr get_front() { return fHead; }
 
-    face_vertex_ptr fbegin() const { return fHead; }
+    face_vertex_ptr fbegin() { return get_front(); }
+    face_vertex_ptr fend() { return get_front()->prev(); }
+    face_vertex_ptr fendr() { return get_front()->next(); }
 
-    face_vertex_ptr fend() { return fHead->prev(); }
-    face_vertex_ptr fendr() { return fHead->next(); }
+    void for_each(
+        std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
 
-    face_ref operator=(const face_ref rhs) {
-      face_ptr out = new face_type();
-      out->mNormal = rhs.mNormal;
-      out->mCenter = rhs.mCenter;
-      out->mVertices = rhs.mVertices;
+      if (!this->fbegin())
+        return;
+      if (!this->fend())
+        return;
 
-      return *out;
+      face_vertex_ptr fvb = this->fbegin();
+      face_vertex_ptr fve = this->fend();
+      bool iterating = true;
+      while (iterating) {
+        iterating = fvb != fve;
+        func(fvb);
+        fvb = fvb->next();
+      }
+    }
+
+    void for_each_reverse(
+        std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
+
+      if (!this->fbegin())
+        return;
+      if (!this->fendr())
+        return;
+
+      face_vertex_ptr fvb = this->fbegin();
+      face_vertex_ptr fve = this->fendr();
+      bool iterating = true;
+      while (iterating) {
+        iterating = fvb != fve;
+        func(fvb);
+        fvb = fvb->prev();
+      }
     }
 
     face_vertex_ptr get_corner_on_vertex(vertex_ptr v) {
@@ -597,59 +798,29 @@ public:
     }
 
     void update_all() {
-      this->update_vertex_faces();
-      this->renumber_vertex_IDs();
-    }
-
-    void renumber_vertex_IDs() {
-      face_vertex_ptr itb = fbegin();
-      face_vertex_ptr ite = fend();
-      size_t new_id = 0;
-      bool at_head = false;
-      bool iterating = true;
-      int i = 0;
-      while (iterating && i < 200) {
-        iterating = itb != ite;
-        itb->position_in_face() = new_id;
-        itb = itb->next();
-        new_id++;
-        i++;
-      }
-      this->mSize = new_id;
-    }
-
-    void update_vertex_faces() {
       face_vertex_ptr itb = fbegin();
       face_vertex_ptr ite = fend();
       int i = 0;
       bool at_head = false;
+
       while (!at_head) {
-        if (itb->vertex() == NULL)
-          std::cout << "NULL VERTEX: " << std::endl;
-        if (itb->next() == NULL)
-          std::cout << "NULL NEXT: " << std::endl;
-        if (itb->prev() == NULL)
-          std::cout << "NULL PREV: " << std::endl;
         at_head = itb == ite;
         itb->face() = this;
+        itb->position_in_face() = i;
         itb = itb->next();
         i++;
       }
+      this->mSize = i;
     }
 
-    void update_vertex_normals() {
-      face_vertex_ptr itb = fHead;
-      face_vertex_ptr ite = fHead->prev();
-      int i = 0;
-      bool at_head = false;
-      while (!at_head && i < 200) {
-        if (itb == ite) {
-          at_head = true;
-        }
-        itb->vertex()->update_normal();
-        itb = itb->next();
-        i++;
-      }
+    int size() {
+      this->update();
+      return mSize;
+    }
+
+    virtual void _update() {
+      // std::cout << " updating f: " << this->position_in_set() << std::endl;
+      this->update_all();
     }
 
     bool has_vertex(vertex_ptr v) {
@@ -658,7 +829,7 @@ public:
       bool iterating = true;
       while (iterating) {
         iterating = itb != ite;
-        if (itb->next()->vertex() == v)
+        if (itb->vertex() == v)
           return true;
         itb = itb->next();
       }
@@ -748,20 +919,31 @@ public:
     }
 
     void verify() {
+
+      this->update();
       face_vertex_ptr itb = fbegin();
       face_vertex_ptr ite = fend();
       bool iterating = true;
+      // std::cout << " v: " << this->position_in_set() << " - ";
       while (iterating) {
         iterating = itb != ite;
-
-        assert(itb->prev()->next() == itb);
-        assert(itb->next()->prev() == itb);
-        assert(itb->face() == this);
+        /*
+        if (itb->face() != this) {
+          trace::print_trace();
+        }
+        */
+        // std::cout << itb->vID << " ";
+        // itb->vertex()->verify();
+        if (this->mSize > 1)
+          assert(itb != itb->next());
         itb = itb->next();
       }
+      // std::cout << endl;
     }
 
     void print() {
+
+      this->update();
       cout << "face " << mSetPosition
            << ": number of vertices: " << this->size() << endl;
       cout << "vertices: " << endl;
@@ -779,6 +961,8 @@ public:
     }
 
     void flag_vertices() {
+
+      this->update();
       face_vertex_ptr fvA = this->fbegin();
       face_vertex_ptr fvAe = this->fend();
       bool has = false;
@@ -791,6 +975,8 @@ public:
     }
 
     void flag_edges(int flag) {
+
+      this->update();
       face_vertex_ptr fvA = this->fbegin();
       face_vertex_ptr fvAe = this->fend();
       bool has = false;
@@ -858,11 +1044,8 @@ public:
   class face_vertex : public data_node<typename SPACE::face_vertex_index> {
 
   public:
-    face_vertex() {
-      mVertex = NULL;
-      mEdge = NULL;
-      mFace = NULL;
-
+    face_vertex() : mVertex(NULL), mEdge(NULL), mFace(NULL) {
+      vID = 0;
       fID = 0;
       flag = 0;
       data = 0;
@@ -898,6 +1081,16 @@ public:
       return *out;
     }
 
+    virtual void _update() {}
+
+    virtual void set_changed() {
+      data_node<typename SPACE::face_vertex_index>::set_changed();
+      if (this->face())
+        this->face()->set_changed();
+      if (this->vertex())
+        this->vertex()->set_changed();
+    }
+
     face_vertex_ptr coedge() { return mEdge->other(this); }
 
     face_ref get_face() { return *mFace; }
@@ -905,37 +1098,43 @@ public:
     face_vertex_ptr add_next() {
       face_vertex_ptr out = new face_vertex(*this);
       face_vertex_ptr nxt = this->nxt_face;
-      out->next() = nxt;
-      nxt->prev() = out;
-      out->prev() = this;
-      this->next() = out;
-
-      mFace->size() += 1;
+      out->set_next(nxt);
+      this->set_next(out);
 
       out->face() = this->face();
-      out->face()->fbegin() = out;
+      out->face()->set_front(out);
       this->vertex()->add_face_vertex(out);
-      this->vertex()->front() = out;
+      this->vertex()->set_front(out);
 
+      this->set_changed();
       return out;
     }
 
     face_vertex_ptr add_prev() {
       face_vertex_ptr out = new face_vertex(*this);
       face_vertex_ptr prv = this->prv_face;
-      out->prev() = prv;
-      prv->next() = out;
-      out->next() = this;
-      this->prev() = out;
-
-      // prv->edge()->set_this(this,out);
-      mFace->size() += 1;
+      prv->set_next(out);
+      out->set_next(this);
 
       out->face() = this->face();
-      out->face()->fbegin() = out;
+      out->face()->set_front(out);
       this->vertex()->add_face_vertex(out);
-      this->vertex()->front() = out;
+      this->vertex()->set_front(out);
+
+      this->set_changed();
       return out;
+    }
+
+    void set_next(face_vertex_ptr fv) {
+      fv->prev() = this;
+      this->next() = fv;
+      this->set_changed();
+    }
+
+    void set_prev(face_vertex_ptr fv) {
+      fv->next() = this;
+      this->prev() = fv;
+      this->set_changed();
     }
 
     face_vertex_ptr &next() { return nxt_face; }
@@ -945,7 +1144,7 @@ public:
 
     face_vertex_ptr vnext() {
       if (mEdge == NULL) {
-        return NULL;
+        return this;
       } else {
         face_vertex_ptr out = mEdge->other(this);
         return out->next();
@@ -953,20 +1152,15 @@ public:
     }
 
     face_vertex_ptr vprev() {
-      if (this->prev() == NULL || this->prev()->mEdge == NULL) {
-        return NULL;
+      if (this->prev()->edge() == NULL) {
+        return this;
       } else {
         face_vertex_ptr out = this->prev();
         if (out->mEdge)
           return out->mEdge->other(out);
         else
-          return NULL;
+          return this;
       }
-    }
-
-    void draw(T off) {
-      this->draw_vertex(off);
-      this->draw_tail(off);
     }
 
     edge_ptr &edge() { return mEdge; }
@@ -989,10 +1183,11 @@ public:
     int &group() { return mGroup; }
     int group() const { return mGroup; }
 
+    int vID = -1;
+
   protected:
     int mGroup;
-    int fID;
-
+    int fID = -1;
     face_vertex_ptr nxt_face;
     face_vertex_ptr prv_face;
 
@@ -1040,6 +1235,8 @@ public:
       this->add_face_vertex(new_fv);
       pinned = false;
       data2 = 0;
+
+      this->set_changed();
     }
 
     int &position_in_set() { return mSetPosition; }
@@ -1050,45 +1247,27 @@ public:
     int &ID() { return mSetPosition; }
     int ID() const { return mSetPosition; }
 
-    int calc_size() {
-      if (!mFront)
-        return 0;
-
-      face_vertex_ptr fvb = this->fbegin();
-      face_vertex_ptr fve = this->fend();
-      bool iterating = true;
-      int sz = 0;
-      while (iterating) {
-        iterating = fvb != fve;
-        fvb = fvb->vnext();
-        sz++;
-      }
-      return sz;
+    int size() {
+      this->update();
+      return mSize;
     }
-
-    int size() { return mSize; }
 
     face_vertex_ptr make_face_vertex() {
       face_vertex_ptr fv = new face_vertex_type();
       mFront = fv;
       fv->vertex() = this;
-      mSize++;
+      this->set_changed();
       return fv;
     }
 
     void add_face_vertex(face_vertex_ptr new_fv) {
-      mFront = new_fv;
-      mSize++;
-      // mFaceVertices.push_back(new_fv);
-      // fvl_iterator end = mFaceVertices.end();
-      // end--;
-      // new_fv->position_in_vertex() = end;
       new_fv->vertex() = this;
+      this->set_changed();
     }
 
     void remove_face_vertex(face_vertex_ptr fv) {
-      mSize--;
-      // mFront = NULL;
+      fv->vertex() = NULL;
+      this->set_changed();
     }
 
     void update_all() {
@@ -1096,33 +1275,95 @@ public:
       face_vertex_ptr itb = this->fbegin();
       face_vertex_ptr ite = this->fend();
       bool iterating = true;
-
+      mSize = 0;
       while (iterating) {
+        // std::cout << mSize << std::endl;
         mSize++;
+        // std::cout << itb << std::endl;
         iterating = itb != ite;
+        // std::cout << itb->vID << " " << itb->next()->vID << std::endl;
         itb->vertex() = this;
+
+        itb->vID = itb->vertex()->position_in_set();
+
         itb = itb->vnext();
       }
     }
-    // void pack(){
-    //   if (mRecycle.size() > 0) {
-    // 	vector<face_vertex_ptr> tFaceVertices;
-    // 	int j = 0;
-    // 	for (int i = 0; i < mFaceVertices.size(); i++) {
-    // 	  if(mFaceVertices[i]){
-    // 	    tFaceVertices.push_back(mFaceVertices[i]);
-    // 	    tFaceVertices.back()->position_in_vertex() = j;
-    // 	    j++;
-    // 	  }
-    // 	}
-    // 	swap(mFaceVertices,tFaceVertices);
-    //   mRecycle.clear();
-    //   }
-    // }
 
-    face_vertex_ptr &front() { return mFront; }
-    face_vertex_ptr fbegin() { return this->front(); }
-    face_vertex_ptr fend() { return this->front()->vprev(); }
+    virtual void _update() {
+      // std::cout << " updating v: " << this->position_in_set() << std::endl;
+      this->update_all();
+    }
+
+    void set_front(face_vertex_ptr fv) {
+      this->set_changed();
+      fv->vertex() = this;
+      mFront = fv;
+    }
+
+    face_vertex_ptr get_front() { return mFront; }
+
+    face_vertex_ptr fbegin() { return this->get_front(); }
+    face_vertex_ptr fend() { return this->get_front()->vprev(); }
+
+    face_vertex_ptr fendr() { return this->get_front()->vnext(); }
+
+    bool is_degenerate() {
+      bool degenerate = this->size() < 4;
+      return degenerate;
+    }
+
+    void for_each(
+        std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
+      using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
+
+      if (!this->fbegin())
+        return;
+      if (!this->fend())
+        return;
+
+      face_vertex_ptr fvb = this->fbegin();
+      face_vertex_ptr fve = this->fend();
+      bool iterating = true;
+      while (iterating) {
+        iterating = fvb != fve;
+        func(fvb);
+        fvb = fvb->vnext();
+      }
+    }
+
+    void for_each_reverse(
+        std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
+      using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
+
+      if (!this->fbegin())
+        return;
+
+      if (!this->fendr())
+        return;
+
+      face_vertex_ptr fvb = this->fbegin();
+      face_vertex_ptr fve = this->fendr();
+      bool iterating = true;
+      while (iterating) {
+        iterating = fvb != fve;
+        func(fvb);
+        fvb = fvb->vprev();
+      }
+    }
+
+    bool has_vertex(vertex_ptr v) {
+      face_vertex_ptr itb = fbegin();
+      face_vertex_ptr ite = fend();
+      bool iterating = true;
+      while (iterating) {
+        iterating = itb != ite;
+        if (itb->next()->vertex() == v)
+          return true;
+        itb = itb->vnext();
+      }
+      return false;
+    }
 
     bool shares_edge_with(vertex_ptr vi) {
       if (mSize == 0)
@@ -1159,27 +1400,66 @@ public:
     }
 
     void verify() {
+      this->update();
       if (mSize == 0)
         return;
       face_vertex_ptr itb = this->fbegin();
       face_vertex_ptr ite = this->fend();
       bool iterating = true;
       int i = 0;
+
       while (iterating) {
         iterating = itb != ite;
         if (itb->vertex() != this) {
+          // trace::print_trace();
+
           std::cout << i++ << " asserted: " << position_in_set() << " v- "
                     << itb->vertex()->position_in_set() << " "
                     << " e- " << itb->edge()->position_in_set() << std::endl;
           std::cout << "          e eq: "
                     << bool(itb->edge()->v1() == itb->edge()->v2())
                     << std::endl;
+          assert(itb != itb->vnext());
         }
+        if (i++ > 20)
+          break;
         itb = itb->vnext();
       }
     }
 
     void print() {
+
+      this->update();
+      face_vertex_ptr itb = this->fbegin();
+      face_vertex_ptr ite = this->fend();
+      bool iterating = true;
+      std::cout << " - vertex: " << mSetPosition << ", size: " << this->mSize
+                << std::endl;
+      int i = 0;
+      while (iterating) {
+        if (i > 20)
+          break;
+        int ei = -1;
+        if (itb->edge())
+          ei = itb->edge()->position_in_set();
+
+        iterating = itb != ite;
+        // std::cout << itb->next()->vertex()->position_in_set() << ", ";
+        // std::cout << "   " << i << ": v- " << itb->vID << ": vn- "
+        //          << itb->next()->vID << std::endl;
+        std::cout << "   " << i << ": v- " << itb->vertex()->position_in_set()
+                  << " "
+                  << " - e- " << ei << " - f- "
+                  << itb->face()->position_in_set() << ": vn- "
+                  << itb->next()->vertex()->position_in_set() << ": vp- "
+                  << itb->prev()->vertex()->position_in_set() << std::endl;
+        itb = itb->vnext();
+        i++;
+      }
+      std::cout << std::endl;
+    }
+
+    void print_adj_sz() {
       if (mSize == 0)
         return;
       face_vertex_ptr itb = this->fbegin();
@@ -1189,12 +1469,13 @@ public:
                 << std::endl;
       int i = 0;
       while (iterating) {
+        if (i > 20)
+          break;
         iterating = itb != ite;
-        // std::cout << itb->next()->vertex()->position_in_set() << ", ";
-        std::cout << "   " << i++ << ": v- " << itb->vertex()->position_in_set()
-                  << " - e- " << itb->edge()->position_in_set() << ": vn- "
-                  << itb->next()->vertex()->position_in_set() << std::endl;
+        std::cout << "    szn: " << itb->next()->vertex()->position_in_set()
+                  << " " << itb->next()->vertex()->size() << std::endl;
         itb = itb->vnext();
+        i++;
       }
       std::cout << std::endl;
     }
@@ -1209,7 +1490,6 @@ public:
   public:
     int pinned;
     unsigned int flag;
-
     coordinate_type data;
     T data2;
     T winding;
@@ -1260,7 +1540,7 @@ public:
         edge_ptr ne0 = mEdges[ite->edge()->position_in_set()];
         fv0->edge() = ne0;
         fv0->face() = nf;
-        nf->fbegin() = fv0;
+        nf->set_front(fv0);
         if (!ne0->v1())
           ne0->v1() = fv0;
         else
@@ -1369,7 +1649,7 @@ public:
           fvi->next() = fvn;
           fvn->prev() = fvi;
         }
-        nf->fbegin() = tmpFaceArray[0];
+        nf->set_front(tmpFaceArray[0]);
         mFaces[i] = nf;
       }
     }
@@ -1390,27 +1670,6 @@ public:
   face_ptr &face(size_t ind) { return mFaces[ind]; }
   edge_ptr &edge(size_t ind) { return mEdges[ind]; }
   vertex_ptr &vertex(size_t ind) { return mVertices[ind]; }
-
-  bool has_face(size_t ind) {
-    if (mFaces[ind])
-      return true;
-    else
-      return false;
-  }
-
-  bool has_edge(size_t ind) {
-    if (mEdges[ind])
-      return true;
-    else
-      return false;
-  }
-
-  bool has_vertex(size_t ind) {
-    if (mVertices[ind])
-      return true;
-    else
-      return false;
-  }
 
   face_array &get_faces() { return mFaces; }
   edge_array &get_edges() { return mEdges; }
@@ -1442,209 +1701,144 @@ public:
   vertex_ptr insert_vertex() {
     vertex_ptr new_vert = new vertex_type();
     new_vert->init();
-    face_ptr new_face = new_vert->front()->face();
+    face_ptr new_face = new_vert->get_front()->face();
     this->push_face(new_face);
     this->push_vertex(new_vert);
     return new_vert;
   }
 
+  bool has_face(size_t ind) { return mHasFace[ind]; }
+  bool has_edge(size_t ind) { return mHasEdge[ind]; }
+  bool has_vertex(size_t ind) { return mHasVertex[ind]; }
+
   void push_vertex(vertex_ptr in) {
-    if (mVertexRecycle.size() > 0 && !manual_clean_up) {
-      int i = mVertexRecycle.back();
-      in->position_in_set() = i;
-      mVertexRecycle.pop_back();
-      mVertices[i] = in;
-    } else {
-      mVertices.push_back(in);
-      in->position_in_set() = mVertices.size() - 1;
-    }
+    in->position_in_set() = mVertices.size();
+    mVertices.push_back(in);
+    std::cout << " ins v: " << in->position_in_set() << " " << in << std::endl;
+    mHasVertex.push_back(true);
   }
 
   void push_edge(edge_ptr in) {
-    if (mEdgeRecycle.size() > 0 && !manual_clean_up) {
-      int i = mEdgeRecycle.back();
-      in->position_in_set() = i;
-      mEdgeRecycle.pop_back();
-      mEdges[i] = in;
-    } else {
-      in->position_in_set() = mEdges.size();
-      mEdges.push_back(in);
-    }
+    in->position_in_set() = mEdges.size();
+    mEdges.push_back(in);
+    mHasEdge.push_back(true);
   }
 
   void push_face(face_ptr in) {
-    if (mFaceRecycle.size() > 0 && manual_clean_up) {
-      int i = mFaceRecycle.back();
-      in->position_in_set() = i;
-      mFaceRecycle.pop_back();
-      mFaces[i] = in;
-    } else {
-      mFaces.push_back(in);
-      in->position_in_set() = mFaces.size() - 1;
-    }
+    in->position_in_set() = mFaces.size();
+    mFaces.push_back(in);
+
+    std::cout << " ins f: " << in->position_in_set() << " " << in << std::endl;
+    mHasFace.push_back(true);
   }
 
-  void remove_vertex(int i) {
-    vertex_ptr v = mVertices[i];
-    // std::cout << "       deleting vert: " << i << std::endl;
-    // std::cout << " removing vert: " << i << " " << v  << " " << v->size() <<
-    // std::endl;
-    mVertexRecycle.push_back(i);
-    if (!manual_clean_up) {
-      // if(v->size() > 1) throw("fuck you fucktard");
-      mVertices[i] = NULL;
-      delete v;
-    }
-  }
+  void brute_force_verify(vertex_ptr v) {
 
-  void remove_edge(int i) {
-    edge_ptr e = mEdges[i];
-    // std::cout << "       deleting edge: " << i << std::endl;
-    // if(i == 175548) throw('gdb here we come!');
-    if (this->mEdgeDeleteFunc)
-      this->mEdgeDeleteFunc(e);
-    mEdgeRecycle.push_back(i);
-
-    if (!manual_clean_up) {
-      delete mEdges[i];
-      mEdges[i] = NULL;
-    }
-  }
-
-  void remove_face(int i) {
-    // std::cout << "       deleting face: " << i << std::endl;
-    face_ptr f = mFaces[i];
-    mFaceRecycle.push_back(i);
-    if (!manual_clean_up) {
-      mFaces[i] = NULL;
-      delete f;
-    };
-  }
-
-  void toggle_clean_up() { manual_clean_up ^= true; }
-
-  void clean_up() {
-    // cleanup globally deletes pointers after an operation that needs them to
-    // exist.
-    for (int i = 0; i < mFaceRecycle.size(); i++) {
-      int ii = mFaceRecycle[i];
-      delete mFaces[ii];
-      mFaces[ii] = NULL;
-    }
-    for (int i = 0; i < mEdgeRecycle.size(); i++) {
-      int ii = mEdgeRecycle[i];
-      delete mEdges[ii];
-      mEdges[ii] = NULL;
-    }
-    for (int i = 0; i < mVertexRecycle.size(); i++) {
-      int ii = mVertexRecycle[i];
-      delete mVertices[ii];
-      mVertices[ii] = NULL;
-    }
-    this->toggle_clean_up();
-  }
-
-  void pack() {
-    // TODO: safer pack, iterating from mRecycle[i] to mRecycle[i+1]
-    if (mFaceRecycle.size() > 0) {
-      face_array tFaces;
-      int j = 0;
-      for (int i = 0; i < mFaces.size(); i++) {
-        if (mFaces[i]) {
-          tFaces.push_back(mFaces[i]);
-          tFaces.back()->position_in_set() = j;
-          j++;
+    for (int i = 0; i < mEdges.size(); i++) {
+      if (this->has_edge(i)) {
+        edge_ptr e = mEdges[i];
+        if (e->v1()->vertex() == v) {
+          std::cout << " oopsy edge v1: " << std::endl;
+          e->print();
         }
-      }
-      swap(mFaces, tFaces);
-    }
-    mFaceRecycle.clear();
-
-    if (mVertexRecycle.size() > 0) {
-      vertex_array tVertices;
-      int j = 0;
-      for (int i = 0; i < mVertices.size(); i++) {
-        if (mVertices[i]) {
-          // mVertices[i]->pack();
-          tVertices.push_back(mVertices[i]);
-          tVertices.back()->position_in_set() = j;
-          j++;
-        }
-      }
-      swap(mVertices, tVertices);
-    }
-    mVertexRecycle.clear();
-
-    if (mEdgeRecycle.size() > 0) {
-      edge_array tEdges;
-      int j = 0;
-      for (int i = 0; i < mEdges.size(); i++) {
-        if (mEdges[i]) {
-          tEdges.push_back(mEdges[i]);
-          tEdges.back()->position_in_set() = j;
-          j++;
-        }
-      }
-      swap(mEdges, tEdges);
-    }
-    mEdgeRecycle.clear();
-    this->pack_vertices();
-  }
-
-  void pack_vertices() {
-    for (int i = 0; i < this->mVertices.size(); i++) {
-      // mVertices[i]->pack();
-    }
-  }
-
-  void validateFaceVertices() {
-    for (int i = 0; i < mVertices.size(); i++) {
-      vertex_ptr v = mVertices[i];
-      if (v) {
-        face_vertex_ptr fvb = v->fbegin();
-        face_vertex_ptr fve = v->fend();
-        bool iterating = true;
-        while (iterating) {
-          if (fvb->vertex() != v) {
-            std::cout << "face vertex: " << fvb
-                      << " has improperly assigned vertex!" << std::endl;
-          }
-          iterating = fvb != fve;
-          fvb = fvb->vnext();
+        if (e->v2()->vertex() == v) {
+          std::cout << " oopsy edge v2: " << std::endl;
+          e->print();
         }
       }
     }
 
     for (int i = 0; i < mFaces.size(); i++) {
-      face_ptr f = mFaces[i];
-      if (f) {
-        face_vertex_ptr fvb = f->fbegin();
-        face_vertex_ptr fve = f->fend();
-        bool iterating = true;
-        while (iterating) {
-          if (fvb->face() != f) {
-            std::cout << "face vertex: " << fvb
-                      << " has improperly assigned face!" << std::endl;
+      if (this->has_face(i)) {
+        face_ptr f = mFaces[i];
+        f->for_each([&v, &f](face_vertex_ptr fv) {
+          if (fv->vertex() == v) {
+            std::cout << " oopsy face: " << std::endl;
+            f->print();
           }
-          iterating = fvb != fve;
-          fvb = fvb->next();
-        }
-      }
-    }
-    for (int i = 0; i < mEdges.size(); i++) {
-      edge_ptr e = mEdges[i];
-      if (e) {
-        if (e->v1()->edge() != e) {
-          std::cout << "face vertex: " << e->v1()->edge()
-                    << " has improperly assigned edge!" << std::endl;
-        }
-        if (e->v2()->edge() != e) {
-          std::cout << "face vertex: " << e->v2()->edge()
-                    << " has improperly assigned edge!" << std::endl;
-        }
+        });
       }
     }
   }
+
+  void remove_vertex(int i) {
+    if (!mVertices[i])
+      return;
+    vertex_ptr v = mVertices[i];
+    // std::cout << " rm v: " << i << " " << v << std::endl;
+    //brute_force_verify(v);
+    mVertices[i] = 0;
+    mHasVertex[i] = false;
+    delete v;
+  }
+
+  void remove_edge(int i) {
+    edge_ptr e = mEdges[i];
+    // std::cout << " rm e: " << i << " " << e << std::endl;
+    mEdges[i] = 0;
+    mHasEdge[i] = false;
+    delete mEdges[i];
+  }
+
+  void remove_face(int i) {
+    face_ptr f = mFaces[i];
+    // std::cout << " rm f: " << i << " " << f << std::endl;
+    mFaces[i] = 0;
+    mHasFace[i] = false;
+    delete f;
+  }
+
+  void pack() {
+    // TODO: safer pack, iterating from mRecycle[i] to mRecycle[i+1]
+    // if (mFaceRecycle.size() > 0) {
+    face_array tFaces;
+
+    int j = 0;
+    for (int i = 0; i < mFaces.size(); i++) {
+      if (mHasFace[i]) {
+        tFaces.push_back(mFaces[i]);
+        tFaces.back()->position_in_set() = j;
+        j++;
+      }
+    }
+    mHasFace = std::vector<bool>(tFaces.size(), true);
+    swap(mFaces, tFaces);
+    //}
+    // mFaceRecycle.clear();
+
+    // if (mVertexRecycle.size() > 0) {
+    vertex_array tVertices;
+    j = 0;
+    for (int i = 0; i < mVertices.size(); i++) {
+      if (has_vertex(i)) {
+        // mVertices[i]->pack();
+        tVertices.push_back(mVertices[i]);
+        tVertices.back()->position_in_set() = j;
+        j++;
+      }
+    }
+    mHasVertex = std::vector<bool>(tVertices.size(), true);
+    swap(mVertices, tVertices);
+    //}
+    // mVertexRecycle.clear();
+
+    // if (mEdgeRecycle.size() > 0) {
+    edge_array tEdges;
+    j = 0;
+    for (int i = 0; i < mEdges.size(); i++) {
+      if (has_edge(i)) {
+        tEdges.push_back(mEdges[i]);
+        tEdges.back()->position_in_set() = j;
+        j++;
+      }
+    }
+    mHasEdge = std::vector<bool>(tEdges.size(), true);
+    swap(mEdges, tEdges);
+    //}
+    // mEdgeRecycle.clear();
+    // this->pack_vertices();
+  }
+
 #if 1
   void groupElements() {
 
@@ -1772,21 +1966,22 @@ public:
   }
 
   void verify() {
-    for (int i = 0; i < mFaces.size(); i++) {
-      if (mFaces[i]) {
-        mFaces[i]->verify();
+
+    for (int i = 0; i < mVertices.size(); i++) {
+      if (this->has_vertex(i)) {
+        mVertices[i]->verify();
       }
     }
 
     for (int i = 0; i < mEdges.size(); i++) {
-      if (mEdges[i]) {
+      if (this->has_edge(i)) {
         mEdges[i]->verify();
       }
     }
 
-    for (int i = 0; i < mVertices.size(); i++) {
-      if (mVertices[i]) {
-        mVertices[i]->verify();
+    for (int i = 0; i < mFaces.size(); i++) {
+      if (this->has_face(i)) {
+        mFaces[i]->verify();
       }
     }
   }
@@ -1812,7 +2007,7 @@ public:
     for (int i = 0; i < mVertices.size(); i++) {
       if (mVertices[i]) {
         mVertices[i]->flag = 0;
-        mVertices[i]->topologyChange = -1;
+        mVertices[i]->topologyChangeId = -1;
       }
     }
   }
@@ -1922,8 +2117,13 @@ public:
     fa_iterator fit_b = mFaces.begin();
     fa_iterator fit_e = mFaces.end();
     for (int i = 0; i < mFaces.size(); i++) {
-      if (mFaces[i]) {
+      if (this->has_face(i)) {
         mFaces[i]->update_all();
+      }
+    }
+    for (int i = 0; i < mVertices.size(); i++) {
+      if (this->has_vertex(i)) {
+        mVertices[i]->update_all();
       }
     }
   }
@@ -1994,13 +2194,21 @@ protected:
   int numGroups;
 
   vector<int> groupSizes;
+
   face_array mFaces;
+  vector<bool> mHasFace;
   vector<int> mFaceRecycle;
+
   edge_array mEdges;
+  vector<bool> mHasEdge;
   vector<int> mEdgeRecycle;
+
   vertex_array mVertices;
+  vector<bool> mHasVertex;
   vector<int> mVertexRecycle;
+
   coordinate_array mGroupColors;
+
   std::function<void(edge_ptr)> mEdgeDeleteFunc;
 
 public:
@@ -2011,67 +2219,28 @@ template <typename SPACE>
 void for_each_vertex(
     typename surf<SPACE>::vertex_ptr v,
     std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
-  using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
-
-  if (!v->fbegin())
-    return;
-  if (!v->fend())
-    return;
-
-  face_vertex_ptr fvb = v->fbegin();
-  face_vertex_ptr fve = v->fend();
-  bool iterating = true;
-  while (iterating) {
-    iterating = fvb != fve;
-    func(fvb);
-    fvb = fvb->vnext();
-  }
+  v->for_each(func);
 }
 
 template <typename SPACE>
 void for_each_vertex_reverse(
     typename surf<SPACE>::vertex_ptr v,
     std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
-  using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
-
-  if (!v->fbegin())
-    return;
-
-  if (!v->fendr())
-    return;
-
-  face_vertex_ptr fvb = v->fbegin();
-  face_vertex_ptr fve = v->fendr();
-  bool iterating = true;
-  while (iterating) {
-    iterating = fvb != fve;
-    func(fvb);
-    fvb = fvb->vprev();
-  }
+  v->for_each_reverse(func);
 }
 
 template <typename SPACE>
 void for_each_face(
     typename surf<SPACE>::face_ptr f,
     std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
+  f->for_each(func);
+}
 
-  using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
-
-  if (!f->fbegin())
-    return;
-  if (!f->fend())
-    return;
-
-  face_vertex_ptr fvb = f->fbegin();
-  face_vertex_ptr fve = f->fend();
-  bool iterating = true;
-
-  while (iterating) {
-
-    iterating = fvb != fve;
-    func(fvb);
-    fvb = fvb->next();
-  }
+template <typename SPACE>
+void for_each_face_reverse(
+    typename surf<SPACE>::face_ptr f,
+    std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
+  f->for_each_reverse(func);
 }
 
 template <typename SPACE>
@@ -2097,45 +2266,19 @@ void for_each_face_except_0(
 }
 
 template <typename SPACE>
-void for_each_face_reverse(
-    typename surf<SPACE>::face_ptr f,
-    std::function<void(typename surf<SPACE>::face_vertex_ptr fv)> func) {
-  using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
-
-  if (!f->fbegin())
-    return;
-
-  if (!f->fendr())
-    return;
-
-  face_vertex_ptr fvb = f->fbegin();
-  face_vertex_ptr fve = f->fendr();
-  bool iterating = true;
-  while (iterating) {
-    iterating = fvb != fve;
-    func(fvb);
-    fvb = fvb->prev();
-  }
-}
-
-template <typename SPACE>
 void set_vertex_flag(typename surf<SPACE>::face_ptr f, int flag, int val) {
   using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
 
-  m2::for_each_face<SPACE>(f, [&](face_vertex_ptr fv) {
-    fv->vertex()->flags[flag] = val;
-    std::cout << fv->vertex()->position_in_set() << " ";
-  });
+  m2::for_each_face<SPACE>(
+      f, [&](face_vertex_ptr fv) { fv->vertex()->flags[flag] = val; });
 }
 
 template <typename SPACE>
 void set_vertex_flag(typename surf<SPACE>::vertex_ptr v, int flag, int val) {
   using face_vertex_ptr = typename surf<SPACE>::face_vertex_ptr;
 
-  m2::for_each_vertex<SPACE>(v, [&](face_vertex_ptr fv) {
-    fv->vertex()->flags[flag] = val;
-    std::cout << fv->vertex()->position_in_set() << " ";
-  });
+  m2::for_each_vertex<SPACE>(
+      v, [&](face_vertex_ptr fv) { fv->vertex()->flags[flag] = val; });
 }
 
 } // namespace m2

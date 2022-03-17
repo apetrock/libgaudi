@@ -105,8 +105,8 @@ public:
     vertex_ptr vB0 = fvB0->vertex();
     vertex_ptr vB1 = fvB1->vertex();
 
-    vA0->front() = fvA0->vprev();
-    vB0->front() = fvB0->vprev();
+    vA0->set_front(fvA0->vprev());
+    vB0->set_front(fvB0->vprev());
 
     vA2->add_face_vertex(fvB2->coedge());
     vA2->update_all();
@@ -256,8 +256,8 @@ public:
     fvAb = (d1 < d0) && (d1 < d2) ? fvA1 : fvAb;
     fvAb = (d2 < d0) && (d2 < d1) ? fvA2 : fvAb;
 
-    fA->front() = fvAb;
-    fB->front() = fvB0;
+    fA->set_front(fvAb);
+    fB->set_front(fvB0);
   }
 
   void averageVerts(face_ptr fA, face_ptr fB) {

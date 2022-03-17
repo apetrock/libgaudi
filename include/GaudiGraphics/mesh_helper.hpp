@@ -24,6 +24,9 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
   int numIndices = 0;
 
   for (int i = 0; i < faces.size(); i++) {
+    if(!mesh->has_face(i)) continue;
+    if (faces[i]->size() < 3)
+      continue;
     numIndices += faces[i]->size();
   }
   numVerts = verts.size();
@@ -33,9 +36,13 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
     auto &indices = o.indices();
     auto &positions = o.positions();
     auto &colors = o.colors();
-
+    int ii = 0;
     for (int i = 0; i < faces.size(); i++) {
-      if(!faces[i]) continue;
+      if (!mesh->has_face(i))
+        continue;
+      if (faces[i]->size() < 3)
+        continue;
+
       face_vertex_ptr fvb = faces[i]->fbegin();
       face_vertex_ptr fve = faces[i]->fend();
       bool it = true;
@@ -43,8 +50,9 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
 
       while (it) {
         it = fvb != fve;
-        indices.col(i)[j] = fvb->vertex()->position_in_set();
-        // std::cout << fvb->vertex()->position_in_set() << " ";
+        std::cout << fvb->vertex()->position_in_set() << " ";
+        indices.col(ii)[j] = fvb->vertex()->position_in_set();
+
         //                    std::cout << fvb->vertex()->position_in_set() <<
         //                    std::endl;
         j++;
@@ -52,8 +60,7 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
         if (j == 3)
           break;
       }
-      // std::cout << std::endl;
-      // std::cout << indices.col(i) << std::endl;
+      ii++;
     }   
 
     for (int i = 0; i < verts.size(); i++) {
@@ -81,6 +88,10 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
   int numIndices = 0;
 
   for (int i = 0; i < faces.size(); i++) {
+    if (!mesh->has_face(i))
+      continue;
+    if (faces[i]->size() < 3)
+      continue;
     numIndices += faces[i]->size();
   }
   numVerts = verts.size();
@@ -90,9 +101,11 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
     auto &indices = o.indices();
     auto &positions = o.positions();
     auto &colors = o.colors();
-
+    int ii = 0;
     for (int i = 0; i < faces.size(); i++) {
-      if (!faces[i])
+      if (!mesh->has_face(i))
+        continue;
+      if (faces[i]->size() < 3)
         continue;
       face_vertex_ptr fvb = faces[i]->fbegin();
       face_vertex_ptr fve = faces[i]->fend();
@@ -101,7 +114,7 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
 
       while (it) {
         it = fvb != fve;
-        indices.col(i)[j] = fvb->vertex()->position_in_set();
+        indices.col(ii)[j] = fvb->vertex()->position_in_set();
         // std::cout << fvb->vertex()->position_in_set() << " ";
         //                    std::cout << fvb->vertex()->position_in_set() <<
         //                    std::endl;
@@ -110,6 +123,7 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
         if (j == 3)
           break;
       }
+      ii++;
       // std::cout << std::endl;
       // std::cout << indices.col(i) << std::endl;
     }

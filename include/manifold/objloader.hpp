@@ -186,13 +186,6 @@ public:
           obj->push_edge(e);
         }
       }
-      if (vert->position_in_set() == 14637) {
-        std::cout << "14637:" << fvn << " " << fvn->edge() << " "
-                  << this->area(fvn->face()) << " "
-                  << fvn->next()->vertex()->position_in_set() << " "
-                  << fvn->prev()->vertex()->position_in_set() << " "
-                  << std::endl;
-      }
     }
   }
 
@@ -216,7 +209,7 @@ public:
       for (int j = 0; j < inputFaces[i].size(); j++) {
         face_vertex_ptr fv = new face_vertex_type();
         int verti = inputFaces[i][j];
-        obj->vertex(verti)->add_face_vertex(fv);
+        obj->vertex(verti)->set_front(fv);
         cornersOnVertices[verti].push_back(fv);
         cornersOnPoly.push_back(fv);
       }
@@ -225,12 +218,11 @@ public:
         int jn = (j + 1) % cornersOnPoly.size();
         face_vertex_ptr prev = cornersOnPoly[j];
         face_vertex_ptr next = cornersOnPoly[jn];
-        prev->next() = next;
-        next->prev() = prev;
+        prev->set_next(next);
       }
 
       face_ptr f = new face_type();
-      f->setHead(cornersOnPoly[0]);
+      f->set_front(cornersOnPoly[0]);
       f->update_all();
       obj->push_face(f);
     }
@@ -261,7 +253,7 @@ public:
       }
     }
 #endif
-    obj->clean_up();
+    //obj->clean_up();
     obj->pack();
     obj->update_all();
 
@@ -353,9 +345,8 @@ public:
     surf_ref obj = buildObj(inputVerts, inputFaces);
 
     std::cout << "done" << std::endl;
-    obj.clean_up();
+    //obj.clean_up();
     obj.pack();
-    obj.pack_vertices();
     obj.update_all();
     return obj;
   }
@@ -377,6 +368,9 @@ void write_obj(m2::surf<SPACE> &obj, string filename) {
 
   for (unsigned int x = 0; x < faces.size(); x++) {
     face_ptr f = faces[x];
+    
+    if(f->size() < 3) continue;
+
     vertex_ptr vert0 = f->fbegin()->vertex();
     vertex_ptr vert1 = f->fbegin()->next()->vertex();
     vertex_ptr vert2 = f->fbegin()->prev()->vertex();

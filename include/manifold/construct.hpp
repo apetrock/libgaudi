@@ -10,6 +10,9 @@
 #ifndef __TWOMANIFOLDFUNCTIONS__
 #define __TWOMANIFOLDFUNCTIONS__
 #include "m2Includes.h"
+#include "manifold/m2.hpp"
+#include <cstddef>
+#include <set>
 
 namespace m2 {
 
@@ -225,33 +228,18 @@ public:
     face_vertex_ptr v1c = v1->add_prev();
     face_vertex_ptr v2c = v2->add_prev();
 
-    v1->prev() = v2c;
-    v2c->next() = v1;
-    v2->prev() = v1c;
-    v1c->next() = v2;
+    v2c->set_next(v1);
+    v1c->set_next(v2);
 
     e1->set(v1c, v2c);
-    f1->fbegin() = v1c;
-    f2->fbegin() = v2c;
-    f1->update_all();
-    f2->update_all();
+    f1->set_front(v1c);
+    f2->set_front(v2c);
+    f1->update();
+    f2->update();
+    v1->vertex()->update();
+    v2->vertex()->update();
+
     int s1 = 0, s2 = 0;
-
-    face_vertex_ptr fvb = v1c->vertex()->fbegin();
-    face_vertex_ptr fve = v1c->vertex()->fend();
-
-    // bool iterating = true;
-    // for(fvb; iterating;  fvb = fvb->vnext()){
-    // 	iterating = fvb != fve;
-    // 	s1++;
-    // }
-    // fvb = v2c->vertex()->fbegin();
-    // fve = v2c->vertex()->fend();
-    // iterating = true;
-    // for(fvb; iterating;  fvb = fvb->vnext()){
-    // 	iterating = fvb != fve;
-    // 	s2++;
-    // }
 
     obj_in->push_face(f2);
     return e1;
@@ -278,27 +266,19 @@ public:
       face_vertex_ptr tmp1 = v1->add_prev();
       face_vertex_ptr tmp2 = v2->add_prev();
 
-      tmp1->next() = v2;
-      v2->prev() = tmp1;
-
-      tmp2->next() = v1;
-      v1->prev() = tmp2;
+      tmp1->set_next(v2);
+      tmp2->set_next(v1);
 
       e1->set(tmp1, tmp2);
-      face1->fbegin() = v1;
+      face1->set_front(v1);
 
-      face1->update_all();
-      e1->verify();
-      face1->verify();
     }
 
     else if (face1->size() == 1 && face2->size() > 1) {
       face_vertex_ptr tmp = v2->add_prev();
-      tmp->next() = v1;
-      v1->prev() = tmp;
-      v1->next() = v2;
-      v2->prev() = v1;
-      face1->fbegin() = v1;
+      tmp->set_next(v1);
+      v1->set_next(v2);
+      face1->set_front(v1);
       e1->set(v1, tmp);
     }
 
@@ -308,24 +288,16 @@ public:
       v2->prev() = tmp;
       v2->next() = v1;
       v1->prev() = v2;
-      face1->fbegin() = v2;
+      face1->set_front(v2);
       e1->set(v2, tmp);
     }
 
-    else {
-      v1->next() = v2;
-      v2->prev() = v1;
-      v1->prev() = v2;
-      v2->next() = v1;
-      e1->set(v1, v2);
-      v1->face() = face1;
-      v2->face() = face1;
-    }
+    face1->update();
+    v1->vertex()->update();
+    v2->vertex()->update();
 
-    face1->update_all();
     obj_in->remove_face(face2->position_in_set());
     obj_in->push_edge(e1);
-    face1->update_all();
 
     bool check = true;
     return e1;
@@ -336,18 +308,13 @@ public:
     face_vertex_ptr v1 = e->v1();
     face_vertex_ptr v2 = e->v2();
 
-    v1->vertex()->front() = v1->vnext();
-    v2->vertex()->front() = v2->vnext();
+    v1->vertex()->set_front(v1->vnext());
+    v2->vertex()->set_front(v2->vnext());
 
     face_ptr f1 = v1->face();
     face_ptr f2 = v2->face();
-    bool same_face = f1 == f2;
-    int sz1 = f1->size();
-    int sz2 = f2->size();
-    face_ptr fout;
-    int sw = 0;
 
-    // std::cout << e << " " << f1 << " " << f2 << std::endl;
+    face_ptr fout;
 
     if (f1 == f2) {
       face_ptr f1 = disconnect_face(obj_in, e);
@@ -382,71 +349,124 @@ public:
     face_ptr f1 = v1a->face();
     face_ptr f2 = v2a->face();
 
-#if 0
-      std::cout << __FUNCTION__ << std::endl;
-       f1->print();
-       f2->print();
-       std::cout <<" 1: "<< v1 << " " << v1a << " " << v1n << " " << v1p << std::endl;
-       std::cout <<" 2: "<< v2 << " " << v2a << " " << v2n << " " << v2p << std::endl;
-
+#if 1
+    std::cout << "  " << __FUNCTION__ << std::endl;
+    std::cout << "   1: v: " << v1->position_in_set()
+              << " f: " << v1a->face()->position_in_set() << std::endl;
+    std::cout << "   2: v: " << v2->position_in_set()
+              << " f: " << v2a->face()->position_in_set() << std::endl;
 #endif
+
+    v1->set_front(v1a->vnext());
+    v2->set_front(v2a->vnext());
+
+    auto handle_dangling_point =
+        [&obj_in](
+            edge_ptr e,                                                    //
+            vertex_ptr v1,                                                 //
+            face_vertex_ptr c1p, face_vertex_ptr c1a, face_vertex_ptr c1n, //
+            vertex_ptr v2,                                                 //
+            face_vertex_ptr c2p, face_vertex_ptr c2a, face_vertex_ptr c2n  //
+        ) {
+          std::cout << " ------------ " << std::endl;
+          std::cout << c1p << " " << c1a << " " << c1n << std::endl;
+          std::cout << c2p << " " << c2a << " " << c2n << std::endl;
+
+          face_ptr f1 = c1a->face();
+          face_ptr f2 = c2a->face();
+
+          f1->print();
+          f2->print();
+
+          c2p->set_next(c2n);
+          c1a->set_next(c1a);
+
+          std::cout << c2n->prev() << std::endl;
+
+          f1->set_front(c1a);
+          f2->set_front(c2n);
+          v1->set_front(c1a);
+          v2->set_front(c2n);
+
+          v2->remove_face_vertex(c2a);
+          obj_in->remove_edge(e->position_in_set());
+          delete c2a;
+
+          c1a->edge() = NULL;
+
+          f1->update();
+          f2->update();
+
+          v1->update();
+          v2->update();
+
+          return f2;
+        };
+
     if (v1p == v1a && v2p == v2a) {
-      obj_in->remove_face(f1->position_in_set());
-      obj_in->remove_face(f2->position_in_set());
+
+      std::cout << " a: " //
+                << v1->position_in_set() << " " << v2->position_in_set()
+                << " " //
+                << f1->position_in_set() << " " << f2->position_in_set()
+                << " " //
+                << f1->size() << " " << f2->size() << std::endl;
+
       obj_in->remove_edge(e->position_in_set());
 
-      v1->remove_face_vertex(v1a);
-      v2->remove_face_vertex(v2a);
-      delete v1a;
-      delete v2a;
+      v1a->set_next(v1a);
+      v2a->set_next(v2a);
+      v1->set_front(v1a);
+      v2->set_front(v2a);
+
+      v1a->edge() = NULL;
+      v2a->edge() = NULL;
+
+      v1->update();
+      v2->update();
       return NULL;
     }
 
     else if (v1p == v1a) {
-      v2p->next() = v2n;
-      v2n->prev() = v2p;
 
-      f1->fbegin() = v2n;
-      f1->update_all();
-      v2->front() = v2n;
-
-      obj_in->remove_face(f2->position_in_set());
-      obj_in->remove_edge(e->position_in_set());
-      v1->remove_face_vertex(v1a);
-      v2->remove_face_vertex(v2a);
-      delete v1a;
-      delete v2a;
+      std::cout << " b: " //
+                << v1->position_in_set() << " " << v2->position_in_set()
+                << " " //
+                << f1->position_in_set() << " " << f2->position_in_set()
+                << " " //
+                << f1->size() << " " << f2->size() << std::endl;
+      return handle_dangling_point(e,                 //
+                                   v1, v1p, v1a, v1n, //
+                                   v2, v2p, v2a, v2n);
     }
 
     else if (v2p == v2a) {
-      v1p->next() = v1n;
-      v1n->prev() = v1p;
-      f1->fbegin() = v1n;
-      f1->update_all();
-      v1->front() = v1n;
-
-      obj_in->remove_face(f2->position_in_set());
-      obj_in->remove_edge(e->position_in_set());
-      v1->remove_face_vertex(v1a);
-      v2->remove_face_vertex(v2a);
-      delete v1a;
-      delete v2a;
+      std::cout << " c: " //
+                << v1->position_in_set() << " " << v2->position_in_set()
+                << " " //
+                << f1->position_in_set() << " " << f2->position_in_set()
+                << " " //
+                << f1->size() << " " << f2->size() << std::endl;
+      return handle_dangling_point(e,                 //
+                                   v2, v2p, v2a, v2n, //
+                                   v1, v1p, v1a, v1n);
     }
 
     else {
-      //	 std::cout << e->position_in_set() << " " <<
-      // v1->position_in_set() << " " << v2->position_in_set() << " "
-      //	 << v1a << " " << v2a << " " << " " << v1p << " " << v2n <<
-      // std::endl;
-      v1p->next() = v2n;
-      v2n->prev() = v1p;
-      v2p->next() = v1n;
-      v1n->prev() = v2p;
-      f1->fbegin() = v1p;
+      std::cout << " d: " //
+                << v1->position_in_set() << " " << v2->position_in_set()
+                << " " //
+                << f1->position_in_set() << " " << f2->position_in_set()
+                << " " //
+                << f1->size() << " " << f2->size() << std::endl;
 
-      f1->update_all();
-      v1->front() = v2n;
-      v2->front() = v1n;
+      v1p->set_next(v2n);
+      v2p->set_next(v1n);
+
+      f1->set_front(v1p);
+
+      v1->set_front(v2n);
+      v2->set_front(v1n);
 
       obj_in->remove_face(f2->position_in_set());
       obj_in->remove_edge(e->position_in_set());
@@ -456,6 +476,13 @@ public:
 
       delete v1a;
       delete v2a;
+
+      f1->update();
+      v1->update();
+      v2->update();
+
+      v1->verify();
+      v2->verify();
     }
 
     // else{
@@ -477,31 +504,98 @@ public:
     face_vertex_ptr v2n = v2a->next();
     face_vertex_ptr v2p = v2a->prev();
     vertex_ptr v2 = v2a->vertex();
-#if 0
-      std::cout << __FUNCTION__ << std::endl;
-      face_ptr f1 = v1a->face();
-      f1->print();
-      std::cout <<" 1: "<< v1 << " " << v1a << " " << v1n << " " << v1p << std::endl;
-      std::cout <<" 2: "<< v2 << " " << v2a << " " << v2n << " " << v2p << std::endl;
+
+#if 1
+    std::cout << "  " << __FUNCTION__ << std::endl;
+    std::cout << "   1: v: " << v1->position_in_set()
+              << " f: " << v1a->face()->position_in_set() << std::endl;
+    std::cout << "   2: v: " << v2->position_in_set()
+              << " f: " << v2a->face()->position_in_set() << std::endl;
 #endif
 
+    auto handle_dangling_point =
+        [&obj_in](
+            edge_ptr e,                                                    //
+            vertex_ptr v1,                                                 //
+            face_vertex_ptr c1p, face_vertex_ptr c1a, face_vertex_ptr c1n, //
+            vertex_ptr v2,                                                 //
+            face_vertex_ptr c2p, face_vertex_ptr c2a, face_vertex_ptr c2n  //
+        ) {
+          // general case:
+          //                v2
+          //        c2n --- c2a --- c2p
+          //             /
+          // c1p--- c1a --- c1n
+          //        v1
+
+          // this case:
+          //        c2n --- c2a, c1n
+          //             /
+          // c1p--- c1a
+          std::cout << " ------------ " << std::endl;
+          face_ptr f2 = c2a->face();
+          c1p->set_next(c2n);
+          f2->set_front(c2n);
+          f2->update();
+
+          face_ptr f1 = new face_type();
+          obj_in->push_face(f1);
+          std::cout << " fs: " << f1->position_in_set() << " "
+                    << f2->position_in_set() << std::endl;
+          f1->set_front(c2a);
+          c2a->face() = f2;
+          c2a->set_next(c2a);
+          c2a->edge() = NULL;
+          f1->update();
+
+          v1->set_front(c2n);
+          v1->update();
+
+          v2->set_front(c2a);
+          v2->update();
+
+          obj_in->remove_edge(e->position_in_set());
+          v1->remove_face_vertex(c1a);
+
+          delete c1a;
+          return f2;
+        };
+
     if (v1n == v2a && v2n == v1a) { // two face vertices
-      std::cout << "A " << v1->calc_size() << " " << v2->calc_size()
-                << std::endl;
+      std::cout << "A " << v1->position_in_set() << " " << v2->position_in_set()
+                << " " << v1->size() << " " << v2->size() << std::endl;
 
       face_ptr f1 = v1a->face();
 
       if (v1a != v2a) {
-        v1->remove_face_vertex(v1a);
-        v2->remove_face_vertex(v2a);
 
-        obj_in->remove_face(f1->position_in_set());
+        // v1->remove_face_vertex(v1a);
         obj_in->remove_edge(e->position_in_set());
-        delete v1a;
-        delete v2a;
-      } else {
-        v1->remove_face_vertex(v1a);
 
+        face_ptr f2 = new face_type();
+        obj_in->push_face(f2);
+
+        v2a->face() = f2;
+
+        v1a->set_next(v1a);
+        v2a->set_next(v2a);
+        v1a->edge() = NULL;
+        v2a->edge() = NULL;
+
+        v1->set_front(v1a);
+        v2->set_front(v2a);
+        f1->set_front(v1a);
+        f2->set_front(v2a);
+
+        v1->update();
+        v2->update();
+        f1->update();
+        f2->update();
+      } else {
+        std::cout << "A.2" << std::endl;
+        v1->remove_face_vertex(v1a);
+        v1->set_front(v1a->vnext());
+        v1->update();
         obj_in->remove_face(f1->position_in_set());
         obj_in->remove_edge(e->position_in_set());
         delete v1a;
@@ -510,114 +604,56 @@ public:
     }
 
     else if (v1n == v2a) { // dangling point
-      std::cout << "B " << v1->calc_size() << " " << v2->calc_size()
+      std::cout << "B " << v1->position_in_set() << " " << v2->position_in_set()
                 << std::endl;
-      face_ptr f1 = v1a->face();
-
-      // connect up stuff.
-      v1p->next() = v2n;
-      v2n->prev() = v1p;
-
-      f1->fbegin() = v2n;
-      f1->update_vertex_faces();
-      f1->update_all();
-
-      if (v1a != v2a) {
-        std::cout << "B.1" << std::endl;
-        obj_in->remove_edge(e->position_in_set());
-        v1->remove_face_vertex(v1a);
-        v2->remove_face_vertex(v2a);
-        delete v1a;
-        delete v2a;
-      } else {
-        std::cout << "B.2" << std::endl;
-        obj_in->remove_edge(e->position_in_set());
-        v1->remove_face_vertex(v1a);
-        delete v1a;
-      }
-
-      v1->front() = v2n;
-      v1->update_all();
-      v1->verify();
-      // v2->verify();
-      return f1;
+      return handle_dangling_point(e,                 //
+                                   v1, v1p, v1a, v1n, //
+                                   v2, v2p, v2a, v2n);
     }
 
     else if (v2n == v1a) { // dangling point
-      std::cout << "C " << v1->calc_size() << " " << v2->calc_size()
+      std::cout << "C " << v1->position_in_set() << " " << v2->position_in_set()
                 << std::endl;
-      face_ptr f1 = v2a->face();
-      face_vertex_ptr fvb = f1->fbegin();
-      face_vertex_ptr fve = f1->fend();
-      bool iterating = true;
+      return handle_dangling_point(e,                 //
+                                   v2, v2p, v2a, v2n, //
+                                   v1, v1p, v1a, v1n);
 
-      v2p->next() = v1n;
-      v1n->prev() = v2p;
-
-      f1->fbegin() = v1n;
-      f1->update_vertex_faces();
-      f1->update_all();
-
-      if (v1a != v2a) {
-
-        std::cout << "C.1" << std::endl;
-        obj_in->remove_edge(e->position_in_set());
-        v1->remove_face_vertex(v1a);
-        v2->remove_face_vertex(v2a);
-
-        delete v1a;
-        delete v2a;
-      } else {
-        std::cout << "C.1" << std::endl;
-        v1->remove_face_vertex(v1a);
-        obj_in->remove_edge(e->position_in_set());
-        delete v1a;
-      }
-
-      v2->front() = v1n;
-      v2->update_all();
-      v2->verify();
-
-      return f1;
     } else { // full pipe
       std::cout << "D" << std::endl;
 
       face_ptr f1 = v1a->face();
 
       if (v1a != v2a) {
+        std::cout << "D.1" << std::endl;
         face_ptr nf = new face_type();
-        f1->fbegin() = v1n;
-        nf->fbegin() = v2n;
+        f1->set_front(v1n);
+        nf->set_front(v2n);
         v2p->next() = v1n;
         v1n->prev() = v2p;
         v1p->next() = v2n;
         v2n->prev() = v1p;
 
-        f1->update_vertex_faces();
-        nf->update_vertex_faces();
-        f1->update_all();
-        nf->update_all();
+        f1->update();
+        nf->update();
 
         obj_in->remove_edge(e->position_in_set());
         v1->remove_face_vertex(v1a);
         v2->remove_face_vertex(v2a);
         delete v1a;
         delete v2a;
-        v1->front() = v2n;
-        v2->front() = v1n;
+        v1->set_front(v2n);
+        v2->set_front(v1n);
         obj_in->push_face(nf);
+        std::cout << " ins f: " << nf->position_in_set() << std::endl;
         return nf;
       } else {
-        f1->fbegin() = v1n;
-        v2p->next() = v1n;
-        v1n->prev() = v2p;
-        v1p->next() = v2n;
-        v2n->prev() = v1p;
-
-        f1->update_vertex_faces();
-        f1->update_all();
+        std::cout << "D.2" << std::endl;
+        f1->set_front(v1n);
+        v2p->set_next(v1n);
+        v1p->set_next(v2n);
+        f1->update();
         v1->remove_face_vertex(v1a);
-        v1->front() = v1n;
+        v1->set_front(v1n);
         obj_in->remove_edge(e->position_in_set());
         delete v1a;
         return f1;
@@ -644,8 +680,8 @@ public:
     face_vertex_ptr fv1n = fv1->add_next();
     face_vertex_ptr fv2n = fv2->add_next();
 
-    fv1->vertex()->front() = fv1;
-    fv2->vertex()->front() = fv2;
+    fv1->vertex()->set_front(fv1);
+    fv2->vertex()->set_front(fv2);
 
     v1->remove_face_vertex(fv1n);
     v2->remove_face_vertex(fv2n);
@@ -655,7 +691,7 @@ public:
 
     vn->add_face_vertex(fv1n);
     vn->add_face_vertex(fv2n);
-    vn->front() = fv1n;
+    vn->set_front(fv1n);
 
     e1->set(fv1, fv2n);
     e2->set(fv1n, fv2);
@@ -812,72 +848,48 @@ public:
     return new_edges;
   }
 
-  void cleanup_zero_edges(surf_ptr &obj_in, vertex_ptr &v) {
-    bool cleanup = true;
-    while (cleanup) {
-      face_vertex_ptr fvb = v->fbegin(), fve = v->fend();
-
-      bool iterating = true;
-      bool hasZeroEdge = false;
-      edge_ptr zeroEdge;
-      while (iterating) {
-        iterating = fvb != fve;
-        if (fvb->edge()->v1()->vertex() == fvb->edge()->v2()->vertex()) {
-          hasZeroEdge = true;
-          zeroEdge = fvb->edge();
-        }
-        fvb = fvb->vnext();
-      }
-      if (hasZeroEdge) {
-        this->delete_edge(obj_in, zeroEdge);
-      }
-      cleanup = hasZeroEdge;
-    }
-  }
-
   face_ptr delete_vertex_primitive(surf_ptr obj_in, vertex_ptr v) {
     // we gather up all the face vertices
     // vertex_ptr v = obj_in->get_vertices()[i];
-    if (v->size() < 1) {
-      obj_in->remove_vertex(v->position_in_set());
-      return NULL;
+    auto clean_up_fv = [&obj_in](face_vertex_ptr fv) {
+      obj_in->remove_face(fv->face()->position_in_set());
+      obj_in->remove_vertex(fv->vertex()->position_in_set());
+      delete fv;
+    };
+
+    if (v->size() == 1) {
+      if (!v->get_front()->edge()) {
+        face_vertex_ptr fv0 = v->get_front();
+        clean_up_fv(fv0);
+        return NULL;
+      }
     }
 
-    else {
+    face_ptr nf;
+    bool iterating = true;
+    int i = 0;
+    while (iterating) {
+      std::set<edge_ptr> edges;
+      for_each_vertex<SPACE>(v, [&edges](face_vertex_ptr fv) {
+        if (fv->edge())
+          edges.insert(fv->edge());
+      });
 
-      // cleanup_zero_edges(obj_in,v);
-      face_vertex_ptr fvb = v->fbegin(), fve = v->fend();
-      bool iterating = true;
-      // clear any existing edge flags should they be there
-      while (iterating) {
-        iterating = fvb != fve;
-        fvb->edge()->flag = 0;
-        fvb = fvb->vnext();
+      iterating = edges.size() > 0;
+
+      std::cout << " dv: " << i++ << " " << edges.size() << std::endl;
+      for (auto e : edges) {
+        nf = this->delete_edge(obj_in, e);
       }
-      iterating = true;
-      fvb = v->fbegin();
-      fve = v->fend();
-      // iterate and grab edge pointers flagging them so as to not delete them
-      // twice
-      vector<edge_ptr> edgesToDelete;
-      while (iterating) {
-        iterating = fvb != fve;
-        if (fvb->edge()->delete_flag == 0)
-          edgesToDelete.push_back(fvb->edge());
-        fvb->edge()->delete_flag += 1;
-        fvb = fvb->vnext();
-      }
-
-      face_ptr nf;
-
-      for (int i = 0; i < edgesToDelete.size(); i++) {
-        edgesToDelete[i]->verify();
-        nf = this->delete_edge(obj_in, edgesToDelete[i]);
-      }
-
-      obj_in->remove_vertex(v->position_in_set());
-      return nf;
+      v->update();
     }
+
+    face_vertex_ptr fvb = v->get_front();
+
+    clean_up_fv(fvb);
+
+    // obj_in->remove_vertex(v->position_in_set());
+    return nf;
   }
 
   face_ptr delete_vertex(surf_ptr obj_in, vertex_ptr v) {
@@ -885,272 +897,62 @@ public:
     face_vertex_ptr fvb = v->fbegin(), fve = v->fend();
     bool iterating = true;
 
-    face_vertex_ptr this_wing,
-        inco_edge; // we'll need this after connecting everything up
-    // 1. we need to loop around and gather the current vertex's next and the
-    // next vertex's previous;
     face_ptr nf = new face_type();
-    int j = 0;
-    iterating = true;
-    vector<face_vertex_ptr> chk;
-    while (iterating) {
-      // the corners we're grabbing should make som illogical sense...
-      iterating = fvb != fve;
+    std::set<face_ptr> faces;
+    std::set<edge_ptr> edges;
 
-      this_wing = fvb->next();
-      inco_edge = fvb->vnext()->prev()->prev();
+    for_each_vertex<SPACE>(v, [&obj_in, &v, &nf](face_vertex_ptr fv) {
+      face_vertex_ptr cn = fv->next();
+      face_vertex_ptr cpn = cn->vprev()->prev();
 
-      this_wing->prev() = inco_edge;
-      inco_edge->next() = this_wing;
+      std::cout << " fs: " << cn->face()->size() << " " << cpn->face()->size()
+                << std::endl;
+      std::cout << " vset: " << v->position_in_set() << " "
+                << cn->vertex()->position_in_set() << " "
+                << cpn->vertex()->position_in_set() << std::endl;
+      std::cout << fv->vnext() << " " << std::endl;
+      cn->set_prev(cpn);
+      nf->set_front(cn);
+      cn->face() = nf;
+      cpn->face() = nf;
+      cn->vertex()->set_front(cn);
+      std::cout << fv->vnext() << std::endl;
+    });
 
-      this_wing->face() = nf;
-      inco_edge->face() = nf;
-      inco_edge->position_in_face() = j;
-      j++;
-      this_wing->position_in_face() = j;
-      j++;
-      this_wing->vertex()->front() = this_wing;
-      chk.push_back(this_wing);
-      chk.push_back(inco_edge);
-      fvb = fvb->vnext();
+    // clean up
+    for (auto e : edges) {
+      obj_in->remove_edge(e->position_in_set());
     }
-    iterating = true;
-    nf->fbegin() = v->fbegin()->next();
+    for (auto f : faces) {
+      obj_in->remove_face(f->position_in_set());
+    }
 
-    nf->size() = j;
-    nf->update_all();
     obj_in->push_face(nf);
-
-    // 3. now the nasty part about deletion;
-    fvb = nf->fbegin();
-    fve = nf->fend();
-
-    iterating = true;
-    while (iterating) {
-      iterating = fvb != fve;
-      fvb = fvb->next();
-    }
-    fvb = v->fbegin();
-    fve = v->fend();
-    iterating = true;
-    while (iterating) {
-      iterating = fvb != fve;
-
-      face_ptr cf = fvb->face();
-      edge_ptr ce = fvb->edge();
-      face_vertex_ptr fvp1 = ce->v1();
-      face_vertex_ptr fvp2 = ce->v2();
-      // uhh... make sure we advance before we delete...
-      fvb = fvb->vnext();
-      obj_in->remove_face(cf->position_in_set());
-      obj_in->remove_edge(ce->position_in_set());
-      fvp1->vertex()->remove_face_vertex(fvp1);
-      fvp2->vertex()->remove_face_vertex(fvp2);
-    }
     obj_in->remove_vertex(v->position_in_set());
-    bool here = true;
+
     return nf;
   }
 
-  bool delete_degenerates(surf_ptr obj, vertex_ptr v, real tol = 1e-8) {
+  bool delete_degenerates(surf_ptr obj, vertex_ptr v) {
     vector<vertex_ptr> vertDegenerates;
-    if (v->calc_size() < 3) {
-      // std::cout << " deleting: " << v->position_in_set() << std::endl;
-      this->delete_vertex_primitive(obj, v);
+    if (v->is_degenerate()) {
+
+      std::cout << "deg: " << v->size() << " " << v->position_in_set()
+                << std::endl;
+      face_ptr f = this->delete_vertex_primitive(obj, v);
+
       return true;
     }
-    /*
-    if (v->flags[2]) {
-      std::cout << " deleting flagged: " << v->position_in_set() << std::endl;
-      this->delete_vertex_primitive(obj, v);
-      return true;
-    }
-    if (m2::ci::area<SPACE>(v) < tol) {
-      this->delete_vertex_primitive(obj, v);
-      return true;
-    }
-    */
     return false;
   };
 
   bool delete_degenerates(surf_ptr obj, edge_ptr e) {
-
-    if (e->v1() == e->v2()) {
-      // std::cout << " deleting 1: " << e->position_in_set() << std::endl;
-      this->delete_edge(obj, e);
-      return true;
-    }
-
-    if (e->v1()->face()->size() < 3) {
-      // std::cout << " deleting 1: " << e->position_in_set() << std::endl;
-      this->delete_edge(obj, e);
-      return true;
-    }
-    if (e->v2()->face()->size() < 3) {
-      // std::cout << " deleting 2: " << e->position_in_set() << std::endl;
+    if (e->is_degenerate()) {
       this->delete_edge(obj, e);
       return true;
     }
     return false;
   };
-
-  vertex_ptr collapse_edge_triangle(surf_ptr obj, edge_ptr e) {
-    // TODO:: move to triangle_ops, compare with joinFaceOneSharedEdge
-    if (e->v1()->vertex() == e->v2()->vertex())
-      return e->v1()->vertex();
-
-    face_vertex_ptr va0 = e->v1();
-    face_vertex_ptr vb0 = e->v2();
-    vertex_ptr v1 = va0->vertex();
-    vertex_ptr v2 = vb0->vertex();
-
-    coordinate_type c1 = this->coordinate(v1);
-    coordinate_type c2 = this->coordinate(v2);
-    coordinate_type cp = 0.5 * (c1 + c2);
-    this->coordinate(cp, v1);
-
-    if (va0->face()->size() == 1 || va0->face()->size() == 2) {
-      std::cout << "e pos (v2): " << e->position_in_set() << std::endl;
-      v2->print();
-      delete_edge(obj, e);
-      return v1;
-    }
-
-    if (vb0->face()->size() == 1 || vb0->face()->size() == 2) {
-      std::cout << "e pos (v2): " << e->position_in_set() << std::endl;
-      v2->print();
-      delete_edge(obj, e);
-      return v2;
-    }
-
-    if (v1->calc_size() == 1 || v1->calc_size() == 2) {
-      std::cout << "e pos (v1): " << e->position_in_set() << std::endl;
-      v1->print();
-      // std::cout << " deleting v1" << std::endl;
-      face_ptr f = delete_vertex_primitive(obj, v1);
-      return v2;
-    }
-
-    if (v2->calc_size() == 1 || v2->calc_size() == 2) {
-      std::cout << "e pos (v2): " << e->position_in_set() << std::endl;
-      v2->print();
-      face_ptr f = delete_vertex_primitive(obj, v2);
-      //	std::cout << "output 3: " << std::endl;
-      // v1->print();
-      return v1;
-    }
-
-    if (v1->calc_size() == 1 || v1->calc_size() == 2) {
-      std::cout << "e pos (v1): " << e->position_in_set() << std::endl;
-      v1->print();
-      // std::cout << " deleting v1" << std::endl;
-      face_ptr f = delete_vertex_primitive(obj, v1);
-      return v2;
-    }
-
-    face_vertex_ptr va1 = va0->next();
-    face_vertex_ptr va2 = va0->prev();
-    edge_ptr ea1 = va1->edge();
-    edge_ptr ea2 = va2->edge();
-    face_vertex_ptr va2p = ea1->other(va1);
-    face_vertex_ptr va0p = ea2->other(va2);
-
-    face_vertex_ptr vb1 = vb0->next();
-    face_vertex_ptr vb2 = vb0->prev();
-    edge_ptr eb1 = vb1->edge();
-    edge_ptr eb2 = vb2->edge();
-    face_vertex_ptr vb2p = eb1->other(vb1);
-    face_vertex_ptr vb0p = eb2->other(vb2);
-
-    if (e->position_in_set() == 57456) {
-
-      std::cout << " e: " << e->position_in_set() << std::endl;
-      std::cout << " ea2: " << ea2->position_in_set() << std::endl;
-      std::cout << " eb2: " << eb2->position_in_set() << std::endl;
-
-      std::cout << " e: " << e->v1() << " " << e->v2() << std::endl;
-      std::cout << va0 << " " << va1 << " " << va2 << " " << vb0 << " " << vb1
-                << " " << vb2 << std::endl;
-
-      std::cout << va0p << " " << va2p << " " << vb0p << " " << vb2p
-                << std::endl;
-
-      bool iterating = true;
-      face_vertex_ptr fvb = v1->fbegin();
-      face_vertex_ptr fve = v1->fend();
-      while (iterating) {
-        iterating = fvb != fve;
-        std::cout << fvb->edge()->position_in_set() << " ";
-        fvb = fvb->vnext();
-      }
-      std::cout << std::endl;
-
-      iterating = true;
-      fvb = v1->fbegin();
-      fve = v1->fend();
-      while (iterating) {
-        iterating = fvb != fve;
-        std::cout << fvb->edge()->v1() << " ";
-        fvb = fvb->vnext();
-      }
-      std::cout << std::endl;
-
-      iterating = true;
-      fvb = v1->fbegin();
-      fve = v1->fend();
-      while (iterating) {
-        iterating = fvb != fve;
-        std::cout << fvb->edge()->v2() << " ";
-        //<< fvb->next()->vertex()->calc_size() <<  " ";
-        fvb = fvb->vnext();
-      }
-      std::cout << std::endl;
-    }
-
-    ea1->set(va0p, va2p);
-    eb1->set(vb0p, vb2p);
-
-    va0p->vertex() = v1;
-
-    va0p->vertex()->front() = va0p;
-    va2p->vertex()->front() = va2p;
-    vb0p->vertex()->front() = vb0p;
-    vb2p->vertex()->front() = vb2p;
-
-    face_ptr fa = va0->face();
-    face_ptr fb = vb0->face();
-
-    v1->color.r = 1.0;
-
-    obj->remove_face(fa->position_in_set());
-    obj->remove_face(fb->position_in_set());
-
-    obj->remove_edge(e->position_in_set());
-    obj->remove_edge(ea2->position_in_set());
-    obj->remove_edge(eb2->position_in_set());
-    obj->remove_vertex(v2->position_in_set());
-    // these gotta go last
-    if (va0)
-      delete va0;
-    if (va1)
-      delete va1;
-    if (va2)
-      delete va2;
-    if (vb0)
-      delete vb0;
-    if (vb1)
-      delete vb1;
-    if (vb2)
-      delete vb2;
-
-    for_each(v1, [&v1](face_vertex_ptr fv) -> void {
-      fv->vertex() = v1;
-      fv->next()->vertex()->front() = fv->next();
-    });
-
-    // while(this->delete_degenerates(obj,v1));
-    return v1;
-  }
 
   vertex_ptr collapse_edge(surf_ptr obj, edge_ptr e) {
     if (e->v1()->size() == 0)
@@ -1166,41 +968,14 @@ public:
     vertex_ptr v1 = fv1->vertex();
     vertex_ptr v2 = fv2->vertex();
 
-    // std::cout << "input: " << std::endl;
-    // v1->print();
-    // v2->print();
-
     coordinate_type c1 = this->coordinate(v1);
     coordinate_type c2 = this->coordinate(v2);
     coordinate_type cp = 0.5 * (c1 + c2);
     this->coordinate(cp, v1);
 
-    /*
-    if (v2->size() == 3) {
-
-      face_ptr f = delete_vertex_primitive(obj, v2);
-      //	std::cout << "output 3: " << std::endl;
-      // v1->print();
-      return v1;
-    }
-    */
     std::cout << v1->position_in_set() << ":" << v1->size() << " "
               << v2->position_in_set() << ":" << v2->size() << " " << std::endl;
 
-    /*
-    if (v2->size() == 2) {
-      edge_ptr e1n = fv1->next()->edge();
-      edge_ptr e2n = fv2->next()->edge();
-      this->delete_edge(obj, e);
-      this->delete_edge(obj, e1n);
-      this->delete_edge(obj, e2n);
-      // std::cout << "output 2: " << std::endl;
-      // v1->print();
-      // v2->print();
-      obj->remove_vertex(v2->position_in_set());
-      return v1;
-    }
-    */
     if (fv1->face()->size() == 3)
       this->delete_edge(obj, fv1->next()->edge());
     if (fv2->face()->size() == 3)
@@ -1211,12 +986,11 @@ public:
     face_vertex_ptr v2p = fv2->prev();
     face_vertex_ptr v2n = fv2->next();
 
-    fv1->face()->fbegin() = v1p;
-    fv2->face()->fbegin() = v2p;
-    v1p->next() = v1n;
-    v1n->prev() = v1p;
-    v2p->next() = v2n;
-    v2n->prev() = v2p;
+    fv1->face()->set_front(v1p);
+    fv2->face()->set_front(v2p);
+    v1p->set_next(v1p);
+    v2p->set_next(v2n);
+
     fv1->face()->update_all();
     fv2->face()->update_all();
 
@@ -1231,7 +1005,7 @@ public:
       fvb = fvb->vnext();
     }
 
-    v1->front() = fvb;
+    v1->set_front(fvb);
 
     v1->remove_face_vertex(fv1);
     delete fv1;
@@ -1345,11 +1119,11 @@ public:
     v1p->add_face_vertex(fv2);
     v2p->add_face_vertex(fv1);
 
-    v1p->front() = fv2;
-    v2p->front() = fv1;
+    v1p->set_front(fv2);
+    v2p->set_front(fv1);
 
-    v1->front() = fv2n;
-    v2->front() = fv1n;
+    v1->set_front(fv2n);
+    v2->set_front(fv1n);
 
     f1->update_all();
     f2->update_all();
@@ -1371,7 +1145,7 @@ public:
       normv = dot(fc, coordinate(fvb2));
       if (normv < normt) {
         normt = normv;
-        f2->fbegin() = fvb2;
+        f2->set_front(fvb2);
       }
       fvb2 = fvb2->next();
     }
@@ -1434,7 +1208,7 @@ public:
       normv = dot(fc, coordinate(fvb2));
       if (normv < normt) {
         normt = normv;
-        f2->fbegin() = fvb2;
+        f2->set_front(fvb2);
       }
       fvb2 = fvb2->next();
     }
@@ -1561,7 +1335,7 @@ public:
       fv1 = new face_vertex_type();
       fv2 = new face_vertex_type();
       fv3 = new face_vertex_type();
-      nf->fbegin() = fv0; // set this new face to begin at fv0;
+      nf->set_front(fv0); // set this new face to begin at fv0;
 
       // we connect up our new face so it circulates properly
       fv0->next() = fv1;
@@ -1603,7 +1377,6 @@ public:
       fv3->vertex() = nv3;
       nv3->add_face_vertex(fv3);
       fv3->face() = nf;
-      nf->size() = 4;
       // in order to connect up the sides, we'll have to loop around the top and
       // bottom vertices
       topfv.push_back(fv2);
@@ -1717,7 +1490,7 @@ public:
     nf->color.g = 0.0;
     nf->color.b = 0.0;
 
-    nf->fbegin() = nfv0;
+    nf->set_front(nfv0);
     nf->update_all();
     obj->push_face(nf);
 
@@ -1748,16 +1521,15 @@ public:
     int iterations = 0;
     while (!atHead && iterations < maxIterations) {
       if (!fvb->edge()) {
-        // std::cout << fvb << " " << fvb->next()->vnext() << " " <<
-        // fvb->vertex() <<" " << fve  << std::endl;
+        std::cout << fvb << " " << fvb->next()->vnext() << " " << fvb << " "
+                  << fve << std::endl;
         fvb->face()->color.r = 0;
         fvb->face()->color.g = 0.5;
         fvb->face()->color.b = 0.5;
         if (!fvb->next()->edge())
           fvb = fvb->next();
         else
-          fvb = fvb->next()
-                    ->vnext(); // i wish I could draw pictures of all of this.
+          fvb = fvb->next()->vnext();
         loopSize++;
       } else
         fvb = fvb->vnext();
@@ -1782,8 +1554,8 @@ public:
                   << std::endl;
         face_vertex_ptr nfv = new face_vertex_type();
         nfv->face() = nf;
-        nfv->vertex() = fvb->vertex();
-        fvb->vertex()->add_face_vertex(nfv);
+        std::cout << fvb->vertex() << " ";
+        fvb->vertex()->set_front(nfv);
         nfvs.push_back(nfv);
         ofvs.push_back(fvb);
         if (!fvb->next()->edge())
@@ -1805,13 +1577,9 @@ public:
           int in = (i + 1 < N) ? i + 1 : N - i - 1;
           int ip = (i - 1 >= 0) ? i - 1 : N - 1 + i;
           std::cout << ip << " " << i << " " << in << " " << std::endl;
-          nfvs[i]->next() = nfvs[ip];
-          nfvs[ip]->prev() = nfvs[i];
-          // nfvs[i]->prev()  = nfvs[ip];
-          // nfvs[ip]->next() = nfvs[i];
+          nfvs[i]->set_next(nfvs[ip]);
 
           edge_ptr ne = new edge_type(nfvs[i], ofvs[ip]);
-
           obj->push_edge(ne);
 
           std::cout << ne->position_in_set() << " "
@@ -1821,7 +1589,7 @@ public:
                     << ne->fv2->next()->vertex()->position_in_set() << " "
                     << ne->fv1 << " " << ne->fv2 << " " << std::endl;
         }
-        nf->fbegin() = nfvs[0];
+        nf->set_front(nfvs[0]);
         nf->update_all();
         obj->push_face(nf);
         // std::cout << "done patching face" << std::endl;
