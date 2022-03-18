@@ -348,7 +348,7 @@ public:
 
     if (e->v1()->vertex()->is_degenerate())
       return true;
-    ;
+
     if (e->v2()->vertex()->is_degenerate())
       return true;
 
@@ -359,6 +359,8 @@ public:
       return true;
     if (e->v2()->face()->size() != 3)
       return true;
+
+    return false;
   }
 
   virtual bool op() {
@@ -1810,10 +1812,10 @@ public:
     while (testing) {
       i = 0;
       bool deleting = false;
+      std::cout << "stuck here!" << std::endl;
       for (auto e : this->_surf->get_edges()) {
         if (!this->_surf->has_edge(i++))
           continue;
-        // std::cout << i << std::endl;
         deleting |= cons.delete_degenerates(this->_surf, e);
       }
       testing = deleting;
@@ -1841,6 +1843,7 @@ public:
 
     m2::remesh<SPACE> rem;
     rem.triangulate(this->_surf);
+    return true;
   }
 };
 #endif
@@ -1897,11 +1900,10 @@ public:
         SPACE::vertex_index::COORDINATE);
 
     double l0 = m2::ci::geometric_mean_length<SPACE>(_surf);
-    l0 *= 0.5;
     std::cout << " integrator avg length: " << l0 << std::endl;
     _min = min * l0;
     _max = max * _min;
-    _merge = merge * min;
+    _merge = merge * _min;
   }
 
   void add_vertex_policy(vertex_policy<SPACE> *policy) {
@@ -1943,8 +1945,7 @@ public:
         typename SPACE::real li = 0.0;
         if (i < 3)
           li = l[i];
-        fv->template set<typename SPACE::real>(SPACE::face_vertex_index::BARY,
-                                               li);
+        fv->template set<typename SPACE::real>(SPACE::face_vertex_index::BARY, li);
         i++;
       });
     }
@@ -1957,12 +1958,13 @@ public:
     m2::area_laplacian<SPACE, coordinate_type> M(this->_surf);
     int i = 0;
 
+    std::cout << "ugly smoothing ";
     for (int k = 0; k < N; k++) {
       coordinate_array coords = m2::ci::get_coordinates<SPACE>(this->_surf);
       coordinate_array normals = m2::ci::get_vertex_normals<SPACE>(this->_surf);
       coordinate_array ncoords = M.mult(coords);
-
-      for (int i = 0; i < coords.size(); i++) {
+      std::cout << ".";
+       for (int i = 0; i < coords.size(); i++) {
         coordinate_type cp = va::orthogonal_project(normals[i], ncoords[i]);
 
         if (isnan(cp[0])) {
@@ -1979,6 +1981,7 @@ public:
       }
       m2::ci::set_coordinates<SPACE>(coords, this->_surf);
     }
+    std::cout << std::endl;
   }
 
   void operate_edges(triangle_operations_base<SPACE> &op) {
@@ -2052,14 +2055,17 @@ public:
   }
 
   void delete_degenerates() {
+
+    std::cout << "-- delete_degenerates --" << std::endl;
     m2::construct<SPACE> cons;
     degenerate_deleter<SPACE> zapper(this->_surf);
     zapper.op();
+    std::cout << " done! " << std::endl;
   }
 
   bool integrate() { // mergeTris(_meshGraph, rxA, rxB);
 
-    // mergeEdges();
+    mergeEdges();
     delete_degenerates();
     splitEdges();
     delete_degenerates();
@@ -2067,10 +2073,10 @@ public:
     delete_degenerates();
     flipEdges();
     delete_degenerates();
-    std::cout << "ugly smoothing " << std::endl;
     this->_surf->pack();
-    smoothMesh(0.01, 10);
-    std::cout << "done " << std::endl;
+    smoothMesh(0.05, 10);
+    
+    return true;
   }
   m2::surf<SPACE> *_surf;
   real _min = 0.5, _max = 3.0, _merge = 1.0;

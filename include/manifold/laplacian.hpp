@@ -20,7 +20,6 @@
 
 #include <math.h>
 
-#include "manifold/conj_grad.hpp"
 namespace m2 {
 template <typename SPACE, typename TYPE> class laplacian {
   M2_TYPEDEFS;

@@ -876,8 +876,7 @@ public:
       });
 
       iterating = edges.size() > 0;
-
-      std::cout << " dv: " << i++ << " " << edges.size() << std::endl;
+      v->print();
       for (auto e : edges) {
         nf = this->delete_edge(obj_in, e);
       }

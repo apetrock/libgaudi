@@ -25,6 +25,7 @@
 
 #include "manifold/conj_grad.hpp"
 #include "manifold/laplacian.hpp"
+#include "manifold/diffuse.hpp"
 
 #include "manifold/bins.hpp"
 #include "manifold/conj_grad.hpp"
@@ -155,7 +156,7 @@ public:
     mod.centerGeometry(*_meshGraph);
 
     int N = 0;
-    _integrator = new m2::surf_integrator<rxd3>(_meshGraph, 0.5, 3.0, 1.0);
+    _integrator = new m2::surf_integrator<rxd3>(_meshGraph, 0.1, 3.0, 0.25);
 
     _integrator->add_default_vertex_policy<typename rxd3::real>(
         rxd3::vertex_index::RXA);
@@ -334,84 +335,6 @@ public:
   }
 
   template <typename SPACE>
-  std::vector<typename SPACE::real>
-  diffuse(m2::surf<SPACE> *surf, const std::vector<typename SPACE::real> &u,
-          const std::vector<typename SPACE::real> &f, rxd3::real dt,
-          typename SPACE::real C) {
-
-    using namespace m2;
-    M2_TYPEDEFS;
-    m2::laplacian<SPACE, real> M(surf);
-
-    auto diffMult = [&M, dt, C, surf](const std::vector<real> &X) {
-      std::vector<real> MX = M.multM(X);
-      std::vector<real> CX = M.multC(X);
-
-      int i = 0;
-      for (int i = 0; i < MX.size(); i++) {
-        MX[i] = MX[i] - dt * C * CX[i];
-      }
-      return MX;
-    };
-
-    std::vector<typename SPACE::real> u_f(u);
-
-    for (int i = 0; i < u_f.size(); i++) {
-      u_f[i] = u[i] + dt * f[i];
-    }
-
-    std::vector<typename SPACE::real> au_f = M.multM(u_f);
-
-    int its;
-    m2::gradient_descent<SPACE> solver;
-    std::vector<real> x = solver.solveConjugateGradient(au_f, diffMult, its);
-
-    return x;
-  }
-
-  template <typename SPACE>
-  std::vector<typename SPACE::real>
-  diffuse_second_order(m2::surf<SPACE> *surf,
-                       const std::vector<typename SPACE::real> &u,
-                       const std::vector<typename SPACE::real> &f,
-                       rxd3::real dt, typename SPACE::real C) {
-
-    using namespace m2;
-    M2_TYPEDEFS;
-    m2::laplacian<SPACE, real> M(surf);
-
-    auto diffMult = [&M, dt, C, surf](const std::vector<real> &X) {
-      std::vector<real> MX = M.multM(X);
-      std::vector<real> CX = M.multC(X);
-
-      int i = 0;
-      for (int i = 0; i < MX.size(); i++) {
-        MX[i] = MX[i] - 0.5 * dt * C * CX[i];
-      }
-      return MX;
-    };
-
-    std::vector<typename SPACE::real> u_f(u);
-
-    for (int i = 0; i < u_f.size(); i++) {
-      u_f[i] = u[i] + dt * f[i];
-    }
-
-    std::vector<typename SPACE::real> au_f = M.multM(u_f);
-    std::vector<typename SPACE::real> lu = M.multC(u);
-
-    for (int i = 0; i < u_f.size(); i++) {
-      au_f[i] += 0.5 * dt * C * lu[i];
-    }
-
-    int its;
-    m2::gradient_descent<SPACE> solver;
-    std::vector<real> x = solver.solveConjugateGradient(au_f, diffMult, its);
-
-    return x;
-  }
-
-  template <typename SPACE>
   void curvature_to_rx(m2::surf<SPACE> *surf,
                        std::vector<typename SPACE::real> &rxA,
                        std::vector<typename SPACE::real> &rxB) {
@@ -432,7 +355,7 @@ public:
     auto vertices = surf->get_vertices();
     coordinate_array coords;
     for (auto v : vertices) {
-      if (dist(e2) > 0.97 && K[i] < 0.1 && rxA[i] > 0.97) {
+      if (dist(e2) > 0.95 && K[i] < 0.1 && rxA[i] > 0.95) {
         coords.push_back(ci::get_coordinate<SPACE>(v));
       }
       i++;
@@ -510,7 +433,6 @@ public:
       i++;
     }
 
-
     setRx(surf, rxA, SPACE::vertex_index::RXA);
     setRx(surf, rxB, SPACE::vertex_index::RXB);
   }
@@ -519,8 +441,6 @@ public:
 
   virtual void onAnimate(int frame) {
 
-    _integrator->integrate();
-    
     std::cout << "====== " << std::endl;
     std::cout << " verts: " << _meshGraph->get_vertices().size() << std::endl;
     std::cout << " edges: " << _meshGraph->get_edges().size() << std::endl;
@@ -531,6 +451,9 @@ public:
     _meshGraph->update_all();
     _meshGraph->reset_flags();
     _meshGraph->pack();
+
+    _integrator->integrate();
+
     // gg::fillBuffer(_meshGraph, _obj);
     std::cout << "get rx " << std::endl;
     std::vector<rxd3::real> rxA = getRx(_meshGraph, rxd3::vertex_index::RXA);
@@ -569,8 +492,9 @@ public:
       fB[i] = vp;
     }
 
-    rxA = diffuse_second_order<rxd3>(_meshGraph, rxA, fA, dt, Du);
-    rxB = diffuse_second_order<rxd3>(_meshGraph, rxB, fB, dt, Dv);
+    m2::diffuse<rxd3> diff;
+    rxA = diff.second_order(_meshGraph, rxA, fA, dt, Du);
+    rxB = diff.second_order(_meshGraph, rxB, fB, dt, Dv);
 
     for (int i = 0; i < rxA.size(); i++) {
       rxA[i] = std::clamp(rxA[i], 0.0, 1.0);
@@ -643,7 +567,7 @@ public:
     double dt = 2.0;
     double Du = 1.0e-4, Dv = 0.025;
     // double k = 0.061, F = 0.070; //pretty good one
-    double k = 0.061, F = 0.074;
+    double k = 0.061, F = 0.068;
     // double k = 0.06, F = 0.082;
     // double k = 0.06132758, F = 0.037;
     // double k = 0.059, F = 0.03;

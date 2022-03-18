@@ -1039,7 +1039,7 @@ public:
   pole_node &operator=(const pole_node &rhs) {
     // this = new pole_node();
     if (this != &rhs) {
-      //children = new int[8];
+      // children = new int[8];
       center = rhs.center;
       centerOfMass = rhs.centerOfMass;
       half = rhs.half;
@@ -1408,7 +1408,7 @@ public:
 
         // leafIds.push_back(cNodeId);
       }
-      //delete lPerm;
+      // delete lPerm;
     }
   }
 
@@ -1455,14 +1455,13 @@ getNearest(PRIMITIVE_B &primB, const aabb_tree<SPACE, PRIMITIVE_A> &faceTree,
       // m2::Debugger& debug = m2::Debugger::get_instance();
       // debug.DebugLines0.push_back(cnode.bbox.center);
       // debug.DebugLines0.push_back(primB);
-      //std::cout << cnode.size << std::endl;
+      // std::cout << cnode.size << std::endl;
       for (int k = cnode.begin; k < cnode.begin + cnode.size; k++) {
-        
+
         PRIMITIVE_A primA = primitives[faceTree.permutation[k]];
         box_type boxA = primA.bbox();
 
         if (!boxA.overlap(boxB)) {
-          //std::cout << " no overlap child" << std::endl;
           continue;
         }
 
@@ -1480,8 +1479,8 @@ getNearest(PRIMITIVE_B &primB, const aabb_tree<SPACE, PRIMITIVE_A> &faceTree,
         box_type boxA = faceTree.nodes[cnode.children[i]].bbox;
         if (boxA.overlap(boxB)) {
           cstack.push(cnode.children[i]);
-        } else{
-          //std::cout << cId << ": nover " << cnode.children[i] << std::endl;
+        } else {
+          // std::cout << cId << ": nover " << cnode.children[i] << std::endl;
           continue;
         }
       }

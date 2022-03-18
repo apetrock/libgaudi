@@ -19,6 +19,8 @@
 
 #include <math.h>
 
+#include "m2.hpp"
+
 namespace m2 {
 template <typename SPACE> class gradient_descent {
   M2_TYPEDEFS;

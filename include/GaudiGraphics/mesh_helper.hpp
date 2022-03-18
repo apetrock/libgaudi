@@ -4,6 +4,7 @@
 #include <GaudiGraphics/buffers.hpp>
 #include <GaudiGraphics/viewer.hpp>
 #include <GaudiMath/typedefs.h>
+#include <cassert>
 #include <manifold/m2Includes.h>
 #include <nanogui/glutil.h>
 
@@ -24,7 +25,8 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
   int numIndices = 0;
 
   for (int i = 0; i < faces.size(); i++) {
-    if(!mesh->has_face(i)) continue;
+    if (!mesh->has_face(i))
+      continue;
     if (faces[i]->size() < 3)
       continue;
     numIndices += faces[i]->size();
@@ -61,7 +63,7 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
           break;
       }
       ii++;
-    }   
+    }
 
     for (int i = 0; i < verts.size(); i++) {
       for (int j = 0; j < 3; j++) {
@@ -78,7 +80,7 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
 
 template <typename SPACE>
 void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
-                const std::vector<m2::colorRGB> & col) {
+                const std::vector<m2::colorRGB> &col) {
   using namespace nanogui;
   M2_TYPEDEFS;
   std::vector<face_ptr> faces = mesh->get_faces();
@@ -92,12 +94,13 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
       continue;
     if (faces[i]->size() < 3)
       continue;
-    numIndices += faces[i]->size();
+    //numIndices += faces[i]->size();
+    numIndices++;
   }
   numVerts = verts.size();
 
   obj->fillBuffer([&](gg::BufferObject &o) -> void {
-    o.allocateVerts(faces.size(), numVerts);
+    o.allocateVerts(numIndices, numVerts);
     auto &indices = o.indices();
     auto &positions = o.positions();
     auto &colors = o.colors();
@@ -105,8 +108,13 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
     for (int i = 0; i < faces.size(); i++) {
       if (!mesh->has_face(i))
         continue;
-      if (faces[i]->size() < 3)
+
+      if (faces[i]->size() < 3){
+        std::cout << "fcuk" << std::endl;
+        faces[i]->print();
         continue;
+      }
+        
       face_vertex_ptr fvb = faces[i]->fbegin();
       face_vertex_ptr fve = faces[i]->fend();
       bool it = true;
@@ -114,7 +122,9 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
 
       while (it) {
         it = fvb != fve;
-        indices.col(ii)[j] = fvb->vertex()->position_in_set();
+        int pos = fvb->vertex()->position_in_set();       
+       
+        indices.col(ii)[j] = pos;
         // std::cout << fvb->vertex()->position_in_set() << " ";
         //                    std::cout << fvb->vertex()->position_in_set() <<
         //                    std::endl;
@@ -156,7 +166,6 @@ void insertPoints(std::vector<typename SPACE::vec3> &points,
     auto &indices = o.indices();
     auto &positions = o.positions();
     auto &colors = o.colors();
-
 
     for (int i = 0; i < points.size(); i++) {
       indices.col(i)[0] = i;

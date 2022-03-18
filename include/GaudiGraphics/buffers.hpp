@@ -171,7 +171,11 @@ public:
     mVertNormals.setZero();
 
     for (int i = 0; i < mIndices.cols(); i++) {
-
+      /*
+      std::cout << i << " " << mIndices.cols() << " - " << mIndices(0, i) << " "
+                << mIndices(1, i) << " " << mIndices(2, i) << " "
+                << mPositions.rows() << " " << mPositions.cols() << std::endl;
+      */
       Vec3 v0 = mPositions.col(mIndices(0, i));
       Vec3 v1 = mPositions.col(mIndices(1, i));
       Vec3 v2 = mPositions.col(mIndices(2, i));
@@ -285,7 +289,7 @@ public:
     updateShaderAttributes();
     /* Draw 2 triangles starting at index 0 */
     //
-    //this->displayShader().drawIndexed(GL_LINES, 0, mIndices.cols());
+    // this->displayShader().drawIndexed(GL_LINES, 0, mIndices.cols());
     this->displayShader().drawIndexed(GL_TRIANGLES, 0, mIndices.cols());
   }
 
