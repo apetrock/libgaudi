@@ -9,9 +9,11 @@
 // files that USE the data structure
 #ifndef __M2TREE_CODE__
 #define __M2TREE_CODE__
-
 #include "bins.hpp"
 #include "geometry_types.hpp"
+
+//#include <execution>
+#include <pstl/glue_execution_defs.h>
 
 /*
 stages
@@ -24,31 +26,33 @@ class Simple_BarnesHutt {
   M2_TYPEDEFS;
 
 public:
+  using Tree = pole_tree<SPACE>;
+  using Node = pole_node<SPACE>;
   using ComputeAccumulation = std::function<void()>;
   using ComputeCharge = std::function<void()>;
 
   using PreComputeFcn = std::function<void(
       const vector<CHARGE> &charges, const vector<T> &weights,
-      const vector<coordinate_type> &points, int begin, int N,
+      const vector<coordinate_type> &points, Node &node, Tree &tree,
       const vector<int> &permutation, coordinate_type &avgPoint,
       CHARGE &netCharge)>;
 
-  using ComputeFcn = std::function<OUTPUT(const CHARGE &charge,
-                                          const coordinate_type &chargePoint,
-                                          const coordinate_type &evalPoint)>;
+  using ComputeFcn = std::function<OUTPUT(size_t i,                           //
+                                          const CHARGE &ci, const CHARGE &cj, //
+                                          const coordinate_type &pi,
+                                          const coordinate_type &pj, //
+                                          Node &node, Tree &tree)>;
 
   vector<OUTPUT> integrate(vector<CHARGE> &charges, vector<T> &weights,
                            vector<coordinate_type> &chargePoints,
                            vector<coordinate_type> &evalPoints,
                            PreComputeFcn preComputeFcn, ComputeFcn computeFcn) {
-    vector<coordinate_type> u(evalPoints.size(), coordinate_type(0, 0, 0));
 
-    typedef pole_tree<SPACE> Tree;
-    typedef pole_node<SPACE> Node;
+    vector<OUTPUT> u(evalPoints.size(), coordinate_type(0, 0, 0));
 
     Tree octree(chargePoints);
 
-    vector<coordinate_type> nodeCharges;
+    vector<CHARGE> nodeCharges;
     vector<coordinate_type> nodePositions;
     nodeCharges.resize(octree.nodes.size());
     nodePositions.resize(octree.nodes.size());
@@ -67,8 +71,8 @@ public:
       int N = pNode.size;
       int beg = pNode.begin;
 
-      preComputeFcn(charges, weights, chargePoints, beg, N, octree.permutation,
-                    netCharge, avgPoint);
+      preComputeFcn(charges, weights, chargePoints, pNode, octree, netCharge,
+                    avgPoint);
 
       nodeCharges[pId] = netCharge;
       nodePositions[pId] = avgPoint;
@@ -85,6 +89,7 @@ public:
       int count = 0;
 
       coordinate_type pi = evalPoints[i];
+      CHARGE ci = charges[i];
 
       std::stack<int> stack1;
       stack1.push(0);
@@ -101,9 +106,19 @@ public:
         // int ii = octree.permutation[pNode.begin];
 
         if (sc / dc < thresh || pNode.isLeaf()) {
-          coordinate_type ci = nodeCharges[pId];
-          OUTPUT ui = computeFcn(ci, pj, pi);
-          u[i] += ui;
+          if (pNode.isLeaf()) {
+            for (int i = pNode.begin; i < pNode.begin + pNode.size; i++) {
+              int ii = octree.permutation[i];
+              CHARGE cj = charges[ii];
+              OUTPUT ui = computeFcn(pId, ci, cj, pi, pj, pNode, octree);
+              u[i] += ui;
+            }
+
+          } else {
+            CHARGE cj = nodeCharges[pId];
+            OUTPUT ui = computeFcn(pId, ci, cj, pi, pj, pNode, octree);
+            u[i] += ui;
+          }
         }
 
         else {
@@ -141,9 +156,9 @@ public:
       coordinate_type &avgNormal)>;
 
   using ComputeFcn = std::function<OUTPUT(
-      const CHARGE &q, const coordinate_type &pc, const coordinate_type &pe,
-      const coordinate_type &N, const vector<PRIMITIVE> &points, Node &node,
-      Tree &tree)>;
+      int i, const CHARGE &q, const coordinate_type &pc,
+      const coordinate_type &pe, const coordinate_type &N,
+      const vector<PRIMITIVE> &points, Node &node, Tree &tree)>;
 
   void integrate(vector<CHARGE> &charges, vector<PRIMITIVE> &chargePrimitives,
                  vector<coordinate_type> &evalPoints, vector<OUTPUT> &u,
@@ -185,10 +200,13 @@ public:
     }
 
     T thresh = 0.5;
-
-    for (int i = 0; i < evalPoints.size(); i++) {
+    // std::vector<size_t> counter(evalPoints.size());
+    // std::iota(std::begin(counter), std::end(counter), 0);
+#pragma omp parallel for
+    for (size_t i = 0; i < evalPoints.size(); i++) {
+      // std::for_each(/*std::execution::seq, */counter.begin(), counter.end(),
+      // [&](auto &&i) {
       int count = 0;
-
       coordinate_type pi = evalPoints[i];
 
       std::stack<int> stack1;
@@ -209,7 +227,8 @@ public:
 
         if (sc / dc <= thresh || pNode.isLeaf()) {
           CHARGE cj = nodeCharges[pId];
-          OUTPUT ui = computeFcn(cj, pj, pi, Nj, chargePrimitives, pNode, tree);
+          OUTPUT ui =
+              computeFcn(i, cj, pj, pi, Nj, chargePrimitives, pNode, tree);
           u[i] += ui;
           // if(sc/dc > thresh){
         } else {
@@ -220,8 +239,8 @@ public:
           }
         }
       }
-    }
-  } // integrator
+    } //);
+  }   // integrator
 
 }; // geometry_integrator
 

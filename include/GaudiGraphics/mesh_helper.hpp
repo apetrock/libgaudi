@@ -52,11 +52,7 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
 
       while (it) {
         it = fvb != fve;
-        std::cout << fvb->vertex()->position_in_set() << " ";
         indices.col(ii)[j] = fvb->vertex()->position_in_set();
-
-        //                    std::cout << fvb->vertex()->position_in_set() <<
-        //                    std::endl;
         j++;
         fvb = fvb->next();
         if (j == 3)
@@ -94,7 +90,7 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
       continue;
     if (faces[i]->size() < 3)
       continue;
-    //numIndices += faces[i]->size();
+    // numIndices += faces[i]->size();
     numIndices++;
   }
   numVerts = verts.size();
@@ -109,12 +105,11 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
       if (!mesh->has_face(i))
         continue;
 
-      if (faces[i]->size() < 3){
-        std::cout << "fcuk" << std::endl;
+      if (faces[i]->size() < 3) {
         faces[i]->print();
         continue;
       }
-        
+
       face_vertex_ptr fvb = faces[i]->fbegin();
       face_vertex_ptr fve = faces[i]->fend();
       bool it = true;
@@ -122,8 +117,8 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
 
       while (it) {
         it = fvb != fve;
-        int pos = fvb->vertex()->position_in_set();       
-       
+        int pos = fvb->vertex()->position_in_set();
+
         indices.col(ii)[j] = pos;
         // std::cout << fvb->vertex()->position_in_set() << " ";
         //                    std::cout << fvb->vertex()->position_in_set() <<

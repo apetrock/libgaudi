@@ -1113,6 +1113,9 @@ public:
   void build(vector<coordinate_type> &points, int maxLevel) {
     // TIMER function//TIMER(__FUNCTION__);
     // inititalize permutation
+    if (points.empty())
+      return;
+
     permutation.resize(points.size());
     leafIds.resize(points.size());
     // nodes.reserve(points.size()*points.size());
@@ -1290,7 +1293,7 @@ public:
 
   aabb_tree(const aabb_tree &other) { *this = other; }
 
-  aabb_tree(vector<PRIMITIVE> &points) { this->build(points, 12); }
+  aabb_tree(vector<PRIMITIVE> &points) { this->build(points, 24); }
 
   aabb_tree &operator=(const aabb_tree &rhs) {
     if (this != &rhs) {
@@ -1302,8 +1305,12 @@ public:
   }
 
   void calcHalfCenter(coordinate_type &half, coordinate_type &cen,
-                      vector<PRIMITIVE> &primitives, vector<int> &permutation,
-                      int beg, int N) {
+                      vector<PRIMITIVE> &primitives,
+                      const vector<int> &permutation, int beg, int N) {
+
+    if (permutation.empty())
+      return;
+
     box_type bb = primitives[permutation[beg]].bbox();
     for (int i = beg; i < beg + N; i++) {
       PRIMITIVE p = primitives[permutation[i]];
@@ -1331,6 +1338,8 @@ public:
     root.size = primitives.size();
     root.id = nodes.size();
     root.parent = -1;
+    if (primitives.empty())
+      return;
     calcHalfCenter(root.bbox.half, root.bbox.center, primitives, permutation,
                    root.begin, root.size);
 
@@ -1350,7 +1359,7 @@ public:
       coordinate_type center = pNode.bbox.center;
 
       int cN[2] = {0, 0}, cCounter[2] = {0, 0}, cAccum[2] = {0, 0};
-      int *lPerm = new int[N];
+      std::vector<int> lPerm(N);
 
       for (int i = beg; i < beg + N; i++) {
         PRIMITIVE p = primitives[permutation[i]];

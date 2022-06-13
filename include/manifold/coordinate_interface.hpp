@@ -512,6 +512,28 @@ typename SPACE::box_type bound(typename surf<SPACE>::surf_ptr s) {
   return makeBoxMinMax<T, coordinate_type>(min, max);
 }
 
+template <typename SPACE, typename TYPE>
+std::vector<TYPE> get(m2::surf<SPACE> *surf, typename SPACE::vertex_index id) {
+  auto vertices = surf->get_vertices();
+  std::vector<TYPE> vals(surf->get_vertices().size());
+  int i = 0;
+  for (auto v : surf->get_vertices()) {
+    vals[i] = v->template get<TYPE>(id);
+    i++;
+  }
+  return vals;
+}
+
+template <typename SPACE, typename TYPE>
+void set(m2::surf<SPACE> *surf, std::vector<TYPE> vals,
+           typename SPACE::vertex_index id) {
+  int i = 0;
+  for (auto v : surf->get_vertices()) {
+    v->template set<TYPE>(id, vals[i]);
+    i++;
+  }
+}
+
 template <typename SPACE>
 std::vector<typename SPACE::coordinate_type>
 get_coordinates(typename surf<SPACE>::surf_ptr s) {
@@ -523,9 +545,6 @@ get_coordinates(typename surf<SPACE>::surf_ptr s) {
   for (auto v : s->get_vertices()) {
     if (!s->has_vertex(i++))
       continue;
-    if (v->is_degenerate()) {
-      std::cout << " damno! " << v->size() << std::endl;
-    }
     coords.push_back(get_coordinate<SPACE>(v));
   }
 
@@ -609,6 +628,59 @@ get_tris(std::vector<typename surf<SPACE>::face_ptr> faces) {
     tris.insert(tris.end(), ftris.begin(), ftris.end());
   }
   return tris;
+}
+
+template <typename SPACE, typename V>
+std::vector<V> verts_to_faces(std::vector<V> vert_vals,
+                              typename surf<SPACE>::surf_ptr s) {
+  M2_TYPEDEFS;
+
+  auto &faces = s->get_faces();
+  std::vector<V> face_vals(faces.size());
+
+  for (int i = 0; i < faces.size(); i++) {
+    if (!s->has_face(i))
+      continue;
+    if (faces[i]->size() < 3)
+      continue;
+
+    V r = z::zero<V>();
+
+    m2::for_each_face<SPACE>(faces[i], [&r, &vert_vals](face_vertex_ptr fv) {
+      int j = fv->vertex()->position_in_set();
+      real l = fv->template get<real>(SPACE::face_vertex_index::BARY);
+      r += l * vert_vals[j];
+    });
+    // std::cout << r << " " << m2::va::norm(r) << std::endl;
+    face_vals[i] = r;
+  }
+  return face_vals;
+}
+
+template <typename SPACE, typename V>
+std::vector<V> faces_to_verts(std::vector<V> face_vals,
+                              typename surf<SPACE>::surf_ptr s) {
+  M2_TYPEDEFS;
+
+  auto &verts = s->get_vertices();
+  std::vector<V> vert_vals(verts.size());
+
+  for (int i = 0; i < verts.size(); i++) {
+    if (!s->has_vertex(i))
+      continue;
+
+    V r = z::zero<V>();
+
+    m2::for_each_vertex<SPACE>(verts[i], [&r, &face_vals](face_vertex_ptr fv) {
+      int j = fv->face()->position_in_set();
+      real l = fv->template get<real>(SPACE::face_vertex_index::BARY);
+      r += l * face_vals[j];
+    });
+    // std::cout << r << " " << m2::va::norm(r) << std::endl;
+    
+    vert_vals[i] = r;
+  }
+  return vert_vals;
 }
 
 } // namespace ci

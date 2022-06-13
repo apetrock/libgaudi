@@ -36,7 +36,7 @@ template <typename T, typename CTYPE> struct swept_triangle {
   CTYPE &operator[](int i) { return p[i]; }
   CTYPE operator[](int i) const { return p[i]; }
 
-  CTYPE normal() { return cross(p[1] - p[0], p[2] - p[0]).normalize(); }
+  CTYPE normal() { return m2::va::calculate_normal(p[0], p[1], p[2]); }
 
   CTYPE center() { return 0.33333 * (p[0] + p[1] + p[2]); }
 
@@ -157,10 +157,8 @@ public:
     const CTYPE &ca1 = this->p[1];
     const CTYPE &cb0 = B.p[0];
     const CTYPE &cb1 = B.p[1];
-    T d0 = 1.0 / 2.0 *
-           ((cb0 - ca0).squaredNorm() + (cb1 - ca1).squaredNorm());
-    T d1 = 1.0 / 2.0 *
-           ((cb0 - ca1).squaredNorm() + (cb1 - ca0).squaredNorm());
+    T d0 = 1.0 / 2.0 * ((cb0 - ca0).squaredNorm() + (cb1 - ca1).squaredNorm());
+    T d1 = 1.0 / 2.0 * ((cb0 - ca1).squaredNorm() + (cb1 - ca0).squaredNorm());
 
     return min(d0, d1);
   };
@@ -217,6 +215,20 @@ public:
     return out;
   }
 
+  bounding_box<T, CTYPE> bbox() {
+    CTYPE min, max;
+    this->getExtents(min, max);
+    return makeBoxMinMax<T, CTYPE>(min, max);
+  }
+
+  void getExtents(CTYPE &min, CTYPE &max) {
+    min = p[0], max = p[0];
+    min = m2::va::min(min, p[1]);
+    min = m2::va::min(min, p[2]);
+    max = m2::va::max(max, p[1]);
+    max = m2::va::max(max, p[2]);
+  }
+
   T solidAngle(CTYPE pi) {
     CTYPE A = p[0] - pi;
     CTYPE B = p[1] - pi;
@@ -271,19 +283,6 @@ public:
     return dmin;
   };
 
-  bounding_box<T, CTYPE> bbox() {
-    CTYPE min, max;
-    this->getExtents(min, max);
-    return makeBoxMinMax<T, CTYPE>(min, max);
-  }
-
-  void getExtents(CTYPE &min, CTYPE &max) {
-    min = p[0], max = p[0];
-    min = m2::va::min(min, p[1]);
-    min = m2::va::min(min, p[2]);
-    max = m2::va::max(max, p[1]);
-    max = m2::va::max(max, p[2]);
-  }
 };
 
 template <typename T, typename CTYPE> struct swept_point {
@@ -332,11 +331,87 @@ template <typename T, typename CTYPE> struct box {
   };
 };
 
+template <typename T, typename CTYPE> struct ls_sphere {
+  T //
+      Sx = 0.0,
+      Sy = 0.0, Sz = 0.0,                 //
+      Sxx = 0.0, Syy = 0.0, Szz = 0.0,    //
+      Sxy = 0.0, Sxz = 0.0, Syz = 0.0,    //
+      Sxxx = 0.0, Syyy = 0.0, Szzz = 0.0, //
+      Sxyy = 0.0, Sxzz = 0.0, Sxxy = 0.0, //
+      Sxxz = 0.0, Syyz = 0.0, Syzz = 0.0;
+  T W = 0;
+
+  void add_vec(CTYPE xi, T w) {
+    T x = xi[0];
+    T y = xi[1];
+    T z = xi[2];
+    Sxx += x * x, Syy += y * y, Szz += z * z;
+    Sxy += x * y, Sxz += x * z, Syz += y * z;
+
+    Sxxx += x * x * x, Syyy += y * y * y, Szzz += z * z * z;
+    Sxyy += x * y * y, Sxzz += x * z * z, Sxxy += x * x * y;
+    Sxxz += x * x * z, Syyz += y * y * z, Syzz += y * z * z;
+    W += w;
+  }
+
+  ls_sphere<T, CTYPE> &operator+=(const ls_sphere<T, CTYPE> &rhs) {
+    Sxx += rhs.Sxx, Syy += rhs.Syy, Szz += rhs.Szz;
+    Sxy += rhs.Sxy, Sxz += rhs.Sxz, Syz += rhs.Syz;
+
+    Sxxx += rhs.Sxxx, Syyy += rhs.Syyy, Szzz += rhs.Szzz;
+    Sxyy += rhs.Sxyy, Sxzz += rhs.Sxzz, Sxxy += rhs.Sxxy;
+    Sxxz += rhs.Sxxz, Syyz += rhs.Syyz, Syzz += rhs.Syzz;
+    W += rhs.W;
+
+    return *this;
+  }
+
+  void calc(CTYPE &X, T &R) {
+    T A1 = Sxx + Syy + Szz;
+    T a = 2.0 * Sx * Sx - 2.0 * W * Sxx;
+    T b = 2.0 * Sx * Sy - 2.0 * W * Sxy;
+    T c = 2.0 * Sx * Sz - 2.0 * W * Sxz;
+    T d = -W * (Sxxx + Sxyy + Sxzz) + A1 * Sx;
+
+    T e = 2.0 * Sx * Sy - 2.0 * W * Sxy;
+    T f = 2.0 * Sy * Sy - 2.0 * W * Syy;
+    T g = 2.0 * Sy * Sz - 2.0 * W * Syz;
+    T h = -W * (Sxxy + Syyy + Syzz) + A1 * Sy;
+    T j = 2.0 * Sx * Sz - 2.0 * W * Sxz;
+    T k = 2.0 * Sy * Sz - 2.0 * W * Syz;
+    T l = 2.0 * Sz * Sz - 2.0 * W * Szz;
+    T m = -W * (Sxxz + Syyz + Szzz) + A1 * Sz;
+
+    T delta = a * (f * l - g * k) - e * (b * l - c * k) + j * (b * g - c * f);
+    X[0] = (d * (f * l - g * k) - h * (b * l - c * k) + m * (b * g - c * f)) /
+           delta;
+    X[1] = (a * (h * l - m * g) - e * (d * l - m * c) + j * (d * g - h * c)) /
+           delta;
+    X[2] = (a * (f * m - h * k) - e * (b * m - d * k) + j * (b * h - d * f)) /
+           delta;
+
+    R = sqrt(X[0] * X[0] + X[1] * X[1] + X[2] * X[2] +
+             (A1 - 2.0 * (X[0] * Sx + X[1] * Sy + X[2] * Sz)) / W);
+  }
+};
+
 // template <typename T, typename CTYPE, typename PRIMITIVE>
 // bool boxIntersect(PRIMITIVE& prim, box<T,CTYPE> & b);
 
 // template<typename T, typename vectype>
 // class ray{};
+enum class storage_type {
+  SIZE = 0,
+  REAL = 1,
+  COMP = 2,
+  VEC3 = 3,
+  VEC4 = 4,
+  MAT3 = 5,
+  MAT4 = 6,
+  QUAT = 7,
+
+};
 
 template <typename T> class euclidean_space {
 public:
@@ -352,8 +427,11 @@ public:
   typedef swept_point<T, coordinate_type> swept_point_type;
   typedef swept_triangle<T, coordinate_type> swept_triangle_type;
   typedef bounding_box<T, coordinate_type> box_type;
+  typedef Eigen::Matrix<T, 2, 2> mat2;
   typedef Eigen::Matrix<T, 3, 3> mat3;
   typedef Eigen::Matrix<T, 4, 4> mat4;
+  typedef Eigen::Matrix<T, 4, 3> mat43;
+
   typedef unsigned short ushort;
   typedef unsigned int uint;
   typedef unsigned long ulong;
@@ -373,13 +451,39 @@ public:
   typedef Eigen::Matrix<T, 4, 1> int3;
   typedef Eigen::Matrix<T, 4, 1> int4;
 
+  enum class face_vertex_index { MAXINDEX = 0 };
+
   enum class edge_index { MAXINDEX = 0 };
 
   enum class vertex_index { COORDINATE = 0, MAXINDEX = 1 };
 
   enum class face_index { NORMAL = 0, CENTER = 1, AREA = 2, MAXINDEX = 3 };
 
-  enum class face_vertex_index { MAXINDEX = 0 };
+  static storage_type get_type(face_vertex_index) { return storage_type::SIZE; }
+
+  static storage_type get_type(edge_index) { return storage_type::SIZE; }
+
+  static storage_type get_type(face_index idx) {
+    switch (idx) {
+    case face_index::NORMAL:
+      return storage_type::VEC3;
+    case face_index::CENTER:
+      return storage_type::VEC3;
+    case face_index::AREA:
+      return storage_type::REAL;
+    default:
+      return storage_type::SIZE;
+    }
+  }
+
+  static storage_type get_type(vertex_index idx) {
+    switch (idx) {
+    case vertex_index::COORDINATE:
+      return storage_type::VEC3;
+    default:
+      return storage_type::SIZE;
+    }
+  }
 };
 
 typedef euclidean_space<double> space3;
@@ -389,14 +493,38 @@ namespace z {
 template <typename T> T zero() { return T(0.0); }
 template <typename T> T one() { return T(1.0); }
 
-template <> double zero<double>() { return 0.0; }
-template <> double one<double>() { return 1.0; }
+template <> inline double zero<double>() { return 0.0; }
+template <> inline double one<double>() { return 1.0; }
 
-template <> Eigen::Matrix<double, 3, 1> zero<Eigen::Matrix<double, 3, 1>>() {
+template <>
+inline Eigen::Matrix<double, 3, 1> zero<Eigen::Matrix<double, 3, 1>>() {
   return Eigen::Matrix<double, 3, 1>(0, 0, 0);
 }
-template <> Eigen::Matrix<double, 3, 1> one<Eigen::Matrix<double, 3, 1>>() {
+template <>
+inline Eigen::Matrix<double, 3, 1> one<Eigen::Matrix<double, 3, 1>>() {
   return Eigen::Matrix<double, 3, 1>(1, 1, 1);
+}
+
+template <>
+inline Eigen::Matrix<double, 3, 3> zero<Eigen::Matrix<double, 3, 3>>() {
+  Eigen::Matrix<double, 3, 3> m = Eigen::Matrix<double, 3, 3>::Zero();
+  //m << 0, 0, 0, 0, 0, 0, 0, 0, 0;
+  return m;
+}
+
+template <>
+inline Eigen::Matrix<double, 3, 3> one<Eigen::Matrix<double, 3, 3>>() {
+  Eigen::Matrix<double, 3, 3> m;
+  m << 1, 0, 0, 0, 1, 0, 0, 0, 1;
+  return m;
+}
+
+template <>
+inline Eigen::Matrix<double, 4, 3> zero<Eigen::Matrix<double, 4, 3>>() {
+  //Eigen::Matrix<double, 4, 3> m;
+  Eigen::Matrix<double, 4, 3> m = Eigen::Matrix<double, 4, 3>::Zero();
+  //m << 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
+  return m;
 }
 
 } // namespace z

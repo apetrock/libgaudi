@@ -16,7 +16,7 @@
 #ifndef __VECADD__
 #define __VECADD__
 
-    using namespace std;
+using namespace std;
 
 namespace m2 {
 namespace va {
@@ -28,11 +28,16 @@ template <int N, typename T> using VEC = Eigen::Matrix<T, N, 1>;
 template <typename T>
 using MAT = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
-template <typename T>
-using MAT3 = Eigen::Matrix<T, 3, 3>;
+template <typename T> using MAT3 = Eigen::Matrix<T, 3, 3>;
+
+template <typename T> int sgn(T val) { return (T(0) < val) - (val < T(0)); }
 
 template <class Tf, class Tv> inline Tv linear(Tf f, const Tv &x, const Tv &y) {
   return (y - x) * f + x;
+}
+
+template <class Tf, class Tv> inline Tv mix(Tf f, const Tv &x, const Tv &y) {
+  return f * x + (1.0 - f) * y;
 }
 
 template <int N, typename T> struct vecComp {
@@ -134,6 +139,12 @@ template <typename T> inline T dot(const VEC3<T> &A, const VEC3<T> &B) {
 }
 
 template <typename T> T norm(VEC3<T> a) { return a.norm(); };
+
+template <typename T> double norm(std::complex<T> a) {
+  a = a * a;
+  return a.real() - a.imag();
+};
+
 template <typename T> T norm2(VEC3<T> a) {
   return a[0] * a[0] + a[1] * a[1] + a[2] * a[2];
 };
@@ -148,6 +159,12 @@ inline VEC3<T> cross(const VEC3<T> &vecA, const VEC3<T> &vecB) {
   out[1] = vecA[2] * vecB[0] - vecA[0] * vecB[2];
   out[2] = vecA[0] * vecB[1] - vecA[1] * vecB[0];
   return out;
+}
+
+template <typename T>
+inline MAT3<T> outer(const VEC3<T> &vecA, const VEC3<T> &vecB) {
+  // return vecA.transpose() * vecB;
+  return vecA * vecB.transpose();
 }
 
 template <typename T>
@@ -166,20 +183,32 @@ inline T cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
 }
 
 template <typename T>
-inline T abs_cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
+inline T abs_cos(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
 
   T e1 = norm(VEC3<T>(c1 - c0));
   T e2 = norm(VEC3<T>(c2 - c0));
   T e3 = norm(VEC3<T>(c2 - c1));
 
-  if(e1 == 0.0 || e2 == 0.0)
+  if (e1 == 0.0 || e2 == 0.0)
     return 0.0;
 
-  float cos_alpha = fabs((e1 * e1 + e2 * e2 - e3 * e3) / (2.0f * e1 * e2));
+  T cos_alpha = fabs((e1 * e1 + e2 * e2 - e3 * e3) / (2.0f * e1 * e2));
 
   return cos_alpha;
 }
 
+template <typename T>
+inline T abs_cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
+
+  T cos_alpha = abs_cos<T>(c0, c1, c2);
+
+  if (cos_alpha == 0)
+    return 2.0;
+
+  T cotan1 = cos_alpha / sqrt(1.0f - cos_alpha * cos_alpha + 1e-16);
+  cotan1 = std::min<T>(cotan1, T(2.0));
+  return cotan1;
+}
 
 template <typename T>
 inline bool ray_triangle_intersect(VEC3<T> &pi, const VEC3<T> &r0,
@@ -606,6 +635,13 @@ inline T angle_from_plane(const VEC3<T> &norm, const VEC3<T> &vertA,
   return angle_from_vectors(A, B);
 };
 
+template <typename T>
+inline VEC3<T> calculate_normal(const VEC3<T> &p0, //
+                                const VEC3<T> &p1, //
+                                const VEC3<T> &p2 ) {
+  return (p1 - p0).cross(p2 - p0).normalized();
+}
+
 template <typename T> inline VEC3<T> calculate_normal(vector<VEC3<T>> vt_list) {
   // using newell's method
   VEC3<T> tNormal;
@@ -640,31 +676,53 @@ inline VEC3<T> calculate_average(vector<VEC3<T>> vt_list) {
   return tCenter;
 }
 
-template <typename T> inline void radial_test() {
-  VEC3<T> A;
-  VEC3<T> B;
+template <typename T>
+inline VEC3<T> fit_sphere(const vector<VEC3<T>> &X, vector<VEC3<T>> &Xc, T &r) {
 
-  T imax = 16;
-  for (int i = 0; i < int(imax); i++) {
-    A.set(0, 1, 0);
-    B.set(sin(2 * 3.14 * T(i) / imax), cos(2 * 3.14 * T(i) / imax), 0);
+  T N = T(X.size());
+  T Sx = 0.0, Sy = 0.0, Sz = 0.0,         //
+      Sxx = 0.0, Syy = 0.0, Szz = 0.0,    //
+      Sxy = 0.0, Sxz = 0.0, Syz = 0.0,    //
+      Sxxx = 0.0, Syyy = 0.0, Szzz = 0.0, //
+      Sxyy = 0.0, Sxzz = 0.0, Sxxy = 0.0, //
+      Sxxz = 0.0, Syyz = 0.0, Syzz = 0.0;
 
-    T magA = A.mag();
-    T magB = B.mag();
-    VEC3<T> cAB = cross(A, B);
-    T magcAB = cAB.mag();
+  for (auto xi : X) {
+    T x = xi[0];
+    T y = xi[1];
+    T z = xi[2];
+    Sxx += x * x, Syy += y * y, Szz += z * z;
+    Sxy += x * y, Sxz += x * z, Syz += y * z;
 
-    T dotAB = dot(A, B);
-
-    T ndotAB = dotAB / magA / magB;
-    T nmagcAB = magcAB / magA / magB;
-
-    T theta1 = acos(ndotAB);
-    T theta2 = asin(nmagcAB);
-    cout << i << ": " << 2 * 3.14 * T(i) / imax << endl;
-    cout << "   " << ndotAB << ", " << nmagcAB << endl;
-    cout << "   " << theta1 << ", " << theta2 << endl;
+    Sxxx += x * x * x, Syyy += y * y * y, Szzz += z * z * z;
+    Sxyy += x * y * y, Sxzz += x * z * z, Sxxy += x * x * y;
+    Sxxz += x * x * z, Syyz += y * y * z, Syzz += y * z * z;
   }
+
+  T A1 = Sxx + Syy + Szz;
+  T a = 2 * Sx * Sx - 2 * N * Sxx;
+  T b = 2 * Sx * Sy - 2 * N * Sxy;
+  T c = 2 * Sx * Sz - 2 * N * Sxz;
+  T d = -N * (Sxxx + Sxyy + Sxzz) + A1 * Sx;
+
+  T e = 2 * Sx * Sy - 2 * N * Sxy;
+  T f = 2 * Sy * Sy - 2 * N * Syy;
+  T g = 2 * Sy * Sz - 2 * N * Syz;
+  T h = -N * (Sxxy + Syyy + Syzz) + A1 * Sy;
+  T j = 2 * Sx * Sz - 2 * N * Sxz;
+  T k = 2 * Sy * Sz - 2 * N * Syz;
+  T l = 2 * Sz * Sz - 2 * N * Szz;
+  T m = -N * (Sxxz + Syyz + Szzz) + A1 * Sz;
+  T delta = a * (f * l - g * k) - e * (b * l - c * k) + j * (b * g - c * f);
+
+  T xc =
+      (d * (f * l - g * k) - h * (b * l - c * k) + m * (b * g - c * f)) / delta;
+  T yc =
+      (a * (h * l - m * g) - e * (d * l - m * c) + j * (d * g - h * c)) / delta;
+  T zc =
+      (a * (f * m - h * k) - e * (b * m - d * k) + j * (b * h - d * f)) / delta;
+  T R = sqrt(xc ^ 2 + yc ^ 2 + zc ^
+             2 + (A1 - 2 * (xc * Sx + yc * Sy + zc * Sz)) / N);
 }
 
 inline float Q_rsqrt(float number) {
@@ -692,16 +750,17 @@ template <typename T>
 inline VEC3<T> calc_bary(VEC3<T> c, std::vector<VEC3<T>> vertices) {
   MAT3<T> V;
   int i = 0;
-  
-  for(auto v : vertices){
-    if(i > 2) break;
+
+  for (auto v : vertices) {
+    if (i > 2)
+      break;
     V.block(0, i, 3, 1) = v;
     i++;
   }
 
-  //VEC3<T> l = V.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(c                                                                                                         );
+  // VEC3<T> l = V.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(c );
   VEC3<T> l = V.colPivHouseholderQr().solve(c);
-  //std::cout << l.transpose() << std::endl;
+  // std::cout << l.transpose() << std::endl;
   return l;
 }
 

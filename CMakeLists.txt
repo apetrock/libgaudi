@@ -9,6 +9,13 @@ project(
 
 cmake_minimum_required(VERSION 3.10)
 
+# FetchContent added in CMake 3.11, downloads during the configure step
+include(FetchContent)
+# FetchContent_MakeAvailable was not added until CMake 3.14; use our shim
+if(${CMAKE_VERSION} VERSION_LESS 3.14)
+  include(cmake/add_FetchContent_MakeAvailable.cmake)
+endif()
+
 # Build Types
 set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}
     CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel tsan asan lsan msan ubsan"
@@ -107,11 +114,14 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   endif()
 endif()
 
-# FetchContent added in CMake 3.11, downloads during the configure step
-include(FetchContent)
-# FetchContent_MakeAvailable was not added until CMake 3.14; use our shim
-if(${CMAKE_VERSION} VERSION_LESS 3.14)
-  include(cmake/add_FetchContent_MakeAvailable.cmake)
+
+
+find_package(OpenMP)
+if (OPENMP_FOUND)
+    set(ENV{'OMP_NUM_THREADS'} 8)
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
 set(EIGEN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen-3.4.0")
@@ -140,13 +150,15 @@ add_definitions("${NANOGUI_EXTRA_DEFS}")
 
 include_directories("${EIGEN_INCLUDE_DIR}" "${SPECTRA_INCLUDE_DIR}" )
 add_subdirectory(src)
-# The executable code is here
 
 #add_subdirectory(projects/hello_manifold)
 #add_subdirectory(projects/hello)
 #add_subdirectory(projects/facemergetest)
-add_subdirectory(projects/rxdiff)
-add_subdirectory(projects/rmedge)
+#add_subdirectory(projects/rxdiff)
+add_subdirectory(projects/stretch)
+add_subdirectory(projects/bending)
+
+
 #add_subdirectory(projects/tanvec)
 #add_subdirectory(projects/vortextest)
 #add_subdirectory(projects/sdftest)
