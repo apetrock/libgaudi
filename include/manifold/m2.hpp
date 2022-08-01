@@ -1009,10 +1009,8 @@ public:
     ~face_vertex(){
         // mVertex->remove_face_vertex(mVertexPosition);
     };
-    
-    int position_in_set(face_vertex_ptr cv) const {
-      return mEdge->fv_position_in_set(this);
-    }
+
+    int position_in_set() { return mEdge->fv_position_in_set(this); }
 
     bool operator==(face_vertex_ref rhs) {
       if (mEdge == rhs.mEdge && mFace == rhs.mFace && mVertex == rhs.mVertex) {

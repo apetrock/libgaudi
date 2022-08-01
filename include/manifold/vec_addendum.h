@@ -636,9 +636,16 @@ inline T angle_from_plane(const VEC3<T> &norm, const VEC3<T> &vertA,
 };
 
 template <typename T>
+inline T calculate_area(const VEC3<T> &p0, //
+                        const VEC3<T> &p1, //
+                        const VEC3<T> &p2) {
+  return (p1 - p0).cross(p2 - p0).norm();
+}
+
+template <typename T>
 inline VEC3<T> calculate_normal(const VEC3<T> &p0, //
                                 const VEC3<T> &p1, //
-                                const VEC3<T> &p2 ) {
+                                const VEC3<T> &p2) {
   return (p1 - p0).cross(p2 - p0).normalized();
 }
 
