@@ -193,7 +193,7 @@ public:
   }
 
   virtual void updateShaderAttributes() {
-    mDispShader->uploadAttrib("vertexNormal_modelspace", mVertNormals);
+    //mDispShader->uploadAttrib("vertexNormal_modelspace", mVertNormals);
     mDispShader->uploadIndices(mIndices);
     mDispShader->uploadAttrib("vertexPosition_modelspace", mPositions);
     mDispShader->uploadAttrib("vertexColor_modelspace", mColors);
