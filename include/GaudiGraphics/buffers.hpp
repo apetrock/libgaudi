@@ -2,7 +2,7 @@
 #define __BUFFEROBJECT__
 
 #include <GaudiGraphics/viewer.hpp>
-#include <GaudiMath/typedefs.h>
+#include <GaudiMath/typedefs.hpp>
 #include <nanogui/glutil.h>
 
 #include <iostream>
@@ -10,7 +10,7 @@
 
 namespace gg {
 using namespace GaudiMath;
-std::string realToString(float f) {
+inline std::string realToString(float f) {
   std::ostringstream convert; // stream used for the conversion
   convert << f;         // insert the textual representation of 'Number' in the
   return convert.str(); // set 'Result' to the contents of the
@@ -193,7 +193,7 @@ public:
   }
 
   virtual void updateShaderAttributes() {
-    //mDispShader->uploadAttrib("vertexNormal_modelspace", mVertNormals);
+    // mDispShader->uploadAttrib("vertexNormal_modelspace", mVertNormals);
     mDispShader->uploadIndices(mIndices);
     mDispShader->uploadAttrib("vertexPosition_modelspace", mPositions);
     mDispShader->uploadAttrib("vertexColor_modelspace", mColors);
@@ -579,7 +579,7 @@ private:
   std::vector<nanogui::MatrixXu> mLineIndices;
 };
 
-BufferObject *makeCube() {
+inline BufferObject *makeCube() {
   using namespace nanogui;
 
   BufferObject *cube = new BufferObject();

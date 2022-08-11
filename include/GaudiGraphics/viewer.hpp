@@ -1,7 +1,7 @@
 #ifndef __APP_VIEWER__
 #define __APP_VIEWER__
 
-#include <GaudiMath/typedefs.h>
+#include <GaudiMath/typedefs.hpp>
 #include <nanogui/glutil.h>
 
 //#include <nanogui/glutil.h>
@@ -68,7 +68,8 @@ public:
 
   void init(Vec2i size) {
 
-    mProject = this->makeProjectionMatrix(60.0 * M_PI / 180.0, double(size[0]) / double(size[1]), 0.1, 20);
+    mProject = this->makeProjectionMatrix(
+        60.0 * M_PI / 180.0, double(size[0]) / double(size[1]), 0.1, 20);
     mModelView.setIdentity();
     mModelViewOld.setIdentity();
 
@@ -192,8 +193,8 @@ public:
   typedef double Real;
 
   SimpleApp(int w = 1280, int h = 720)
-      : _width(w), _height(h), nanogui::Screen(Eigen::Vector2i(w, h),
-                        "App Simple") {
+      : _width(w),
+        _height(h), nanogui::Screen(Eigen::Vector2i(w, h), "App Simple") {
     using namespace nanogui;
 
     // now for GUI
@@ -204,7 +205,7 @@ public:
     performLayout(mNVGContext);
 
     _viewer = gg::Viewer::create(mSize);
-    
+
     std::cout << "size: " << mSize << std::endl;
 
     glEnable(GL_DEPTH_TEST);
@@ -272,7 +273,7 @@ public:
   }
 
   virtual void animate() {
-    if (mScene){
+    if (mScene) {
       mScene->_onAnimate();
     }
   }
@@ -281,7 +282,7 @@ public:
     using namespace nanogui;
     glfwGetTime();
 
-    if (this->_animate){
+    if (this->_animate) {
       this->animate();
     }
 

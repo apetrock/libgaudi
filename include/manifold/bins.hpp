@@ -2,7 +2,6 @@
 #define __M2BINS__
 
 #include "conj_grad.hpp"
-#include "debugger.h"
 #include "m2Includes.h"
 
 #include "quartic/cubic.hpp"
@@ -89,10 +88,6 @@ template <typename SPACE> struct line_tests {
     std::ostringstream ss;
     ss << t;
     std::string s(ss.str());
-    Debugger &debug = Debugger::get_instance();
-    debug.add_label(p[0], p[1], p[2], s);
-    debug.DebugPoints.push_back(p);
-
     return true;
   }
 
@@ -137,10 +132,6 @@ template <typename SPACE> struct line_tests {
     // std::cout << tnear << " " << tfar << std::endl;
     coordinate_type p0 = L1 + Ld * tnear;
     coordinate_type p1 = L1 + Ld * tfar;
-    Debugger &debug = Debugger::get_instance();
-    debug.DebugPoints0.push_back(L1);
-    debug.DebugPoints.push_back(p0);
-    debug.DebugPoints.push_back(p1);
 
     return true;
   }
@@ -1403,9 +1394,6 @@ public:
 
         calcHalfCenter(cNode.bbox.half, cNode.bbox.center, primitives,
                        permutation, cNode.begin, cNode.size);
-        // m2::Debugger& debug = m2::Debugger::get_instance();
-        // debug.DebugBoxes.push_back(cNode.bbox.center);
-        // debug.DebugBoxes.push_back(cNode.bbox.half);
 
         nodes.push_back(cNode);
 
@@ -1458,13 +1446,7 @@ getNearest(PRIMITIVE_B &primB, const aabb_tree<SPACE, PRIMITIVE_A> &faceTree,
     const Node &cnode = faceTree.nodes[cId];
 
     if (cnode.children[0] == -1 && cnode.children[1] == -1) {
-      // in order to make this generic, I need to turn this piece into a
-      // function or create iterators for the leaves
 
-      // m2::Debugger& debug = m2::Debugger::get_instance();
-      // debug.DebugLines0.push_back(cnode.bbox.center);
-      // debug.DebugLines0.push_back(primB);
-      // std::cout << cnode.size << std::endl;
       for (int k = cnode.begin; k < cnode.begin + cnode.size; k++) {
 
         PRIMITIVE_A primA = primitives[faceTree.permutation[k]];
@@ -1764,9 +1746,6 @@ inline bool intersectLineTest(typename SPACE::coordinate_type e0,
       if (cnode.children[i] > -1) {
         coordinate_type c0 = faceTree.nodes[cnode.children[i]].bbox.center;
         coordinate_type h0 = faceTree.nodes[cnode.children[i]].bbox.half;
-        m2::Debugger &debug = m2::Debugger::get_instance();
-        debug.DebugBoxes.push_back(c0);
-        debug.DebugBoxes.push_back(h0);
 
         if (test.lineBox(e0, e1, c0 - h0, c0 + h0)) {
           cstack.push(cnode.children[i]);
@@ -1942,9 +1921,6 @@ inline int getNearestInRange(typename SPACE::coordinate_type &p,
   bool hit = false;
   int closestPrim = 0;
   T min = 9999;
-  m2::Debugger &debug = m2::Debugger::get_instance();
-  // debug.DebugBoxes.push_back(p);
-  // debug.DebugBoxes.push_back(coordinate_type(tol,tol,tol));
 
   while (cstack.size() > 0) {
     line_tests<SPACE> test;
@@ -2022,7 +1998,6 @@ getNearestRange(typename SPACE::coordinate_type &p,
   T min = 9999.0; // minimum calculated distance
   int minId = 0;  // the current closest node
   int minTri = 0;
-  m2::Debugger &debug = m2::Debugger::get_instance();
 
   while (cstack.size() > 0) {
     line_tests<SPACE> test;

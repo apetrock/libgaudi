@@ -23,6 +23,7 @@
 #include <string>
 
 #include "GaudiGraphics/buffers.hpp"
+#include "GaudiGraphics/geometry_logger.h"
 #include "GaudiGraphics/mesh_helper.hpp"
 #include "GaudiGraphics/viewer.hpp"
 
@@ -31,7 +32,6 @@
 #include "manifold/laplacian.hpp"
 
 #include "manifold/bins.hpp"
-#include "manifold/conj_grad.hpp"
 #include "manifold/m2Includes.h"
 #include "manifold/m2Operators.h"
 #include "manifold/make.hpp"
@@ -228,9 +228,7 @@ public:
     _obj->init();
     mSceneObjects.push_back(_obj);
 
-    _debugLines = gg::DebugBuffer::create();
-    _debugLines->init();
-    mSceneObjects.push_back(_debugLines);
+    mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }
 
   template <typename SPACE>
@@ -295,10 +293,9 @@ public:
         c = green(m2::va::norm(a));
       if (col == 3)
         c = blue(m2::va::norm(a));
-
-      _debugLines->pushLine(Vec4(pp0[0], pp0[1], pp0[2], 1.0),
-                            Vec4(pp1[0], pp1[1], pp1[2], 1.0),
-                            Vec4(c[0], c[1], c[2], 1.0));
+      gg::geometry_logger::line(Vec4(pp0[0], pp0[1], pp0[2], 1.0),
+                                Vec4(pp1[0], pp1[1], pp1[2], 1.0),
+                                Vec4(c[0], c[1], c[2], 1.0));
     }
   }
 
@@ -421,9 +418,11 @@ public:
 
     m2::optimizer<stretch> opt;
 
+    std::cout << "building constraints " << std::endl;
     m2::constraint_set<stretch>::ptr constraints =
         m2::constraint_set<stretch>::create(_meshGraph);
 
+    std::cout << "adding constraints " << std::endl;
     // init_edge_constraints<stretch>(_meshGraph, constraints);
     constraints->add_constraint(m2::bend<stretch>::create(_meshGraph));
 
@@ -466,7 +465,7 @@ public:
 
     // print_vecs<stretch>(positions, normals);
     std::cout << "rendering debug" << std::endl;
-    _debugLines->renderLines();
+    gg::geometry_logger::render();
 #endif
 
     m2::ci::set_coordinates<stretch>(positions, _meshGraph);
@@ -507,7 +506,7 @@ public:
                       obj->draw(viewer.getProjection(), viewer.getModelView());
                   });
 
-    _debugLines->clear();
+    gg::geometry_logger::clear();
   }
 
   struct {
@@ -518,7 +517,6 @@ private:
   double _max = 0.0;
   double _min = 0.0;
 
-  gg::DebugBufferPtr _debugLines = NULL;
   std::vector<gg::DrawablePtr> mSceneObjects;
 
   gg::BufferObjectPtr _obj = NULL;

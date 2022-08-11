@@ -8,6 +8,8 @@
 #include "Eigen/src/SparseQR/SparseQR.h"
 #include "coordinate_interface.hpp"
 
+#include <GaudiGraphics/geometry_logger.h>
+
 #include "manifold/harmonic_integrators.hpp"
 #include "manifold/m2.hpp"
 
@@ -734,13 +736,13 @@ public:
     init();
   }
 
-  vec3 coord(face_vertex_ptr fv, vecX vals) {
+  vec3 coord(face_vertex_ptr fv, const vecX &vals) {
     vertex_ptr v = fv->vertex();
     size_t i = v->position_in_set();
     return vec_interface<SPACE>::from(vals, i);
   }
 
-  vec3 normal(face_ptr f, vecX vals) {
+  vec3 normal(face_ptr f, const vecX &vals) {
     face_vertex_ptr fv0 = f->fbegin();
     face_vertex_ptr fv1 = fv0->next();
     face_vertex_ptr fv2 = fv1->next();
@@ -750,7 +752,7 @@ public:
     return m2::va::calculate_normal(v0, v1, v2);
   }
 
-  real area(face_ptr f, vecX vals) {
+  real area(face_ptr f, const vecX &vals) {
     face_vertex_ptr fv0 = f->fbegin();
     face_vertex_ptr fv1 = fv0->next();
     face_vertex_ptr fv2 = fv1->next();
@@ -781,7 +783,7 @@ public:
                                 real &phi_p,     //
                                 real &phi_pp) {
         phi_p = 0.5 * phi * phi + 0.5;
-        phi_pp = 0.5 * (phi * phi + 1.0) * phi;
+        phi_pp = phi_pp * phi;
 
         return;
       };
@@ -803,6 +805,7 @@ public:
                     real &psi_pp) {
         real dph = phi - phi_hat;
         real C = k * ai;
+
         psi = C * dph * dph;
 
         psi_p = 2.0 * C * dph * phi_p;
@@ -830,14 +833,15 @@ public:
 
   void init() {
     std::vector<edge_ptr> edges = _surf->get_edges();
+    std::vector<face_ptr> faces = _surf->get_faces();
 
     _phi0 = std::vector<real>(edges.size(), 0);
     _ai = std::vector<real>(edges.size(), 0);
     real h = 0.01;
     real v = 0.5;
     real Y = 0.1;
-    _k = Y * h * h * h / 24.0 / (1.0 - v);
-    //_k = 0.0001;
+    //_k = Y * h * h * h / 24.0 / (1.0 - v);
+    _k = 0.1;
     int i = 0;
     for (auto e : edges) {
       face_vertex_ptr fv0 = e->v1();
@@ -868,7 +872,9 @@ public:
     _psi_pp = std::vector<real>(edges.size());      // psi double derivative
     _grad = std::vector<vec12>(edges.size(), vec12::Zero());
     _hess = std::vector<mat1212>(edges.size(),
-                                 mat1212::Zero()); // inverse_edge_lengths
+                                 mat1212::Zero()); // hess
+    //_hess = std::vector<mat99>(faces.size(),
+    //                           mat99::Zero()); // hess
   }
 
   void preprocess_edges() {
@@ -877,6 +883,7 @@ public:
     int i = 0;
     // need to cache areas, normals from faces
     for (auto e : edges) {
+
       face_vertex_ptr fv0 = e->v1();
       face_vertex_ptr fv1 = e->v2();
       face_ptr f0 = fv0->face();
@@ -924,22 +931,22 @@ public:
       if (p > 1e-10) {
         std::cout << "--------------" << std::endl;
         std::cout << p << " " << pp << std::endl;
-        std::cout << dt << std::endl;
         std::cout << Hi << std::endl;
-        std::cout << _grad[i] << std::endl;
-        std::cout << _hess[i] << std::endl;
-    }
+        std::cout << "sum: " << Hi.sum() << std::endl;
+      }
 #endif
+      // mat1212 I;
+      // I.setIdentity();
       _grad[i] = p * dt;
-      _hess[i] = Hi + pp * dt * dt.transpose();
+      _hess[i] = p * Hi + pp * dt * dt.transpose();
 
-      // He[i] = -He[i];
       i++;
     }
   }
 
   virtual void preprocess() {
     face_array faces = _surf->get_faces();
+
     preprocess_edges();
 
     int i = 0;
@@ -952,25 +959,29 @@ public:
       face_vertex_ptr fv2 = fv1->next();
 
       // coordinates are taken from point opposite the edge
-      coordinate_type p0 = coord(fv2, _positions);
-      coordinate_type p1 = coord(fv0, _positions);
-      coordinate_type p2 = coord(fv1, _positions);
+      int iv0 = fv0->vertex()->position_in_set();
+      int iv1 = fv1->vertex()->position_in_set();
+      int iv2 = fv2->vertex()->position_in_set();
 
-      int ifv0 = fv2->position_in_set();
-      int ifv1 = fv0->position_in_set();
-      int ifv2 = fv1->position_in_set();
+      coordinate_type p0 = coord(fv0, _positions);
+      coordinate_type p1 = coord(fv1, _positions);
+      coordinate_type p2 = coord(fv2, _positions);
 
-      edge_ptr ep0 = fv0->edge();
-      edge_ptr ep1 = fv1->edge();
-      edge_ptr ep2 = fv2->edge();
+      int ifv0 = fv0->position_in_set();
+      int ifv1 = fv1->position_in_set();
+      int ifv2 = fv2->position_in_set();
 
-      int oriente0 = ep0->side(fv0);
-      int oriente1 = ep1->side(fv1);
-      int oriente2 = ep2->side(fv2);
+      edge_ptr ep0 = fv1->edge();
+      edge_ptr ep1 = fv2->edge();
+      edge_ptr ep2 = fv0->edge();
 
-      int ie0 = fv0->edge()->position_in_set();
-      int ie1 = fv1->edge()->position_in_set();
-      int ie2 = fv2->edge()->position_in_set();
+      int oriente0 = ep0->side(fv1);
+      int oriente1 = ep1->side(fv2);
+      int oriente2 = ep2->side(fv0);
+
+      int ie0 = ep0->position_in_set();
+      int ie1 = ep1->position_in_set();
+      int ie2 = ep2->position_in_set();
 
       real il0 = _inv_e_len[ie0];
       real il1 = _inv_e_len[ie1];
@@ -990,10 +1001,10 @@ public:
       real cos1 = -va::dot(e0, e2);
       real cos2 = -va::dot(e1, e0);
 
-      auto calc_dtheta = [](vec12 &dtheta, const int &orient, //
-                            const real cos0, const real ih0,  //
-                            const real cos1, const real ih1,  //
-                            const real cos2, const real ih2,  //
+      auto calc_dtheta = [](vec12 &dtheta, const int &orient,  //
+                            const real &cos0, const real &ih0, //
+                            const real &cos1, const real &ih1, //
+                            const real &cos2, const real &ih2, //
                             const vec3 &N) {
         vec3 dt0 = -1.0 * ih0 * N;
         vec3 dt1 = cos2 * ih1 * N;
@@ -1003,9 +1014,9 @@ public:
           dtheta.block(3, 0, 3, 1) += dt1;
           dtheta.block(6, 0, 3, 1) += dt2;
         } else {
-          dtheta.block(3, 0, 3, 1) += dt2;
-          dtheta.block(6, 0, 3, 1) += dt1;
           dtheta.block(9, 0, 3, 1) += dt0;
+          dtheta.block(6, 0, 3, 1) += dt1;
+          dtheta.block(3, 0, 3, 1) += dt2;
         }
       };
 
@@ -1019,96 +1030,135 @@ public:
       coordinate_type m0 = va::cross(e0, N);
       coordinate_type m1 = va::cross(e1, N);
       coordinate_type m2 = va::cross(e2, N);
+      if (i == 1000) {
+        coordinate_type c0 = 0.5 * (p1 + p2);
+        coordinate_type c1 = 0.5 * (p0 + p2);
+        coordinate_type c2 = 0.5 * (p0 + p1);
+        coordinate_type c = (p0 + p1 + p2) / 3.0;
+
+        real C = 0.1;
+        gg::geometry_logger::get_instance().line(c0, c0 + C * m0,
+                                                 vec4(0.0, 1.0, 0.0, 1.0));
+        gg::geometry_logger::get_instance().line(c1, c1 + C * m1,
+                                                 vec4(1.0, 0.0, 0.0, 1.0));
+        gg::geometry_logger::get_instance().line(c2, c2 + C * m2,
+                                                 vec4(1.0, 0.0, 0.0, 1.0));
+        gg::geometry_logger::get_instance().line(c, c + C * N,
+                                                 vec4(0.0, 0.0, 1.0, 1.0));
+      }
 
       mat3 M0 = N * m0.transpose();
       mat3 M1 = N * m1.transpose();
       mat3 M2 = N * m2.transpose();
 
-      mat3 N0 = M0 * il0 * il0;
-      mat3 N1 = M1 * il1 * il1;
-      mat3 N2 = M2 * il2 * il2;
+      if (i == 2000) {
+        coordinate_type c0 = 0.5 * (p1 + p2) + 0.01 * N;
+        coordinate_type c1 = 0.5 * (p0 + p2);
+        coordinate_type c2 = 0.5 * (p0 + p1);
+        coordinate_type c = (p0 + p1 + p2) / 3.0;
+        mat33 M0t = M0;
+        std::cout << " M " << M0 << std::endl;
+        std::cout << " Mt " << M0t << std::endl;
+        coordinate_type t0 = M0t.block(0, 0, 3, 1);
+        coordinate_type t1 = M0t.block(0, 1, 3, 1);
+        coordinate_type t2 = M0t.block(0, 2, 3, 1);
 
-      real psi_p0 = _psi_p[ie0];
-      real psi_p1 = _psi_p[ie1];
-      real psi_p2 = _psi_p[ie2];
+        real C = 0.1;
+        gg::geometry_logger::get_instance().line(c0, c0 + C * t0,
+                                                 vec4(1.0, 0.0, 0.0, 1.0));
+        gg::geometry_logger::get_instance().line(c0, c0 + C * t1,
+                                                 vec4(0.0, 1.0, 0.0, 1.0));
+        gg::geometry_logger::get_instance().line(c0, c0 + C * t2,
+                                                 vec4(0.0, 0.0, 1.0, 1.0));
+      }
 
-      real sig0 = 1; // no boundaries
-      real sig1 = 1; // no boundaries
-      real sig2 = 1; // no boundaries
+      auto Htri = [](mat1212 &H, const int &orient,                        //
+                     const real &il0, const real &il1, const real &il2,    //
+                     const real &ih0, const real &ih1, const real &ih2,    //
+                     const real &cos0, const real &cos1, const real &cos2, //
+                     const mat33 &M0, const mat33 &M1, const mat33 &M2     //
+                  ) {
+        mat33 M0s = M0;
+        mat33 M1s = M1;
+        mat33 M2s = M2;
+        mat33 M0t = M0s.transpose();
+        mat33 M1t = M1s.transpose();
+        mat33 M2t = M2s.transpose();
 
-      real c0 = sig0 * psi_p0;
-      real c1 = sig1 * psi_p1;
-      real c2 = sig2 * psi_p2;
+        mat33 N0 = il0 * il0 * M0s;
 
-      real d0 = c2 * cos1 + c1 * cos2 - c0;
-      real d1 = c0 * cos2 + c2 * cos0 - c1;
-      real d2 = c1 * cos0 + c0 * cos1 - c2;
+        mat33 N0t = orient == 1 ? N0 : N0.transpose();
 
-      mat3 R0 = c0 * N0;
-      mat3 R1 = c1 * N1;
-      mat3 R2 = c2 * N2;
+        mat33 Q0 = ih0 * ih0 * M0s;
+        mat33 Q1 = ih0 * ih1 * M1s;
+        mat33 Q2 = ih0 * ih2 * M2s;
 
-      mat3 R0d = oriente0 == 0 ? R0 : R0.transpose();
-      mat3 R1d = oriente1 == 0 ? R1 : R1.transpose();
-      mat3 R2d = oriente2 == 0 ? R2 : R2.transpose();
+        mat33 P11 = ih1 * ih1 * cos2 * M1t;
+        mat33 P22 = ih2 * ih2 * cos1 * M2t;
 
-      auto calc_Htri = [](mat1212 &H, const int &orient,                     //
-                          const real &d0, const real &d1, const real &d2,    //
-                          const real &ih0, const real &ih1, const real &ih2, //
-                          const mat33 &M0, const mat33 &M1, const mat33 &M2, //
-                          const mat33 &R0, const mat33 &R1, const mat33 &R2, //
-                          const mat33 &R0d, const mat33 &R1d,
-                          const mat33 &R2d //
-                       ) {
-        mat33 H00 = ih0 * ih0 * (d0 * M0.transpose() + d0 * M0) - R1 - R2;
-        mat33 H01 = ih0 * ih1 * (d0 * M1.transpose() + d1 * M0) + R2d;
-        mat33 H11 = ih1 * ih1 * (d1 * M1.transpose() + d1 * M1) - R2 - R0;
-        mat33 H12 = ih1 * ih2 * (d1 * M2.transpose() + d2 * M1) + R0d;
-        mat33 H22 = ih2 * ih2 * (d2 * M2.transpose() + d2 * M2) - R1 - R0;
+        mat33 P10 = ih1 * ih0 * cos2 * M0t;
+        mat33 P20 = ih2 * ih0 * cos1 * M0t;
+
+        mat33 P12 = ih1 * ih2 * cos2 * M2t;
+        mat33 P21 = ih2 * ih1 * cos1 * M1t;
+
+        mat33 H00 = -(Q0 + Q0.transpose());
+        mat33 H11 = (P11 + P11.transpose()) - N0;
+        mat33 H22 = (P22 + P22.transpose()) - N0;
+        mat33 H10 = P10 - Q1;
+        mat33 H20 = P20 - Q2;
+
+        mat33 H12 = P12 + P21.transpose() + N0t;
 
         if (orient == 0) {
+
           H.block(0, 0, 3, 3) += H00;
-          H.block(0, 3, 3, 3) += H01;
-          // H.block(0, 226, 3, 3) += Zero;
-          H.block(3, 0, 3, 3) += H01.transpose();
           H.block(3, 3, 3, 3) += H11;
-          H.block(3, 6, 3, 3) += H12;
-          // H.block(6, 0, 3, 3) += Zero;
-          H.block(6, 3, 3, 3) += H12.transpose();
           H.block(6, 6, 3, 3) += H22;
+
+          H.block(3, 0, 3, 3) += H10;
+          H.block(0, 3, 3, 3) += H10.transpose();
+
+          H.block(6, 0, 3, 3) += H20;
+          H.block(0, 6, 3, 3) += H20.transpose();
+
+          H.block(3, 6, 3, 3) += H12;
+          H.block(6, 3, 3, 3) += H12.transpose();
+
         } else {
+
           H.block(9, 9, 3, 3) += H00;
-          H.block(9, 6, 3, 3) += H01;
-          // H.block(9, 3, 3, 3) += Zero;
-          H.block(6, 9, 3, 3) += H01.transpose();
           H.block(6, 6, 3, 3) += H11;
-          H.block(6, 3, 3, 3) += H12;
-          // H.block(3, 9, 3, 3) += Zero;
-          H.block(3, 6, 3, 3) += H12.transpose();
           H.block(3, 3, 3, 3) += H22;
+
+          H.block(6, 9, 3, 3) += H10;
+          H.block(9, 6, 3, 3) += H10.transpose();
+
+          H.block(3, 9, 3, 3) += H20;
+          H.block(9, 3, 3, 3) += H20.transpose();
+
+          H.block(6, 3, 3, 3) += H12;
+          H.block(3, 6, 3, 3) += H12.transpose();
         }
       };
 
-      calc_Htri(_hess[ie0], oriente0, //
-                d0, d1, d2,           //
-                ih0, ih1, ih2,        //
-                M0, M1, M2,           //
-                R0, R1, R2,           //
-                R0d, R1d, R2d);
+      Htri(_hess[ie0], oriente0, //
+           il0, il1, il2,        //
+           ih0, ih1, ih2,        //
+           cos0, cos1, cos2,     //
+           M0, M1, M2);
 
-      calc_Htri(_hess[ie1], oriente1, //
-                d1, d2, d0,           //
-                ih1, ih2, ih0,        //
-                M1, M2, M0,           //
-                R1, R2, R0,           //
-                R1d, R2d, R0d);
+      Htri(_hess[ie1], oriente1, //
+           il1, il2, il0,        //
+           ih1, ih2, ih0,        //
+           cos1, cos2, cos0,     //
+           M1, M2, M0);
 
-      calc_Htri(_hess[ie2], oriente2, //
-                d2, d0, d1,           //
-                ih2, ih0, ih1,        //
-                M2, M0, M1,           //
-                R2, R0, R1,           //
-                R2d, R0d, R1d);
+      Htri(_hess[ie2], oriente2, //
+           il2, il0, il1,        //
+           ih2, ih0, ih1,        //
+           cos2, cos0, cos1,     //
+           M2, M0, M1);
 
       i++;
     }
@@ -1158,7 +1208,15 @@ public:
                      3 * i2 + 0, 3 * i2 + 1, 3 * i2 + 2, //
                      3 * i3 + 0, 3 * i3 + 1, 3 * i3 + 2};
       const mat1212 &Hi = _hess[e->position_in_set()];
-
+      const vec12 &gi = _grad[e->position_in_set()];
+#if 0
+      if (gi.norm() > 1e-10) {
+        std::cout << "Gi: " << gi << std::endl;
+        std::cout << "Hi det: " << Hi.determinant() << std::endl;
+        std::cout << "Hi: " << Hi << std::endl;
+        std::cout << "Hi-Hit: " << Hi - Hi.transpose() << std::endl;
+      }
+#endif
       for (int i = 0; i < 12; i++) {
         for (int j = 0; j < 12; j++) {
           triplets.push_back(triplet(ii[i], ii[j], Hi(i, j)));
@@ -1366,6 +1424,8 @@ public:
       c->fill_gradient(G);
     }
     std::cout << " grad sum: " << G.sum() << std::endl;
+    std::cout << " grad norm: " << G.norm() << std::endl;
+
     return G;
   }
 
@@ -1391,11 +1451,14 @@ public:
       for (auto t : hess_triplets) {
         sum += t.value();
       }
+
       std::cout << " trip sum: " << sum << std::endl;
       std::cout << "    H sum: " << H.sum() << std::endl;
+      std::cout << "    H norm: " << H.norm() << std::endl;
     }
     H = I - H;
-
+    std::cout << "    I-H sum: " << H.sum() << std::endl;
+    std::cout << "    I-H norm: " << H.norm() << std::endl;
     return H;
   }
 
@@ -1499,6 +1562,7 @@ public:
     Eigen::SimplicialLDLT<sparmat> solver;
     // Eigen::ConjugateGradient<sparmat> solver;
     solver.compute(A);
+    std::cout << " solver det: " << solver.determinant() << std::endl;
 #else
     // Eigen::SparseQR<sparmat, Eigen::COLAMDOrdering<int>> solver;
     Eigen::SparseLU<sparmat> solver;
@@ -1532,7 +1596,7 @@ public:
     real alpha = 1.0;
     real beta = 1.0;
     int k = 0;
-    while (tol > 1e-10 && k++ < 10) {
+    while (tol > 1e-10 && k++ < 1) {
       fcn->preprocess();
 
       std::vector<triplet> hess_triplets;
@@ -1544,6 +1608,8 @@ public:
       // break;
 #if 1
       vecX h = solve(H, g);
+      std::cout << "h norm: " << h.norm() << std::endl;
+      std::cout << "h sum: " << h.sum() << std::endl;
       vecX xk1 = xk0 - h;
       _g = h;
 #else

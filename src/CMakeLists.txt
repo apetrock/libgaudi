@@ -4,12 +4,22 @@
 # Optionally glob, but only for CMake 3.12 or later:
 # file(GLOB HEADER_LIST CONFIGURE_DEPENDS "${ModernCMakeExample_SOURCE_DIR}/include/modern/*.hpp")
 
-set(HEADER_LIST "${Gaudi_SOURCE_DIR}/include/SIMPLE_PARSER.h"
-                "${Gaudi_SOURCE_DIR}/include/TIMER.h")
+set(HEADER_LIST 
+    "${Gaudi_SOURCE_DIR}/include/SIMPLE_PARSER.h"
+    "${Gaudi_SOURCE_DIR}/include/TIMER.h"
+    "${Gaudi_SOURCE_DIR}/include/GaudiMath/typedefs.hpp"
+    "${Gaudi_SOURCE_DIR}/include/GaudiGraphics/buffers.hpp"
+    "${Gaudi_SOURCE_DIR}/include/GaudiGraphics/geometry_logger.h"
+)
+
+set(SOURCES
+    "${Gaudi_SOURCE_DIR}/src/SIMPLE_PARSER.cpp"
+    "${Gaudi_SOURCE_DIR}/src/TIMER.cpp"
+    "${Gaudi_SOURCE_DIR}/src/GaudiGraphics/geometry_logger.cpp"
+)
 
 # Make an automatic library - will be static or dynamic based on user setting
-add_library(libGaudi SIMPLE_PARSER.cpp 
-                     #TIMER.cpp manifold/debugger.cpp
+add_library(libGaudi ${SOURCES}
                      ${HEADER_LIST})
 
 # We need this directory, and users of our library will need it too

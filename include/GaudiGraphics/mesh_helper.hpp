@@ -3,7 +3,7 @@
 
 #include <GaudiGraphics/buffers.hpp>
 #include <GaudiGraphics/viewer.hpp>
-#include <GaudiMath/typedefs.h>
+#include <GaudiMath/typedefs.hpp>
 #include <cassert>
 #include <manifold/m2Includes.h>
 #include <nanogui/glutil.h>
