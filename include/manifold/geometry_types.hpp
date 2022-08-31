@@ -98,13 +98,18 @@ public:
     this->setBounds(tmin, tmax);
   }
 
-  bool overlap(const bounding_box<T, CTYPE> &other) {
+  bool overlap(const bounding_box<T, CTYPE> &other) const {
     CTYPE omin = other.center - other.half;
     CTYPE omax = other.center + other.half;
 
     CTYPE tmin = this->center - this->half;
     CTYPE tmax = this->center + this->half;
 
+    if (m2::va::greater_than(omin, tmax))
+      return false;
+    if (m2::va::less_than(omax, tmin))
+      return false;
+    /*
     if (omin[0] > tmax[0])
       return false;
     else if (omax[0] < tmin[0])
@@ -119,7 +124,7 @@ public:
       return false;
     else if (omax[2] < tmin[2])
       return false;
-
+*/
     return true;
   }
 };
@@ -136,13 +141,18 @@ template <typename T, typename CTYPE> struct line {
 public:
   static const int size = 3;
   CTYPE p[2];
+  bounding_box<T, CTYPE> _bbox;
+  bool _bbox_init = false;
 
   line(){};
 
-  line(CTYPE p0, CTYPE p1) {
+  line(const CTYPE &p0, const CTYPE &p1) { setP(p0, p1); };
+
+  void setP(const CTYPE &p0, const CTYPE &p1) {
     p[0] = p0;
     p[1] = p1;
-  };
+    update_bbox();
+  }
 
   CTYPE &operator[](int i) { return p[i]; }
   CTYPE operator[](int i) const { return p[i]; }
@@ -163,11 +173,13 @@ public:
     return min(d0, d1);
   };
 
-  bounding_box<T, CTYPE> bbox() {
+  void update_bbox() {
     CTYPE min, max;
     this->getExtents(min, max);
-    return makeBoxMinMax<T, CTYPE>(min, max);
+    _bbox = makeBoxMinMax<T, CTYPE>(min, max);
   }
+
+  const bounding_box<T, CTYPE> &bbox() const { return _bbox; }
 
   void getExtents(CTYPE &min, CTYPE &max) {
     min = m2::va::min(p[0], p[1]);
@@ -282,7 +294,6 @@ public:
     T dmin = min(min(d0, d1), d2);
     return dmin;
   };
-
 };
 
 template <typename T, typename CTYPE> struct swept_point {
@@ -508,7 +519,7 @@ inline Eigen::Matrix<double, 3, 1> one<Eigen::Matrix<double, 3, 1>>() {
 template <>
 inline Eigen::Matrix<double, 3, 3> zero<Eigen::Matrix<double, 3, 3>>() {
   Eigen::Matrix<double, 3, 3> m = Eigen::Matrix<double, 3, 3>::Zero();
-  //m << 0, 0, 0, 0, 0, 0, 0, 0, 0;
+  // m << 0, 0, 0, 0, 0, 0, 0, 0, 0;
   return m;
 }
 
@@ -521,9 +532,9 @@ inline Eigen::Matrix<double, 3, 3> one<Eigen::Matrix<double, 3, 3>>() {
 
 template <>
 inline Eigen::Matrix<double, 4, 3> zero<Eigen::Matrix<double, 4, 3>>() {
-  //Eigen::Matrix<double, 4, 3> m;
+  // Eigen::Matrix<double, 4, 3> m;
   Eigen::Matrix<double, 4, 3> m = Eigen::Matrix<double, 4, 3>::Zero();
-  //m << 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
+  // m << 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
   return m;
 }
 

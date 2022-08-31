@@ -202,7 +202,7 @@ public:
     T thresh = 0.5;
     // std::vector<size_t> counter(evalPoints.size());
     // std::iota(std::begin(counter), std::end(counter), 0);
-#pragma omp parallel for
+    //#pragma omp parallel for
     for (size_t i = 0; i < evalPoints.size(); i++) {
       // std::for_each(/*std::execution::seq, */counter.begin(), counter.end(),
       // [&](auto &&i) {

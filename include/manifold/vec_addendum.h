@@ -592,6 +592,19 @@ inline VEC3<T> reflect(const VEC3<T> &norm, const VEC3<T> &x) {
   return rx;
 };
 
+template <typename T> inline VEC3<T> project(const VEC3<T> &N, const T &A) {
+  return A;
+};
+
+template <typename T>
+inline VEC3<T> project(const VEC3<T> &N, const VEC3<T> &A) {
+  // N has to be normalized
+  T dist = dot(N, A);
+  T N2 = dot(N, N);
+  VEC3<T> out = (dist / N2) * N;
+  return out;
+};
+
 template <typename T>
 inline VEC3<T> orthogonal_project(const VEC3<T> &N, const VEC3<T> &A) {
   // N has to be normalized
@@ -639,7 +652,7 @@ template <typename T>
 inline T calculate_area(const VEC3<T> &p0, //
                         const VEC3<T> &p1, //
                         const VEC3<T> &p2) {
-  return (p1 - p0).cross(p2 - p0).norm();
+  return 0.5 * (p1 - p0).cross(p2 - p0).norm();
 }
 
 template <typename T>
@@ -771,6 +784,13 @@ inline VEC3<T> calc_bary(VEC3<T> c, std::vector<VEC3<T>> vertices) {
   return l;
 }
 
+template <typename T> bool greater_than(const VEC3<T> &A, const VEC3<T> &B) {
+  return (A.array() > B.array()).sum() > 0;
+};
+
+template <typename T> bool less_than(const VEC3<T> &A, const VEC3<T> &B) {
+  return (A.array() < B.array()).sum() > 0;
+};
 } // namespace va
 } // namespace m2
 #endif

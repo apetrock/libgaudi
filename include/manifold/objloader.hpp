@@ -30,7 +30,7 @@ namespace m2 {
 
 template <class SPACE> // unfortunately I can't make this any more generic, but
                        // that's OK
-                       class merge_proc {
+class merge_proc {
   M2_TYPEDEFS;
 
 public:
@@ -38,6 +38,7 @@ public:
 
   void merge_vertices(surf_ptr obj_in, vertex_ptr v1, vertex_ptr v2,
                       vector<list<face_vertex_ptr>> &corners) {
+    std::cout << "merging vertices" << std::endl;
     list<face_vertex_ptr> &va1 = corners[v1->position_in_set()];
     list<face_vertex_ptr> &va2 = corners[v2->position_in_set()];
     size_t sz = va2.size();
@@ -96,6 +97,7 @@ public:
   // prev/next faces that share an adjacent vertex 	 if so, make an edge
   typedef Octree<T, vertex_type> Vtree;
   Vtree *build_octree(surf_ptr in_) {
+    std::cout << "building octree: " << std::endl;
     Vtree *tree_out = new Octree<T, vertex_type>();
     vertex_array &va = in_->get_vertices();
     T *bounds = tree_out->calculate_cubic_bounds(va);
@@ -169,7 +171,7 @@ public:
                     list<face_vertex_ptr> &rFaceVertices) {
     fvl_iterator itb = rFaceVertices.begin();
     fvl_iterator ite = rFaceVertices.end();
-
+    std::cout << "stitching edge" << std::endl;
     for (itb; itb != ite; itb++) {
       fvl_iterator jtb = rFaceVertices.begin();
       fvl_iterator jte = rFaceVertices.end();
@@ -190,20 +192,19 @@ public:
   }
 
   surf_ref buildObj(vector<coordinate_type> &inputVerts,
-                       vector<vector<int>> &inputFaces) {
-
+                    vector<vector<int>> &inputFaces) {
     surf_ptr obj = new surf_type();
-    for (int i = 0; i < inputVerts.size(); i++) {
-      coordinate_type v = inputVerts[i];
-      vertex_ptr vert = new vertex_type();
+    int i = 0;
+    for (auto &v : inputVerts) {
+      vertex_ptr vert = obj->insert_vertex();
       this->coordinate(v, vert);
-      obj->push_vertex(vert);
     }
 
     vector<list<face_vertex_ptr>> cornersOnVertices;
 
     cornersOnVertices.resize(inputVerts.size());
     for (int i = 0; i < inputFaces.size() - 1; i++) {
+
       vector<face_vertex_ptr> cornersOnPoly;
 
       for (int j = 0; j < inputFaces[i].size(); j++) {
@@ -231,7 +232,9 @@ public:
     // this->merge_vertices(obj, cornersOnVertices);
 
     vector<vertex_ptr> &vertices = obj->get_vertices();
+
     for (long i = 0; i < vertices.size(); i++) {
+      std::cout << "  " << i << std::endl;
       list<face_vertex_ptr> &corners = cornersOnVertices[i];
       if (corners.size() > 0) {
         m2::construct<SPACE> cons;
@@ -253,7 +256,7 @@ public:
       }
     }
 #endif
-    //obj->clean_up();
+    // obj->clean_up();
     obj->pack();
     obj->update_all();
 
@@ -309,12 +312,16 @@ public:
           bFacesIncluded = 1;
           int faceSize = vals.size() - 1;
           vector<int> curFace;
+
           for (int i = 1; i < vals.size(); i++) {
+
             int index;
             std::istringstream iss(vals[i]);
-            iss >> index;
-            curFace.push_back(index - 1);
+            if (iss >> index)
+              curFace.push_back(index - 1);
           }
+          std::cout << std::endl;
+
           inputFaces.push_back(curFace);
           fIdx++;
         } else if (vals[0] == "vn") {
@@ -339,13 +346,11 @@ public:
       }
     }
     myfile.close();
-    if (!bNormalsIncluded) {
-      // calcTriNormals();
-    }
+
     surf_ref obj = buildObj(inputVerts, inputFaces);
 
     std::cout << "done" << std::endl;
-    //obj.clean_up();
+    // obj.clean_up();
     obj.pack();
     obj.update_all();
     return obj;
@@ -368,8 +373,9 @@ void write_obj(m2::surf<SPACE> &obj, string filename) {
 
   for (unsigned int x = 0; x < faces.size(); x++) {
     face_ptr f = faces[x];
-    
-    if(f->size() < 3) continue;
+
+    if (f->size() < 3)
+      continue;
 
     vertex_ptr vert0 = f->fbegin()->vertex();
     vertex_ptr vert1 = f->fbegin()->next()->vertex();

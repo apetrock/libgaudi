@@ -129,8 +129,7 @@ public:
   };
 
   edge_line(coordinate_type p0, coordinate_type p1, int i0, int i1, int eid) {
-    this->p[0] = p0;
-    this->p[1] = p1;
+    this->setP(p0, p1);
     indices[0] = i0;
     indices[1] = i1;
     edgeId = eid;
@@ -824,6 +823,7 @@ public:
     void update_all() {
       face_vertex_ptr itb = fbegin();
       face_vertex_ptr ite = fend();
+
       int i = 0;
       bool at_head = false;
 
@@ -850,9 +850,11 @@ public:
     bool has_vertex(vertex_ptr v) {
       face_vertex_ptr itb = fbegin();
       face_vertex_ptr ite = fend();
+
       bool iterating = true;
       while (iterating) {
         iterating = itb != ite;
+
         if (itb->vertex() == v)
           return true;
         itb = itb->next();
@@ -1670,6 +1672,9 @@ public:
   face_array &get_faces() { return mFaces; }
   edge_array &get_edges() { return mEdges; }
   vertex_array &get_vertices() { return mVertices; }
+  size_t nverts() { return mVertices.size(); }
+  size_t nedges() { return mEdges.size(); }
+  size_t nfaces() { return mFaces.size(); }
 
   void merge(surf_ref other) {
     this->pack();
@@ -1694,13 +1699,20 @@ public:
     other.mVertices.clear();
   }
 
-  vertex_ptr insert_vertex() {
-    vertex_ptr new_vert = new vertex_type();
-    new_vert->init();
-    face_ptr new_face = new_vert->get_front()->face();
-    this->push_face(new_face);
-    this->push_vertex(new_vert);
-    return new_vert;
+  vertex_ptr insert_vertex(bool make_face = false) {
+    vertex_ptr v = new vertex_type();
+    v->init();
+
+    this->push_vertex(v);
+    if (make_face) {
+      face_vertex_ptr fv = v->make_face_vertex();
+      face_ptr f = new face_type();
+      fv->set_next(fv);
+      f->set_front(fv);
+      v->set_front(fv);
+      this->push_face(f);
+    }
+    return v;
   }
 
   bool has_face(size_t ind) { return mHasFace[ind]; }
@@ -2361,7 +2373,7 @@ public:
     using flat_data = flattened_data_vector<SPACE, ITYPE>;
     for (int i = 0; i < static_cast<int>(ITYPE::MAXINDEX); i++) {
       ITYPE ii = static_cast<ITYPE>(i);
-      std::cout << i << std::endl;
+
       storage_type type = SPACE::get_type(ii);
 
       flat_data *data;
@@ -2426,7 +2438,6 @@ public:
   inflate(const std::vector<typename surf<SPACE>::template data_node<ITYPE> *>
               &nodes) {
 
-    std::cout << " nodes: " << nodes.size() << std::endl;
     for (int i = 0; i < static_cast<int>(ITYPE::MAXINDEX); i++) {
       ITYPE ii = static_cast<ITYPE>(i);
       flattened_data_vector<SPACE, ITYPE> *data = _data[i];
@@ -2556,7 +2567,6 @@ public:
     std::vector<typename m2::surf<SPACE>::template data_node<
         typename SPACE::face_vertex_index> *>
         corners;
-    std::cout << "3 " << corner_verts.size() << std::endl;
 
     std::vector<face_vertex_ptr> fvs;
     for (int i = 0; i < corner_verts.size(); i += 2) {

@@ -514,8 +514,7 @@ typename SPACE::box_type bound(typename surf<SPACE>::surf_ptr s) {
 
 template <typename SPACE, typename TYPE>
 std::vector<TYPE> get(m2::surf<SPACE> *surf, typename SPACE::vertex_index id) {
-  auto vertices = surf->get_vertices();
-  std::vector<TYPE> vals(surf->get_vertices().size());
+  std::vector<TYPE> vals(surf->nverts());
   int i = 0;
   for (auto v : surf->get_vertices()) {
     vals[i] = v->template get<TYPE>(id);
@@ -526,7 +525,7 @@ std::vector<TYPE> get(m2::surf<SPACE> *surf, typename SPACE::vertex_index id) {
 
 template <typename SPACE, typename TYPE>
 void set(m2::surf<SPACE> *surf, std::vector<TYPE> vals,
-           typename SPACE::vertex_index id) {
+         typename SPACE::vertex_index id) {
   int i = 0;
   for (auto v : surf->get_vertices()) {
     v->template set<TYPE>(id, vals[i]);
@@ -632,7 +631,8 @@ get_tris(std::vector<typename surf<SPACE>::face_ptr> faces) {
 
 template <typename SPACE, typename V>
 std::vector<V> verts_to_faces(std::vector<V> vert_vals,
-                              typename surf<SPACE>::surf_ptr s) {
+                              typename surf<SPACE>::surf_ptr s,
+                              bool proj_to_normal = false) {
   M2_TYPEDEFS;
 
   auto &faces = s->get_faces();
@@ -645,12 +645,24 @@ std::vector<V> verts_to_faces(std::vector<V> vert_vals,
       continue;
 
     V r = z::zero<V>();
+    real af = area<SPACE>(faces[i]);
+    coordinate_type N = normal<SPACE>(faces[i]);
+    m2::for_each_face<SPACE>(
+        faces[i], [&r, proj_to_normal, af, N, &vert_vals](face_vertex_ptr fv) {
+          int j = fv->vertex()->position_in_set();
+          real l = fv->template get<real>(SPACE::face_vertex_index::BARY);
+          real av = area<SPACE>(fv->vertex());
 
-    m2::for_each_face<SPACE>(faces[i], [&r, &vert_vals](face_vertex_ptr fv) {
-      int j = fv->vertex()->position_in_set();
-      real l = fv->template get<real>(SPACE::face_vertex_index::BARY);
-      r += l * vert_vals[j];
-    });
+          V proj = vert_vals[j];
+          if (proj_to_normal)
+            proj = m2::va::project(N, vert_vals[j]);
+
+          if (av < 1e-10)
+            return;
+
+          r += (l * af) / av * proj;
+          // r += 0.3333 * vert_vals[j];
+        });
     // std::cout << r << " " << m2::va::norm(r) << std::endl;
     face_vals[i] = r;
   }
@@ -677,7 +689,7 @@ std::vector<V> faces_to_verts(std::vector<V> face_vals,
       r += l * face_vals[j];
     });
     // std::cout << r << " " << m2::va::norm(r) << std::endl;
-    
+
     vert_vals[i] = r;
   }
   return vert_vals;

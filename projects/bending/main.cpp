@@ -186,10 +186,14 @@ public:
     } else {
 
       _meshGraph = &load("assets/bunny.obj");
+      //_meshGraph = &load("assets/icosahedron.obj");
+      //_meshGraph = &load("assets/sphere.obj");
+
       //_meshGraph = &load("assets/messer.obj");
+      //_meshGraph = &load("assets/tet.obj");
       // std::cout << "--make cube" << std::endl;
-      //_meshGraph =  mk.cube(0.05,1.0,1.0);
       //_meshGraph = mk.cube(1.0, 1.0, 1.0);
+      //_meshGraph = mk.tet();
 
       //_meshGraph = &sub.subdivide_control(*_meshGraph);
       //_meshGraph = &sub.subdivide_control(*_meshGraph);
@@ -213,7 +217,7 @@ public:
     }
 
     int N = 0;
-    _integrator = new m2::surf_integrator<stretch>(_meshGraph, 0.5, 3.0, 0.35);
+    _integrator = new m2::surf_integrator<stretch>(_meshGraph, 0.75, 3.0, 0.35);
     //_integrator = new m2::surf_integrator<stretch>(_meshGraph, 0.1, 3.0, 0.5);
     _integrator->add_default_vertex_policy<typename stretch::real>(
         stretch::vertex_index::SMOOTH);
@@ -360,8 +364,8 @@ public:
 #endif
 
 #if 0
-      typename edge_length<SPACE>::ptr length01 =
-          edge_length<SPACE>::create(i0, i1);
+      typename m2::edge_length<SPACE>::ptr length01 =
+          m2::edge_length<SPACE>::create(i0, i1);
       constraints->add_constraint(length01);
 #endif
 
@@ -392,6 +396,8 @@ public:
     _meshGraph->pack();
     if (frame == 1)
       _integrator->integrate();
+    //    if (frame > 1)
+    //      return;
 
     std::cout << "frame: " << frame << std::endl;
     std::cout << "====== " << std::endl;
@@ -428,16 +434,17 @@ public:
 
 #if 1
     // perturb config
+    int iii = 50;
     std::vector<stretch::vec3> normals =
         m2::ci::get_vertex_normals<stretch>(_meshGraph);
-    positions[0] += 0.1 * normals[0];
+    positions[iii] += 0.1 * normals[iii];
 #endif
-
+#if 1
     constraints->set_positions(positions);
     opt.update(constraints);
     positions = constraints->get_positions();
     m2::ci::set_coordinates<stretch>(positions, _meshGraph);
-
+#endif
 #if 0
     std::vector<stretch::mat3> blocks = opt.block_diag;
     int i = 0;

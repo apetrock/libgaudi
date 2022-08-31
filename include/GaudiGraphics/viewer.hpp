@@ -80,7 +80,8 @@ public:
 
     ball = new nanogui::Arcball();
     ball->setSize(size);
-    mPosition = Vec4(0, 0, 4, 0);
+    mPosition = Vec4(0, 0, mDist, 1);
+    this->updatePosition();
   }
 
   void updateFrame() {
@@ -99,14 +100,22 @@ public:
     mModelRotNew = r * mModelRotOld;
     // set the modelView equal to the new rotation
     mModelView = mModelRotNew;
-    mModelView.col(3) << Vec4(0, 0, -3, 1);
+
+    mModelView.col(3) << Vec4(0, 0, -mDist, 1);
     // rotate the world, then take a step back
     // get the position from the inverse  of the matrix
-    mPosition = mModelRotNew.transpose() * Vec4(0, 0, 4, 1);
+    mPosition = mModelRotNew.transpose() * Vec4(0, 0, mDist, 1);
   }
 
   virtual bool onMouseButton(const Eigen::Vector2i &p, int button, bool down,
                              int modifiers) {
+    if (down) {
+      mode = button;
+      pLast = p;
+
+    } else
+      mode = -1;
+
     updateFrame();
     ball->button(p, down);
     mDragging = false;
@@ -117,9 +126,13 @@ public:
   virtual bool onMouseMotion(const Eigen::Vector2i &p,
                              const Eigen::Vector2i &rel, int button,
                              int modifiers) {
-
-    ball->motion(p);
+    if (mode == 2) {
+      int delt = p[1] - pLast[1];
+      mDist += 0.01 * float(delt);
+    } else
+      ball->motion(p);
     updatePosition();
+    pLast = p;
     return true;
   }
 
@@ -138,9 +151,11 @@ protected:
   // variables for selection and dragging, I maintain two selection groups
   // one for widgets and one for objects
   bool mDragging;
+  Eigen::Vector2i pLast;
   Vec4 mObjCenCache;
   Vec4 mDragStart;
-
+  Real mDist = 4.0;
+  int mode = -1;
   nanogui::Arcball *ball;
 }; // viewer
 

@@ -28,10 +28,10 @@ public:
     surf_ptr tcube = new surf_type();
     construct<SPACE> cons;
     subdivide<SPACE> subd;
-    face_vertex_ptr fv0 = tcube->insert_vertex()->get_front();
-    face_vertex_ptr fv1 = tcube->insert_vertex()->get_front();
-    face_vertex_ptr fv2 = tcube->insert_vertex()->get_front();
-    face_vertex_ptr fv3 = tcube->insert_vertex()->get_front();
+    face_vertex_ptr fv0 = tcube->insert_vertex()->make_face_vertex();
+    face_vertex_ptr fv1 = tcube->insert_vertex()->make_face_vertex();
+    face_vertex_ptr fv2 = tcube->insert_vertex()->make_face_vertex();
+    face_vertex_ptr fv3 = tcube->insert_vertex()->make_face_vertex();
     this->coordinate(coordinate_type(-x * 0.5, -y * 0.5, -z * 0.5), fv0);
     this->coordinate(coordinate_type(x * 0.5, -y * 0.5, -z * 0.5), fv1);
     this->coordinate(coordinate_type(x * 0.5, y * 0.5, -z * 0.5), fv2);
@@ -43,6 +43,29 @@ public:
     cons.insert_edge(tcube, fv3, fv0);
     cons.bevel(tcube, 0.0, z, 0.0);
     return tcube;
+  }
+
+  surf_ptr tet() {
+    surf_ptr out = new surf_type();
+    construct<SPACE> cons;
+    subdivide<SPACE> subd;
+
+    face_vertex_ptr fv0 = out->insert_vertex(true)->get_front();
+    face_vertex_ptr fv1 = out->insert_vertex(true)->get_front();
+    face_vertex_ptr fv2 = out->insert_vertex(true)->get_front();
+    this->coordinate(coordinate_type(0.0, 0.0, 0.0), fv0);
+    this->coordinate(coordinate_type(0.0, 1.0, 0.0), fv1);
+    this->coordinate(coordinate_type(0.0, 0.0, 1.0), fv2);
+    std::cout << 0 << std::endl;
+    cons.insert_edge(out, fv0, fv1);
+    std::cout << 1 << std::endl;
+    cons.insert_edge(out, fv1, fv2);
+    std::cout << 2 << std::endl;
+    cons.insert_edge(out, fv2, fv0);
+    m2::remesh<SPACE> rem;
+
+    rem.stellate_face_generic(out, fv1->face(), coordinate_type(1.0, 0.0, 0.0));
+    return out;
   }
 
   surf_ptr two_tets(T x, T diff = 0.05) {

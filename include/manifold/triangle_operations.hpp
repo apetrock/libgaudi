@@ -94,8 +94,8 @@ public:
     if (!compatible(eA, eB))
       return;
 
-//    std::cout << " joining: " << eA->position_in_set() << " "
-//              << eB->position_in_set() << std::endl;
+    //    std::cout << " joining: " << eA->position_in_set() << " "
+    //              << eB->position_in_set() << std::endl;
 
     if (eA->v1()->face() == eB->v1()->face())
       return;
@@ -346,33 +346,32 @@ public:
     vertex_ptr v2p = fvb->prev()->vertex();
 
     construct<SPACE> cons;
-    //std::cout << " collapse; " << v1->size() << " " << v2->size() << std::endl;
-    //std::cout << " collapse; " << v1->position_in_set() << " "
-    //          << v2->position_in_set() << std::endl;
+    // std::cout << " collapse; " << v1->size() << " " << v2->size() <<
+    // std::endl; std::cout << " collapse; " << v1->position_in_set() << " "
+    //           << v2->position_in_set() << std::endl;
 
     if (v1->is_degenerate()) {
-      //std::cout << " deg collapse 1: " << v1->position_in_set() << " "
-      //          << v1->size() << std::endl;
+      // std::cout << " deg collapse 1: " << v1->position_in_set() << " "
+      //           << v1->size() << std::endl;
       return NULL;
       // cons.delete_vertex_primitive(obj, v1);
     }
     if (v2->is_degenerate()) {
-      //std::cout << " deg collapse 2: " << v2->position_in_set() << " "
-      //          << v2->size() << std::endl;
+      // std::cout << " deg collapse 2: " << v2->position_in_set() << " "
+      //           << v2->size() << std::endl;
       return NULL;
       cons.delete_vertex_primitive(obj, v2);
     }
 
-    std::cout << 1 << std::endl;
     std::vector<edge_ptr> edges = v1->get_shared_edges(v2);
     if (edges.size() == 1) { // not a pinch point
-      //std::cout << " edge collapse 1: " << v2->position_in_set() << " "
-      //          << v2->size() << std::endl;
+      // std::cout << " edge collapse 1: " << v2->position_in_set() << " "
+      //           << v2->size() << std::endl;
 
       return base_collapse(obj, e, true);
     } else if (edges.size() == 2) {
-      //std::cout << " edge collapse 2: " << edges[0]->position_in_set() << " "
-      //          << edges[1]->position_in_set() << std::endl;
+      // std::cout << " edge collapse 2: " << edges[0]->position_in_set() << " "
+      //           << edges[1]->position_in_set() << std::endl;
       edge_merge<SPACE> merge;
       merge(obj, edges[0], edges[1]);
       return NULL;
@@ -532,8 +531,6 @@ public:
         continue;
       vertices[i]->topologyChangeId = -1;
     }
-
-    std::cout << "done:" << std::endl;
   }
 
   virtual edge_array get_edges() { return edge_array(); }
@@ -771,7 +768,10 @@ public:
     std::vector<line_type> lines = m2::ci::get_lines<SPACE>(filtered_edges);
     m2::aabb_tree<SPACE, line_type> tree(lines);
 
-    std::cout << "tree.nodes.size(): " << tree.nodes.size() << std::endl;
+    std::cout << __FUNCTION__ << ": edges.size(): " << edges.size()
+              << std::endl;
+    std::cout << __FUNCTION__ << ": tree.nodes.size(): " << tree.nodes.size()
+              << std::endl;
 
     auto lineDist = [](const line_type &A, const line_type &B) -> T {
       return A.dist(B);
@@ -1077,7 +1077,6 @@ public:
         continue;
       edge_ptr e = edges[indicesToCollapse[i]];
       edge_collapse<SPACE> collapser;
-      std::cout << i << " " << e->position_in_set() << std::endl;
       vertex_ptr nv = collapser(this->_surf, e);
       if (nv)
         nv->topologyChangeId = i;
@@ -1307,10 +1306,12 @@ public:
         coordinate_type cp = va::orthogonal_project(normals[i], ncoords[i]);
         // real dotc = va::dot(normals[i], va::normalize(ncoords[1]));
         // real l = pow(0.5 - 0.5 * dotc, .01);
-        real l = sm[i];
+        real l = std::min(0.5, sm[i]);
         coordinate_type cc = (1.0 - l) * cp + l * c;
 
-        coords[i] = coords[i] + C * cc;
+        // coords[i] = coords[i] + C * cc;
+        coords[i] = coords[i] + C * cp;
+
         assert(!isnan(coords[i][0]));
         assert(!isnan(coords[i][1]));
         assert(!isnan(coords[i][2]));
@@ -1329,7 +1330,6 @@ public:
     if (edges_to_op.empty())
       return false;
 
-    std::cout << "calculating new vals" << std::endl;
     for (auto p : _policies) {
       p->reserve(edges_to_op.size());
     }
@@ -1340,7 +1340,6 @@ public:
       }
       i++;
     }
-    std::cout << "op: " << edges_to_op.size() << " edges" << std::endl;
 
     op.op(edges_to_op);
 
@@ -1422,7 +1421,7 @@ public:
     // diffuse edge flags
     this->cacheBary(this->_surf);
 
-    smoothMesh(0.001, 5);
+    smoothMesh(0.01, 5);
 
     std::vector<real> x =
         ci::get<SPACE, real>(_surf, SPACE::vertex_index::SMOOTH);
@@ -1430,10 +1429,13 @@ public:
     m2::diffuse<SPACE> diff(_surf);
     std::vector<real> fs(x);
 
-    for (auto &xi : x)
+    for (auto &xi : x) {
       xi = std::min(std::max(xi, 0.0), 1.0);
+      xi *= 0.5;
+    }
+    /*
     for (auto &f : fs)
-      f = -0.001 * f;
+      f = 0.0;
 
     x = diff.second_order(x, fs, 0.01, _max);
     double Sm = 0.0;
@@ -1444,7 +1446,7 @@ public:
     }
 
     std::cout << "   smooth norm: " << Sm / double(x.size()) << std::endl;
-
+    */
     ci::set<SPACE, real>(_surf, x, SPACE::vertex_index::SMOOTH);
 
     return true;

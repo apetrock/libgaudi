@@ -30,6 +30,8 @@ template <typename SPACE> class vec_interface {
 public:
   M2_TYPEDEFS;
   typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
+  typedef Eigen::Matrix<real, 3, 1> vec3;
+  typedef Eigen::Matrix<real, 3, 3> mat33;
 
   static coordinate_type from(const vecX &vals, size_t i) {
     return coordinate_type(vals[3 * i + 0], vals[3 * i + 1], vals[3 * i + 2]);
@@ -58,6 +60,61 @@ public:
     for (int i = 0; i < positions.size(); i++) {
       positions[i] = from(x, i);
     }
+  }
+
+  static vec3 coord(vertex_ptr v, const vecX &vals) {
+    size_t i = v->position_in_set();
+    return from(vals, i);
+  }
+
+  static vec3 coord(face_vertex_ptr fv, const vecX &vals) {
+    vertex_ptr v = fv->vertex();
+
+    return coord(v, vals);
+    // size_t i = v->position_in_set();
+    // return from(vals, i);
+  }
+
+  static vec3 normal(face_ptr f, const vecX &vals) {
+    face_vertex_ptr fv0 = f->fbegin();
+    face_vertex_ptr fv1 = fv0->next();
+    face_vertex_ptr fv2 = fv1->next();
+    vec3 v0 = coord(fv0, vals);
+    vec3 v1 = coord(fv1, vals);
+    vec3 v2 = coord(fv2, vals);
+    return m2::va::calculate_normal(v0, v1, v2);
+  }
+
+  static real area(face_ptr f, const vecX &vals) {
+    face_vertex_ptr fv0 = f->fbegin();
+    face_vertex_ptr fv1 = fv0->next();
+    face_vertex_ptr fv2 = fv1->next();
+
+    vec3 v0 = coord(fv0, vals);
+    vec3 v1 = coord(fv1, vals);
+    vec3 v2 = coord(fv2, vals);
+    return m2::va::calculate_area(v0, v1, v2);
+  }
+
+  static vec3 center(face_ptr f, const vecX &vals) {
+    face_vertex_ptr fv0 = f->fbegin();
+    face_vertex_ptr fv1 = fv0->next();
+    face_vertex_ptr fv2 = fv1->next();
+
+    vec3 v0 = coord(fv0, vals);
+    vec3 v1 = coord(fv1, vals);
+    vec3 v2 = coord(fv2, vals);
+    return 1.0 / 3.0 * (v0 + v1 + v2);
+  }
+
+  static vec3 center(edge_ptr e, const vecX &vals) {
+
+    face_vertex_ptr fv0 = e->v1();
+    face_vertex_ptr fv1 = e->v2();
+
+    vec3 v0 = coord(fv0, vals);
+    vec3 v1 = coord(fv1, vals);
+    return 1.0 / 2.0 * (v0 + v1);
   }
 
   template <typename InputIterator>
@@ -737,30 +794,15 @@ public:
   }
 
   vec3 coord(face_vertex_ptr fv, const vecX &vals) {
-    vertex_ptr v = fv->vertex();
-    size_t i = v->position_in_set();
-    return vec_interface<SPACE>::from(vals, i);
+    return vec_interface<SPACE>::coord(fv, vals);
   }
 
   vec3 normal(face_ptr f, const vecX &vals) {
-    face_vertex_ptr fv0 = f->fbegin();
-    face_vertex_ptr fv1 = fv0->next();
-    face_vertex_ptr fv2 = fv1->next();
-    vec3 v0 = coord(fv0, vals);
-    vec3 v1 = coord(fv1, vals);
-    vec3 v2 = coord(fv2, vals);
-    return m2::va::calculate_normal(v0, v1, v2);
+    return vec_interface<SPACE>::normal(f, vals);
   }
 
   real area(face_ptr f, const vecX &vals) {
-    face_vertex_ptr fv0 = f->fbegin();
-    face_vertex_ptr fv1 = fv0->next();
-    face_vertex_ptr fv2 = fv1->next();
-
-    vec3 v0 = coord(fv0, vals);
-    vec3 v1 = coord(fv1, vals);
-    vec3 v2 = coord(fv2, vals);
-    return m2::va::calculate_area(v0, v1, v2);
+    return vec_interface<SPACE>::area(f, vals);
   }
 
   std::function<real(const coordinate_type &, //
@@ -782,8 +824,9 @@ public:
       calc_phi_derivatives = [](const real &phi, //
                                 real &phi_p,     //
                                 real &phi_pp) {
-        phi_p = 0.5 * phi * phi + 0.5;
-        phi_pp = phi_pp * phi;
+        real phi2_1 = phi * phi + 1;
+        phi_p = 0.5 * phi2_1;
+        phi_pp = phi_p * phi;
 
         return;
       };
@@ -804,32 +847,16 @@ public:
                     real &psi_p,         //
                     real &psi_pp) {
         real dph = phi - phi_hat;
-        real C = k * ai;
+        real C = 2.0 * k * ai;
 
-        psi = C * dph * dph;
+        psi = 0.5 * C * dph * dph;
 
-        psi_p = 2.0 * C * dph * phi_p;
+        psi_p = C * dph * phi_p;
 
-        psi_pp = 2.0 * C * (dph * phi_pp + phi_p * phi_p);
+        psi_pp = C * (dph * phi_pp + phi_p * phi_p);
 
         return psi_pp;
       };
-
-  virtual real evaluate_constraint() {
-    std::vector<edge_ptr> edges = _surf->get_edges();
-
-    int i = 0;
-    real C = 0.0;
-    for (auto e : edges) {
-      real ai = _ai[i];
-      real phi0 = _phi0[i];
-      real phi1 = _phi1[i];
-      real dphi = phi1 - phi0;
-      C += ai * _k * dphi * dphi;
-      i++;
-    }
-    return C;
-  }
 
   void init() {
     std::vector<edge_ptr> edges = _surf->get_edges();
@@ -841,8 +868,15 @@ public:
     real v = 0.5;
     real Y = 0.1;
     //_k = Y * h * h * h / 24.0 / (1.0 - v);
-    _k = 0.1;
+    _k = 0.001;
     int i = 0;
+
+    for (auto f : faces) {
+      real A = area(f, _positions);
+      _Abar += A;
+    }
+
+    _Abar /= float(faces.size());
     for (auto e : edges) {
       face_vertex_ptr fv0 = e->v1();
       face_vertex_ptr fv1 = e->v2();
@@ -860,21 +894,35 @@ public:
 
       coordinate_type e_vec = c1 - c0;
       _phi0[i] = calc_phi(N0, N1, e_vec);
+#if 0
+      if (i == 0)
+        _phi0[i] *= 1.5;
+#endif
       _ai[i] = 3.0 * va::norm2(e_vec) / (A0 + A1);
       i++;
     }
 
-    _inv_e_len = std::vector<real>(edges.size()); // inverse_edge_lengths
-    _unit_e_vec =
-        std::vector<coordinate_type>(edges.size()); // unit edge vector
-    _phi1 = std::vector<real>(edges.size());        // phi1
-    _psi_p = std::vector<real>(edges.size());       // psi derivative
-    _psi_pp = std::vector<real>(edges.size());      // psi double derivative
+    _e_len = std::vector<real>(edges.size());  // inverse_edge_lengths
+    _phi1 = std::vector<real>(edges.size());   // phi1
+    _psi = std::vector<real>(edges.size());    // psi derivative
+    _psi_p = std::vector<real>(edges.size());  // psi derivative
+    _psi_pp = std::vector<real>(edges.size()); // psi double derivative
     _grad = std::vector<vec12>(edges.size(), vec12::Zero());
-    _hess = std::vector<mat1212>(edges.size(),
-                                 mat1212::Zero()); // hess
-    //_hess = std::vector<mat99>(faces.size(),
-    //                           mat99::Zero()); // hess
+    _hess0 = std::vector<mat99>(faces.size(),
+                                mat99::Zero()); // hess
+    _hess1 = std::vector<mat1212>(edges.size(),
+                                  mat1212::Zero()); // hess
+  }
+
+  virtual real evaluate_constraint() {
+    std::vector<edge_ptr> edges = _surf->get_edges();
+    int i = 0;
+    real C = 0.0;
+    for (auto e : edges) {
+      C += _psi[i];
+      i++;
+    }
+    return C;
   }
 
   void preprocess_edges() {
@@ -889,9 +937,6 @@ public:
       face_ptr f0 = fv0->face();
       face_ptr f1 = fv1->face();
 
-      real A0 = area(f0, _positions);
-      real A1 = area(f1, _positions);
-
       coordinate_type c0 = coord(fv0, _positions);
       coordinate_type c1 = coord(fv1, _positions);
 
@@ -899,46 +944,42 @@ public:
       coordinate_type N1 = normal(f1, _positions);
 
       coordinate_type e_vec = c1 - c0;
-      real il = 1.0 / m2::va::norm(e_vec);
 
       _phi1[i] = calc_phi(N0, N1, e_vec);
-      _inv_e_len[i] = il;
-      _unit_e_vec[i] = e_vec * il;
-      real phi_p, phi_pp, psi;
+      _e_len[i] = m2::va::norm(e_vec);
+      real phi_p = 0.0, phi_pp = 0.0;
+
       calc_phi_derivatives(_phi1[i], phi_p, phi_pp);
-      calc_psi(_phi1[i], _phi0[i], phi_p, phi_pp, _k, _ai[i], psi, _psi_p[i],
-               _psi_pp[i]);
-      // std::cout << _k << " " << _ai[i] << " dphi: " << phi1[i] - _phi0[i] <<
-      // " "
-      //           << psi << " " << psi_p[i] << " " << psi_pp[i] << std::endl;
+      calc_psi(_phi1[i], _phi0[i], phi_p, phi_pp, _k, _ai[i], _psi[i],
+               _psi_p[i], _psi_pp[i]);
+
       _grad[i] = vec12::Zero();
-      _hess[i] = mat1212::Zero(); // inverse_edge_lengths
+      _hess1[i] = mat1212::Zero(); // inverse_edge_lengths
 
       i++;
     }
+
+    i = 0;
+    face_array faces = _surf->get_faces();
+    _Abar = 0;
+    for (auto f : faces) {
+      _hess0[i++] = mat99::Zero(); // inverse_edge_lengths
+      real A = area(f, _positions);
+      _Abar += A;
+    }
+    //_Abar /= float(faces.size());
   }
 
   void finish_grad_hess() {
     int i = 0;
     edge_array edges = _surf->get_edges();
-
     for (auto e : edges) {
       const vec12 &dt = _grad[i];
-      const mat1212 &Hi = _hess[i];
       const real &p = _psi_p[i];
       const real &pp = _psi_pp[i];
-#if 0
-      if (p > 1e-10) {
-        std::cout << "--------------" << std::endl;
-        std::cout << p << " " << pp << std::endl;
-        std::cout << Hi << std::endl;
-        std::cout << "sum: " << Hi.sum() << std::endl;
-      }
-#endif
-      // mat1212 I;
-      // I.setIdentity();
       _grad[i] = p * dt;
-      _hess[i] = p * Hi + pp * dt * dt.transpose();
+      _hess1[i] = pp * dt * dt.transpose();
+      //_hess1[i] = dt * dt.transpose();
 
       i++;
     }
@@ -946,11 +987,11 @@ public:
 
   virtual void preprocess() {
     face_array faces = _surf->get_faces();
-
     preprocess_edges();
 
     int i = 0;
     for (auto f : faces) {
+
       real A = area(f, _positions);
       coordinate_type N = normal(f, _positions);
 
@@ -959,54 +1000,60 @@ public:
       face_vertex_ptr fv2 = fv1->next();
 
       // coordinates are taken from point opposite the edge
-      int iv0 = fv0->vertex()->position_in_set();
-      int iv1 = fv1->vertex()->position_in_set();
-      int iv2 = fv2->vertex()->position_in_set();
 
       coordinate_type p0 = coord(fv0, _positions);
       coordinate_type p1 = coord(fv1, _positions);
       coordinate_type p2 = coord(fv2, _positions);
 
-      int ifv0 = fv0->position_in_set();
-      int ifv1 = fv1->position_in_set();
-      int ifv2 = fv2->position_in_set();
-
       edge_ptr ep0 = fv1->edge();
       edge_ptr ep1 = fv2->edge();
       edge_ptr ep2 = fv0->edge();
 
-      int oriente0 = ep0->side(fv1);
-      int oriente1 = ep1->side(fv2);
-      int oriente2 = ep2->side(fv0);
+      int o0 = ep0->side(fv1);
+      int o1 = ep1->side(fv2);
+      int o2 = ep2->side(fv0);
 
       int ie0 = ep0->position_in_set();
       int ie1 = ep1->position_in_set();
       int ie2 = ep2->position_in_set();
 
-      real il0 = _inv_e_len[ie0];
-      real il1 = _inv_e_len[ie1];
-      real il2 = _inv_e_len[ie2];
+      real psip0 = _psi_p[ie0];
+      real psip1 = _psi_p[ie1];
+      real psip2 = _psi_p[ie2];
+
+      real l0 = _e_len[ie0];
+      real l1 = _e_len[ie1];
+      real l2 = _e_len[ie2];
+
+      real il0 = 1.0 / l0;
+      real il1 = 1.0 / l1;
+      real il2 = 1.0 / l2;
 
       coordinate_type e0 = il0 * (p2 - p1);
       coordinate_type e1 = il1 * (p0 - p2);
       coordinate_type e2 = il2 * (p1 - p0);
 
-      real ih0 = 0.5 / il0 / A;
-      real ih1 = 0.5 / il1 / A;
-      real ih2 = 0.5 / il2 / A;
+      e0 *= 100.0;
+      e1 *= 100.0;
+      e2 *= 100.0;
+      N = e0.cross(-e1);
+      A = N.norm();
+      N /= A;
+      A /= 2;
 
-      // checkpoint
+      real ih0 = 0.5 * l0 / A;
+      real ih1 = 0.5 * l1 / A;
+      real ih2 = 0.5 * l2 / A;
 
       real cos0 = -va::dot(e2, e1);
       real cos1 = -va::dot(e0, e2);
       real cos2 = -va::dot(e1, e0);
 
-      auto calc_dtheta = [](vec12 &dtheta, const int &orient,  //
-                            const real &cos0, const real &ih0, //
-                            const real &cos1, const real &ih1, //
-                            const real &cos2, const real &ih2, //
-                            const vec3 &N) {
-        vec3 dt0 = -1.0 * ih0 * N;
+      auto grad = [](vec12 &dtheta, const int &orient, const vec3 &N,      //
+                     const real &cos0, const real &cos1, const real &cos2, //
+                     const real &ih0, const real &ih1, const real &ih2     //
+                  ) {
+        vec3 dt0 = -ih0 * N;
         vec3 dt1 = cos2 * ih1 * N;
         vec3 dt2 = cos1 * ih2 * N;
         if (orient == 0) {
@@ -1020,146 +1067,168 @@ public:
         }
       };
 
-      calc_dtheta(_grad[ie0], oriente0, //
-                  cos0, ih0, cos1, ih1, cos2, ih2, N);
-      calc_dtheta(_grad[ie1], oriente1, //
-                  cos1, ih1, cos2, ih2, cos0, ih0, N);
-      calc_dtheta(_grad[ie2], oriente2, //
-                  cos2, ih2, cos0, ih0, cos1, ih1, N);
+      // l0 = 1.0;
+      // l1 = 1.0;
+      // l2 = 1.0;
+
+      // psip0 = 1.0;
+      // psip1 = 1.0;
+      // psip2 = 1.0;
+
+      // A = 1.0;
+
+      grad(_grad[ie0], o0, N, //
+           cos0, cos1, cos2,  //
+           ih0, ih1, ih2);
+      grad(_grad[ie1], o1, N, //
+           cos1, cos2, cos0,  //
+           ih1, ih2, ih0);
+      grad(_grad[ie2], o2, N, //
+           cos2, cos0, cos1,  //
+           ih2, ih0, ih1);
 
       coordinate_type m0 = va::cross(e0, N);
       coordinate_type m1 = va::cross(e1, N);
       coordinate_type m2 = va::cross(e2, N);
-      if (i == 1000) {
-        coordinate_type c0 = 0.5 * (p1 + p2);
-        coordinate_type c1 = 0.5 * (p0 + p2);
-        coordinate_type c2 = 0.5 * (p0 + p1);
-        coordinate_type c = (p0 + p1 + p2) / 3.0;
+      /*
+            coordinate_type cen = 0.333 * (p0 + p1 + p2);
+            gg::geometry_logger::get_instance().line(p0, p0 + 0.02 * m0,
+                                                     vec4(1.0, 0.0, 0.0, 1.0));
+            gg::geometry_logger::get_instance().line(p1, p1 + 0.02 * m1,
+                                                     vec4(0.0, 1.0, 0.0, 1.0));
+            gg::geometry_logger::get_instance().line(p2, p2 + 0.02 * m2,
+                                                     vec4(0.0, 0.0, 1.0, 1.0));
+            gg::geometry_logger::get_instance().line(cen, cen + 0.02 * N,
+                                                     vec4(1.0, 0.0, 0.0, 1.0));
+      */
 
-        real C = 0.1;
-        gg::geometry_logger::get_instance().line(c0, c0 + C * m0,
-                                                 vec4(0.0, 1.0, 0.0, 1.0));
-        gg::geometry_logger::get_instance().line(c1, c1 + C * m1,
-                                                 vec4(1.0, 0.0, 0.0, 1.0));
-        gg::geometry_logger::get_instance().line(c2, c2 + C * m2,
-                                                 vec4(1.0, 0.0, 0.0, 1.0));
-        gg::geometry_logger::get_instance().line(c, c + C * N,
-                                                 vec4(0.0, 0.0, 1.0, 1.0));
+#if 1
+      mat33 M0 = N * m0.transpose();
+      mat33 M1 = N * m1.transpose();
+      mat33 M2 = N * m2.transpose();
+#else
+      mat33 M0 = m0 * N.transpose();
+      mat33 M1 = m1 * N.transpose();
+      mat33 M2 = m2 * N.transpose();
+#endif
+
+#if 1
+      if (abs(psip0 + psip1 + psip2)) {
+        std::cout << " A: " << A << std::endl;
       }
-
-      mat3 M0 = N * m0.transpose();
-      mat3 M1 = N * m1.transpose();
-      mat3 M2 = N * m2.transpose();
-
-      if (i == 2000) {
-        coordinate_type c0 = 0.5 * (p1 + p2) + 0.01 * N;
-        coordinate_type c1 = 0.5 * (p0 + p2);
-        coordinate_type c2 = 0.5 * (p0 + p1);
-        coordinate_type c = (p0 + p1 + p2) / 3.0;
-        mat33 M0t = M0;
-        std::cout << " M " << M0 << std::endl;
-        std::cout << " Mt " << M0t << std::endl;
-        coordinate_type t0 = M0t.block(0, 0, 3, 1);
-        coordinate_type t1 = M0t.block(0, 1, 3, 1);
-        coordinate_type t2 = M0t.block(0, 2, 3, 1);
-
-        real C = 0.1;
-        gg::geometry_logger::get_instance().line(c0, c0 + C * t0,
-                                                 vec4(1.0, 0.0, 0.0, 1.0));
-        gg::geometry_logger::get_instance().line(c0, c0 + C * t1,
-                                                 vec4(0.0, 1.0, 0.0, 1.0));
-        gg::geometry_logger::get_instance().line(c0, c0 + C * t2,
-                                                 vec4(0.0, 0.0, 1.0, 1.0));
+#endif
+#if 0
+      if (abs(psip0 + psip1 + psip2)) {
+        std::cout << " psi: " << psip0 << " " << psip1 << " " << psip2
+                  << std::endl;
+        std::cout << " ih: " << ih0 << " " << ih1 << " " << ih2 << std::endl;
+        std::cout << " il: " << il0 << " " << il1 << " " << il2 << std::endl;
+        std::cout << " cos: " << cos0 << " " << cos1 << " " << cos2
+                  << std::endl;
+        std::cout << " A: " << A << std::endl;
+        std::cout << cos0 << " " << cos1 << " " << cos2 << std::endl;
+        std::cout << va::abs_cos(p0, p1, p2) << " " << va::abs_cos(p1, p2, p0)
+                  << " " << va::abs_cos(p2, p0, p1) << std::endl;
       }
+#endif
 
-      auto Htri = [](mat1212 &H, const int &orient,                        //
+      auto Htri = [](mat99 &H,                                             //
+                     const int &o0, const int &o1, const int &o2,          //
+                     const real &psi0, const real &psi1, const real &psi2, //
                      const real &il0, const real &il1, const real &il2,    //
                      const real &ih0, const real &ih1, const real &ih2,    //
                      const real &cos0, const real &cos1, const real &cos2, //
                      const mat33 &M0, const mat33 &M1, const mat33 &M2     //
                   ) {
-        mat33 M0s = M0;
-        mat33 M1s = M1;
-        mat33 M2s = M2;
-        mat33 M0t = M0s.transpose();
-        mat33 M1t = M1s.transpose();
-        mat33 M2t = M2s.transpose();
+        auto dag = [](const mat33 &M, int orient) {
+          mat33 Mt = M.transpose();
+          return orient ? Mt : M;
+          // return orient ? M.transpose() : M;
+        };
 
-        mat33 N0 = il0 * il0 * M0s;
+        real d0 = psi2 * cos1 + psi1 * cos2 - psi0;
+        real d1 = psi0 * cos2 + psi2 * cos0 - psi1;
+        real d2 = psi1 * cos0 + psi0 * cos1 - psi2;
 
-        mat33 N0t = orient == 1 ? N0 : N0.transpose();
+        mat33 M0t = M0.transpose();
+        mat33 M1t = M1.transpose();
+        mat33 M2t = M2.transpose();
+        mat33 R0 = psi0 * il0 * il0 * M0;
+        mat33 R1 = psi1 * il1 * il1 * M1;
+        mat33 R2 = psi2 * il2 * il2 * M2;
 
-        mat33 Q0 = ih0 * ih0 * M0s;
-        mat33 Q1 = ih0 * ih1 * M1s;
-        mat33 Q2 = ih0 * ih2 * M2s;
+        mat33 H00 = ih0 * ih0 * (d0 * M0t + d0 * M0) - R2 - R1;
+        mat33 H11 = ih1 * ih1 * (d1 * M1t + d1 * M1) - R0 - R2;
+        mat33 H22 = ih2 * ih2 * (d2 * M2t + d2 * M2) - R1 - R0;
+        mat33 H01 = ih0 * ih1 * (d0 * M1t + d1 * M0) + dag(R2, o2);
+        mat33 H12 = ih1 * ih2 * (d1 * M2t + d2 * M1) + dag(R0, o0);
+        mat33 H20 = ih2 * ih0 * (d2 * M0t + d0 * M2) + dag(R1, o1);
 
-        mat33 P11 = ih1 * ih1 * cos2 * M1t;
-        mat33 P22 = ih2 * ih2 * cos1 * M2t;
+        //  mat33 H01 = ih0 * ih1 * (d0 * M1t + d1 * M0);
+        //  mat33 H12 = ih1 * ih2 * (d1 * M2t + d2 * M1);
+        //  mat33 H20 = ih2 * ih0 * (d2 * M0t + d0 * M2);
 
-        mat33 P10 = ih1 * ih0 * cos2 * M0t;
-        mat33 P20 = ih2 * ih0 * cos1 * M0t;
+        // mat33 H00 = -R2 - R1;
+        // mat33 H11 = -R0 - R2;
+        // mat33 H22 = -R1 - R0;
+        // mat33 H01 = dag(R2, o2);
+        // mat33 H12 = dag(R0, o0);
+        // mat33 H20 = dag(R1, o1);
 
-        mat33 P12 = ih1 * ih2 * cos2 * M2t;
-        mat33 P21 = ih2 * ih1 * cos1 * M1t;
+        int i0 = 0;
+        int i1 = 3;
+        int i2 = 6;
 
-        mat33 H00 = -(Q0 + Q0.transpose());
-        mat33 H11 = (P11 + P11.transpose()) - N0;
-        mat33 H22 = (P22 + P22.transpose()) - N0;
-        mat33 H10 = P10 - Q1;
-        mat33 H20 = P20 - Q2;
+        H.block(i0, i0, 3, 3) = H00;
+        H.block(i1, i1, 3, 3) = H11;
+        H.block(i2, i2, 3, 3) = H22;
 
-        mat33 H12 = P12 + P21.transpose() + N0t;
+        H.block(i0, i1, 3, 3) = H01;
+        H.block(i1, i0, 3, 3) = H01.transpose();
 
-        if (orient == 0) {
+        H.block(i1, i2, 3, 3) = H12;
+        H.block(i2, i1, 3, 3) = H12.transpose();
 
-          H.block(0, 0, 3, 3) += H00;
-          H.block(3, 3, 3, 3) += H11;
-          H.block(6, 6, 3, 3) += H22;
-
-          H.block(3, 0, 3, 3) += H10;
-          H.block(0, 3, 3, 3) += H10.transpose();
-
-          H.block(6, 0, 3, 3) += H20;
-          H.block(0, 6, 3, 3) += H20.transpose();
-
-          H.block(3, 6, 3, 3) += H12;
-          H.block(6, 3, 3, 3) += H12.transpose();
-
-        } else {
-
-          H.block(9, 9, 3, 3) += H00;
-          H.block(6, 6, 3, 3) += H11;
-          H.block(3, 3, 3, 3) += H22;
-
-          H.block(6, 9, 3, 3) += H10;
-          H.block(9, 6, 3, 3) += H10.transpose();
-
-          H.block(3, 9, 3, 3) += H20;
-          H.block(9, 3, 3, 3) += H20.transpose();
-
-          H.block(6, 3, 3, 3) += H12;
-          H.block(3, 6, 3, 3) += H12.transpose();
-        }
+        H.block(i2, i0, 3, 3) = H20;
+        H.block(i0, i2, 3, 3) = H20.transpose();
       };
 
-      Htri(_hess[ie0], oriente0, //
-           il0, il1, il2,        //
-           ih0, ih1, ih2,        //
-           cos0, cos1, cos2,     //
+      Htri(_hess0[i],           //
+           o0, o1, o2,          //
+           psip0, psip1, psip2, //
+           il0, il1, il2,       //
+           ih0, ih1, ih2,       //
+           cos0, cos1, cos2,    //
            M0, M1, M2);
+      //_hess0[i] /= _Abar;
+#if 0
+      if (abs(psip0 + psip1 + psip2)) {
+        /*
+        std::cout << _grad[ie0] << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << _grad[ie1] << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << _grad[ie2] << std::endl;
+        */
+        std::cout << " H1: " << _hess0[i] << std::endl;
+      }
 
-      Htri(_hess[ie1], oriente1, //
-           il1, il2, il0,        //
-           ih1, ih2, ih0,        //
-           cos1, cos2, cos0,     //
-           M1, M2, M0);
+#endif
+      /*
+            Htri(_hess0[i], 1, oriente1, //
+                 psip1, psip2, psip0,    //
+                 il1, il2, il0,          //
+                 ih1, ih2, ih0,          //
+                 cos1, cos2, cos0,       //
+                 M1, M2, M0);
 
-      Htri(_hess[ie2], oriente2, //
-           il2, il0, il1,        //
-           ih2, ih0, ih1,        //
-           cos2, cos0, cos1,     //
-           M2, M0, M1);
-
+            Htri(_hess0[i], 2, oriente2, //
+                 psip2, psip0, psip1,    //
+                 il2, il0, il1,          //
+                 ih2, ih0, ih1,          //
+                 cos2, cos0, cos1,       //
+                 M2, M0, M1);
+      */
       i++;
     }
 
@@ -1191,6 +1260,35 @@ public:
   }
 
   virtual void get_hess_triplets(std::vector<triplet> &triplets) {
+    face_array faces = _surf->get_faces();
+#if 1
+    for (auto &f : faces) {
+
+      face_vertex_ptr fv0 = f->fbegin();
+      face_vertex_ptr fv1 = fv0->next();
+      face_vertex_ptr fv2 = fv1->next();
+
+      vertex_ptr v0 = fv0->vertex();
+      vertex_ptr v1 = fv1->vertex();
+      vertex_ptr v2 = fv2->vertex();
+
+      size_t i0 = v0->position_in_set();
+      size_t i1 = v1->position_in_set();
+      size_t i2 = v2->position_in_set();
+
+      size_t ii[] = {3 * i0 + 0, 3 * i0 + 1, 3 * i0 + 2, //
+                     3 * i1 + 0, 3 * i1 + 1, 3 * i1 + 2, //
+                     3 * i2 + 0, 3 * i2 + 1, 3 * i2 + 2};
+      const mat99 &Hi = _hess0[f->position_in_set()];
+
+      for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 9; j++) {
+          triplets.push_back(triplet(ii[i], ii[j], Hi(i, j)));
+        }
+      }
+    }
+#endif
+#if 1
     edge_array edges = _surf->get_edges();
     for (auto &e : edges) {
       vertex_ptr v1 = e->v1()->vertex();
@@ -1207,26 +1305,19 @@ public:
                      3 * i1 + 0, 3 * i1 + 1, 3 * i1 + 2, //
                      3 * i2 + 0, 3 * i2 + 1, 3 * i2 + 2, //
                      3 * i3 + 0, 3 * i3 + 1, 3 * i3 + 2};
-      const mat1212 &Hi = _hess[e->position_in_set()];
-      const vec12 &gi = _grad[e->position_in_set()];
-#if 0
-      if (gi.norm() > 1e-10) {
-        std::cout << "Gi: " << gi << std::endl;
-        std::cout << "Hi det: " << Hi.determinant() << std::endl;
-        std::cout << "Hi: " << Hi << std::endl;
-        std::cout << "Hi-Hit: " << Hi - Hi.transpose() << std::endl;
-      }
-#endif
+
+      const mat1212 &Hi = _hess1[e->position_in_set()];
       for (int i = 0; i < 12; i++) {
         for (int j = 0; j < 12; j++) {
           triplets.push_back(triplet(ii[i], ii[j], Hi(i, j)));
         }
       }
     }
+#endif
   }
 
   virtual void update(const vecX &vals) { _positions = vals; }
-
+  real _Abar = 0.0;
   real _k = 0.0;
   surf_ptr _surf;
   vecX _positions;
@@ -1235,13 +1326,15 @@ public:
   std::vector<real> _ai;
 
   std::vector<vec12> _grad;
-  std::vector<mat1212> _hess;
+  std::vector<mat99> _hess0;
+  std::vector<mat1212> _hess1;
 
-  std::vector<real> _inv_e_len;             // inverse_edge_lengths
-  std::vector<coordinate_type> _unit_e_vec; // unit edge vector
-  std::vector<real> _phi1;                  // phi1
-  std::vector<real> _psi_p;                 // psi derivative
-  std::vector<real> _psi_pp;                // psi double derivative
+  std::vector<real> _e_len; // inverse_edge_lengths
+  std::vector<real> _phi1;  // phi1
+
+  std::vector<real> _psi;    // psi derivative
+  std::vector<real> _psi_p;  // psi derivative
+  std::vector<real> _psi_pp; // psi double derivative
 };
 
 template <typename SPACE> class objective_function {
@@ -1264,9 +1357,12 @@ public:
   virtual void preprocess() {}
   virtual real calc_objective() = 0;
 
+  virtual void visualize(const sparmat &M, const vecX &x){};
+  virtual void visualize(const vecX &v, const vecX &x, vec4 color){};
+
   virtual vecX project_gradient(const vecX &x) = 0;
-  virtual vecX calc_gradient() = 0;
-  virtual sparmat calc_hessian() = 0;
+  virtual vecX calc_gradient(const vecX &x) = 0;
+  virtual sparmat calc_hessian(const vecX &x) = 0;
 };
 
 template <typename SPACE>
@@ -1296,7 +1392,7 @@ public:
   };
 
   virtual vecX project_gradient(const vecX &x) { return x; };
-  virtual vecX calc_gradient() {
+  virtual vecX calc_gradient(const vecX &x) {
     double xV = X[0];
     double yV = X[1];
     double dfdx = 2 * (-a + xV + 2 * b * xV * (xV * xV - yV));
@@ -1312,7 +1408,7 @@ public:
     return grad;
   };
 
-  virtual sparmat calc_hessian() {
+  virtual sparmat calc_hessian(const vecX &x) {
     double xV = X[0];
     double yV = X[1];
 
@@ -1344,8 +1440,11 @@ public:
   typedef Eigen::Matrix<real, 6, 1> vec6;
   typedef Eigen::Matrix<real, 3, 1> vec3;
   typedef Eigen::Matrix<real, 3, 2> mat32;
+  typedef Eigen::Matrix<real, 3, 3> mat33;
+
   typedef Eigen::Matrix<real, 6, 6> mat66;
   typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
+  typedef Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> matX;
   typedef Eigen::SparseMatrix<real> sparmat;
 
   typedef std::shared_ptr<constraint_set<SPACE>> ptr;
@@ -1355,6 +1454,111 @@ public:
 
   constraint_set(const surf_ptr surf) : _surf(surf) {
     _reg = m2::ci::geometric_mean_length<SPACE>(_surf);
+  };
+
+  template <typename MAT> mat33 get33Block(MAT M, int i, int j) {
+    real c00 = M.coeff(3 * i + 0, 3 * j + 0);
+    real c01 = M.coeff(3 * i + 0, 3 * j + 1);
+    real c02 = M.coeff(3 * i + 0, 3 * j + 2);
+
+    real c10 = M.coeff(3 * i + 1, 3 * j + 0);
+    real c11 = M.coeff(3 * i + 1, 3 * j + 1);
+    real c12 = M.coeff(3 * i + 1, 3 * j + 2);
+
+    real c20 = M.coeff(3 * i + 2, 3 * j + 0);
+    real c21 = M.coeff(3 * i + 2, 3 * j + 1);
+    real c22 = M.coeff(3 * i + 2, 3 * j + 2);
+    mat33 Mb;
+    Mb.row(0) << c00, c01, c02;
+    Mb.row(1) << c10, c11, c12;
+    Mb.row(2) << c20, c21, c22;
+
+    return Mb;
+  }
+
+  void minmax(mat33 M, real &min, real &max) {
+    coordinate_type t0 = M.block(0, 0, 3, 1);
+    coordinate_type t1 = M.block(0, 1, 3, 1);
+    coordinate_type t2 = M.block(0, 2, 3, 1);
+    real nt0 = t0.norm();
+    real nt1 = t1.norm();
+    real nt2 = t2.norm();
+    min = std::min(min, std::min(nt0, std::min(nt1, nt2)));
+    max = std::max(max, std::max(nt0, std::max(nt1, nt2)));
+  }
+
+  template <typename MAT>
+  void minmax(MAT M, int i, int j, real &min, real &max) {
+    mat33 Mb = get33Block(M, i, j);
+    minmax(Mb, min, max);
+  }
+
+  template <typename MAT>
+  void visualizeBlock(MAT M, coordinate_type c, int i, int j, real C = 1.0) {
+    mat33 Mb = get33Block(M, i, j);
+    gg::geometry_logger::get_instance().frame(Mb, c, C);
+  }
+
+  virtual void visualize(const sparmat &Ms, const vecX &x) {
+    vertex_array verts = _surf->get_vertices();
+    edge_array edges = _surf->get_edges();
+    real min = std::numeric_limits<real>::max();
+    real max = 0;
+
+    for (int k = 0; k < Ms.outerSize(); ++k)
+      for (typename sparmat::InnerIterator it(Ms, k); it; ++it) {
+        it.value();
+        it.row();   // row index
+        it.col();   // col index (here it is equal to k)
+        it.index(); // inner index, here it is equal to it.row()
+      }
+
+    for (auto e : edges) {
+      vec3 c = vec_interface<SPACE>::center(e, x);
+      int ei = e->v1()->vertex()->position_in_set();
+      int ej = e->v2()->vertex()->position_in_set();
+      minmax(Ms, ei, ej, min, max);
+    }
+    for (auto v : verts) {
+      vec3 c = vec_interface<SPACE>::coord(v, x);
+      int vi = v->position_in_set();
+      minmax(Ms, vi, vi, min, max);
+    }
+    max = std::min(100.0, max);
+    real scale = 1.0 / (max - min);
+    std::cout << " min max scale: " << min << " " << max << " " << scale
+              << std::endl;
+#if 1
+    for (auto e : edges) {
+
+      vec3 c = vec_interface<SPACE>::center(e, x);
+      int ei = e->v1()->vertex()->position_in_set();
+      int ej = e->v2()->vertex()->position_in_set();
+      visualizeBlock(Ms, c, ei, ej, 0.1 * scale);
+    }
+#endif
+#if 1
+    for (auto v : verts) {
+
+      vec3 c = vec_interface<SPACE>::coord(v, x);
+      int vi = v->position_in_set();
+      visualizeBlock(Ms, c, vi, vi, 0.1 * scale);
+    }
+#endif
+  };
+
+  virtual void visualize(const vecX &g, const vecX &x,
+                         vec4 color = vec4(0.0, 0.6, 0.7, 1.0)) {
+    vertex_array verts = _surf->get_vertices();
+#if 1
+    for (auto v : verts) {
+      int vi = v->position_in_set();
+      vec3 c = vec_interface<SPACE>::coord(v, x);
+      vec3 gi = vec_interface<SPACE>::coord(v, g);
+      real C = 2.0;
+      gg::geometry_logger::get_instance().line(c, c + C * gi, color);
+    }
+#endif
   };
 
   virtual void update_constraints(const vecX &x) {
@@ -1381,7 +1585,6 @@ public:
   };
 
   virtual void set_x(const vecX &x) {
-
     update_constraints(x);
     _x = x;
   };
@@ -1415,21 +1618,23 @@ public:
     }
   }
 
-  virtual vecX calc_gradient() {
+  virtual vecX calc_gradient(const vecX &x) {
     int N = _N;
     std::vector<triplet> grad_triplets;
     vecX G(3 * N);
+
     G.setZero();
     for (auto c : constraints) {
       c->fill_gradient(G);
     }
+    // visualize(G, x);
     std::cout << " grad sum: " << G.sum() << std::endl;
     std::cout << " grad norm: " << G.norm() << std::endl;
 
     return G;
   }
 
-  virtual sparmat calc_hessian() {
+  virtual sparmat calc_hessian(const vecX &x) {
     int N = _N;
     std::vector<triplet> hess_triplets;
     for (auto c : constraints) {
@@ -1439,6 +1644,7 @@ public:
 
     H.setFromTriplets(hess_triplets.begin(), hess_triplets.end());
 
+    // visualize(H, x);
     size_t Nr = H.rows();
     size_t Nc = H.cols();
     sparmat I(Nr, Nc);
@@ -1456,7 +1662,7 @@ public:
       std::cout << "    H sum: " << H.sum() << std::endl;
       std::cout << "    H norm: " << H.norm() << std::endl;
     }
-    H = I - H;
+    H = I - 1.0 * H;
     std::cout << "    I-H sum: " << H.sum() << std::endl;
     std::cout << "    I-H norm: " << H.norm() << std::endl;
     return H;
@@ -1514,7 +1720,7 @@ public:
     int k = 0;
     while (tol > 1e-10 && k++ < 20) {
       fcn->preprocess();
-      vecX g = fcn->calc_gradient();
+      vecX g = fcn->calc_gradient(xk0);
 
       // g = fcn->project_gradient(g);
       std::cout << "gnorm: " << g.norm() << std::endl;
@@ -1528,7 +1734,7 @@ public:
       vecX xk1 = xk0 - lambda * g;
       tol = (xk1 - xk0).norm();
       // std::cout << " xki norm: " << xki.norm() << std::endl;
-      std::cout << "      tol: " << tol << std::endl;
+      std::cout << "====>>tol: " << tol << std::endl;
 
       fcn->set_x(xk1);
       _g = g;
@@ -1596,22 +1802,28 @@ public:
     real alpha = 1.0;
     real beta = 1.0;
     int k = 0;
-    while (tol > 1e-10 && k++ < 1) {
+    while (tol > 1e-10 && k < 20) {
       fcn->preprocess();
 
       std::vector<triplet> hess_triplets;
       std::vector<triplet> grad_triplets;
-      vecX g = fcn->calc_gradient();
-      sparmat H = fcn->calc_hessian();
+      vecX g = fcn->calc_gradient(xk0);
+      sparmat H = fcn->calc_hessian(xk0);
 
-      _H = H;
-      // break;
 #if 1
       vecX h = solve(H, g);
+      std::cout << "h min/max : " << h.minCoeff() << " " << h.maxCoeff()
+                << std::endl;
       std::cout << "h norm: " << h.norm() << std::endl;
       std::cout << "h sum: " << h.sum() << std::endl;
+      std::cout << "g-h: " << (g - h).norm() << std::endl;
+
+      // fcn->visualize(h, xk0, vec4(0.75, 0.0, 0.6, 1.0));
+
       vecX xk1 = xk0 - h;
-      _g = h;
+
+      // return;
+      // break;
 #else
       real lambda = calc_lambda(g, fcn);
       vecX xk1 = H * xk0 - g;
@@ -1623,77 +1835,17 @@ public:
       // real lambda = calc_lambda(h, fcn);
       alpha *= beta;
       tol = (xk1 - xk0).norm();
-
-      // std::cout << " xki norm: " << xki.norm() << std::endl;
-      std::cout << "      tol: " << tol << std::endl; //<< '\r'
-
+      // if (k > 1)
+      //   break;
+      //  std::cout << " xki norm: " << xki.norm() << std::endl;
+      std::cout << "====>>tol: " << tol << std::endl; //<< '\r'
+                                                      //      if (k > 1)
+                                                      //        break;
       fcn->set_x(xk1);
       std::swap(xk0, xk1);
+      k++;
     }
   }
-
-  virtual vecX extract_gradient() { return _g; };
-  virtual vector<mat3> extract_hessian_block_diag() {
-    int block_size = 3;
-    int N = _H.rows();
-    int Nb = N / block_size;
-
-    vector<mat3> blocks(Nb);
-    for (auto &block : blocks)
-      block.setZero();
-
-#if 0
-    sparmat E(N, block_size);
-    std::vector<triplet> triplets;
-    std::cout << N << " " << Nb << std::endl;
-    for (int i = 0; i < Nb; i++) {
-      for (int j = 0; j < block_size; j++) {
-        triplets.push_back(triplet(block_size * i + j, j, 1.0));
-      }
-    }
-
-    E.setFromTriplets(triplets.begin(), triplets.end());
-    E = _H * E;
-    std::cout << E.rows() << " " << E.cols() << std::endl;
-
-    std::cout << blocks.size() << std::endl;
-    std::cout << E.rows() << " " << E.cols() << std::endl;
-
-    for (int k = 0; k < E.outerSize(); ++k)
-      for (typename sparmat::InnerIterator it(E, k); it; ++it) {
-        real val = it.value();
-        int row = it.row(); // row index
-        int col = it.col(); // col index (here it is equal to k)
-        int i = row / block_size;
-        int ii = row % block_size;
-        //assert(i < blocks.size());
-        mat3 &block = blocks[i];
-        if(ii < 3 && col < 3)
-          block(ii, col) = val;
-        // it.index(); // inner index, here it is equal to it.row()
-      }
-#else
-    for (int k = 0; k < _H.outerSize(); ++k)
-      for (typename sparmat::InnerIterator it(_H, k); it; ++it) {
-        real val = it.value();
-        int row = it.row(); // row index
-        int col = it.col(); // col index (here it is equal to k)
-        int i = row / block_size;
-        int ii = row % block_size;
-        int jj = col % block_size;
-        // assert(i < blocks.size());
-        mat3 &block = blocks[i];
-        if (abs(row - col) < 3)
-          block(ii, jj) = val;
-        // it.index(); // inner index, here it is equal to it.row()
-      }
-#endif
-    std::cout << "4" << std::endl;
-    return blocks;
-  };
-
-  vecX _g;
-  sparmat _H;
 };
 
 template <typename SPACE> class optimizer {

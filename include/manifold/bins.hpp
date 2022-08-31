@@ -1449,8 +1449,8 @@ getNearest(PRIMITIVE_B &primB, const aabb_tree<SPACE, PRIMITIVE_A> &faceTree,
 
       for (int k = cnode.begin; k < cnode.begin + cnode.size; k++) {
 
-        PRIMITIVE_A primA = primitives[faceTree.permutation[k]];
-        box_type boxA = primA.bbox();
+        const PRIMITIVE_A &primA = primitives[faceTree.permutation[k]];
+        const box_type &boxA = primA.bbox();
 
         if (!boxA.overlap(boxB)) {
           continue;

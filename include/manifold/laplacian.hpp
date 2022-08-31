@@ -205,7 +205,10 @@ public:
         u += K * (uj - ui);
       });
 
-      L[i] = u / area;
+      if (area < 1e-10)
+        L[i] = z::zero<TYPE>();
+      else
+        L[i] = u / area;
 
       i++;
     }
@@ -234,15 +237,13 @@ public:
       real aj = m2::ci::area<SPACE>(fv->face());
       real l = fv->template get<real>(SPACE::face_vertex_index::BARY);
       real K = l * aj + 1e-6;
-      //K = 0.00001;
+      // K = 0.00001;
       Km -= K;
       return K;
     });
   }
 
-  virtual void init() {
-    this->initM();
-  }
+  virtual void init() { this->initM(); }
 
   std::vector<coordinate_type> mult(const std::vector<coordinate_type> &U) {
     // Eigen::VectorXd test(U.data());
