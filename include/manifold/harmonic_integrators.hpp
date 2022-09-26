@@ -10,7 +10,9 @@
 #ifndef __M2HARMONIC_INTEGRATOR__
 #define __M2HARMONIC_INTEGRATOR__
 
+#include "manifold/coordinate_interface.hpp"
 #include "manifold/geometry_types.hpp"
+#include "manifold/m2.hpp"
 #include "tree_code.hpp"
 #include <vector>
 
@@ -26,9 +28,9 @@ public:
   using DNode = typename Dist_Integrator::Node;
 
   vector<T> calcDistanceFromMesh(surf_ptr mesh,
-                                 std::vector<coordinate_type> evalPoints) {
+                                 std::vector<coordinate_type> evalPoints,
+                                 T regLength = 0.0001) {
 
-    T regLength = 0.0001;
     auto pre = [](const vector<triangle_type> &tris, DNode &node, DTree &tree,
                   coordinate_type &netCharge, coordinate_type &avgPoint,
                   coordinate_type &avgNormal) -> void {
@@ -60,11 +62,11 @@ public:
       return kappa;
     };
 
-    auto compute = [this, regLength, computeK](
-                       const coordinate_type &q, const coordinate_type &pc,
-                       const coordinate_type &pe, const coordinate_type &N,
-                       const vector<triangle_type> &tris, DNode &node,
-                       DTree &tree) -> T {
+    auto compute =
+        [this, regLength, computeK](
+            int i_c, const coordinate_type &q, const coordinate_type &pc,
+            const coordinate_type &pe, const coordinate_type &N,
+            const vector<triangle_type> &tris, DNode &node, DTree &tree) -> T {
       T out = 0;
       coordinate_type dp = pc - pe;
       T dist = m2::va::norm(dp);
@@ -593,13 +595,17 @@ public:
 #endif
     };
     std::vector<real> K(evalPoints.size());
+    coordinate_array vertex_normals = ci::get_vertex_normals<SPACE>(mesh);
     real mn = 999999, mx = 0.0;
-    auto compute = [this, &mn, &mx, &K, faceVectors, regLength, computeK](
-                       int i_c, const Q &wq, const coordinate_type &pc,
-                       const coordinate_type &pe, const coordinate_type &N,
-                       const vector<triangle_type> &tris, ANode &node,
-                       ATree &tree) -> Q {
+    auto compute = [this, &mn, &mx, &K, &vertex_normals, faceVectors, regLength,
+                    computeK](int i_c, const Q &wq, const coordinate_type &pc,
+                              const coordinate_type &pe,
+                              const coordinate_type &N,
+                              const vector<triangle_type> &tris, ANode &node,
+                              ATree &tree) -> Q {
       Q out = z::zero<Q>();
+
+      coordinate_type vn = vertex_normals[i_c];
 
       if (node.isLeaf()) {
         for (int i = node.begin; i < node.begin + node.size; i++) {
@@ -616,20 +622,21 @@ public:
           //  out += w * computeK(dist, regLength) * va::cross(q,dp);
 
           // T Ndp = m2::va::dot(tri.normal(), dp);
-
+          T Ndn = 0.5 + 0.5 * m2::va::dot(tri.normal(), vn);
           T k = computeK(dist, regLength);
-          out += w * k * qi;
+          out += Ndn * w * k * qi;
           K[i_c] += w * k;
-          mn = std::min(w * k, mn);
-          mx = std::max(w * k, mx);
+          // mn = std::min(w * k, mn);
+          // mx = std::max(w * k, mx);
         }
       } else {
         // out += computeK(dist, regLength) * va::cross(q, dp);
         coordinate_type dp = pc - pe;
         T dist = m2::va::norm(dp);
         // T Ndp = m2::va::dot(N, dp);
+        T Ndn = 0.5 + 0.5 * m2::va::dot(N, vn);
         T k = computeK(dist, regLength);
-        out += k * wq;
+        out += Ndn * k * wq;
 
         mn = std::min(k, mn);
         mx = std::max(k, mx);

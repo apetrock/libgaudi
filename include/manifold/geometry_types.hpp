@@ -263,7 +263,30 @@ public:
     return T(2) * atan2(det, divisor);
   }
 
-  T distanceFrom(CTYPE point) { return distance_from_triangle(p, point); }
+  T determinant(CTYPE pi) {
+    CTYPE A = p[0] - pi;
+    CTYPE B = p[1] - pi;
+    CTYPE C = p[2] - pi;
+    /*
+        T a = m2::va::norm(A);
+        T b = m2::va::norm(B);
+        T c = m2::va::norm(C);
+
+        A /= a;
+        B /= b;
+        C /= c;
+    */
+    return m2::va::determinant(A, B, C);
+  }
+
+  T distanceFrom(CTYPE point) {
+    return m2::va::distance_from_triangle(p, point);
+  }
+
+  bool rayIntersect(const CTYPE &r0, const CTYPE &r1, T &d) {
+    CTYPE pi;
+    return m2::va::ray_triangle_intersect<T>(pi, r0, r1, p[0], p[1], p[2], d);
+  }
 
   T angle(const triangle &B) const {
     CTYPE NA = this->normal();

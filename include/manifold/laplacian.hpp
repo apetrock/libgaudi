@@ -119,13 +119,9 @@ public:
 
   void initC() {
     _matC = this->build([](face_vertex_ptr fv, real &Km) {
-      face_vertex_ptr fvp = fv->vprev()->next();
-      face_vertex_ptr fvn = fv->vnext()->next();
-      real cotp = m2::ci::abs_cotan<SPACE>(fvp);
-      real cotn = m2::ci::abs_cotan<SPACE>(fvn);
-      assert(!isnan(cotp));
-      assert(!isnan(cotn));
-      real K = (cotp + cotn);
+      real cote = m2::ci::cotan<SPACE>(fv->edge());
+      assert(!isnan(cote));
+      real K = cote;
       Km -= K;
       return K;
     });
@@ -170,6 +166,112 @@ public:
 private:
   Eigen::SparseMatrix<real> _matC;
   Eigen::SparseMatrix<real> _matM;
+};
+
+template <typename SPACE>
+class laplacian3 : laplacian_base<SPACE, typename SPACE::coordinate_type> {
+  M2_TYPEDEFS;
+
+public:
+  laplacian3(m2::surf<SPACE> *surf)
+      : laplacian_base<SPACE, coordinate_type>(surf) {
+    this->init();
+  }
+
+  ~laplacian3() {}
+  /*L = MinvC*/
+
+  Eigen::SparseMatrix<real> build() {
+    auto vertices = this->_surf->get_vertices();
+    auto edges = this->_surf->get_edges();
+
+    typedef Eigen::Triplet<double> triplet;
+    std::vector<triplet> tripletList;
+    tripletList.reserve(vertices.size() + 2 * edges.size());
+
+    int i = 0;
+
+    for (auto v : this->_surf->get_vertices()) {
+
+      real Km = 0.0;
+      m2::for_each_vertex<SPACE>(v, [&Km, i, &tripletList](face_vertex_ptr fv) {
+        int j = fv->next()->vertex()->position_in_set();
+        real K = m2::ci::cotan<SPACE>(fv->edge());
+        tripletList.push_back(triplet(3 * i + 0, 3 * j + 0, K));
+        tripletList.push_back(triplet(3 * i + 1, 3 * j + 1, K));
+        tripletList.push_back(triplet(3 * i + 2, 3 * j + 2, K));
+        Km -= K;
+      });
+
+      tripletList.push_back(triplet(3 * i + 0, 3 * i + 0, Km));
+      tripletList.push_back(triplet(3 * i + 1, 3 * i + 1, Km));
+      tripletList.push_back(triplet(3 * i + 2, 3 * i + 2, Km));
+      i++;
+    }
+    Eigen::SparseMatrix<real> mat(3 * vertices.size(), 3 * vertices.size());
+    mat.setFromTriplets(tripletList.begin(), tripletList.end());
+    return mat;
+  }
+
+  void init() { _mat = this->build(); }
+
+  typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
+
+  static coordinate_type from(const vecX &vals, size_t i) {
+    return coordinate_type(vals[3 * i + 0], vals[3 * i + 1], vals[3 * i + 2]);
+  };
+
+  static void to(coordinate_type c, vecX &vals, size_t i) {
+    vals[3 * i + 0] = c[0];
+    vals[3 * i + 1] = c[1];
+    vals[3 * i + 2] = c[2];
+  }
+
+  // these will be function pointers with a default
+  static vecX to(const coordinate_array &positions) {
+    vecX out(3 * positions.size());
+    int i = 0;
+
+    for (int i = 0; i < positions.size(); i++) {
+      coordinate_type p = positions[i];
+      to(p, out, i);
+    }
+
+    return out;
+  }
+
+  static void from(coordinate_array &positions, const vecX &x) {
+    for (int i = 0; i < positions.size(); i++) {
+      positions[i] = from(x, i);
+    }
+  }
+
+  std::vector<coordinate_type> mult(const std::vector<coordinate_type> &U) {
+    // Eigen::VectorXd test(U.data());
+    Eigen::VectorXd Ue = to(U);
+    Eigen::VectorXd Le = _mat * Ue;
+    std::vector<coordinate_type> Uc(U);
+    from(Uc, Le);
+    return Uc;
+  }
+
+  std::vector<coordinate_type> smooth(const std::vector<coordinate_type> &U,
+                                      real c0, real c1) {
+    // Eigen::VectorXd test(U.data());
+    Eigen::VectorXd U0 = to(U);
+    Eigen::SparseMatrix<real> I(_mat.rows(), _mat.cols());
+    I.setIdentity();
+    Eigen::VectorXd U1 = (I + c0 * _mat) * U0;
+    Eigen::VectorXd U2 = (I - c1 * _mat) * U1;
+    std::vector<coordinate_type> Uc(U);
+    from(Uc, U2);
+    return Uc;
+  }
+
+  bool inited = false;
+
+private:
+  Eigen::SparseMatrix<real> _mat;
 };
 
 template <typename SPACE, typename TYPE> class area_laplacian_0 {

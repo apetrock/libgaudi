@@ -1148,13 +1148,14 @@ public:
 #endif
 
 #if 1
+enum op_type { split, merge };
 
 template <typename SPACE> class vertex_policy {
 public:
   M2_TYPEDEFS;
 
   vertex_policy(typename SPACE::vertex_index id) : _id(id) {}
-  virtual void calc(int i, edge_ptr &e) = 0;
+  virtual void calc(int i, edge_ptr &e, op_type op) = 0;
   virtual void apply(int i, vertex_ptr &v) = 0;
   virtual void reserve(long N) = 0;
   virtual void clear() = 0;
@@ -1170,7 +1171,7 @@ public:
     std::cout << " id: " << int(this->_id) << std::endl;
   }
 
-  virtual void calc(int i, edge_ptr &e) {
+  virtual void calc(int i, edge_ptr &e, op_type op) {
 
     face_vertex_ptr v0 = e->v1();
     face_vertex_ptr v1 = v0->prev();
@@ -1288,7 +1289,8 @@ public:
     // return;
     vertex_array &vertices = this->_surf->get_vertices();
     int i = 0;
-    m2::area_laplacian_0<SPACE, coordinate_type> M(this->_surf);
+    // m2::area_laplacian_0<SPACE, coordinate_type> M(this->_surf);
+    m2::laplacian3<SPACE> M(this->_surf);
 
     std::cout << "ugly smoothing " << std::flush;
     coordinate_array coords = m2::ci::get_coordinates<SPACE>(this->_surf);
@@ -1298,31 +1300,31 @@ public:
         ci::get<SPACE, real>(_surf, SPACE::vertex_index::SMOOTH);
     for (int k = 0; k < N; k++) {
       std::cout << "." << std::flush;
-      coordinate_array ncoords = M.mult(coords);
-
+      M.build();
+      coords = M.smooth(coords, C, C + 1e-5);
+#if 0
 #pragma omp parallel for
       for (int i = 0; i < coords.size(); i++) {
         coordinate_type c = ncoords[i];
         coordinate_type cp = va::orthogonal_project(normals[i], ncoords[i]);
         // real dotc = va::dot(normals[i], va::normalize(ncoords[1]));
         // real l = pow(0.5 - 0.5 * dotc, .01);
-        real l = std::min(0.5, sm[i]);
-        coordinate_type cc = (1.0 - l) * cp + l * c;
-
-        // coords[i] = coords[i] + C * cc;
+        // real l = std::min(0.5, sm[i]);
+        // coordinate_type cc = (1.0 - l) * cp + l * c;
         coords[i] = coords[i] + C * cp;
 
         assert(!isnan(coords[i][0]));
         assert(!isnan(coords[i][1]));
         assert(!isnan(coords[i][2]));
       }
+#endif
     }
 
     m2::ci::set_coordinates<SPACE>(coords, this->_surf);
     std::cout << "done!" << std::endl;
   }
 
-  bool operate_edges(triangle_operations_base<SPACE> &op) {
+  bool operate_edges(triangle_operations_base<SPACE> &op, op_type opt) {
 
     op.reset_flags();
     edge_array edges_to_op = op.get_edges();
@@ -1336,7 +1338,7 @@ public:
     int i = 0;
     for (auto e : edges_to_op) {
       for (auto p : _policies) {
-        p->calc(i, e);
+        p->calc(i, e, opt);
       }
       i++;
     }
@@ -1368,7 +1370,7 @@ public:
 
   bool splitEdges() {
     m2::edge_splitter<SPACE> splitter(_surf, _max);
-    return this->operate_edges(splitter);
+    return this->operate_edges(splitter, split);
   }
 
   bool collapsEdges() {
@@ -1376,7 +1378,7 @@ public:
     M2_TYPEDEFS;
     std::cout << "-- collapsing --" << std::endl;
     m2::edge_collapser<SPACE> collapser(_surf, _min);
-    return this->operate_edges(collapser);
+    return this->operate_edges(collapser, merge);
   }
 
   bool mergeEdges() {
@@ -1421,7 +1423,7 @@ public:
     // diffuse edge flags
     this->cacheBary(this->_surf);
 
-    smoothMesh(0.01, 5);
+    smoothMesh(0.003, 10);
 
     std::vector<real> x =
         ci::get<SPACE, real>(_surf, SPACE::vertex_index::SMOOTH);

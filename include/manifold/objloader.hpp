@@ -171,7 +171,6 @@ public:
                     list<face_vertex_ptr> &rFaceVertices) {
     fvl_iterator itb = rFaceVertices.begin();
     fvl_iterator ite = rFaceVertices.end();
-    std::cout << "stitching edge" << std::endl;
     for (itb; itb != ite; itb++) {
       fvl_iterator jtb = rFaceVertices.begin();
       fvl_iterator jte = rFaceVertices.end();
@@ -234,7 +233,6 @@ public:
     vector<vertex_ptr> &vertices = obj->get_vertices();
 
     for (long i = 0; i < vertices.size(); i++) {
-      std::cout << "  " << i << std::endl;
       list<face_vertex_ptr> &corners = cornersOnVertices[i];
       if (corners.size() > 0) {
         m2::construct<SPACE> cons;
@@ -320,7 +318,6 @@ public:
             if (iss >> index)
               curFace.push_back(index - 1);
           }
-          std::cout << std::endl;
 
           inputFaces.push_back(curFace);
           fIdx++;

@@ -51,7 +51,6 @@
   typedef typename SPACE::swept_triangle_type swept_triangle_type;             \
   typedef typename SPACE::box_type box_type;                                   \
   typedef typename SPACE::quat quat;                                           \
-  typedef typename SPACE::vec4 vec4;                                           \
   typedef typename SPACE::mat2 mat2;                                           \
   typedef typename SPACE::mat3 mat3;                                           \
   typedef typename SPACE::mat4 mat4;                                           \
@@ -602,25 +601,16 @@ public:
       face_vertex_ptr fv0 = this->v1();
       face_vertex_ptr fv1 = this->v2();
       vertex_ptr v00 = fv0->vertex();
-      vertex_ptr v01 = fv0->next()->vertex();
-      vertex_ptr v02 = fv0->prev()->vertex();
-
       vertex_ptr v10 = fv1->vertex();
-      vertex_ptr v11 = fv1->next()->vertex();
-      vertex_ptr v12 = fv1->prev()->vertex();
       // test these suckers with face vertices, more robusta?
       if (v00 == v10) {
         return true;
       }
-
-      if (v00 == v01 || v00 == v02) {
+      /*
+      if (fv0->prev()->vnext()->edge() == fv1->prev()->vnext()->edge())
+        // means they are tetrahedra
         return true;
-      }
-
-      if (v10 == v11 || v10 == v12) {
-        return true;
-      }
-
+      */
       if (fv0->face()->is_degenerate() || fv1->face()->is_degenerate()) {
         return true;
       }
@@ -1259,7 +1249,7 @@ public:
     face_vertex_ptr fendr() { return this->get_front()->vnext(); }
 
     bool is_degenerate() {
-      bool degenerate = this->size() < 3;
+      bool degenerate = this->size() < 4;
       // if (degenerate)
       //   std::cout << "degenerate! " << this->size() << std::endl;
       return degenerate;

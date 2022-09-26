@@ -227,14 +227,15 @@ inline bool ray_triangle_intersect(VEC3<T> &pi, const VEC3<T> &r0,
   VEC3<T> v = v2 - v0;
 
   VEC3<T> n = cross(u, v);
-  n = n.normalize();
+  n = n.normalized();
   T eps = 0.00001;
   VEC3<T> dir = (r1 - r0);
   T b = dot(dir, n);
   if (fabs(b) < eps) {
+    // dist = -1;
     return 0;
   }
-  dist = dot((v0 - r0), n) / b;
+  dist = (v0 - r0).dot(n) / b;
   pi = r0 + dir * dist;
 
   VEC3<T> w = pi - v0;
@@ -246,11 +247,15 @@ inline bool ray_triangle_intersect(VEC3<T> &pi, const VEC3<T> &r0,
   T dwv = dot(w, v);
   T denom = 1. / (duv * duv - duu * dvv);
   T s0 = (duv * dwv - dvv * dwu) * denom;
-  if (s0 < -eps || s0 > 1.0 + eps)
+  if (s0 < -eps || s0 > 1.0 + eps) {
+    // dist = -1;
     return 0; // I is outside T
+  }
   T t0 = (duv * dwu - duu * dwv) * denom;
-  if (t0 < -eps || (s0 + t0) > 1.0 + eps)
+  if (t0 < -eps || (s0 + t0) > 1.0 + eps) {
+    // dist = -1;
     return 0; // I is outside T
+  }
 
   return 1; // I is in T
 }
@@ -397,14 +402,14 @@ template <typename T>
 inline T distance_from_line(const VEC3<T> &v0, const VEC3<T> &v1,
                             const VEC3<T> &pt) {
   VEC3<T> dx = v1 - v0;
-  T s = dot((pt - v0), dx) / (dot(dx, dx));
+  T s = (pt - v0).dot(dx) / dx.dot(dx);
   if (s >= 1)
     s = 1;
   if (s <= 0)
     s = 0;
   VEC3<T> ptl = v0 + s * dx;
 
-  T d = norm2(pt - ptl);
+  T d = (pt - ptl).norm();
   return d;
 }
 
@@ -531,7 +536,7 @@ inline T distance_from_triangle(const VEC3<T> *tri, VEC3<T> r0) {
 
   if (b10 >= 0.0 && b20 >= 0.0 && b12 >= 0.0) {
     VEC3<T> c = b10 * v2 + b20 * v1 + b12 * v0;
-    return norm2(r0 - c);
+    return (r0 - c).norm();
   } else {
 #if 1
     if (b10 <= 0) {

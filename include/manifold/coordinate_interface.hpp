@@ -172,10 +172,12 @@ typename SPACE::real area(typename surf<SPACE>::face_ptr f) {
     coordinate_type c20 = c2 - c0;
     coordinate_type n = va::cross(c10, c20);
     a += n.norm();
+    /*
     if (isnan(a)) {
       std::cout << c1.transpose() << "-" << c2.transpose() << std::endl;
       assert(!isnan(a));
     }
+    */
   });
   return 0.5 * a;
 }
@@ -575,6 +577,18 @@ get_centers(typename surf<SPACE>::surf_ptr s) {
   std::vector<coordinate_type> coords;
   for (auto f : s->get_faces()) {
     coords.push_back(center<SPACE>(f));
+  }
+  return coords;
+}
+
+template <typename SPACE>
+std::vector<typename SPACE::coordinate_type>
+get_normals(typename surf<SPACE>::surf_ptr s) {
+  using T = typename SPACE::real;
+  using coordinate_type = typename SPACE::coordinate_type;
+  std::vector<coordinate_type> coords;
+  for (auto f : s->get_faces()) {
+    coords.push_back(normal<SPACE>(f));
   }
   return coords;
 }

@@ -16,6 +16,14 @@
 namespace gg {
 class geometry_logger;
 
+enum PresetColor {
+  grey,
+  red,
+  green,
+  blue,
+  rainbow,
+};
+
 class geometry_logger {
 
 public:
@@ -26,6 +34,14 @@ public:
   static void clear();
   static void line4(const Vec4 &p0, const Vec4 &p1, const Vec4 &color);
   static void line(const Vec3d &p0, const Vec3d &p1, const Vec4d &color);
+
+  static void box(const Vec3d &cen, const Vec3d &h, const Vec4d &col);
+
+  static void lines(const std::vector<Vec3d> &p0, const std::vector<Vec3d> &p1,
+                    const std::vector<Vec4d> &colors);
+  static void field(const std::vector<Vec3d> &p, const std::vector<Vec3d> &dirs,
+                    double D = 0.1, PresetColor col = grey);
+
   void frame(Mat3d M, Vec3d c, double C);
 
   bool &initialized() { return instance_flag; }

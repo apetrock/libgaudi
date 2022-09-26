@@ -1,8 +1,14 @@
 //#include "nanoguiincludes.h"
 
 #include "manifold/coordinate_interface.hpp"
+
+#include "manifold/hepworth/constraints_init.hpp"
+#include "manifold/hepworth/objective_function.hpp"
+
 #include "manifold/m2.hpp"
+#include <algorithm>
 #include <exception>
+#include <vector>
 #if defined(WIN32)
 #include <windows.h>
 #endif
@@ -37,7 +43,7 @@
 #include "manifold/make.hpp"
 #include "manifold/objloader.hpp"
 
-#include "manifold/position_optimization.hpp"
+#include "manifold/hepworth/optimizer.hpp"
 
 #include "manifold/harmonic_integrators.hpp"
 #include "manifold/vec_addendum.h"
@@ -100,7 +106,9 @@ public:
     COORDINATE = 0,
     COLOR = 1,
     SMOOTH = 2,
-    MAXINDEX = 3
+    ACT = 3,
+
+    MAXINDEX = 4
   };
 
   enum class face_index { NORMAL = 0, CENTER = 1, AREA = 2, MAXINDEX = 3 };
@@ -145,11 +153,220 @@ public:
       return storage_type::VEC3;
     case vertex_index::SMOOTH:
       return storage_type::REAL;
+    case vertex_index::ACT:
+      return storage_type::REAL;
     default:
       return storage_type::SIZE;
     }
   }
 };
+
+template <typename SPACE>
+class action_policy : public m2::vertex_policy<SPACE> {
+public:
+  M2_TYPEDEFS;
+
+  action_policy(typename SPACE::vertex_index id) : vertex_policy<SPACE>(id) {
+    std::cout << " id: " << int(this->_id) << std::endl;
+  }
+
+  virtual void calc(int i, edge_ptr &e, m2::op_type op) {
+    face_vertex_ptr v0 = e->v1();
+    face_vertex_ptr v1 = v0->prev();
+    face_vertex_ptr v2 = e->v2();
+    face_vertex_ptr v3 = v2->prev();
+
+    real t0 = v0->vertex()->template get<real>(this->_id);
+    real t1 = v1->vertex()->template get<real>(this->_id);
+    real t2 = v2->vertex()->template get<real>(this->_id);
+    real t3 = v3->vertex()->template get<real>(this->_id);
+
+    if (op == m2::op_type::split) {
+      //_vals[i] = -0.2 * (t0 + t2) + 0.2 * (t1 + t3);
+      _vals[i] = 0.0;
+    } else {
+      real mx = t0 * t0 > t2 * t2 ? t0 : t2;
+      _vals[i] = 0.99 * mx;
+    }
+
+    //_vals[i] = -0.25 * (t0 + t2);
+    return;
+  }
+
+  virtual void apply(int i, vertex_ptr &v) {
+    v->template set<real>(this->_id, _vals[i]);
+  }
+
+  virtual void reserve(long N) { _vals = std::vector<real>(N); }
+
+  virtual void clear() { _vals.clear(); }
+
+  std::vector<real> _vals;
+};
+
+////////////////////////////////////////////////////////////////////////////
+// AVG
+////////////////////////////////////////////////////////////////////////////
+
+template <typename SPACE>
+vector<typename SPACE::vec3>
+calcPotential(m2::surf<SPACE> *mesh, std::vector<typename SPACE::vec3> vertVals,
+              std::vector<typename SPACE::coordinate_type> evalPoints,
+              typename SPACE::real regLength = 0.5) {
+  M2_TYPEDEFS;
+
+  typedef Eigen::Matrix<real, 3, 1> vec3;
+  typedef Eigen::Matrix<real, 4, 1> vec4;
+
+  using Avg_Integrator =
+      m2::Geometry_Integrator<SPACE, vec3, triangle_type, vec3>;
+
+  using ATree = typename Avg_Integrator::Tree;
+  using ANode = typename Avg_Integrator::Node;
+
+  std::vector<vec3> faceVals = ci::verts_to_faces<SPACE>(vertVals, mesh);
+
+  if (evalPoints.empty())
+    return std::vector<vec3>();
+
+  auto pre = [faceVals](const vector<triangle_type> &tris, ANode &node,
+                        ATree &tree, vec3 &netCharge, coordinate_type &avgPoint,
+                        coordinate_type &avgNormal) -> void {
+    avgPoint = coordinate_type(0, 0, 0);
+    netCharge = z::zero<vec3>();
+
+    T netWeight = 0;
+
+    for (int i = node.begin; i < node.begin + node.size; i++) {
+      int ii = tree.permutation[i];
+      triangle_type tri = tris[ii];
+      T w = tri.area();
+      avgPoint += w * tri.center();
+      avgNormal += w * tri.normal();
+      netCharge += w * faceVals[ii];
+      netWeight += w;
+    }
+
+    avgPoint /= netWeight;
+  };
+
+  auto computeK = [](T dist, T C) {
+#if 0
+      T d3 = dist * dist * dist;
+      T l3 = C * C * C;
+      T kappa = (1.0 - exp(-d3 / l3)) / d3;
+      return kappa / pow(4.0 * M_PI, 1.5);
+#elif 1
+    T dist3 = dist * dist * dist;
+    T l3 = C * C * C;
+    T kappa = 1.0 / (dist3 + l3);
+    return kappa / pow(4.0 * M_PI, 1.5);
+#elif 0
+    T dist2 = dist * dist * dist;
+    T l2 = C * C;
+    T kappa = 1.0 / (dist2 + l2);
+    return kappa / 4.0 / M_PI;
+#elif 1
+    T kappa = 1.0 / (dist + C);
+    return kappa / 4.0 / M_PI;
+#elif 0
+    T dist2 = dist * dist;
+    T dt = 0.5;
+    T kappa = exp(-dist2 / 4.0 / dt);
+    return kappa / pow(4.0 * M_PI * dt, 1.5);
+#endif
+  };
+  coordinate_array vertex_normals = ci::get_vertex_normals<SPACE>(mesh);
+
+  auto compute = [&vertex_normals, faceVals, regLength,
+                  computeK](int i_c, const vec3 &wq, const coordinate_type &pc,
+                            const coordinate_type &pe, const coordinate_type &N,
+                            const vector<triangle_type> &tris, ANode &node,
+                            ATree &tree) -> vec3 {
+    vec3 out = z::zero<vec3>();
+
+    coordinate_type vn = vertex_normals[i_c];
+    auto computeKelvin = [](coordinate_type r, coordinate_type f, real eps) {
+      real mu = 10.0;
+      real v = 2e-1;
+      real a = 1.0 / 4.0 / mu;
+      real b = a / (4.0 * (1.0 - v));
+      real eps2 = 1e-10 * eps * eps;
+      real re = 1.0 / sqrt(r.dot(r) + eps2);
+      real re3 = re * re * re;
+
+      mat3 R = r * r.transpose();
+      mat3 I;
+      I.setIdentity();
+
+      coordinate_type u =
+          ((a - b) / re * I + b / re3 * R + 0.5 * a * eps2 / re3 * I) * f;
+
+      return u;
+    };
+
+    if (node.isLeaf()) {
+      for (int i = node.begin; i < node.begin + node.size; i++) {
+        int ii = tree.permutation[i];
+        vec3 qi = faceVals[ii];
+        auto tri = tris[ii];
+        auto w = tri.area();
+        auto c = tri.center();
+        auto Nf = tri.normal();
+
+        coordinate_type dp = c - pe;
+
+        real m = qi.norm();
+        // out += computeKelvin(dp, w * qi, regLength);
+
+        float sg = va::sgn(qi.dot(Nf));
+        T dist = m2::va::norm(dp);
+        T k = computeK(dist, regLength);
+        dp /= dist;
+        coordinate_type u = va::cross(dp, qi);
+
+        out += w * k * u;
+      }
+    } else {
+      // out += computeK(dist, regLength) * va::cross(q, dp);
+      coordinate_type dp = pc - pe;
+
+      out += computeKelvin(dp, wq, regLength);
+
+      T dist = m2::va::norm(dp);
+      T k = computeK(dist, regLength);
+      dp /= dist;
+      coordinate_type u = va::cross(dp, wq);
+
+      real m = wq.norm();
+      float sg = va::sgn(wq.dot(N));
+      out += k * u;
+    }
+    return out;
+  };
+
+  vector<face_ptr> &faces = mesh->get_faces();
+  vector<coordinate_type> normals;
+  vector<triangle_type> triangles;
+  for (int i = 0; i < faces.size(); i++) {
+    if (!mesh->has_face(i))
+      continue;
+    if (faces[i]->size() < 3)
+      continue;
+    std::vector<triangle_type> tris = m2::ci::get_tris<SPACE>(faces[i]);
+    triangles.insert(triangles.end(), tris.begin(), tris.end());
+  }
+
+  for (auto t : triangles) {
+    normals.push_back(t.normal());
+  }
+  vector<vec3> u(evalPoints.size(), z::zero<vec3>());
+  Avg_Integrator integrator;
+  integrator.integrate(faceVals, triangles, evalPoints, u, pre, compute);
+  int i = 0;
+
+  return u;
+}
 
 typedef stretch_space<double> stretch;
 
@@ -186,6 +403,8 @@ public:
     } else {
 
       _meshGraph = &load("assets/bunny.obj");
+      //_meshGraph = &load("assets/close.obj");
+
       //_meshGraph = &load("assets/icosahedron.obj");
       //_meshGraph = &load("assets/sphere.obj");
 
@@ -217,10 +436,14 @@ public:
     }
 
     int N = 0;
-    _integrator = new m2::surf_integrator<stretch>(_meshGraph, 0.75, 3.0, 0.35);
+    _integrator = new m2::surf_integrator<stretch>(_meshGraph, 0.5, 2.5, 0.75);
     //_integrator = new m2::surf_integrator<stretch>(_meshGraph, 0.1, 3.0, 0.5);
     _integrator->add_default_vertex_policy<typename stretch::real>(
         stretch::vertex_index::SMOOTH);
+    _integrator->add_default_vertex_policy<typename stretch::real>(
+        stretch::vertex_index::ACT);
+    _integrator->add_vertex_policy(
+        new action_policy<stretch>(stretch::vertex_index::ACT));
     _max = _integrator->_max;
     _min = _integrator->_min;
 
@@ -239,154 +462,39 @@ public:
   vector<m2::colorRGB> getColor(m2::surf<SPACE> *surf) {
     M2_TYPEDEFS;
     auto smooth = m2::ci::get<SPACE, real>(surf, SPACE::vertex_index::SMOOTH);
+    auto hot = m2::ci::get<SPACE, real>(surf, SPACE::vertex_index::ACT);
 
     m2::cotan_curvature<SPACE> curve(surf);
     std::vector<real> K = curve();
+    real mn = K[0];
+    real mx = K[0];
+    std::for_each(std::begin(K), std::end(K), [&](const double d) {
+      mn = std::min(mn, d);
+      mx = std::max(mx, d);
+    });
+
     std::vector<m2::colorRGB> vert_colors(smooth.size());
     int i = 0;
     for (auto v : surf->get_vertices()) {
-      typename SPACE::real k = K[i];
+      typename SPACE::real k = (K[i] - mn) / (mx - mn);
       typename SPACE::real N = 0;
       typename SPACE::real s = smooth[i];
+      typename SPACE::real h = hot[i];
 
       typename SPACE::coordinate_type colorS(1.0, 0.0, 0.0);
       typename SPACE::coordinate_type colorC(0.56, 0.50, 0.60);
+      typename SPACE::coordinate_type colorH(0.5, 0.0, 0.5);
+      typename SPACE::coordinate_type colorK(0.5, 0.5, 0.0);
+      typename SPACE::coordinate_type mx = colorC;
+      mx = m2::va::mix(k, colorK, mx);
+      mx = m2::va::mix(s, colorS, mx);
+      mx = m2::va::mix(h, colorH, mx);
+      mx = m2::va::mix(k, colorC, mx);
 
-      typename SPACE::coordinate_type mx = m2::va::mix(s, colorS, colorC);
       vert_colors[i] = m2::colorRGB(mx[0], mx[1], mx[2], 1.0);
       i++;
     }
     return vert_colors;
-  }
-
-#if 1
-  space3::vec3 rainbow(double d) {
-    double r = 0.5 + 0.5 * cos(2.0 * M_PI * (d + 0.000));
-    double g = 0.5 + 0.5 * cos(2.0 * M_PI * (d + 0.333));
-    double b = 0.5 + 0.5 * cos(2.0 * M_PI * (d + 0.666));
-    return space3::vec3(r, g, b);
-  }
-
-  space3::vec3 grey(double d) { return space3::vec3(0.5, 0.5, 0.5); }
-  space3::vec3 red(double d) { return space3::vec3(1.0, 0.0, 0.0); }
-  space3::vec3 green(double d) { return space3::vec3(0.0, 1.0, 0.0); }
-  space3::vec3 blue(double d) { return space3::vec3(0.0, 0.0, 1.0); }
-
-  template <typename SPACE>
-  void print_vecs(const std::vector<typename SPACE::vec3> &p0,
-                  const std::vector<typename SPACE::vec3> &p1, double D = 0.1,
-                  int col = 0) {
-    double mx =
-        std::accumulate(p1.begin(), p1.end(), 0.0, [](double a, auto &c) {
-          return max(a, m2::va::norm(c));
-        });
-
-    for (int i = 0; i < p0.size(); i++) {
-
-      const auto &p = p0[i];
-      const auto &a = p1[i];
-
-      auto pp0 = p - D * a / mx;
-      auto pp1 = p + D * a / mx;
-
-      // std::cout << a.transpose() << std::endl;
-      auto c = grey(m2::va::norm(a));
-      if (col == 1)
-        c = red(m2::va::norm(a));
-      if (col == 2)
-        c = green(m2::va::norm(a));
-      if (col == 3)
-        c = blue(m2::va::norm(a));
-      gg::geometry_logger::line(Vec4(pp0[0], pp0[1], pp0[2], 1.0),
-                                Vec4(pp1[0], pp1[1], pp1[2], 1.0),
-                                Vec4(c[0], c[1], c[2], 1.0));
-    }
-  }
-
-#endif
-
-  template <typename SPACE>
-  void
-  init_edge_constraints(m2::surf<SPACE> *surf,
-                        typename m2::constraint_set<SPACE>::ptr constraints) {
-    M2_TYPEDEFS;
-
-    std::vector<edge_ptr> edges = _meshGraph->get_edges();
-    std::vector<size_t> indices;
-    std::vector<stretch::real> lengths;
-
-    for (auto e : edges) {
-      vertex_ptr v0 = e->v1()->vertex();
-      vertex_ptr v1 = e->v2()->vertex();
-      vertex_ptr v2 = e->v1()->prev()->vertex();
-      vertex_ptr v3 = e->v2()->prev()->vertex();
-
-      size_t i0 = v0->position_in_set();
-      size_t i1 = v1->position_in_set();
-      size_t i2 = v2->position_in_set();
-      size_t i3 = v3->position_in_set();
-
-      indices.push_back(i0);
-      indices.push_back(i1);
-      indices.push_back(i2);
-      indices.push_back(i3);
-
-      stretch::coordinate_type c0 = m2::ci::get_coordinate<stretch>(v0);
-      stretch::coordinate_type c1 = m2::ci::get_coordinate<stretch>(v1);
-      stretch::coordinate_type c2 = m2::ci::get_coordinate<stretch>(v2);
-      stretch::coordinate_type c3 = m2::ci::get_coordinate<stretch>(v3);
-      stretch::real l01 = m2::va::norm(stretch::coordinate_type(c0 - c1));
-      stretch::real l23 = m2::va::norm(stretch::coordinate_type(c3 - c2));
-      lengths.push_back(l01);
-      lengths.push_back(l23);
-    }
-
-    int i = 0;
-    int N = 0.5 * lengths.size();
-
-    for (i = 0; i < N; i++) {
-      size_t i0 = indices[4 * i + 0];
-      size_t i1 = indices[4 * i + 1];
-      size_t i2 = indices[4 * i + 2];
-      size_t i3 = indices[4 * i + 3];
-
-      real l01 = lengths[2 * i + 0];
-      real l23 = lengths[2 * i + 1];
-#if 1
-      typename m2::edge_stretch<SPACE>::ptr stretch01 =
-          m2::edge_stretch<SPACE>::create(i0, i1, l01);
-      constraints->add_constraint(stretch01);
-#endif
-#if 0
-      typename m2::edge_stretch<SPACE>::ptr stretch23 =
-          m2::edge_stretch<SPACE>::create(i2, i3, l23);
-      constraints->add_constraint(stretch23);
-#endif
-
-#if 0
-      typename m2::edge_length<SPACE>::ptr length01 =
-          m2::edge_length<SPACE>::create(i0, i1);
-      constraints->add_constraint(length01);
-#endif
-
-#if 0
-      typename m2::cross_ratio<SPACE>::ptr cross =
-          m2::cross_ratio<SPACE>::create(i0, i1, i2, i3, 1.1);
-      constraints->add_constraint(cross);
-#endif
-    }
-  }
-
-  double smoothstep(double t, double l, double h, double t0, double x0) {
-    double x = (l * t + t0);
-    double fx = 3.0 * x * x - 2.0 * x * x * x;
-    std::cout << " x/t: " << t << " " << x << std::endl;
-    if (x <= 0)
-      return x0;
-    if (x > 0 && x < 1)
-      return x0 + h * fx;
-    if (x >= 1)
-      return x0 + h;
   }
 
   virtual void onAnimate(int frame) {
@@ -394,8 +502,8 @@ public:
     _meshGraph->update_all();
     _meshGraph->reset_flags();
     _meshGraph->pack();
-    if (frame == 1)
-      _integrator->integrate();
+    // if (frame == 1)
+    _integrator->integrate();
     //    if (frame > 1)
     //      return;
 
@@ -412,8 +520,9 @@ public:
     auto colors = getColor(_meshGraph);
 #if 1
 
-    std::vector<stretch::vec3> positions =
+    std::vector<stretch::vec3> p0 =
         m2::ci::get_coordinates<stretch>(_meshGraph);
+    std::vector<stretch::vec3> p1(p0);
 
     // build constraints to capture current config
     std::cout << "====== " << std::endl;
@@ -422,61 +531,170 @@ public:
     using edge_ptr = typename m2::surf<stretch>::edge *;
     using vertex_ptr = typename m2::surf<stretch>::vertex *;
 
-    m2::optimizer<stretch> opt;
-
     std::cout << "building constraints " << std::endl;
-    m2::constraint_set<stretch>::ptr constraints =
-        m2::constraint_set<stretch>::create(_meshGraph);
+    hepworth::constraint_set<stretch>::ptr constraints =
+        hepworth::constraint_set<stretch>::create(_meshGraph);
 
     std::cout << "adding constraints " << std::endl;
-    // init_edge_constraints<stretch>(_meshGraph, constraints);
-    constraints->add_constraint(m2::bend<stretch>::create(_meshGraph));
+    // init_stretch_constraints<stretch>(_meshGraph, constraints, 1e-5);
+    //       init_cross_constraints<stretch>(_meshGraph, constraints);
+    init_bend_constraints<stretch>(_meshGraph, constraints, 5e-5);
 
-#if 1
-    // perturb config
-    int iii = 50;
+    constraints->add_constraint(
+        hepworth::internal_collisions<stretch>::create(_meshGraph, _max));
+
     std::vector<stretch::vec3> normals =
         m2::ci::get_vertex_normals<stretch>(_meshGraph);
-    positions[iii] += 0.1 * normals[iii];
+
+    std::vector<stretch::vec3> forces(p0.size(), stretch::vec3::Zero());
+    std::vector<stretch::vec3> wN(p0);
+    int i = 0;
+#if 0
+    // perturb config
+    int iii = 0;
+    forces[iii] = 0.01 * normals[iii];
+    p1[iii] += forces[iii];
+
+#elif 1
+    std::mt19937_64 rng;
+    // initialize the random number generator with time-dependent seed
+    // rng.seed(419770629407);
+    // initialize a uniform distribution between 0 and 1
+    std::uniform_real_distribution<double> unif(-1.0, 1.0);
+    std::uniform_real_distribution<double> unif01(0.0, 1.0);
+    auto &verts = _meshGraph->get_vertices();
+
+    m2::cotan_curvature<stretch> curve(_meshGraph);
+    std::vector<double> K = curve();
+    double sum = std::accumulate(std::begin(K), std::end(K), 0.0);
+    double mean = sum / K.size();
+    double accum = 0.0;
+    std::for_each(std::begin(K), std::end(K),
+                  [&](const double d) { accum += (d - mean) * (d - mean); });
+    double stdev = sqrt(accum / (K.size() - 1));
+
+    std::cout << " K mean: " << mean << " stdev: " << stdev << std::endl;
+
+    double N = double(verts.size());
+    double d0 = 0.0;
+    double dp = 0.0;
+    double dn = 0.0;
+    for (auto &v : verts) {
+      double a = v->template get<double>(stretch::vertex_index::ACT);
+      d0 += sqrt(a * a) / N;
+    }
+
+    std::cout << "current density: " << d0 << std::endl;
+    double max_d = 0.01;
+    double prob_d = 1.0 / N / max_d;
+    double d1 = d0;
+    std::cout << "max density: " << max_d << ", prob density: " << prob_d
+              << std::endl;
+
+    for (auto &v : verts) {
+      double a = v->template get<double>(stretch::vertex_index::ACT);
+      forces[i].setZero();
+
+      if (unif01(rng) < prob_d && d1 < max_d && a < 1e-1) {
+        if (dp < 16.0 * dn) {
+          a = 1.0;
+          dp += fabs(a) / N;
+        } else {
+          a = -1.0;
+          dn += fabs(a) / N;
+        }
+        d1 += sqrt(a * a) / N;
+      }
+
+      if (a * a > 0) {
+        // if (unif01(rng) > 0.99)
+        //   a = 0.0;
+        a *= (1.0 - 0.002 * unif01(rng));
+      }
+      // std::cout << forces[i].transpose() << " - " << a << std::endl;
+      // double mag = a < 0 ? -a : a;
+      // p1[i] += a * 0.03 * normals[i];
+      wN[i] = stretch::vec3(a * normals[i]);
+      v->template set<double>(stretch::vertex_index::ACT, a);
+
+      i++;
+    }
+
+#elif 0
+    for (int i = 0; i < p1.size(); i++) {
+      forces[i] = 0.01 * normals[i];
+      p1[i] += forces[i];
+    }
+
 #endif
 #if 1
-    constraints->set_positions(positions);
-    opt.update(constraints);
-    positions = constraints->get_positions();
-    m2::ci::set_coordinates<stretch>(positions, _meshGraph);
+
+    i = 0;
+    double C_N = 0.01;
+    for (auto v : verts) {
+      auto f = wN[i].norm();
+      auto sn = va::sgn(wN[i].dot(normals[i]));
+      for_each_vertex<stretch>(
+          v, [i, &p0, &p1, &normals, f, sn,
+              C_N](typename m2::surf<stretch>::face_vertex_ptr fv) {
+            int j = fv->next()->vertex()->position_in_set();
+            auto Nj = normals[j];
+            p1[j] += C_N * f * sn * Nj;
+          });
+      p1[i] -= 0.5 * C_N * f * sn * normals[i];
+      i++;
+    }
 #endif
 #if 0
-    std::vector<stretch::mat3> blocks = opt.block_diag;
-    int i = 0;
-    std::vector<stretch::coordinate_type> v0s;
-    std::vector<stretch::coordinate_type> v1s;
-    std::vector<stretch::coordinate_type> v2s;
-    for (auto &block : blocks) {
-      //std::cout << block << std::endl; 
-      //std::cout << std::endl;
-      stretch::coordinate_type p0 = positions[i++];
-      stretch::coordinate_type v0 = block.block(0, 0, 3, 1);
-      stretch::coordinate_type v1 = block.block(0, 1, 3, 1);
-      stretch::coordinate_type v2 = block.block(0, 2, 3, 1);
-      v0s.push_back(p0 + v0);
-      v1s.push_back(p0 + v1);
-      v2s.push_back(p0 + v2);
+    i = 0;
+
+    double C_C = C_N;
+    for (auto v : verts) {
+      auto f = wN[i].norm();
+      auto sn = va::sgn(wN[i].dot(normals[i]));
+
+      for_each_vertex<stretch>(
+          v, [i, &p0, &p1, &normals, f, sn,
+              C_C](typename m2::surf<stretch>::face_vertex_ptr fv) {
+            int j = fv->next()->vertex()->position_in_set();
+            auto Ni = normals[i];
+            auto pi = p0[i];
+            auto pj = p0[j];
+            typename stretch::coordinate_type dp = pj - pi;
+            dp.normalize();
+            auto Ncp = dp.cross(Ni);
+            p1[j] += 0.5 * C_C * f * sn * Ncp;
+          });
+      i++;
     }
-    print_vecs<stretch>(positions, v0s, 0.1, 1);
-    print_vecs<stretch>(positions, v1s, 0.1, 2);
-    print_vecs<stretch>(positions, v2s, 0.1, 3);
-    std::cout << normals[0] << std::endl;
 #endif
 #if 1
-    // std::cout << "print vecs" << std::endl;
+    std::vector<stretch::vec3> fN =
+        calcPotential<stretch>(_meshGraph, wN, p0, 2.0 * _max);
+    i = 0;
+    for (auto f : fN) {
+      p1[i] += 0.1 * f;
+      i++;
+    }
+    gg::geometry_logger::field(p0, fN, 1.0);
 
-    // print_vecs<stretch>(positions, normals);
+#endif
+    // hepworth::position_optimizer<stretch> opt(p0, p1, weights);
+
+    // gg::geometry_logger::field(p0, wN, 0.1, gg::PresetColor::red);
+
+    hepworth::velocity_optimizer<stretch> opt(p0, p1);
+    opt.update(constraints);
+    p1 = constraints->get_positions();
+    m2::ci::set_coordinates<stretch>(p1, _meshGraph);
+
+#if 1
+
+    // std::cout << "print vecs" << std::endl;
     std::cout << "rendering debug" << std::endl;
     gg::geometry_logger::render();
 #endif
 
-    m2::ci::set_coordinates<stretch>(positions, _meshGraph);
-    // this->dump_gaudi(frame);
     _meshGraph->print();
 
     gg::fillBuffer(_meshGraph, _obj, colors);
