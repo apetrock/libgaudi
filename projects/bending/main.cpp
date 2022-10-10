@@ -605,10 +605,9 @@ public:
     edge_array &edges = surf->get_edges();
 
     coordinate_array gradU(faces.size(), coordinate_type::Zero());
-    i = 0;
     for (auto e : edges) {
-      coordinate_type c0 = ci::get_coordinate<SPACE>(e->v1()->next());
-      coordinate_type c1 = ci::get_coordinate<SPACE>(e->v2()->next());
+      coordinate_type c0 = ci::get_coordinate<SPACE>(e->v1());
+      coordinate_type c1 = ci::get_coordinate<SPACE>(e->v2());
       real u0 = u[e->v1()->prev()->vertex()->position_in_set()];
       real u1 = u[e->v2()->prev()->vertex()->position_in_set()];
 
@@ -622,9 +621,8 @@ public:
       coordinate_type M0 = dp.cross(N0);
       coordinate_type M1 = dp.cross(N1);
 
-      gradU[e->v1()->face()->position_in_set()] += M0 * u0 / 2.0 / A0;
-      gradU[e->v2()->face()->position_in_set()] -= M1 * u1 / 2.0 / A1;
-      i++;
+      gradU[e->v1()->face()->position_in_set()] -= M0 * u0 / 2.0 / A0;
+      gradU[e->v2()->face()->position_in_set()] += M1 * u1 / 2.0 / A1;
     }
 
     i = 0;
@@ -639,51 +637,22 @@ public:
     ///////////////
     // divergence
     ///////////////
-    std::vector<real> divu(act.size());
-    i = 0;
-
-    for (auto &v : verts) {
-      real div = 0.0;
-      m2::for_each_vertex<SPACE>(v, [gradU, &div](face_vertex_ptr fv) {
-        face_vertex_ptr fvn = fv->next();
-        face_vertex_ptr fvp = fv->prev();
-
-        coordinate_type gu = gradU[fv->face()->position_in_set()];
-        coordinate_type c0 = ci::get_coordinate<SPACE>(fv);
-        coordinate_type cN = ci::get_coordinate<SPACE>(fvn);
-        coordinate_type cP = ci::get_coordinate<SPACE>(fvp);
-        coordinate_type eN = cN - c0;
-        coordinate_type eP = cP - c0;
-        real cotN = ci::abs_cotan<SPACE>(fvn);
-        real cotP = ci::abs_cotan<SPACE>(fvp);
-        div += cotN * eN.dot(gu);
-        div += cotP * eP.dot(gu);
-      });
-      divu[i] = 0.5 * div;
-      // std::cout << 0.5 * div << std::endl;
-      //  divu[i] = 0.0;
-
-      i++;
-    }
+    std::vector<real> divu(act.size(), 0.0);
 
     for (auto e : edges) {
       coordinate_type c0 = ci::get_coordinate<SPACE>(e->v1()->next());
       coordinate_type c1 = ci::get_coordinate<SPACE>(e->v2()->next());
-      real u0 = u[e->v1()->prev()->vertex()->position_in_set()];
-      real u1 = u[e->v2()->prev()->vertex()->position_in_set()];
 
-      real A0 = m2::ci::area<SPACE>(e->v1()->face());
-      real A1 = m2::ci::area<SPACE>(e->v2()->face());
-
-      coordinate_type N0 = m2::ci::normal<SPACE>(e->v1()->face());
-      coordinate_type N1 = m2::ci::normal<SPACE>(e->v2()->face());
+      coordinate_type g0 = gradU[e->v1()->face()->position_in_set()];
+      coordinate_type g1 = gradU[e->v2()->face()->position_in_set()];
       coordinate_type dp = c1 - c0;
 
-      coordinate_type M0 = dp.cross(N0);
-      coordinate_type M1 = dp.cross(N1);
-
-      gradU[e->v1()->face()->position_in_set()] += M0 * u0 / 2.0 / A0;
-      gradU[e->v2()->face()->position_in_set()] -= M1 * u1 / 2.0 / A1;
+      real cot0 = ci::abs_cotan<SPACE>(e->v1()->prev());
+      real cot1 = ci::abs_cotan<SPACE>(e->v2()->prev());
+      divu[e->v1()->vertex()->position_in_set()] += 0.5 * cot0 * dp.dot(g0);
+      divu[e->v1()->vertex()->position_in_set()] += 0.5 * cot1 * dp.dot(g1);
+      divu[e->v2()->vertex()->position_in_set()] -= 0.5 * cot0 * dp.dot(g0);
+      divu[e->v2()->vertex()->position_in_set()] -= 0.5 * cot1 * dp.dot(g1);
       i++;
     }
 #if 0
