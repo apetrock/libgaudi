@@ -4,6 +4,8 @@
 #define __PENKO_OBJECTIVE__
 
 #include "constraints.hpp"
+#include "manifold/coordinate_interface.hpp"
+#include "manifold/m2.hpp"
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
@@ -39,6 +41,7 @@ public:
   virtual void visualize(const sparmat &M, const vecX &x){};
   virtual void visualize(const vecX &v, const vecX &x, vec4 color, real C){};
 
+  virtual void limit_strain(vecX &x, real h){};
   virtual vecX calc_gradient(const vecX &x) = 0;
   virtual sparmat calc_hessian(const vecX &x) = 0;
 };
@@ -284,6 +287,32 @@ public:
   virtual void preprocess(const vecX &v) {
     for (auto c : constraints) {
       c->preprocess(v);
+    }
+  }
+
+  virtual void limit_strain(vecX &vel, real h) {
+    vertex_array verts = _surf->get_vertices();
+    int i = 0;
+    for (auto v : verts) {
+      mat3 M = mat3::Zero();
+      coordinate_type p0 = ci::get_coordinate<SPACE>(v);
+      for_each_vertex<SPACE>(v, [&M, p0](face_vertex_ptr fv) {
+        coordinate_type p1 = ci::get_coordinate<SPACE>(fv->next()->vertex());
+        coordinate_type dp = p1 - p0;
+        M += dp * dp.transpose();
+      });
+
+      Eigen::JacobiSVD<mat3> svd(M, Eigen::ComputeFullU);
+      // const mat3 U = svd.matrixU();
+      const vec3 S = svd.singularValues();
+      coordinate_type vl = vec_interface<SPACE>::from(vel, i);
+      // real Sm = sqrt(S[1]) / h;
+      real Sm = sqrt(S[0]);
+      real vn = vl.norm();
+      if (vn > Sm)
+        vl *= Sm / vn;
+      vec_interface<SPACE>::to(vl, vel, i);
+      i++;
     }
   }
 

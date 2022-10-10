@@ -38,7 +38,13 @@ public:
     return coordinate_type(vals[3 * i + 0], vals[3 * i + 1], vals[3 * i + 2]);
   };
 
-  static void to(coordinate_type c, vecX &vals, size_t i) {
+  static void to_plus(const coordinate_type &c, vecX &vals, size_t i) {
+    vals[3 * i + 0] += c[0];
+    vals[3 * i + 1] += c[1];
+    vals[3 * i + 2] += c[2];
+  }
+
+  static void to(const coordinate_type &c, vecX &vals, size_t i) {
     vals[3 * i + 0] = c[0];
     vals[3 * i + 1] = c[1];
     vals[3 * i + 2] = c[2];
@@ -63,6 +69,8 @@ public:
     }
   }
 
+  static vec3 coord(const int &i, const vecX &vals) { return from(vals, i); }
+
   static vec3 coord(vertex_ptr v, const vecX &vals) {
     size_t i = v->position_in_set();
     return from(vals, i);
@@ -74,6 +82,14 @@ public:
     return coord(v, vals);
     // size_t i = v->position_in_set();
     // return from(vals, i);
+  }
+
+  static vec3 normal(const int &i0, const int &i1, const int &i2,
+                     const vecX &vals) {
+    vec3 v0 = coord(i0, vals);
+    vec3 v1 = coord(i1, vals);
+    vec3 v2 = coord(i2, vals);
+    return m2::va::calculate_normal(v0, v1, v2);
   }
 
   static vec3 normal(face_ptr f, const vecX &vals) {
@@ -340,6 +356,12 @@ public:
     }
   }
 
+  virtual bool safe() {
+    if ((_p1 - _p0).norm() < 1e-4)
+      return false;
+    return true;
+  }
+
   virtual real evaluate_constraint() {
     coordinate_type dp = _p1 - _p0;
     real l = va::norm(dp);
@@ -412,6 +434,8 @@ public:
 #endif
 
   virtual void fill_gradient(vecX &G) {
+    if (!safe())
+      return;
     vec6 g = local_gradient();
     size_t ii[] = {3 * _i0 + 0, 3 * _i0 + 1, 3 * _i0 + 2,
                    3 * _i1 + 0, 3 * _i1 + 1, 3 * _i1 + 2};
@@ -421,6 +445,8 @@ public:
   }
 
   virtual void get_hess_triplets(std::vector<triplet> &triplets) {
+    if (!safe())
+      return;
     mat66 H = local_hessien();
     size_t ii[] = {3 * _i0 + 0, 3 * _i0 + 1, 3 * _i0 + 2,
                    3 * _i1 + 0, 3 * _i1 + 1, 3 * _i1 + 2};
@@ -439,6 +465,179 @@ public:
   // real _T = 1;
   bool _init_rest = false;
 }; // namespace m2
+
+template <typename SPACE> class shear : public constraint<SPACE> {
+public:
+  M2_TYPEDEFS;
+
+  typedef std::shared_ptr<shear<SPACE>> ptr;
+
+  static ptr create(size_t i0, size_t i1) {
+    return std::make_shared<shear<SPACE>>(i0, i1);
+  }
+
+  static ptr create(size_t i0, size_t i1, real l) {
+    return std::make_shared<shear<SPACE>>(i0, i1, l);
+  }
+
+  typedef Eigen::Matrix<real, 2, 1> vec2;
+  typedef Eigen::Matrix<real, 6, 1> vec6;
+  typedef Eigen::Matrix<real, 3, 1> vec3;
+  typedef Eigen::Matrix<real, 3, 2> mat32;
+  typedef Eigen::Matrix<real, 3, 6> mat36;
+  typedef Eigen::Matrix<real, 6, 6> mat66;
+  typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
+
+  typedef Eigen::SparseMatrix<real> sparmat;
+
+  real _w = 1e-2; // convenience local variable
+  shear(size_t i0, size_t i1) : _i0(i0), _i1(i1), _init_rest(true) {
+    this->set_weight(_w);
+  }
+
+  shear(size_t i0, size_t i1, real l)
+      : _i0(i0), _i1(i1), _lc(l), _init_rest(false) {
+    this->set_weight(_w);
+  }
+
+  virtual void update(const vecX &vals) {
+    _p0 = vec_interface<SPACE>::from(vals, _i0);
+    _p1 = vec_interface<SPACE>::from(vals, _i1);
+    _p2 = vec_interface<SPACE>::from(vals, _i1);
+  }
+
+  virtual void init_rest() {
+    if (_init_rest) {
+      _lc = (_p0 - _p1).norm();
+    }
+  }
+
+  virtual bool safe() {
+    if ((_p1 - _p0).norm() < 1e-4)
+      return false;
+    return true;
+  }
+
+  /*
+   *                x3
+   *            /|
+   *           / |
+   *          /  |
+   *         /   |  e2
+   *        /    |
+   *       /     |
+   *      /      |
+   *   x1 <-------  x2
+   *          e1
+   *
+   */
+
+  virtual real evaluate_constraint() {
+    coordinate_type dp = _p1 - _p0;
+    real l = va::norm(dp);
+    real invl = 1.0 / l;
+    real de = l - _lc;
+    return 0.5 * this->_mu * de * de;
+  }
+
+  vec6 local_gradient() {
+    coordinate_type dp = _p1 - _p0;
+    real l = va::norm(dp);
+    real invl = 1.0 / l;
+    coordinate_type dldx = dp * invl;
+    real de = l - _lc;
+    coordinate_type dCdxi = this->_mu * de * dldx;
+
+    vec6 G;
+    G.segment(0, 3) = -dCdxi;
+    G.segment(3, 3) = dCdxi;
+    return G;
+  }
+#if 1
+  mat66 local_hessien() {
+
+    coordinate_type dp = _p1 - _p0;
+    real l = va::norm(dp);
+    real invl = 1.0 / l;
+    // coordinate_type dldx = dp * invl;
+    // real de = l - _lc;
+    mat3 I = mat3::Identity(3, 3);
+    vec3 dldx = invl * dp;
+    mat3 dldlT = dldx * dldx.transpose();
+    mat3 d2CDX2 = this->_mu * (-I + _lc * invl * (I - dldlT));
+
+    mat66 H;
+    H.block(0, 0, 3, 3) = d2CDX2;
+    H.block(0, 3, 3, 3) = -d2CDX2;
+    H.block(3, 3, 3, 3) = d2CDX2;
+    // symmetric matrix
+    H.block(3, 0, 3, 3) = -d2CDX2;
+    //    std::cout << H << std::endl;
+    //    std::cout << "=================" << std::endl;
+
+    return H;
+  }
+
+#else
+  mat66 local_hessien() {
+    coordinate_type dp = _p1 - _p0;
+    real l = va::norm(dp);
+    real il = 1.0 / l;
+    coordinate_type dldx = dp * il;
+
+    double deltaRatio = 1.0 - _lc * il;
+    mat3 llT = dldx * dldx.transpose();
+    mat3 I = mat3::Identity(3, 3);
+    mat3 d2CDX2 = _mu * (llT + deltaRatio * (I - llT.transpose()));
+
+    mat66 H;
+    H.block(0, 0, 3, 3) = d2CDX2;
+    H.block(0, 3, 3, 3) = -d2CDX2;
+    H.block(3, 3, 3, 3) = d2CDX2;
+    // symmetric matrix
+    H.block(3, 0, 3, 3) = -d2CDX2;
+    //    std::cout << H << std::endl;
+    //    std::cout << "=================" << std::endl;
+
+    return -H;
+  }
+#endif
+
+  virtual void fill_gradient(vecX &G) {
+    if (!safe())
+      return;
+    vec6 g = local_gradient();
+    size_t ii[] = {3 * _i0 + 0, 3 * _i0 + 1, 3 * _i0 + 2,
+                   3 * _i1 + 0, 3 * _i1 + 1, 3 * _i1 + 2};
+    for (int i = 0; i < 6; i++) {
+      G(ii[i]) += g(i);
+    }
+  }
+
+  virtual void get_hess_triplets(std::vector<triplet> &triplets) {
+    if (!safe())
+      return;
+    mat66 H = local_hessien();
+    size_t ii[] = {3 * _i0 + 0, 3 * _i0 + 1, 3 * _i0 + 2,
+                   3 * _i1 + 0, 3 * _i1 + 1, 3 * _i1 + 2};
+    for (int i = 0; i < 6; i++) {
+      for (int j = 0; j < 6; j++) {
+        triplets.push_back(triplet(ii[i], ii[j], H(i, j)));
+      }
+    }
+    // std::cout << endl;
+  }
+
+  size_t _i0 = -1, _i1 = -1;
+  coordinate_type _p0, _p1, _p2;
+  real _lc;
+  // real _E = 0.1;
+  // real _T = 1;
+  bool _init_rest = false;
+}; // namespace m2
+
+// -----------------------------------------------------------------------
+
 template <typename SPACE> class cross_ratio : public constraint<SPACE> {
 public:
   M2_TYPEDEFS;
@@ -453,6 +652,7 @@ public:
   }
 
   typedef Eigen::Matrix<real, 3, 1> vec3;
+  typedef Eigen::Matrix<real, 4, 1> vec4;
   typedef Eigen::Matrix<real, 3, 3> mat33;
   typedef Eigen::Matrix<real, 12, 1> vec12;
   typedef Eigen::Matrix<real, 12, 12> mat1212;
@@ -473,7 +673,7 @@ public:
     if (_init_rest)
       _k = cross();
   }
-
+  bool safe() { return true; }
   virtual void update(const vecX &vals) {
 
     _pi = vec_interface<SPACE>::from(vals, _ii);
@@ -629,19 +829,46 @@ public:
   }
 
   virtual void fill_gradient(vecX &G) {
+    if (!safe())
+      return;
+
     vec12 g = local_gradient();
     // std::cout << " lGNorm: " << g.norm() << std::endl;
+    /*
+        size_t ii[] = {3 * _ii + 0, 3 * _ii + 1, 3 * _ii + 2, //
+                       3 * _ij + 0, 3 * _ij + 1, 3 * _ij + 2, //
+                       3 * _ik + 0, 3 * _ik + 1, 3 * _ik + 2, //
+                       3 * _il + 0, 3 * _il + 1, 3 * _il + 2};
+        for (int i = 0; i < 12; i++) {
+          G(ii[i]) += g(i);
+        }
+    */
+    //    j
+    // k <|> l
+    //    i
+    vec3 N0 = m2::va::calculate_normal(_pi, _pk, _pj);
+    vec3 N1 = m2::va::calculate_normal(_pj, _pl, _pi);
+    vec3 N = (N0 + N1).normalized();
+    size_t ii[] = {_ik, _ii, _ij, _il};
+    vec3 Ns[] = {N0, N, N, N1};
+    vec3 ps[] = {_pk, _pi, _pj, _pl};
 
-    size_t ii[] = {3 * _ii + 0, 3 * _ii + 1, 3 * _ii + 2, //
-                   3 * _ij + 0, 3 * _ij + 1, 3 * _ij + 2, //
-                   3 * _ik + 0, 3 * _ik + 1, 3 * _ik + 2, //
-                   3 * _il + 0, 3 * _il + 1, 3 * _il + 2};
-    for (int i = 0; i < 12; i++) {
-      G(ii[i]) += g(i);
+    for (int i = 0; i < 4; i++) {
+      vec3 gi = g.segment(3 * i, 3);
+      // gg::geometry_logger::line(ps[i], ps[i] + 1000 * gi,
+      //                           vec4(0.0, 1.0, 0.0, 1.0));
+
+      // gi = va::orthogonal_project(N, gi);
+      // gg::geometry_logger::line(ps[i], ps[i] + 1000 * gi,
+      //                           vec4(1.0, 0.0, 0.0, 1.0));
+      vec_interface<SPACE>::to_plus(gi, G, ii[i]);
     }
   }
 
   virtual void get_hess_triplets(std::vector<triplet> &triplets) {
+    if (!safe())
+      return;
+
     mat1212 H = local_hessien();
 
     size_t ii[] = {3 * _ii + 0, 3 * _ii + 1, 3 * _ii + 2, //
@@ -679,9 +906,8 @@ public:
                     real &psi,                                 //
                     real &psi_p,                               //
                     real &psi_pp) = 0;
-  virtual void init(const typename SPACE::coordinate_type &N0, //
-                    const typename SPACE::coordinate_type &N1, //
-                    const typename SPACE::coordinate_type &e) = 0;
+  virtual void init(const real &p) = 0;
+  virtual real rest() { return 0.0; }
 };
 
 template <typename SPACE> class tan_psi : public psi<SPACE> {
@@ -701,21 +927,24 @@ public:
   tan_psi(const typename SPACE::coordinate_type &N0, //
           const typename SPACE::coordinate_type &N1, //
           const typename SPACE::coordinate_type &e) {
-    init(N0, N1, e);
+    init(calc_phi(N0, N1, e));
+  }
+
+  static real static_calc_phi(const coordinate_type &N0, //
+                              const coordinate_type &N1, //
+                              const coordinate_type &e) {
+    real sint = va::sin(N0, N1, e);
+    real cost = va::cos(N0, N1, e);
+    if (cost == 0.0)
+      return 0.0;
+    real tant = sint / cost;
+    return tant;
   }
 
   real calc_phi(const coordinate_type &N0, //
                 const coordinate_type &N1, //
                 const coordinate_type &e) {
-    // 2.0 tan(thet/2)
-    real sint = va::norm(vec3(N1 - N0));
-    real cost = va::norm(vec3(N1 + N0));
-    if (cost == 0.0)
-      return 0.0;
-    cost = std::max(0.1, cost);
-    real tant = m2::va::sgn(va::determinant(N0, N1, e)) * sint / cost;
-
-    return tant;
+    return static_calc_phi(N0, N1, e);
   };
 
   void calc_phi_derivatives(const real &phi, //
@@ -753,11 +982,9 @@ public:
     calc_psi(phi1, phi0, phi_p, phi_pp, psi, psi_p, psi_pp);
   };
 
-  virtual void init(const typename SPACE::coordinate_type &N0, //
-                    const typename SPACE::coordinate_type &N1, //
-                    const typename SPACE::coordinate_type &e) {
-    phi0 = calc_phi(N0, N1, e);
-  };
+  void init(const real &p0) { phi0 = p0; };
+
+  virtual real rest() { return phi0; }
 
   real phi0 = 0.0;
 };
@@ -778,33 +1005,13 @@ public:
   sin_psi() {}
   sin_psi(const typename SPACE::coordinate_type &N0, //
           const typename SPACE::coordinate_type &N1, //
-          const typename SPACE::coordinate_type &e) {
-    init(N0, N1, e);
-  }
-
-  real sin(const coordinate_type &N0, //
-           const coordinate_type &N1) {
-    // 2.0 tan(thet/2)
-    return va::norm(vec3(N1 - N0));
-  };
-
-  real cos(const coordinate_type &N0, //
-           const coordinate_type &N1) {
-    // 2.0 tan(thet/2)
-    return va::norm(vec3(N1 + N0));
-  };
-
-  real sgn(const coordinate_type &N0, //
-           const coordinate_type &N1, const coordinate_type &e) {
-    // 2.0 tan(thet/2)
-    return m2::va::sgn(va::determinant(N0, N1, e));
-  };
+          const typename SPACE::coordinate_type &e) {}
 
   real calc_phi(const coordinate_type &N0, //
                 const coordinate_type &N1, //
                 const coordinate_type &e) {
     // 2.0 tan(thet/2)
-    real sint = 2.0 * sgn(N0, N1, e) * sin(N1, N0);
+    real sint = m2::va::sin(N0, N1, e);
     return sint;
   };
 
@@ -813,11 +1020,12 @@ public:
                             const coordinate_type &e,  //
                             real &phi_p,               //
                             real &phi_pp) {
-    real s = sgn(N0, N1, e);
-    real sint = s * sin(N1, N0);
-    real cost = cos(N1, N0);
-    phi_p = cost;
-    phi_pp = -0.5 * sint;
+
+    real sint = m2::va::sin(N0, N1, e);
+    real cost = m2::va::cos(N0, N1, e);
+
+    phi_p = 0.5 * cost;
+    phi_pp = -0.25 * sint;
 
     return;
   };
@@ -843,16 +1051,82 @@ public:
     real phi1 = calc_phi(N0, N1, e);
     real phi_p = 0, phi_pp = 0;
     calc_phi_derivatives(N0, N1, e, phi_p, phi_pp);
-    calc_psi(phi1, phi0, phi_p, phi_pp, psi, psi_p, psi_pp);
+    calc_psi(phi1, 0.0, phi_p, phi_pp, psi, psi_p, psi_pp);
   };
 
-  virtual void init(const typename SPACE::coordinate_type &N0, //
+  virtual void init(const real &p){};
+};
+
+template <typename SPACE> class cos_psi : public psi<SPACE> {
+  M2_TYPEDEFS
+public:
+  typedef Eigen::Matrix<real, 3, 1> vec3;
+  typedef std::shared_ptr<cos_psi<SPACE>> ptr;
+  static ptr create() { return std::make_shared<cos_psi<SPACE>>(); }
+
+  static ptr create(const typename SPACE::coordinate_type &N0, //
                     const typename SPACE::coordinate_type &N1, //
                     const typename SPACE::coordinate_type &e) {
-    phi0 = 0.0;
+    return std::make_shared<cos_psi<SPACE>>(N0, N1, e);
+  }
+
+  cos_psi() {}
+  cos_psi(const typename SPACE::coordinate_type &N0, //
+          const typename SPACE::coordinate_type &N1, //
+          const typename SPACE::coordinate_type &e) {}
+
+  real calc_phi(const coordinate_type &N0, //
+                const coordinate_type &N1, //
+                const coordinate_type &e) {
+    // 2.0 tan(thet/2)
+    return m2::va::cos(N0, N1, e);
   };
-  real phi0 = 0.0;
+
+  void calc_phi_derivatives(const coordinate_type &N0, //
+                            const coordinate_type &N1, //
+                            const coordinate_type &e,  //
+                            real &phi_p,               //
+                            real &phi_pp) {
+
+    real sint = m2::va::sin(N0, N1, e);
+    real cost = m2::va::cos(N0, N1, e);
+
+    phi_p = -0.5 * sint;
+    phi_pp = -0.25 * cost;
+
+    return;
+  };
+
+  void calc_psi(const real &phi,     //
+                const real &phi_hat, //
+                const real &phi_p,   //
+                const real &phi_pp,  //
+                real &psi,           //
+                real &psi_p,         //
+                real &psi_pp) {
+    psi = 0.5 * phi * phi;
+    psi_p = phi * phi_p;
+    psi_pp = phi * phi_pp + phi_p * phi_p;
+  };
+
+  virtual void calc(const typename SPACE::coordinate_type &N0, //
+                    const typename SPACE::coordinate_type &N1, //
+                    const typename SPACE::coordinate_type &e,  //
+                    real &psi,                                 //
+                    real &psi_p,                               //
+                    real &psi_pp) {
+    real phi1 = calc_phi(N0, N1, e);
+    real phi_p = 0, phi_pp = 0;
+    calc_phi_derivatives(N0, N1, e, phi_p, phi_pp);
+    calc_psi(phi1, 0.0, phi_p, phi_pp, psi, psi_p, psi_pp);
+  };
+
+  virtual void init(const real &p){};
 };
+
+//////////////////////////////////////////////////////////
+// edge_bend
+//////////////////////////////////////////////////////////
 
 template <typename SPACE> class edge_bend : public constraint<SPACE> {
 
@@ -875,6 +1149,7 @@ public:
                     const int &i2, const int &i3) {
     return std::make_shared<edge_bend<SPACE>>(i0, i1, i2, i3);
   }
+
   real _w = 1e-3;
   edge_bend(const int &i0, const int &i1, //
             const int &i2, const int &i3)
@@ -904,6 +1179,32 @@ public:
   //
   // Edge orientation: e0,e1,e2 point away from x0
   //                      e3,e4 point away from x1
+
+  virtual bool safe() {
+    coordinate_type x00 = _p0;
+    coordinate_type x1 = _p1;
+    coordinate_type x2 = _p2;
+    coordinate_type x10 = _p3;
+    A0 = m2::va::calculate_area(x00, x1, x2);
+    A1 = m2::va::calculate_area(x10, x2, x1);
+
+    if (A0 / A1 > 4.0)
+      return false;
+    if (A1 / A0 > 4.0)
+      return false;
+
+    if (std::isinf(_psi_fcn->rest())) {
+      return false;
+    }
+
+    if (std::isnan(_psi_fcn->rest()))
+      return false;
+
+    if (fabs(_psi_fcn->rest()) > 4.0)
+      return false;
+
+    return true;
+  }
 
   void update_intermediates() {
     coordinate_type x00 = _p0;
@@ -962,21 +1263,33 @@ public:
     this->set_weight(k);
   }
 
+  real calc_a(real k, real a0, real a1, real l) {
+    real denom = a0 + a1;
+    real C = 3.0 * k * l * l / denom;
+    C = denom = a0 < 1e-5 ? 0 : C;
+    C = denom = a1 < 1e-5 ? 0 : C;
+    C = a0 / a1 > 4.0 ? 0 : C;
+    C = a1 / a0 > 4.0 ? 0 : C;
+
+    return C;
+  }
+
   virtual void init_rest() {
     update_intermediates();
-
+    _ai = this->calc_a(this->_mu, A0, A1, l0);
     _psi_fcn = tan_psi<SPACE>::create(N0, N1, e0);
+    //_psi_fcn = cos_psi<SPACE>::create(N0, N1, e0);
     //_psi_fcn = sin_psi<SPACE>::create(N0, N1, e0);
-
-    real denom = A0 + A1;
-    denom = max(denom, 2e-5);
-    _ai = 3.0 * this->_mu * l0 * l0 / denom;
   }
 
   virtual real evaluate_constraint() { return _psi; }
 
   virtual void preprocess(const vecX &v) {
     _psi_fcn->calc(N0, N1, e0, _psi, _psi_p, _psi_pp);
+    _psi = _ai * _psi;
+    _psi_p = _ai * _psi_p;
+    _psi_pp = _ai * _psi_pp;
+
     update_intermediates();
     _grad = vec12::Zero();
     _hess = mat1212::Zero();
@@ -992,7 +1305,7 @@ public:
 
   vec12 local_gradient() {
     vec12 dtheta = d_theta();
-    return _ai * _psi_p * dtheta;
+    return _psi_p * dtheta;
   }
 
   mat1212 local_hessien() {
@@ -1083,11 +1396,15 @@ public:
     H.block(i2, i1, 3, 3) = H12.transpose();
     vec12 dtheta = d_theta();
 
-    H = _ai * _psi_p * H + _ai * _psi_pp * dtheta * dtheta.transpose();
+    H = _psi_p * H + _psi_pp * dtheta * dtheta.transpose();
+    //    if (_psi_p > 0)
+    //      std::cout << _ai << " " << _psi_p << " " << _psi_pp << std::endl;
     return -H;
   }
 
   virtual void fill_gradient(vecX &G) {
+    if (!safe())
+      return;
     size_t ii[] = {3 * _i0 + 0, 3 * _i0 + 1, 3 * _i0 + 2, //
                    3 * _i1 + 0, 3 * _i1 + 1, 3 * _i1 + 2, //
                    3 * _i2 + 0, 3 * _i2 + 1, 3 * _i2 + 2, //
@@ -1099,6 +1416,8 @@ public:
   }
 
   virtual void get_hess_triplets(std::vector<triplet> &triplets) {
+    if (!safe())
+      return;
 #if 1
     size_t ii[] = {3 * _i0 + 0, 3 * _i0 + 1, 3 * _i0 + 2, //
                    3 * _i1 + 0, 3 * _i1 + 1, 3 * _i1 + 2, //
@@ -1116,6 +1435,7 @@ public:
 
   real _k = 0.0;
   real _ai;
+
   typename psi<SPACE>::ptr _psi_fcn;
   real _psi;    // psi derivative
   real _psi_p;  // psi derivative
@@ -1137,6 +1457,167 @@ public:
   size_t _i0 = -1, _i1 = -1, _i2 = -1, _i3 = -1;
   coordinate_type _p0, _p1, _p2, _p3;
 };
+#if 1
+//////////////////////////////////////////////////////////
+// edge_mem_bend
+//////////////////////////////////////////////////////////
+
+template <typename SPACE> class willmore_bend : public edge_bend<SPACE> {
+
+public:
+  M2_TYPEDEFS;
+
+  typedef Eigen::Matrix<real, 3, 1> vec3;
+  typedef Eigen::Matrix<real, 3, 3> mat33;
+  typedef Eigen::Matrix<real, 9, 1> vec9;
+  typedef Eigen::Matrix<real, 9, 9> mat99;
+  typedef Eigen::Matrix<real, 12, 1> vec12;
+  typedef Eigen::Matrix<real, 12, 12> mat1212;
+
+  typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
+  typedef Eigen::SparseMatrix<real> sparmat;
+
+  typedef std::shared_ptr<willmore_bend<SPACE>> ptr;
+
+  static ptr create(const int &i0, const int &i1, //
+                    const int &i2, const int &i3) {
+    return std::make_shared<willmore_bend<SPACE>>(i0, i1, i2, i3);
+  }
+
+  real _w = 1e-3;
+
+  willmore_bend(const int &i0, const int &i1, //
+                const int &i2, const int &i3)
+      : edge_bend<SPACE>(i0, i1, i2, i3) {
+    this->set_weight(_w);
+  }
+
+  virtual void init_rest() {
+    this->update_intermediates();
+    this->_ai = this->calc_a(this->_mu, this->A0, this->A1, this->l0);
+    // this->_psi_fcn = tan_psi<SPACE>::create(N0, N1, e0);
+    //_psi_fcn = cos_psi<SPACE>::create(N0, N1, e0);
+    this->_psi_fcn = sin_psi<SPACE>::create(this->N0, this->N1, this->e0);
+  }
+};
+
+#endif
+
+#if 1
+//////////////////////////////////////////////////////////
+// edge_mem_bend
+//////////////////////////////////////////////////////////
+
+template <typename SPACE> class edge_mem_bend : public edge_bend<SPACE> {
+
+public:
+  M2_TYPEDEFS;
+
+  typedef Eigen::Matrix<real, 3, 1> vec3;
+  typedef Eigen::Matrix<real, 3, 3> mat33;
+  typedef Eigen::Matrix<real, 9, 1> vec9;
+  typedef Eigen::Matrix<real, 9, 9> mat99;
+  typedef Eigen::Matrix<real, 12, 1> vec12;
+  typedef Eigen::Matrix<real, 12, 12> mat1212;
+
+  typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
+  typedef Eigen::SparseMatrix<real> sparmat;
+
+  typedef std::shared_ptr<edge_mem_bend<SPACE>> ptr;
+
+  static ptr create(const int &i0, const int &i1, //
+                    const int &i2, const int &i3, const real &phi0) {
+    return std::make_shared<edge_mem_bend<SPACE>>(i0, i1, i2, i3, phi0);
+  }
+
+  real _w0 = 1e-3;
+  real _w1 = 1e-3;
+
+  edge_mem_bend(const int &i0, const int &i1, //
+                const int &i2, const int &i3, const real &phi0)
+      : edge_bend<SPACE>(i0, i1, i2, i3), _phi0(phi0) {
+    this->set_weight(_w0, _w1);
+  }
+
+  void set_weight(real w0, real w1) {
+    _k0 = w0;
+    _k1 = w1;
+  }
+
+  virtual bool safe() {
+    coordinate_type x00 = this->_p0;
+    coordinate_type x1 = this->_p1;
+    coordinate_type x2 = this->_p2;
+    coordinate_type x10 = this->_p3;
+    this->A0 = m2::va::calculate_area(x00, x1, x2);
+    this->A1 = m2::va::calculate_area(x10, x2, x1);
+    /*
+        if (A0 / A1 > 4.0)
+          return false;
+        if (A1 / A0 > 4.0)
+          return false;
+
+        if (std::isinf(_psi_fcn->rest())) {
+          return false;
+        }
+
+        if (std::isnan(_psi_fcn->rest()))
+          return false;
+
+        if (fabs(_psi_fcn->rest()) > 4.0)
+          return false;
+    */
+    return true;
+  }
+
+  virtual void init_rest() {
+    this->update_intermediates();
+
+    _ai0 = this->calc_a(_k0, this->A0, this->A1, this->l0);
+    _ai1 = this->calc_a(_k1, this->A0, this->A1, this->l0);
+
+    _psi_fcn0 = tan_psi<SPACE>::create();
+    _psi_fcn0->init(_phi0);
+
+    _psi_fcn1 = tan_psi<SPACE>::create(this->N0, this->N1, this->e0);
+  }
+
+  virtual real evaluate_constraint() { return this->_psi; }
+
+  virtual void preprocess(const vecX &v) {
+
+    coordinate_type N0 = this->N0;
+    coordinate_type N1 = this->N1;
+    coordinate_type e0 = this->e0;
+    real psi0, psi0_p, psi0_pp;
+    _psi_fcn0->calc(N0, N1, e0, psi0, psi0_p, psi0_pp);
+    real psi1, psi1_p, psi1_pp;
+    _psi_fcn1->calc(N0, N1, e0, psi1, psi1_p, psi1_pp);
+
+    this->_psi = _ai0 * psi0 + _ai1 * psi1;
+    this->_psi_p = _ai0 * psi0_p + _ai1 * psi1_p;
+    this->_psi_pp = _ai0 * psi0_pp + _ai1 * psi1_pp;
+    this->update_intermediates();
+    this->_grad = vec12::Zero();
+    this->_hess = mat1212::Zero();
+  }
+
+  real _k0 = 0.0;
+  real _k1 = 0.0;
+  real _ai0;
+  real _ai1;
+
+  real _phi0 = 0.0;
+
+  typename psi<SPACE>::ptr _psi_fcn0;
+  typename psi<SPACE>::ptr _psi_fcn1;
+};
+
+#endif
+
+//////////////////////////////////////////////////////////
+// total_bend
+//////////////////////////////////////////////////////////
 
 template <typename SPACE> class total_bend : public constraint<SPACE> {
 
@@ -1857,7 +2338,9 @@ public:
       real mx = 0.5 * fnorm;
       real denom = f.dot(f);
       denom = denom < 1e-16 ? 1 : denom;
-      f = 0.5 * v.dot(f) / denom * f;
+      // f = 0.5 * v.dot(f) / denom * f;
+      f = 0.65 * v.dot(f) / denom * f;
+
       real fn = f.norm();
       f = fn > mx ? f * mx / fn : f;
     }

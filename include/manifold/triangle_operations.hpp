@@ -32,7 +32,8 @@ template <typename SPACE> class edge_split {
   M2_TYPEDEFS;
 
 public:
-  vertex_ptr operator()(surf_ptr obj_in, edge_ptr edge_in) {
+  vertex_ptr operator()(surf_ptr obj_in, edge_ptr edge_in, edge_ptr &e1,
+                        edge_ptr &e2) {
 
     face_vertex_ptr fv1 = edge_in->v1();
     face_vertex_ptr fv2 = edge_in->v2();
@@ -42,8 +43,8 @@ public:
 
     vertex_ptr vn = new vertex_type();
 
-    edge_ptr e1 = edge_in;
-    edge_ptr e2 = new edge_type();
+    e1 = edge_in;
+    e2 = new edge_type();
     face_vertex_ptr fv1n = fv1->add_next();
     face_vertex_ptr fv2n = fv2->add_next();
 
@@ -212,9 +213,9 @@ public:
       return;
     }
     coordinate_type ca0 = ci::get_coordinate<SPACE>(eA->v1());
-    coordinate_type ca1 = ci::get_coordinate<SPACE>(eA->v1());
+    coordinate_type ca1 = ci::get_coordinate<SPACE>(eA->v2());
     coordinate_type cb0 = ci::get_coordinate<SPACE>(eB->v1());
-    coordinate_type cb1 = ci::get_coordinate<SPACE>(eB->v1());
+    coordinate_type cb1 = ci::get_coordinate<SPACE>(eB->v2());
 
     T d0 = 1.0 / 3.0 * ((cb0 - ca0).squaredNorm() + (cb1 - ca1).squaredNorm());
     T d1 = 1.0 / 3.0 * ((cb0 - ca1).squaredNorm() + (cb1 - ca0).squaredNorm());
@@ -633,8 +634,21 @@ public:
       coordinate_type c1 = this->coordinate(v1);
       coordinate_type c2 = this->coordinate(v2);
       coordinate_type c3 = this->coordinate(v3);
-
-      // interior angles
+      T A0 = va::calculate_area<T>(c0, c1, c2);
+      T A1 = va::calculate_area<T>(c2, c3, c0);
+      edge_flip<SPACE> flip;
+      if (A0 / A1 > 4.0) {
+        flip(e);
+        flipped = true;
+        continue;
+      } else if (A1 / A0 > 4) {
+        flip(e);
+        flipped = true;
+        continue;
+      }
+      // std::cout << A0 << "  " << A1 << " " << A0 / A1 << " " << A1 / A0
+      //           << std::endl;
+      //  interior angles
       face_vertex_ptr fvEdge = NULL;
       T m01 = 1.0 / (c0 - c1).norm();
       T m12 = 1.0 / (c1 - c2).norm();
@@ -667,7 +681,7 @@ public:
 
       // if (false) {
       if (eFlip < 0.5 * eSame) {
-        edge_flip<SPACE> flip;
+
         flip(e);
         flipped = true;
       }
@@ -768,10 +782,10 @@ public:
     std::vector<line_type> lines = m2::ci::get_lines<SPACE>(filtered_edges);
     m2::aabb_tree<SPACE, line_type> tree(lines);
 
-    std::cout << __FUNCTION__ << ": edges.size(): " << edges.size()
-              << std::endl;
-    std::cout << __FUNCTION__ << ": tree.nodes.size(): " << tree.nodes.size()
-              << std::endl;
+    // std::cout << __FUNCTION__ << ": edges.size(): " << edges.size()
+    //           << std::endl;
+    // std::cout << __FUNCTION__ << ": tree.nodes.size(): " << tree.nodes.size()
+    //           << std::endl;
 
     auto lineDist = [](const line_type &A, const line_type &B) -> T {
       return A.dist(B);
@@ -794,11 +808,11 @@ public:
 
     std::sort(collected.begin(), collected.end(), std::less<line_pair>());
 
-    std::cout << " full list: " << collected.size() << std::endl;
+    // std::cout << " full list: " << collected.size() << std::endl;
     auto it = std::unique(collected.begin(), collected.end());
 
     collected.erase(it, collected.end());
-    std::cout << " unique list: " << collected.size() << std::endl;
+    // std::cout << " unique list: " << collected.size() << std::endl;
 
     collected.erase(std::remove_if(collected.begin(), collected.end(),
                                    [edges, tol](auto p) {
@@ -824,7 +838,7 @@ public:
                                    }),
                     collected.end());
 
-    std::cout << " merging " << collected.size() << " lines!" << std::endl;
+    // std::cout << " merging " << collected.size() << " lines!" << std::endl;
     return collected;
   }
 
@@ -839,15 +853,15 @@ public:
 
       std::sort(collected.begin(), collected.end(), std::less<line_pair>());
 
-      std::cout << "merging phase" << phase
-                << ", line pair count: " << collected.size() << std::endl;
+      // std::cout << "merging phase" << phase
+      //           << ", line pair count: " << collected.size() << std::endl;
 
       std::vector<line_pair> new_collect;
 
       for (auto p : collected) {
         if (!this->_surf->has_edge(p.A.edgeId) ||
             !this->_surf->has_edge(p.B.edgeId)) {
-          std::cout << " moving on... " << std::endl;
+          // std::cout << " moving on... " << std::endl;
           continue;
         };
 
@@ -930,20 +944,14 @@ public:
   void split_edge(int i, edge_ptr e) {
     // TIMER function//TIMER(__FUNCTION__);
 
-#if 0
-    std::cout << __FUNCTION__ << " " << e->v1()->face()->size() << " "
-              << e->v2()->face()->size() << std::endl;
-    std::cout << "  " << __FUNCTION__ << std::endl;
-    e->print();
-#endif
-
     face_vertex_ptr fv1 = e->v1();
     face_vertex_ptr fv2 = e->v2();
     T circ1 = fv1->data;
     T circ2 = fv2->data;
     edge_split<SPACE> split;
     // coordinate_type c = getButterflyWeight(e);
-    vertex_ptr nv = split(this->_surf, e);
+    edge_ptr e0, e1;
+    vertex_ptr nv = split(this->_surf, e, e0, e1);
     nv->topologyChangeId = i;
 
     // nv->coordinate() = c;
@@ -952,6 +960,11 @@ public:
 
     edge_ptr e11 = subdivideFace(fv1->next());
     edge_ptr e21 = subdivideFace(fv2->next());
+
+    e0->topologyChangeId = 4 * i + 0;
+    e1->topologyChangeId = 4 * i + 1;
+    e11->topologyChangeId = 4 * i + 2;
+    e21->topologyChangeId = 4 * i + 3;
 
     e11->flags[1] = 0;
     e21->flags[1] = 0;
@@ -978,7 +991,8 @@ public:
     }
 #endif
 
-    std::cout << " - sorting " << edgesToSplit.size() << " edges" << std::endl;
+    // std::cout << " - sorting " << edgesToSplit.size() << " edges" <<
+    // std::endl;
     std::sort(edgesToSplit.begin(), edgesToSplit.end(),
               this->mEdgeSorterGreater);
     return edgesToSplit;
@@ -987,7 +1001,8 @@ public:
   virtual bool op(edge_array edgesToSplit) {
     // TIMER function//TIMER(__FUNCTION__);
 
-    std::cout << "splitting " << edgesToSplit.size() << " edges" << std::endl;
+    // std::cout << "splitting " << edgesToSplit.size() << " edges" <<
+    // std::endl;
 
     for (int i = 0; i < edgesToSplit.size(); i++) {
       this->split_edge(i, edgesToSplit[i]);
@@ -1047,8 +1062,8 @@ public:
     }
 #endif
 
-    std::cout << " - sorting " << edgeToCollapse.size() << " edges"
-              << std::endl;
+    // std::cout << " - sorting " << edgeToCollapse.size() << " edges"
+    //           << std::endl;
     std::sort(edgeToCollapse.begin(), edgeToCollapse.end(),
               this->mEdgeSorterLesser);
     /*
@@ -1057,7 +1072,7 @@ public:
                                         [](edge_ptr e) { return e->flags[0]; }),
                          edgeToCollapse.end());
     */
-    std::cout << " collapsing: " << edgeToCollapse.size() << std::endl;
+    // std::cout << " collapsing: " << edgeToCollapse.size() << std::endl;
     return edgeToCollapse;
   }
 
@@ -1107,6 +1122,7 @@ public:
       for (auto e : this->_surf->get_edges()) {
         if (!this->_surf->has_edge(i++))
           continue;
+
         deleting |= cons.delete_degenerates(this->_surf, e);
       }
       testing = deleting;
@@ -1126,6 +1142,7 @@ public:
           continue;
         deleting = cons.delete_degenerates(this->_surf, f);
       }
+
       testing |= deleting;
     }
 
@@ -1211,7 +1228,42 @@ public:
   }
 
   virtual void reserve(long N) { _vals = std::vector<TYPE>(N); }
+  virtual void clear() { _vals.clear(); }
+  std::vector<TYPE> _vals;
+};
 
+template <typename SPACE> class edge_policy {
+public:
+  M2_TYPEDEFS;
+
+  edge_policy(typename SPACE::edge_index id) : _id(id) {}
+  virtual void calc(int i, edge_ptr &e, op_type op) = 0;
+  virtual void apply(int i, edge_ptr &e) = 0;
+  virtual void reserve(long N) = 0;
+  virtual void clear() = 0;
+  typename SPACE::edge_index _id;
+};
+
+template <typename SPACE, typename TYPE>
+class edge_policy_t : public edge_policy<SPACE> {
+public:
+  M2_TYPEDEFS;
+
+  edge_policy_t(typename SPACE::edge_index id) : edge_policy<SPACE>(id) {}
+
+  virtual void calc(int i, edge_ptr &e, op_type op) {
+    //_vals[4 * i + 0] = blah;
+    //_vals[4 * i + 1] = blah;
+    //_vals[4 * i + 2] = blah;
+    //_vals[4 * i + 3] = blah;
+    std::cout << _vals.size() << " " << 4 * i << std::endl;
+  }
+
+  virtual void apply(int i, edge_ptr &e) {
+
+    e->template set<TYPE>(this->_id, _vals[i]);
+  }
+  virtual void reserve(long N) { _vals = std::vector<TYPE>(4 * N); }
   virtual void clear() { _vals.clear(); }
 
   std::vector<TYPE> _vals;
@@ -1238,12 +1290,16 @@ public:
   void set_mesh(const surf_ptr &surf) { this->_surf = surf; }
 
   void add_vertex_policy(vertex_policy<SPACE> *policy) {
-    _policies.push_back(policy);
+    _vertex_policies.push_back(policy);
   }
 
   template <typename TYPE>
   void add_default_vertex_policy(typename SPACE::vertex_index id) {
-    _policies.push_back(new vertex_policy_t<SPACE, TYPE>(id));
+    _vertex_policies.push_back(new vertex_policy_t<SPACE, TYPE>(id));
+  }
+
+  void add_edge_policy(edge_policy<SPACE> *policy) {
+    _edge_policies.push_back(policy);
   }
 
   void cacheBary(m2::surf<SPACE> *surf) {
@@ -1253,17 +1309,6 @@ public:
 
       if (!surf->has_face(i++))
         continue;
-#if 0
-      if (f->size() < 3) {
-        std::cout << " bary_size: " << std::endl;
-        std::cout << "   face: " << f->size() << std::endl;
-        std::cout << "   vert: " << f->fbegin()->vertex()->size() << std::endl;
-        std::cout << "   edge: " << f->fbegin()->edge() << std::endl;
-        f->print();
-        f->fbegin()->vertex()->print();
-        continue;
-      }
-#endif
 
       typename SPACE::coordinate_type c = m2::ci::center<SPACE>(f);
       typename SPACE::coordinate_type l = m2::ci::point_to_bary<SPACE>(f, c);
@@ -1301,23 +1346,7 @@ public:
     for (int k = 0; k < N; k++) {
       std::cout << "." << std::flush;
       M.build();
-      coords = M.smooth(coords, C, C + 1e-5);
-#if 0
-#pragma omp parallel for
-      for (int i = 0; i < coords.size(); i++) {
-        coordinate_type c = ncoords[i];
-        coordinate_type cp = va::orthogonal_project(normals[i], ncoords[i]);
-        // real dotc = va::dot(normals[i], va::normalize(ncoords[1]));
-        // real l = pow(0.5 - 0.5 * dotc, .01);
-        // real l = std::min(0.5, sm[i]);
-        // coordinate_type cc = (1.0 - l) * cp + l * c;
-        coords[i] = coords[i] + C * cp;
-
-        assert(!isnan(coords[i][0]));
-        assert(!isnan(coords[i][1]));
-        assert(!isnan(coords[i][2]));
-      }
-#endif
+      coords = M.smooth(coords, C, C + 3e-5);
     }
 
     m2::ci::set_coordinates<SPACE>(coords, this->_surf);
@@ -1332,39 +1361,49 @@ public:
     if (edges_to_op.empty())
       return false;
 
-    for (auto p : _policies) {
-      p->reserve(edges_to_op.size());
-    }
-    int i = 0;
-    for (auto e : edges_to_op) {
-      for (auto p : _policies) {
-        p->calc(i, e, opt);
+    auto calc_policy = [&opt](const edge_array &edges_to_op, auto &&policies) {
+      for (auto p : policies) {
+        p->reserve(edges_to_op.size());
       }
-      i++;
-    }
+      int i = 0;
+      for (auto e : edges_to_op) {
+        for (auto p : policies) {
+          p->calc(i, e, opt);
+        }
+        i++;
+      }
+    };
+
+    calc_policy(edges_to_op, _vertex_policies);
+    calc_policy(edges_to_op, _edge_policies);
 
     op.op(edges_to_op);
 
-    vertex_array vertices = _surf->get_vertices();
+    // std::cout << "assigning calc'd vertex values" << std::endl;
+    auto apply_policy = [](auto &&primitives, auto &&policies) {
+      for (auto prim : primitives) {
+        if (!prim)
+          continue;
+        int topologyChangeId = prim->topologyChangeId;
+        if (topologyChangeId < 0)
+          continue;
 
-    std::cout << "assigning calc'd vertex values" << std::endl;
-
-    for (auto v : vertices) {
-      if (!v)
-        continue;
-      int topologyChangeId = v->topologyChangeId;
-      if (topologyChangeId < 0)
-        continue;
-
-      for (auto p : _policies) {
-        p->apply(topologyChangeId, v);
+        for (auto p : policies) {
+          p->apply(topologyChangeId, prim);
+        }
+        prim->topologyChangeId = -1;
       }
-      v->topologyChangeId = -1;
-    }
 
-    for (auto p : _policies) {
-      p->clear();
-    }
+      for (auto p : policies) {
+        p->clear();
+      }
+    };
+
+    vertex_array vertices = _surf->get_vertices();
+    apply_policy(vertices, _vertex_policies);
+    edge_array edges = _surf->get_edges();
+    apply_policy(edges, _edge_policies);
+
     return true;
   }
 
@@ -1376,13 +1415,13 @@ public:
   bool collapsEdges() {
     using namespace m2;
     M2_TYPEDEFS;
-    std::cout << "-- collapsing --" << std::endl;
+    // std::cout << "-- collapsing --" << std::endl;
     m2::edge_collapser<SPACE> collapser(_surf, _min);
     return this->operate_edges(collapser, merge);
   }
 
   bool mergeEdges() {
-    std::cout << "-- merging --" << std::endl;
+    // std::cout << "-- merging --" << std::endl;
     edge_merger<SPACE> merger(this->_surf, _merge);
     return merger.op();
   }
@@ -1394,10 +1433,10 @@ public:
 
   void delete_degenerates() {
 
-    std::cout << "-- delete_degenerates --" << std::endl;
+    // std::cout << "-- delete_degenerates --" << std::endl;
     degenerate_deleter<SPACE> zapper(this->_surf);
     zapper.op();
-    std::cout << " done! " << std::endl;
+    // std::cout << " done! " << std::endl;
   }
 
   bool integrate() { // mergeTris(_meshGraph, rxA, rxB);
@@ -1423,7 +1462,7 @@ public:
     // diffuse edge flags
     this->cacheBary(this->_surf);
 
-    smoothMesh(0.003, 10);
+    smoothMesh(0.004, 10);
 
     std::vector<real> x =
         ci::get<SPACE, real>(_surf, SPACE::vertex_index::SMOOTH);
@@ -1456,7 +1495,8 @@ public:
   m2::surf<SPACE> *_surf;
   real _min = 0.5, _max = 3.0, _merge = 1.0;
 
-  std::vector<vertex_policy<SPACE> *> _policies;
+  std::vector<vertex_policy<SPACE> *> _vertex_policies;
+  std::vector<edge_policy<SPACE> *> _edge_policies;
 };
 
 #endif

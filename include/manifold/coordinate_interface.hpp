@@ -526,7 +526,7 @@ std::vector<TYPE> get(m2::surf<SPACE> *surf, typename SPACE::vertex_index id) {
 }
 
 template <typename SPACE, typename TYPE>
-void set(m2::surf<SPACE> *surf, std::vector<TYPE> vals,
+void set(m2::surf<SPACE> *surf, const std::vector<TYPE> &vals,
          typename SPACE::vertex_index id) {
   int i = 0;
   for (auto v : surf->get_vertices()) {

@@ -488,6 +488,11 @@ public:
         this->v2()->set_changed();
     }
 
+    template <typename TYPE>
+    void set(const typename SPACE::edge_index &i, const TYPE &d) {
+      data_node<typename SPACE::edge_index>::template set<TYPE>(i, d);
+    }
+
     void set(face_vertex_ptr nfv1, face_vertex_ptr nfv2) {
       // lets be a little careful and make sure we maintain order.
       // its probably not a problem, but...
@@ -611,6 +616,7 @@ public:
         // means they are tetrahedra
         return true;
       */
+
       if (fv0->face()->is_degenerate() || fv1->face()->is_degenerate()) {
         return true;
       }
@@ -620,6 +626,7 @@ public:
 
     face_vertex_ptr fv1;
     face_vertex_ptr fv2;
+    int topologyChangeId = -1; // needs to be changed to stored value
 
   protected:
     int mSetPosition;

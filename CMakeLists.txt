@@ -126,6 +126,8 @@ endif()
 
 set(EIGEN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen-3.4.0")
 set(SPECTRA_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/spectra/include")
+set(SUITE_SPARSE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/SuiteSparse/include")
+
 
 # Disable building extras we won't need (pure C++ project)
 set(NANOGUI_BUILD_SHARED OFF CACHE BOOL " " FORCE)
@@ -148,7 +150,7 @@ add_definitions("${NANOGUI_EXTRA_DEFS}")
 #set(SPECTRA_EIGEN_INCLUDE_DIR "${EIGEN_INCLUDE_DIR}" CACHE FILEPATH " " FORCE)
 #add_subdirectory(ext/spectra)
 
-include_directories("${EIGEN_INCLUDE_DIR}" "${SPECTRA_INCLUDE_DIR}" )
+include_directories("${EIGEN_INCLUDE_DIR}" "${SPECTRA_INCLUDE_DIR}" "ext/AudioFile")
 add_subdirectory(src)
 
 #add_subdirectory(projects/hello_manifold)
@@ -158,6 +160,7 @@ add_subdirectory(src)
 add_subdirectory(projects/physarym)
 add_subdirectory(projects/stretch)
 add_subdirectory(projects/bending)
+add_subdirectory(projects/wav2fft)
 
 
 #add_subdirectory(projects/tanvec)

@@ -154,7 +154,7 @@ protected:
   Eigen::Vector2i pLast;
   Vec4 mObjCenCache;
   Vec4 mDragStart;
-  Real mDist = 4.0;
+  Real mDist = 2.0;
   int mode = -1;
   nanogui::Arcball *ball;
 }; // viewer

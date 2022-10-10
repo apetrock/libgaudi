@@ -223,6 +223,11 @@ public:
     // Eigen::SimplicialLLT<sparmat> solver;
     Eigen::SimplicialLDLT<sparmat> solver;
     // Eigen::ConjugateGradient<sparmat> solver;
+    // Eigen::ConjugateGradient<sparmat, Eigen::Lower | Eigen::Upper,
+    //                        Eigen::DiagonalPreconditioner<double>> solver;
+    // Eigen::ConjugateGradient<sparmat, Eigen::Lower | Eigen::Upper,
+    //                         Eigen::IncompleteCholesky<double>> solver;
+
     solver.compute(A);
 //    std::cout << " solver det: " << solver.determinant() << std::endl;
 #else
@@ -244,12 +249,71 @@ public:
     return x;
   }
 
-  real calc_lambda(const vecX &g, typename objective_function<SPACE>::ptr fcn) {
-    real C = fcn->calc_objective();
-    real denom = g.transpose() * g;
-    return C / denom;
-  }
+#if 0
+  virtual void solve(typename objective_function<SPACE>::ptr fcn,
+                     const vecX &v0i, const real &hb) {
 
+    vecX xk0 = fcn->get_x();
+    vecX xk1 = xk0;
+    vecX v1 = v0i;
+    vecX v0 = v0i;
+    fcn->set_x(xk1);
+
+    real tol = 1;
+    int k = 0;
+    int max = 2;
+    real sig = 1e-6;
+    real hs = hb;
+
+    while (tol > sig) {
+      if (k > max)
+        break;
+
+      sparmat M = fcn->get_areas();
+
+      real ih = 1.0 / hs;
+
+      fcn->preprocess(ih * M * v0);
+      vecX g = fcn->calc_gradient(xk1);
+      sparmat K = fcn->calc_hessian(xk1);
+
+      real h = 0.5 * hb;
+      // implicit half step
+
+      ih = 1.0 / hs;
+      sparmat H = M - h * h * K;
+      vecX r = M * v0 - h * g;
+
+      vecX dv = solve(H, r);
+      fcn->limit_strain(v0, h);
+      xk1 += 2.0 * h * dv;
+      v0 -= dv;
+
+      fcn->set_x(xk1);
+
+      fcn->preprocess(ih * M * v0);
+      g = fcn->calc_gradient(xk1);
+      K = fcn->calc_hessian(xk1);
+      // K = fcn->calc_hessian(xk1);
+      sparmat iM = fcn->get_inv_areas();
+      v1 = iM * (M * v0 + h * g);
+
+      M = fcn->get_areas();
+
+      H = M - h * h * K;
+      r = M * v1 - h * g;
+
+      dv = solve(H, r);
+
+      v1 -= dv;
+      v0 = v1;
+
+      tol = r.norm();
+      std::cout << "====>>tol: " << tol << std::endl; //<< '\r'
+      k++;
+    }
+  }
+#else
   virtual void solve(typename objective_function<SPACE>::ptr fcn,
                      const vecX &v0, const real &hb) {
 
@@ -260,63 +324,50 @@ public:
 
     real tol = 1;
     int k = 0;
-    int max = 4;
+    int max = 3;
     real sig = 1e-6;
     real hs = hb;
     while (tol > sig) {
       if (k > max)
         break;
-      std::vector<triplet> hess_triplets;
-      std::vector<triplet> grad_triplets;
+
       sparmat M = fcn->get_areas();
 
       real ih = 1.0 / hs;
+
       fcn->preprocess(ih * M * v1);
+      std::cout << "v1     : " << v1.norm() << std::endl;
+      fcn->limit_strain(v1, hs);
+      std::cout << "v_limit: " << v1.norm() << std::endl;
+
       vecX g = fcn->calc_gradient(xk1);
       sparmat K = fcn->calc_hessian(xk1);
 
-      sparmat I(K.rows(), K.cols());
-      I.setIdentity();
+      // fcn->visualize(K, xk0);
 
-      /*
-      std::cout << "H: " << H.rows() << " " << H.cols() << std::endl;
-      std::cout << "v: " << v.rows() << " " << v.cols() << std::endl;
-      std::cout << "g: " << g.rows() << " " << g.cols() << std::endl;
-      std::cout << "W: " << W.rows() << " " << W.cols() << std::endl;
-      */
-      //   xk0 = xk1;
+      // real gtg = g.transpose() * g;
+      // real gtMv = g.transpose() * M * v1;
+      // real hmax = gtMv / gtg;
 
-      real gtg = g.transpose() * g;
-      real gtMv = g.transpose() * M * v1;
-      real hmax = gtMv / gtg;
-
-      real h = std::min(hs, fabs(hmax));
+      real h = hs; // std::min(hs, fabs(hmax));
       hs = std::min(2.0 * h, hs);
-      std::cout << "h vs hmax: " << h << " " << hmax << std::endl;
+      // std::cout << "h vs hmax: " << h << " " << hmax << std::endl;
+      std::cout << "g: " << g.norm() << std::endl;
 
       sparmat H = M - h * h * K;
       vecX r = M * v1 - h * g;
-      // vecX r = K * vp + h * W * g;
-
-      std::cout << "g: " << g.norm() << std::endl;
-      std::cout << "v0: " << v0.norm() << std::endl;
-      std::cout << "v1: " << v1.norm() << std::endl;
-
-      std::cout << "r: " << r.norm() << std::endl;
 
       vecX dv = solve(H, r);
+      std::cout << "dv     : " << dv.norm() << std::endl;
+      fcn->limit_strain(dv, hs);
+      std::cout << "dv_limit: " << dv.norm() << std::endl;
+      // fcn->visualize(g, xk0, vec4(0.0, 0.75, 0.75, 1.0), 1.0);
+      //  fcn->visualize(K, xk0);
 
       xk1 += h * dv;
       // v1 = (xk1 - xk0) / h;
-      v1 = v1 -= dv;
-      /*
-            fcn->visualize(v0, xk0, vec4(0.5, 0.5, 0.0, 1.0), 10.0);
-            fcn->visualize(v1, xk0, vec4(0.75, 0.75, 0.0, 1.0), 10.0);
-            fcn->visualize(dv, xk0, vec4(1.0, 1.0, 0.0, 1.0), 10.0);
-            fcn->visualize(g, xk0, vec4(0.75, 0.0, 0.0, 1.0), 10.0);
-            fcn->visualize(h * K * v0, xk0, vec4(0.0, 0.75, 0.0, 1.0), 10.0);
-            fcn->visualize(r, xk0, vec4(0.75, 0.0, 0.75, 1.0), 10.0);
-      */
+      v1 -= dv;
+
       tol = r.norm();
 
       std::cout << "====>>tol: " << tol << std::endl; //<< '\r'
@@ -325,6 +376,7 @@ public:
       k++;
     }
   }
+#endif
 };
 
 } // namespace hepworth

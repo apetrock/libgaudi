@@ -368,6 +368,29 @@ inline T determinant(const VEC3<T> &A, const VEC3<T> &B, const VEC3<T> &C) {
 };
 
 template <typename T>
+T sgn(const VEC3<T> &N0, //
+      const VEC3<T> &N1, //
+      const VEC3<T> &e) {
+  // 2.0 tan(thet/2)
+  return sgn(va::determinant(N0, N1, e));
+};
+
+template <typename T>
+T sin(const VEC3<T> &N0, //
+      const VEC3<T> &N1, //
+      const VEC3<T> &e) {
+
+  return sgn(N0, N1, e) * norm(VEC3<T>(N1 - N0));
+};
+
+template <typename T>
+T cos(const VEC3<T> &N0, //
+      const VEC3<T> &N1, //
+      const VEC3<T> &e) {
+  return va::norm(VEC3<T>(N1 + N0));
+};
+
+template <typename T>
 inline T angle_from_vectors(const VEC3<T> &angA, const VEC3<T> angB) {
 
   T AB = dot(angA, angB);

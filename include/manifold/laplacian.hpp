@@ -116,26 +116,104 @@ public:
 
   ~laplacian() {}
   /*L = MinvC*/
-
+  /*
+    void initC() {
+      _matC = this->build([](face_vertex_ptr fv, real &Km) {
+        real cote = m2::ci::cotan<SPACE>(fv->edge());
+        assert(!isnan(cote));
+        real K = cote;
+        Km -= K;
+        return K;
+      });
+      // std::cout << _matM << std::endl;
+    }
+  */
   void initC() {
-    _matC = this->build([](face_vertex_ptr fv, real &Km) {
-      real cote = m2::ci::cotan<SPACE>(fv->edge());
-      assert(!isnan(cote));
-      real K = cote;
-      Km -= K;
-      return K;
-    });
-    // std::cout << _matM << std::endl;
+    auto vertices = this->_surf->get_vertices();
+    auto edges = this->_surf->get_edges();
+
+    typedef Eigen::Triplet<double> triplet;
+    std::vector<triplet> tripletList;
+    tripletList.reserve(vertices.size() + 2 * edges.size());
+
+    int i = 0;
+
+    for (auto v : this->_surf->get_vertices()) {
+
+      real Km = 0.0;
+      m2::for_each_vertex<SPACE>(v, [&Km, i, &tripletList](face_vertex_ptr fv) {
+        int j = fv->next()->vertex()->position_in_set();
+        real K = m2::ci::cotan<SPACE>(fv->edge());
+        tripletList.push_back(triplet(i, j, K));
+        Km -= K;
+      });
+      tripletList.push_back(triplet(i, i, Km));
+      i++;
+    }
+    Eigen::SparseMatrix<real> mat(vertices.size(), vertices.size());
+    mat.setFromTriplets(tripletList.begin(), tripletList.end());
+    _matC = mat;
+  }
+
+  Eigen::SparseMatrix<real> initML() {
+    auto vertices = this->_surf->get_vertices();
+    auto edges = this->_surf->get_edges();
+
+    typedef Eigen::Triplet<double> triplet;
+    std::vector<triplet> tripletList;
+    tripletList.reserve(vertices.size() + 2 * edges.size());
+
+    int i = 0;
+
+    for (auto v : this->_surf->get_vertices()) {
+      real A = 0.0;
+      m2::for_each_vertex<SPACE>(v, [&A, &tripletList](face_vertex_ptr fv) {
+        real Aj = m2::ci::area<SPACE>(fv->face());
+        A += Aj / 3.0;
+      });
+
+      real Km = 0.0;
+      m2::for_each_vertex<SPACE>(
+          v, [&Km, i, A, &tripletList](face_vertex_ptr fv) {
+            int j = fv->next()->vertex()->position_in_set();
+            real K = m2::ci::cotan<SPACE>(fv->edge());
+            K = K < 1e-16 ? 1.0 : K;
+            K /= 2.0 * A;
+            tripletList.push_back(triplet(i, j, K));
+            Km -= K;
+          });
+      tripletList.push_back(triplet(i, i, Km));
+      i++;
+    }
+    Eigen::SparseMatrix<real> mat(vertices.size(), vertices.size());
+    mat.setFromTriplets(tripletList.begin(), tripletList.end());
+    return mat;
   }
 
   void initM() {
-    _matM = this->build([](face_vertex_ptr fv, real &Km) {
-      real aj = m2::ci::area<SPACE>(fv->face());
-      real l = fv->template get<real>(SPACE::face_vertex_index::BARY);
-      // real l = 0.33;
-      Km += l * aj;
-      return 0;
-    });
+    auto vertices = this->_surf->get_vertices();
+    auto edges = this->_surf->get_edges();
+
+    typedef Eigen::Triplet<double> triplet;
+    std::vector<triplet> tripletList;
+    tripletList.reserve(vertices.size() + 2 * edges.size());
+
+    int i = 0;
+    for (auto v : this->_surf->get_vertices()) {
+      real Km = 0.0;
+      m2::for_each_vertex<SPACE>(v, [&Km, i, &tripletList](face_vertex_ptr fv) {
+        real aj = m2::ci::area<SPACE>(fv->face());
+        // real l = fv->template get<real>(SPACE::face_vertex_index::BARY);
+        real l = 0.33;
+        Km += l * aj;
+      });
+
+      tripletList.push_back(triplet(i, i, Km));
+      i++;
+    }
+    Eigen::SparseMatrix<real> mat(vertices.size(), vertices.size());
+    mat.setFromTriplets(tripletList.begin(), tripletList.end());
+    _matM = mat;
   }
 
   void init() {
@@ -161,6 +239,84 @@ public:
     return std::vector<real>(Le.data(), Le.data() + Le.rows() * Le.cols());
   }
 
+  typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
+  typedef Eigen::SparseMatrix<real> sparmat;
+
+  vecX to(const std::vector<TYPE> &U) {
+    vecX Ue = Eigen::Map<const vecX, Eigen::Unaligned>(U.data(), U.size());
+    return Ue;
+  }
+
+  std::vector<TYPE> from(vecX U) {
+    return std::vector<real>(U.data(), U.data() + U.rows() * U.cols());
+  }
+
+  virtual vecX solve(sparmat &A, vecX &b) {
+#if 1
+    // Eigen::SimplicialLLT<sparmat> solver;
+    Eigen::SimplicialLDLT<sparmat> solver;
+    // Eigen::ConjugateGradient<sparmat> solver;
+    // Eigen::ConjugateGradient<sparmat, Eigen::Lower | Eigen::Upper,
+    //                        Eigen::DiagonalPreconditioner<double>> solver;
+    // Eigen::ConjugateGradient<sparmat, Eigen::Lower | Eigen::Upper,
+    //                         Eigen::IncompleteCholesky<double>> solver;
+
+    solver.compute(A);
+//    std::cout << " solver det: " << solver.determinant() << std::endl;
+#else
+    // Eigen::SparseQR<sparmat, Eigen::COLAMDOrdering<int>> solver;
+    Eigen::SparseLU<sparmat> solver;
+    solver.analyzePattern(A);
+    solver.factorize(A);
+#endif
+    if (solver.info() != Eigen::Success) {
+      // decomposition failed
+      std::cout << ".....decomposition error! " << std::endl;
+    }
+    vecX x = solver.solve(b);
+    if (solver.info() != Eigen::Success) {
+      // solving failed
+      std::cout << ".....solve error! " << std::endl;
+    }
+
+    return x;
+  }
+
+#if 1
+  std::vector<TYPE> solve(const std::vector<TYPE> &f) {
+
+    using namespace m2;
+    M2_TYPEDEFS;
+    // sparmat L = initML();
+
+    Eigen::SparseMatrix<real> I(_matC.rows(), _matC.cols());
+    I.setIdentity();
+    sparmat L = _matC + 1e-6 * I;
+
+    vecX fe = to(f);
+    std::cout << " L sum: " << L.sum() << std::endl;
+    std::cout << " f norm: " << fe.norm() << std::endl;
+    vecX x = solve(L, fe);
+    std::cout << " x norm: " << x.norm() << std::endl;
+    return from(x);
+  }
+#endif
+
+#if 1
+  std::vector<TYPE> diffuse(const std::vector<TYPE> &f, const real &dt) {
+
+    using namespace m2;
+    M2_TYPEDEFS;
+    m2::surf<SPACE> *surf = this->_surf;
+
+    sparmat M = _matM;
+    sparmat L = _matC;
+    sparmat A = M - dt * L;
+    vecX fe = to(f);
+
+    return from(solve(A, fe));
+  }
+#endif
   bool inited = false;
 
 private:

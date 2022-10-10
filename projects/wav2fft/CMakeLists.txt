@@ -3,7 +3,7 @@ set(SOURCES
     main.cpp
 )
 
-set(PROJECT_NAME bending)
+set(PROJECT_NAME wav2fft)
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 #add_executable(bending main.cpp GuadiGraphics/geometry_logger.cpp)
@@ -15,4 +15,4 @@ target_link_libraries(${PROJECT_NAME} PRIVATE -g -ltbb)
 #    target_link_libraries(stretch PUBLIC OpenMP::OpenMP_CXX)
 #endif()
 
-target_link_libraries(bending PRIVATE libGaudi nanogui ${NANOGUI_EXTRA_LIBS})
+target_link_libraries(wav2fft PRIVATE libGaudi nanogui ${NANOGUI_EXTRA_LIBS})

@@ -51,10 +51,9 @@ public:
     return X;
   }
 
-  std::vector<typename SPACE::real>
-  solveConjugateGradient(const std::vector<typename SPACE::real> &B,
-                         function<std::vector<real>(const std::vector<real> &)> M,
-                         int & its) {
+  std::vector<typename SPACE::real> solveConjugateGradient(
+      const std::vector<typename SPACE::real> &B,
+      function<std::vector<real>(const std::vector<real> &)> M, int &its) {
 
     /*
      x =          initial guess for solution of Ax=b
@@ -84,7 +83,7 @@ public:
     std::vector<real> P = R;
     real sig1 = dot(R, R);
     int ii = 0;
-    while (ii < 512 && sig1 > 1e-16) {
+    while (ii < 10000 && sig1 > 1e-6) {
 
       // v = Ap                        ... matrix-vector multiply
       std::vector<real> V = M(P);
