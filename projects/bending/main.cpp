@@ -589,7 +589,7 @@ public:
 
     double dt = 10.0 * pow(_scale, 2);
     std::vector<real> u = lap.diffuse(f, dt);
-#if 1
+#if 0
     i = 0;
     for (auto xi : u) {
       xi = log(xi);
@@ -621,8 +621,8 @@ public:
       coordinate_type M0 = dp.cross(N0);
       coordinate_type M1 = dp.cross(N1);
 
-      gradU[e->v1()->face()->position_in_set()] -= M0 * u0 / 2.0 / A0;
-      gradU[e->v2()->face()->position_in_set()] += M1 * u1 / 2.0 / A1;
+      gradU[e->v1()->face()->position_in_set()] += M0 * u0 / 2.0 / A0;
+      gradU[e->v2()->face()->position_in_set()] -= M1 * u1 / 2.0 / A1;
     }
 
     i = 0;
@@ -653,7 +653,6 @@ public:
       divu[e->v1()->vertex()->position_in_set()] += 0.5 * cot1 * dp.dot(g1);
       divu[e->v2()->vertex()->position_in_set()] -= 0.5 * cot0 * dp.dot(g0);
       divu[e->v2()->vertex()->position_in_set()] -= 0.5 * cot1 * dp.dot(g1);
-      i++;
     }
 #if 0
     i = 0;
@@ -663,10 +662,10 @@ public:
       i++;
     }
 #endif
+
     std::vector<real> x = lap.solve(divu);
     // std::vector<real> x = lap.diffuse(divu, dt);
-
-#if 0
+#if 1
     i = 0;
     for (auto xi : x) {
       gg::geometry_logger::line(p0[i], p0[i] + 10.0 * xi * normals[i],
