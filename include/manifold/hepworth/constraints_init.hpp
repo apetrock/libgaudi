@@ -2,15 +2,15 @@
 #ifndef __PENKO_CONSTRAINTS_INIT__
 #define __PENKO_CONSTRAINTS_INIT__
 
-#include <manifold/coordinate_interface.hpp>
-#include <manifold/m2.hpp>
+#include <manifold/asawa/coordinate_interface.hpp>
+#include <manifold/asawa/m2.hpp>
 
 #include "constraints.hpp"
 #include "objective_function.hpp"
 
 template <typename SPACE>
 void init_stretch_constraints(
-    m2::surf<SPACE> *surf,
+    asawa::surf<SPACE> *surf,
     typename hepworth::constraint_set<SPACE>::ptr constraints,
     double w = 1e-3) {
   M2_TYPEDEFS;
@@ -39,7 +39,7 @@ void init_stretch_constraints(
 
 template <typename SPACE>
 void init_cross_constraints(
-    m2::surf<SPACE> *surf,
+    asawa::surf<SPACE> *surf,
     typename hepworth::constraint_set<SPACE>::ptr constraints, const double &w,
     const double &k) {
   M2_TYPEDEFS;
@@ -83,7 +83,7 @@ void init_cross_constraints(
 
 template <typename SPACE>
 void init_bend_constraints(
-    m2::surf<SPACE> *surf,
+    asawa::surf<SPACE> *surf,
     typename hepworth::constraint_set<SPACE>::ptr constraints,
     double w = 1e-3) {
   M2_TYPEDEFS;
@@ -111,7 +111,7 @@ void init_bend_constraints(
 
 template <typename SPACE>
 void init_mem_bend_constraints(
-    m2::surf<SPACE> *surf,
+    asawa::surf<SPACE> *surf,
     typename hepworth::constraint_set<SPACE>::ptr constraints, double w0 = 1e-3,
     double w1 = 1e-3) {
   M2_TYPEDEFS;
@@ -156,7 +156,7 @@ void init_mem_bend_constraints(
 
 template <typename SPACE>
 void init_willmore_constraints(
-    m2::surf<SPACE> *surf,
+    asawa::surf<SPACE> *surf,
     typename hepworth::constraint_set<SPACE>::ptr constraints,
     double w = 1e-7) {
   M2_TYPEDEFS;

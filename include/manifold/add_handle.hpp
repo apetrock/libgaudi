@@ -148,13 +148,13 @@ Eigen::Matrix<T, 4, 1> blend(T t, Eigen::Matrix<T, 4, 1> p00,
   // return Eigen::Matrix<T,4,1>(p01);
 }
 
-namespace m2 {
+namespace asawa {
 template <typename SPACE> class add_handle {
   M2_TYPEDEFS;
 
 public:
   bool add(surf_ptr ob, long i, long j, T teni, T tenj) {
-    //	m2::subdivide<T> sub;
+    //	asawa::subdivide<T> sub;
     //	m2Ch = sub.subdivide_control(m2Ch);
     // bezier_curve<point_space<3,T> > mCurve(3);
     face_ptr fi = ob->face(i);
@@ -261,4 +261,4 @@ public:
     return true;
   }
 };
-} // namespace m2
+} // namespace asawa

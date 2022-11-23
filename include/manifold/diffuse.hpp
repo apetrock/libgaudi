@@ -20,18 +20,18 @@
 
 #include <math.h>
 
+#include "bontecou/laplacian.hpp"
 #include "conj_grad.hpp"
-#include "laplacian.hpp"
-#include "m2.hpp"
+#include "manifold/asawa/m2.hpp"
 
-namespace m2 {
+namespace asawa {
 template <typename SPACE> class diffuse {
   M2_TYPEDEFS;
 
 public:
-  diffuse(m2::surf<SPACE> *surf) {
+  diffuse(asawa::surf<SPACE> *surf) {
     _surf = surf;
-    _M = new m2::laplacian<SPACE, real>(surf);
+    _M = new asawa::laplacian<SPACE, real>(surf);
   }
 
   ~diffuse() {}
@@ -41,11 +41,11 @@ public:
               const std::vector<typename SPACE::real> &f,
               typename SPACE::real dt, typename SPACE::real C) {
 
-    using namespace m2;
+    using namespace asawa;
     M2_TYPEDEFS;
-    m2::surf<SPACE> *surf = this->_surf;
+    asawa::surf<SPACE> *surf = this->_surf;
 
-    m2::laplacian<SPACE, real> &M = *_M;
+    asawa::laplacian<SPACE, real> &M = *_M;
 
     auto diffMult = [&M, dt, C, surf](const std::vector<real> &X) {
       std::vector<real> MX = M.multM(X);
@@ -67,7 +67,7 @@ public:
     std::vector<typename SPACE::real> au_f = M.multM(u_f);
 
     int its;
-    m2::gradient_descent<SPACE> solver;
+    asawa::gradient_descent<SPACE> solver;
     std::vector<real> x = solver.solveConjugateGradient(au_f, diffMult, its);
 
     return x;
@@ -78,11 +78,11 @@ public:
                const std::vector<typename SPACE::real> &f,
                typename SPACE::real dt, typename SPACE::real C) {
 
-    using namespace m2;
+    using namespace asawa;
     M2_TYPEDEFS;
-    m2::surf<SPACE> *surf = this->_surf;
+    asawa::surf<SPACE> *surf = this->_surf;
 
-    m2::laplacian<SPACE, real> &M = *_M;
+    asawa::laplacian<SPACE, real> &M = *_M;
 
     auto diffMult = [&M, dt, C, surf](const std::vector<real> &X) {
       std::vector<real> MX = M.multM(X);
@@ -109,14 +109,14 @@ public:
     }
 
     int its;
-    m2::gradient_descent<SPACE> solver;
+    asawa::gradient_descent<SPACE> solver;
     std::vector<real> x = solver.solveConjugateGradient(au_f, diffMult, its);
 
     return x;
   }
-  m2::surf<SPACE> *_surf;
-  m2::laplacian<SPACE, real> *_M;
+  asawa::surf<SPACE> *_surf;
+  asawa::laplacian<SPACE, real> *_M;
 };
 
-} // namespace m2
+} // namespace asawa
 #endif

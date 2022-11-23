@@ -42,7 +42,7 @@ public:
   static void field(const std::vector<Vec3d> &p, const std::vector<Vec3d> &dirs,
                     double D = 0.1, PresetColor col = grey);
 
-  void frame(Mat3d M, Vec3d c, double C);
+  static void frame(Mat3d M, Vec3d c, double C);
 
   bool &initialized() { return instance_flag; }
   bool initialized() const { return instance_flag; }

@@ -50,14 +50,14 @@ public:
   M1_TYPEDEFS
   control() {}
   /*
-  control(m2::surf<T> &in) {
+  control(asawa::surf<T> &in) {
     in.pack();
     in.pack_vertices();
-    std::vector<m2::surf<T>::vertex*> V = in.get_vertices();
-    std::vector<m2::surf<T>::edge*> E = in.get_edges();
+    std::vector<asawa::surf<T>::vertex*> V = in.get_vertices();
+    std::vector<asawa::surf<T>::edge*> E = in.get_edges();
     for (long i = 0; i < V.size(); i++) {
-      m2::surf<T>::vertex* vc = V[i];
-      std::vector<m2::surf<T>::face_vertex*> vfv = vc->get_face_vertices();
+      asawa::surf<T>::vertex* vc = V[i];
+      std::vector<asawa::surf<T>::face_vertex*> vfv = vc->get_face_vertices();
       long sz = vfv.size();
       vertex_ptr vn = new vertex_type();
       coordinate_type c;

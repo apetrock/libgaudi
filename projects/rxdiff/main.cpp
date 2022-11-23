@@ -187,14 +187,14 @@ public:
 
   void initScene() {
 
-    m2::obj_loader<rxd3> load;
-    m2::subdivide<rxd3> sub;
-    m2::make<rxd3> mk;
-    m2::convex_hull<rxd3> ch;
+    asawa::obj_loader<rxd3> load;
+    asawa::subdivide<rxd3> sub;
+    asawa::make<rxd3> mk;
+    asawa::convex_hull<rxd3> ch;
 
-    m2::construct<rxd3> bevel;
-    m2::affine<rxd3> mod;
-    ///std::string start_frame = "rxd.100.gaudi";
+    asawa::construct<rxd3> bevel;
+    asawa::affine<rxd3> mod;
+    /// std::string start_frame = "rxd.100.gaudi";
     std::string start_frame = "";
     if (!start_frame.empty()) {
       FILE *file;
@@ -218,7 +218,7 @@ public:
       //_meshGraph = &sub.subdivide_control(*_meshGraph);
       //_meshGraph = &sub.subdivide_control(*_meshGraph);
 
-      m2::remesh<rxd3> rem;
+      asawa::remesh<rxd3> rem;
       rem.triangulate(_meshGraph);
       //_meshGraph = &sub.subdivide_control(*_meshGraph);
 
@@ -233,8 +233,8 @@ public:
     }
 
     int N = 0;
-    _integrator = new m2::surf_integrator<rxd3>(_meshGraph, 0.125, 3.0, 0.5);
-    //_integrator = new m2::surf_integrator<rxd3>(_meshGraph, 1.0, 3.0, 0.5);
+    _integrator = new asawa::surf_integrator<rxd3>(_meshGraph, 0.125, 3.0, 0.5);
+    //_integrator = new asawa::surf_integrator<rxd3>(_meshGraph, 1.0, 3.0, 0.5);
 
     _integrator->add_default_vertex_policy<typename rxd3::real>(
         rxd3::vertex_index::RXA);
@@ -286,9 +286,8 @@ public:
   void print_vecs(const std::vector<typename SPACE::vec3> &p0,
                   const std::vector<typename SPACE::vec3> &p1, int col = 0) {
     double mx =
-        std::accumulate(p1.begin(), p1.end(), 0.0, [](double a, auto &c) {
-          return max(a, m2::va::norm(c));
-        });
+        std::accumulate(p1.begin(), p1.end(), 0.0,
+                        [](double a, auto &c) { return max(a, va::norm(c)); });
 
     for (int i = 0; i < p0.size(); i++) {
 
@@ -297,13 +296,13 @@ public:
 
       auto pa = p + 0.1 * a / mx;
       // std::cout << a.transpose() << std::endl;
-      auto c = grey(m2::va::norm(a));
+      auto c = grey(va::norm(a));
       if (col == 1)
-        c = red(m2::va::norm(a));
+        c = red(va::norm(a));
       if (col == 2)
-        c = green(m2::va::norm(a));
+        c = green(va::norm(a));
       if (col == 3)
-        c = blue(m2::va::norm(a));
+        c = blue(va::norm(a));
 
       _debugLines->pushLine(Vec4(p[0], p[1], p[2], 1.0),
                             Vec4(pa[0], pa[1], pa[2], 1.0),
@@ -315,7 +314,7 @@ public:
     M2_TYPEDEFS;
 
     std::vector<rxd3::vec3> positions =
-        m2::ci::get_coordinates<rxd3>(_meshGraph);
+        asawa::ci::get_coordinates<rxd3>(_meshGraph);
 
     auto rxA = getRx(_meshGraph, SPACE::vertex_index::RXA);
     auto rxB = getRx(_meshGraph, SPACE::vertex_index::RXB);
@@ -337,7 +336,7 @@ public:
     }
 
     std::cout << "creating vecs" << std::endl;
-    std::vector<m2::face_triangle<SPACE>> triangles;
+    std::vector<asawa::face_triangle<SPACE>> triangles;
     auto &faces = _meshGraph->get_faces();
 
     for (int i = 0; i < faces.size(); i++) {
@@ -345,12 +344,12 @@ public:
         continue;
       if (faces[i]->size() < 3)
         continue;
-      std::vector<m2::face_triangle<SPACE>> tris =
-          m2::ci::get_tris<SPACE>(faces[i]);
+      std::vector<asawa::face_triangle<SPACE>> tris =
+          asawa::ci::get_tris<SPACE>(faces[i]);
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
     std::vector<typename SPACE::real> rxFa =
-        m2::ci::verts_to_faces<SPACE, typename SPACE::real>(rxV, _meshGraph);
+        asawa::ci::verts_to_faces<SPACE, typename SPACE::real>(rxV, _meshGraph);
 
     std::vector<typename SPACE::vec3> normF;
     std::vector<typename SPACE::vec3> normV(positions.size());
@@ -363,7 +362,7 @@ public:
     std::cout << "calc_normal 3" << std::endl;
 
     std::cout << "computing harmonic avg" << std::endl;
-    m2::mesh_calculator<SPACE> calc;
+    asawa::mesh_calculator<SPACE> calc;
 
     normV = calc.harmonicAvg(_meshGraph, normF, positions, reg);
     return normV;
@@ -372,7 +371,8 @@ public:
             _meshGraph, normF, positions, reg);
 
     std::vector<typename SPACE::real> divF =
-        m2::ci::verts_to_faces<SPACE, typename SPACE::real>(divV, _meshGraph);
+        asawa::ci::verts_to_faces<SPACE, typename SPACE::real>(divV,
+                                                               _meshGraph);
 
     std::vector<typename SPACE::vec3> grads =
         calc.template gradient<typename SPACE::vec3, typename SPACE::real>(
@@ -385,7 +385,7 @@ public:
   }
 #endif
 
-  template <typename SPACE> void setRxColor(m2::surf<SPACE> *surf) {
+  template <typename SPACE> void setRxColor(asawa::surf<SPACE> *surf) {
     M2_TYPEDEFS;
     auto rxA = getRx(surf, SPACE::vertex_index::RXA);
     auto rxB = getRx(surf, SPACE::vertex_index::RXB);
@@ -396,7 +396,7 @@ public:
     auto smooth = getRx(surf, SPACE::vertex_index::SMOOTH);
 
     int i = 0;
-    m2::cotan_curvature<SPACE> curve(surf);
+    asawa::cotan_curvature<SPACE> curve(surf);
     std::vector<real> K = curve();
     for (auto v : surf->get_vertices()) {
       typename SPACE::real k = K[i];
@@ -427,7 +427,7 @@ public:
 
       // typename SPACE::coordinate_type color = (1.0 - k) * colorA + k *
       // colorB;
-      typename SPACE::coordinate_type mx = m2::va::mix(s, colorS, color);
+      typename SPACE::coordinate_type mx = va::mix(s, colorS, color);
 
       v->template set<typename SPACE::coordinate_type>(
           SPACE::vertex_index::COLOR, mx);
@@ -435,21 +435,22 @@ public:
     }
   }
 
-  std::vector<m2::colorRGB> getRxColors(m2::surf<rxd3> *surf) {
+  std::vector<asawa::colorRGB> getRxColors(asawa::surf<rxd3> *surf) {
     auto vertices = surf->get_vertices();
-    std::vector<m2::colorRGB> colors(vertices.size());
+    std::vector<asawa::colorRGB> colors(vertices.size());
     for (int i = 0; i < vertices.size(); i++) {
       auto v = vertices[i];
       rxd3::coordinate_type color =
           v->template get<typename rxd3::coordinate_type>(
               rxd3::vertex_index::COLOR);
-      colors[i] = m2::colorRGB(color[0], color[1], color[2], 1.0);
+      colors[i] = asawa::colorRGB(color[0], color[1], color[2], 1.0);
     }
 
     return colors;
   }
 
-  std::vector<rxd3::real> getRx(m2::surf<rxd3> *surf, rxd3::vertex_index id) {
+  std::vector<rxd3::real> getRx(asawa::surf<rxd3> *surf,
+                                rxd3::vertex_index id) {
     auto vertices = surf->get_vertices();
     std::vector<rxd3::real> rxs(surf->get_vertices().size());
     int i = 0;
@@ -460,7 +461,7 @@ public:
     return rxs;
   }
 
-  void setRx(m2::surf<rxd3> *surf, std::vector<rxd3::real> rx,
+  void setRx(asawa::surf<rxd3> *surf, std::vector<rxd3::real> rx,
              rxd3::vertex_index id) {
     int i = 0;
     for (auto v : surf->get_vertices()) {
@@ -470,16 +471,16 @@ public:
   }
 
   template <typename SPACE>
-  void curvature_to_rx(m2::surf<SPACE> *surf,
+  void curvature_to_rx(asawa::surf<SPACE> *surf,
                        std::vector<typename SPACE::real> &rxA,
                        std::vector<typename SPACE::real> &rxB,
                        std::vector<typename SPACE::real> &rxC,
                        std::vector<typename SPACE::real> &rxD,
                        std::vector<typename SPACE::real> &rxE,
                        std::vector<typename SPACE::real> &rxF) {
-    using namespace m2;
+    using namespace asawa;
     M2_TYPEDEFS;
-    m2::cotan_curvature<SPACE> curve(surf);
+    asawa::cotan_curvature<SPACE> curve(surf);
     std::vector<real> K = curve();
 
     const auto [min, max] = std::minmax_element(K.begin(), K.end());
@@ -542,8 +543,8 @@ public:
 #endif
   }
 
-  template <typename SPACE> void initRxMesh(m2::surf<SPACE> *surf) {
-    using namespace m2;
+  template <typename SPACE> void initRxMesh(asawa::surf<SPACE> *surf) {
+    using namespace asawa;
     M2_TYPEDEFS;
 
     auto vertices = surf->get_vertices();
@@ -951,7 +952,7 @@ public:
                        std::vector<rxd3::real> &fE, //
                        std::vector<rxd3::real> &fF) {
 
-    m2::diffuse<rxd3> diff(_meshGraph);
+    asawa::diffuse<rxd3> diff(_meshGraph);
 
     double Da = rxParams.Da;
     double Db = rxParams.Db;
@@ -1007,7 +1008,8 @@ public:
     std::cout << " edges: " << _meshGraph->get_edges().size() << std::endl;
     std::cout << " faces: " << _meshGraph->get_faces().size() << std::endl;
     std::cout << " mean edge length: "
-              << m2::ci::geometric_mean_length<rxd3>(_meshGraph) << std::endl;
+              << asawa::ci::geometric_mean_length<rxd3>(_meshGraph)
+              << std::endl;
     // gg::fillBuffer(_meshGraph, _obj);
 
     std::cout << "get rx " << std::endl;
@@ -1076,9 +1078,10 @@ public:
     setRx(_meshGraph, rxF, rxd3::vertex_index::RXF);
 
     std::cout << "====== " << std::endl;
-    std::cout << "area: " << m2::ci::area<rxd3>(_meshGraph) << std::endl;
+    std::cout << "area: " << asawa::ci::area<rxd3>(_meshGraph) << std::endl;
     std::cout << " mean edge length: "
-              << m2::ci::geometric_mean_length<rxd3>(_meshGraph) << std::endl;
+              << asawa::ci::geometric_mean_length<rxd3>(_meshGraph)
+              << std::endl;
 
 #endif
     setRxColor(_meshGraph);
@@ -1091,7 +1094,7 @@ public:
     std::cout << "normal length: " << normals.size() << std::endl;
     std::cout << "rx length: " << rxA.size() << std::endl;
     std::vector<rxd3::vec3> positions =
-        m2::ci::get_coordinates<rxd3>(_meshGraph);
+        asawa::ci::get_coordinates<rxd3>(_meshGraph);
 #if 0
     // std::cout << "print vecs" << std::endl;
 
@@ -1104,15 +1107,15 @@ public:
     std::cout << "integrating " << std::endl;
     double Nn = 0, NRxn = 0;
     for (int i = 0; i < normals.size(); i++) {
-      Nn += m2::va::norm<rxd3::real>(normals[i]);
-      NRxn += m2::va::norm<rxd3::real>(normals[i]);
+      Nn += va::norm<rxd3::real>(normals[i]);
+      NRxn += va::norm<rxd3::real>(normals[i]);
       positions[i] += dtt * normals[i];
     }
 
     std::cout << "pos stage norm: " << Nn / double(rxA.size()) << " "
               << NRxn / double(rxB.size()) << std::endl;
 
-    m2::ci::set_coordinates<rxd3>(positions, _meshGraph);
+    asawa::ci::set_coordinates<rxd3>(positions, _meshGraph);
     this->dump_gaudi(frame);
     _meshGraph->print();
 
@@ -1123,12 +1126,12 @@ public:
     _meshGraph->pack();
     std::stringstream ss;
     ss << "rxdiff." << frame << ".obj";
-    m2::write_obj<rxd3>(*_meshGraph, ss.str());
+    asawa::write_obj<rxd3>(*_meshGraph, ss.str());
   }
 
   virtual void load_gaudi(std::string file_name) {
     std::cout << " loading" << std::endl;
-    m2::flattened_surf<rxd3> fsurf;
+    asawa::flattened_surf<rxd3> fsurf;
     fsurf.clear();
     fsurf.read(file_name);
     _meshGraph = fsurf.to_surf();
@@ -1137,7 +1140,7 @@ public:
 
   virtual void dump_gaudi(int frame = 0) {
     std::cout << " dumping" << std::endl;
-    m2::flattened_surf<rxd3> fsurf(_meshGraph);
+    asawa::flattened_surf<rxd3> fsurf(_meshGraph);
     fsurf.write("rxd." + std::to_string(frame) + ".gaudi");
   }
 
@@ -1188,8 +1191,8 @@ private:
   std::vector<gg::DrawablePtr> mSceneObjects;
 
   gg::BufferObjectPtr _obj = NULL;
-  m2::surf<rxd3> *_meshGraph;
-  m2::surf_integrator<rxd3> *_integrator;
+  asawa::surf<rxd3> *_meshGraph;
+  asawa::surf_integrator<rxd3> *_integrator;
 };
 
 std::string GetCurrentWorkingDir(void) {

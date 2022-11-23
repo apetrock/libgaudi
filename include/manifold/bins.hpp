@@ -1,8 +1,7 @@
 #ifndef __M2BINS__
 #define __M2BINS__
 
-#include "conj_grad.hpp"
-#include "m2Includes.h"
+#include "manifold/asawa/m2.hpp"
 
 #include "quartic/cubic.hpp"
 #include "tribox_test.hpp"
@@ -14,12 +13,12 @@
 #include <limits>
 
 bool boxOverlap(space3::triangle_type &tri, space3::box_type &b) {
-  m2::va::tri_box<space3::double_type, space3::coordinate_type> tribox;
+  va::tri_box<space3::double_type, space3::coordinate_type> tribox;
   bool inBox = tribox.triBoxOverlap(b.center, b.half, tri.p);
   return inBox;
 };
 
-namespace m2 {
+namespace bins {
 template <typename SPACE> struct line_tests {
   M2_TYPEDEFS;
 
@@ -276,7 +275,7 @@ public:
           continue;
         if (ti < 0.0)
           continue;
-        m2::distance_calculator<SPACE> calc;
+        bins::distance_calculator<SPACE> calc;
         triangle_type tri(c0 + ti * v0, c1 + ti * v1, c2 + ti * v2);
         T tdist = this->distance(tri, ci + ti * vi);
         dist = dist < tdist ? dist : tdist;
@@ -303,7 +302,7 @@ public:
       T dist = 999.0, tdist = 999.0;
       coordinate_type pi; 
       bool hit = false;
-      m2::line_tests<SPACE> tester;
+      asawa::line_tests<SPACE> tester;
       
       hit = tester.ray_triangle_intersect(e0, e1, c00, c01, c02, pi, tdist);
       dist = (hit && tdist < dist) ? tdist : dist;
@@ -515,7 +514,7 @@ template <typename SPACE> struct face_bin {
     face_array &faces = mesh.get_faces();
     _dx = dx;
     T idx = 1.0 / dx;
-    box_type bb = ci::bound<SPACE>(&mesh);
+    box_type bb = asawa::ci::bound<SPACE>(&mesh);
     coordinate_type gcen = bb.center;
     coordinate_type glengths = 2.0 * bb.half;
 
@@ -536,7 +535,7 @@ template <typename SPACE> struct face_bin {
     for (int c = 0; c < faces.size(); c++) {
       face_ptr f = faces[c];
       if (f) {
-        coordinate_type p = ci::center<SPACE>(f);
+        coordinate_type p = asawa::ci::center<SPACE>(f);
         int b[3];
         nearestBin(p, b);
         int index = b[0] + b[1] * _xRes + b[2] * _xRes * _yRes;
@@ -555,7 +554,7 @@ template <typename SPACE> struct face_bin {
     for (int c = 0; c < faces.size(); c++) {
       face_ptr f = faces[c];
       if (f) {
-        coordinate_type p = ci::center<SPACE>(f);
+        coordinate_type p = asawa::ci::center<SPACE>(f);
         int b[3];
         nearestBin(p, b);
         int index = b[0] + b[1] * _xRes + b[2] * _xRes * _yRes;
@@ -1783,17 +1782,17 @@ inline void getAllNearest(PRIMITIVE_B &primB,
       int beg = faceTree.nodes[cId].begin;
       int end = beg + faceTree.nodes[cId].size;
       int d = 0;
-      // m2::Debugger& debug = m2::Debugger::get_instance();
+      // asawa::Debugger& debug = asawa::Debugger::get_instance();
       // debug.DebugLines0.push_back(cnode.bbox.center);
       // debug.DebugLines0.push_back(primB);
       while (beg != end) {
         PRIMITIVE_A primA = corners[faceTree.permutation[beg]];
-        m2::distance_calculator<SPACE> calc;
+        bins::distance_calculator<SPACE> calc;
         T dist = calc.distance(primA, primB);
         // if(dist < 10) std::cout << dist << std::endl;
         if (dist < tol * tol)
           collectedPrimitives.push_back(faceTree.permutation[beg]);
-        // m2::Debugger& debug = m2::Debugger::get_instance();
+        // asawa::Debugger& debug = asawa::Debugger::get_instance();
         // debug.DebugLines0.push_back(primB);
         // debug.DebugLines0.push_back(primA.center());
         beg++;
@@ -1810,7 +1809,7 @@ inline void getAllNearest(PRIMITIVE_B &primB,
         coordinate_type maxB;
         geometry_calculator<SPACE> calc;
         calc.getExtents(primB, minB, maxB);
-        // m2::Debugger& debug = m2::Debugger::get_instance();
+        // asawa::Debugger& debug = asawa::Debugger::get_instance();
         // debug.DebugBoxes.push_back(c);
         // debug.DebugBoxes.push_back(h);
         if (minA[0] > maxB[0] + tol || minB[0] - tol > maxA[0] ||
@@ -1852,17 +1851,17 @@ getAllNearestTriPoint(typename SPACE::coordinate_type &p,
       int beg = faceTree.nodes[cId].begin;
       int end = beg + faceTree.nodes[cId].size;
       int d = 0;
-      // m2::Debugger& debug = m2::Debugger::get_instance();
+      // asawa::Debugger& debug = asawa::Debugger::get_instance();
       // debug.DebugLines0.push_back(cnode.bbox.center);
       // debug.DebugLines0.push_back(p);
       while (beg != end) {
         triangle_type primA = corners[faceTree.permutation[beg]];
-        m2::distance_calculator<SPACE> calc;
+        bins::distance_calculator<SPACE> calc;
         T dist = calc.distance(primA, p);
         // if(dist < 10) std::cout << dist << std::endl;
         if (dist < tol * tol)
           collectedPrimitives.push_back(faceTree.permutation[beg]);
-        // m2::Debugger& debug = m2::Debugger::get_instance();
+        // asawa::Debugger& debug = asawa::Debugger::get_instance();
         // debug.DebugLines0.push_back(p);
         // debug.DebugLines0.push_back(primA.center());
         beg++;
@@ -1879,7 +1878,7 @@ getAllNearestTriPoint(typename SPACE::coordinate_type &p,
         coordinate_type maxB;
         geometry_calculator<SPACE> calc;
         calc.getExtents(p, minB, maxB);
-        // m2::Debugger& debug = m2::Debugger::get_instance();
+        // asawa::Debugger& debug = asawa::Debugger::get_instance();
         // debug.DebugBoxes.push_back(c);
         // debug.DebugBoxes.push_back(h);
         /*if(minA[0] > maxB[0] + tol || minB[0] - tol > maxA[0] ||
@@ -1936,13 +1935,13 @@ inline int getNearestInRange(typename SPACE::coordinate_type &p,
       int beg = faceTree.nodes[cId].begin;
       int end = beg + faceTree.nodes[cId].size;
       int d = 0;
-      // m2::Debugger& debug = m2::Debugger::get_instance();
+      // asawa::Debugger& debug = asawa::Debugger::get_instance();
       // debug.DebugLines0.push_back(cnode.bbox.center);
       // debug.DebugLines0.push_back(p);
       // std::cout << beg << " " << end << std::endl;
       while (beg != end) {
         PRIMITIVE_A primA = corners[faceTree.permutation[beg]];
-        m2::distance_calculator<SPACE> calc;
+        bins::distance_calculator<SPACE> calc;
         T dist = calc.distance(primA, p);
         if (dist < tol + 1e-16 && dist < min) {
           min = dist;
@@ -2013,12 +2012,12 @@ getNearestRange(typename SPACE::coordinate_type &p,
       int beg = faceTree.nodes[cId].begin;
       int end = beg + faceTree.nodes[cId].size;
       int d = 0;
-      // m2::Debugger& debug = m2::Debugger::get_instance();
+      // asawa::Debugger& debug = asawa::Debugger::get_instance();
       // debug.DebugLines0.push_back(cnode.bbox.center);
       // debug.DebugLines0.push_back(primB);
       while (beg != end) {
         PRIMITIVE_A primA = corners[faceTree.permutation[beg]];
-        m2::distance_calculator<SPACE> calc;
+        bins::distance_calculator<SPACE> calc;
         T dist = calc.distance(primA, p);
         if (dist < min) {
           minId = cId;
@@ -2052,7 +2051,7 @@ getNearestRange(typename SPACE::coordinate_type &p,
 
   /*
     PRIMITIVE_A primA = corners[minTri];
-    m2::distance_calculator<SPACE> calc;
+    asawa::distance_calculator<SPACE> calc;
     T dist = calc.distance(primA,p);
     std::cout << dist << " " << norm(p-cen) << std::endl;
     */
@@ -2121,5 +2120,5 @@ template <typename SPACE> struct ccd {
                     coordinate_type x4, coordinate_type v4) {}
 };
 
-} // namespace m2
+} // namespace bins
 #endif

@@ -13,7 +13,7 @@
 #include "TIMER.h"
 #include <cmath>
 
-namespace m2 {
+namespace asawa {
 
 template <typename SPACE, typename BLOCK_T> struct LeafBlock {
   M2_TYPEDEFS;
@@ -221,8 +221,8 @@ void testBins() {
 }
 
 template <typename SPACE>
-Block<SPACE, 24, std::vector<m2::vertex<SPACE> *>> *
-makeBlock(m2::surf<SPACE> *mesh) {
+Block<SPACE, 24, std::vector<asawa::vertex<SPACE> *>> *
+makeBlock(asawa::surf<SPACE> *mesh) {
   M2_TYPEDEFS;
   typedef Block<SPACE, 24, std::vector<vertex_ptr>> vertex_block;
 
@@ -394,10 +394,10 @@ public:
 };
 
 template <typename SPACE, int L0, int L1, int L2>
-BlockTree<SPACE, L0, L1, L2, std::vector<m2::vertex<SPACE> *>> *
-makeTree(m2::surf<SPACE> *mesh) {
+BlockTree<SPACE, L0, L1, L2, std::vector<asawa::vertex<SPACE> *>> *
+makeTree(asawa::surf<SPACE> *mesh) {
   M2_TYPEDEFS;
-  typedef BlockTree<SPACE, L0, L1, L2, std::vector<m2::vertex<SPACE> *>>
+  typedef BlockTree<SPACE, L0, L1, L2, std::vector<asawa::vertex<SPACE> *>>
       vertex_tree;
   typedef typename vertex_tree::Root Root;
   typedef typename vertex_tree::Block1 Block1;
@@ -422,13 +422,13 @@ makeTree(m2::surf<SPACE> *mesh) {
 };
 
 template <typename SPACE, int L0, int L1, int L2>
-BlockTree<SPACE, L0, L1, L2, std::vector<m2::face<SPACE> *>> *
-// makeTriTree(m2::surf<SPACE> *  mesh, ImmediateLines * debug,
+BlockTree<SPACE, L0, L1, L2, std::vector<asawa::face<SPACE> *>> *
+// makeTriTree(asawa::surf<SPACE> *  mesh, ImmediateLines * debug,
 // ImmediateLines * debug0){
-makeTriTree(m2::surf<SPACE> *mesh) {
+makeTriTree(asawa::surf<SPACE> *mesh) {
 
   M2_TYPEDEFS;
-  typedef BlockTree<SPACE, L0, L1, L2, std::vector<m2::face<SPACE> *>>
+  typedef BlockTree<SPACE, L0, L1, L2, std::vector<asawa::face<SPACE> *>>
       vertex_tree;
   typedef typename vertex_tree::Root Root;
   typedef typename vertex_tree::Block1 Block1;
@@ -446,7 +446,7 @@ makeTriTree(m2::surf<SPACE> *mesh) {
 
   auto tribox = [&](coordinate_type cen, T half, void *data) {
     coordinate_type *tri = static_cast<coordinate_type *>(data);
-    m2::va::tri_box<T, coordinate_type> tribox;
+    va::tri_box<T, coordinate_type> tribox;
 
     coordinate_type halfc = 0.5 * coordinate_type(half, half, half, 0.0);
 
@@ -526,5 +526,5 @@ makeTriTree(m2::surf<SPACE> *mesh) {
   return block;
 };
 
-} // namespace m2
+} // namespace asawa
 #endif

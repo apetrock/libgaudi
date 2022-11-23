@@ -18,7 +18,7 @@
 
 // functions-------------------------------
 
-namespace m2 {
+namespace asawa {
 template <typename SPACE> class graph_skinning {
   // class designed to produce primitives, such as convex hulls or loading .obj,
   // etc;
@@ -87,8 +87,8 @@ public:
       cp3 += vb + dn * jr;
       cp4 += vb + dn * jr;
 
-      m2::construct<SPACE> cons;
-      surf_ptr seg = new m2::surf<SPACE>();
+      asawa::construct<SPACE> cons;
+      surf_ptr seg = new asawa::surf<SPACE>();
       seg->insert_vertex(cp1);
       seg->insert_vertex(cp2);
       seg->insert_vertex(cp3);
@@ -105,7 +105,7 @@ public:
       face_ptr f2 = seg->face(1);
 
       cons.bevel_face(seg, f1, 0, 0);
-      m2::affine<SPACE> affine;
+      asawa::affine<SPACE> affine;
       /*
         to finish out this portion, we'll have to put the beginning face and end
         face into an array
@@ -123,9 +123,10 @@ public:
       face_list &fov2 =
           faces_on_vertex[i2]; // list because we will be pushing back data
       // now all the faces are pushed into their respective vertices, then we
-      // can do some psuedo convex hulling 		vector<m1::edge<T>*> ev =
-      //graph_in->get_edges(); 		vector<m1::vertex<T>*> vv =
-      //graph_in->get_vertices();
+      // can do some psuedo convex hulling 		vector<m1::edge<T>*> ev
+      // =
+      // graph_in->get_edges(); 		vector<m1::vertex<T>*> vv =
+      // graph_in->get_vertices();
       fov1.push_back(f2);
       fov2.push_back(f1);
     }
@@ -152,7 +153,7 @@ public:
         }
 
         surf_ptr joint;
-        m2::convex_hull<SPACE> ch;
+        asawa::convex_hull<SPACE> ch;
         joint = ch.quick_hull(jverts);
 
         remesh<SPACE> rem;
@@ -170,7 +171,7 @@ public:
             if (fi && fj) {
               bool is_match = opposing_face_match(fi, fj, 0.005);
               //								bool
-              //is_match = false;
+              // is_match = false;
               if (is_match) {
                 pair<face_ptr, face_ptr> cpair(fi, fj);
                 jpairs.push_back(cpair);
@@ -327,5 +328,5 @@ public:
     return true;
   }
 };
-}; // namespace m2
+}; // namespace asawa
 #endif

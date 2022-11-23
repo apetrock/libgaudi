@@ -18,7 +18,6 @@
 
 using namespace std;
 
-namespace m2 {
 namespace va {
 template <typename T> using VEC3 = Eigen::Matrix<T, 3, 1>;
 template <typename T> using VEC4 = Eigen::Matrix<T, 4, 1>;
@@ -820,5 +819,4 @@ template <typename T> bool less_than(const VEC3<T> &A, const VEC3<T> &B) {
   return (A.array() < B.array()).sum() > 0;
 };
 } // namespace va
-} // namespace m2
 #endif

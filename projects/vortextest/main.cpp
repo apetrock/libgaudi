@@ -36,28 +36,28 @@
 #define TRACKBALLSIZE (0.8f)
 #define RENORMCOUNT 97
 
-    using std::cerr;
+using std::cerr;
 using std::cout;
 using std::endl;
 
 template <typename SPACE>
-void debugVorticity(m2::surf<SPACE> *mesh, gg::DebugBufferPtr debug) {
+void debugVorticity(asawa::surf<SPACE> *mesh, gg::DebugBufferPtr debug) {
   using namespace nanogui;
   M2_TYPEDEFS;
   std::cout << "  rendering vorticity" << std::endl;
 
   for (auto f : mesh->get_faces()) {
     coordinate_type v = 0.1 * f->data;
-    coordinate_type cen = m2::ci::center<SPACE>(f);
+    coordinate_type cen = asawa::ci::center<SPACE>(f);
 
     coordinate_type l0 = cen - 1.0 * v;
     coordinate_type l1 = cen + 1.0 * v;
-    T mag = m2::va::norm(v);
+    T mag = va::norm(v);
     T pi = M_PI;
     gg::Vec4 col(0.5 + 0.5 * cos(2.0 * pi * mag + 0.000 * pi),
-             0.5 + 0.5 * cos(2.0 * pi * mag + 0.666 * pi),
-             0.5 + 0.5 * cos(2.0 * pi * mag + 1.333 * pi), mag);
-    //gg::Vec4 col(0.5, 0.5, 0.5, 1.0);
+                 0.5 + 0.5 * cos(2.0 * pi * mag + 0.666 * pi),
+                 0.5 + 0.5 * cos(2.0 * pi * mag + 1.333 * pi), mag);
+    // gg::Vec4 col(0.5, 0.5, 0.5, 1.0);
     debug->pushLine(gg::Vec4(l0[0], l0[1], l0[2], 1.0),
                     gg::Vec4(l1[0], l1[1], l1[2], 1.0), col);
   }
@@ -76,13 +76,13 @@ public:
   VortexScene() : gg::Scene() {
     using namespace nanogui;
 
-    m2::obj_loader<space3> load;
-    m2::subdivide<space3> sub;
-    m2::make<space3> mk;
-    m2::convex_hull<space3> ch;
+    asawa::obj_loader<space3> load;
+    asawa::subdivide<space3> sub;
+    asawa::make<space3> mk;
+    asawa::convex_hull<space3> ch;
 
-    m2::construct<space3> bevel;
-    m2::affine<space3> mod;
+    asawa::construct<space3> bevel;
+    asawa::affine<space3> mod;
 
     //_meshGraph = &load("assets/bunny.obj");
     //_meshGraph = &load("assets/messer.obj");
@@ -101,7 +101,7 @@ public:
     std::cout << "--pack" << std::endl;
     _meshGraph->pack();
     std::cout << "--build sheet" << std::endl;
-    _vortex = new m2::vortex_sheet<space3>(_meshGraph);
+    _vortex = new asawa::vortex_sheet<space3>(_meshGraph);
 
     mod.centerGeometry(*_meshGraph);
     std::cout << "creating buffer" << std::endl;
@@ -122,7 +122,7 @@ public:
               << std::endl;
     std::cout << " edges: " << _meshGraph->get_edges().size() << std::endl;
     std::cout << " faces: " << _meshGraph->get_faces().size() << std::endl;
-    m2::affine<space3> mod;
+    asawa::affine<space3> mod;
 
     double max = 0.025;
     double min = max / 10.0;
@@ -145,7 +145,7 @@ public:
     _meshGraph->verify();
 
     _vortex->updateVorticity();
-    m2::remesh<space3> rem;
+    asawa::remesh<space3> rem;
     rem.triangulate(_meshGraph);
     debugVorticity(_meshGraph, _debugLines);
 
@@ -170,8 +170,8 @@ private:
   std::vector<gg::DrawablePtr> mSceneObjects;
 
   gg::BufferObjectPtr _obj = NULL;
-  m2::surf<space3> *_meshGraph;
-  m2::vortex_sheet<space3> *_vortex;
+  asawa::surf<space3> *_meshGraph;
+  asawa::vortex_sheet<space3> *_vortex;
 };
 
 std::string GetCurrentWorkingDir(void) {

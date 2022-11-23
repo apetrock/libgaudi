@@ -13,7 +13,7 @@
 
 // oh man, 350 lines of code and nary a comment, I'll have to comment my way
 // through this, blech!
-namespace m2 {
+namespace asawa {
 template <typename SPACE> class epSubdivide {
   M2_TYPEDEFS;
 
@@ -360,5 +360,5 @@ public:
     return true;
   }
 };
-} // namespace m2
+} // namespace asawa
 #endif

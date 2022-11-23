@@ -29,14 +29,4 @@ profile_logger &profile_logger::get_instance() {
   return logger;
 }
 
-void geometry_logger::clear() {}
-
-void geometry_logger::frame() {
-
-  // gg::geometry_logger::line(c - C * t0, c + C * t0, Vec4d(1.0, 0.0,
-  // 0.0, 1.0)); gg::geometry_logger::line(c - C * t1, c + C * t1,
-  // Vec4d(0.0, 1.0, 0.0, 1.0)); gg::geometry_logger::line(c - C * t2, c + C *
-  // t2, Vec4d(0.0, 0.0, 1.0, 1.0));
-}
-
 } // namespace gg

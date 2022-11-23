@@ -52,7 +52,7 @@ struct CSC {
   vector<double> A; // Nonzero elements of A.
 };
 
-template <typename SPACE> void buildSymMatrix(m2::surf<SPACE> &in, CSC &m) {
+template <typename SPACE> void buildSymMatrix(asawa::surf<SPACE> &in, CSC &m) {
   M2_TYPEDEFS;
 
   vector<vertex_ptr> &tverts = in.get_vertices();
@@ -67,7 +67,7 @@ template <typename SPACE> void buildSymMatrix(m2::surf<SPACE> &in, CSC &m) {
 
     typedef std::pair<float, int> ColumnEntry;
     std::vector<ColumnEntry> adjacency;
-    m2::mesh_calculator<SPACE> mcalc;
+    asawa::mesh_calculator<SPACE> mcalc;
     while (iterating) {
       iterating = itb != ite;
       sz++;
@@ -157,8 +157,8 @@ public:
 
   void createGeometry() {
     std::cout << "creating buffer" << std::endl;
-    m2::obj_loader<space3> load;
-    m2::affine<space3> mod;
+    asawa::obj_loader<space3> load;
+    asawa::affine<space3> mod;
 
     std::cout << "  loading assets" << std::endl;
     _meshGraph = &load("assets/messer.obj");
@@ -174,7 +174,7 @@ public:
     // gg::fillBuffer(_meshGraph, _obj);
     // mSceneObjects.push_back(_obj);
 #if 0
-    typedef m2::vertex<space3> *vertex_ptr;
+    typedef asawa::vertex<space3> *vertex_ptr;
     std::vector<vertex_ptr> tverts = _meshGraph->get_vertices();
     int n = m.pcol.size() - 1;
     int nnz = m.A.size();
@@ -226,10 +226,7 @@ public:
 #endif
   }
 
-  virtual void onAnimate() {
-
-    gg::fillBuffer(_meshGraph, _obj);
-  }
+  virtual void onAnimate() { gg::fillBuffer(_meshGraph, _obj); }
 
   virtual void onDraw(gg::Viewer &viewer) {
     std::for_each(mSceneObjects.begin(), mSceneObjects.end(),
@@ -246,7 +243,7 @@ private:
   gg::PointBufferPtr _points;
   gg::DebugBufferPtr _debugLines;
 
-  m2::surf<space3> *_meshGraph;
+  asawa::surf<space3> *_meshGraph;
 };
 
 std::string GetCurrentWorkingDir(void) {

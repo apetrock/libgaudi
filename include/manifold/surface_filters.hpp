@@ -11,18 +11,18 @@
 #include "m2Includes.h"
 #include "surface_calculator.hpp"
 
-namespace m2 {
+namespace asawa {
 template <typename SPACE> class surface_filter {
   M2_TYPEDEFS;
 
 public:
-  void filterCutoff(m2::surf<SPACE> &in, T cutoff, vector<T> &vertexWeights,
+  void filterCutoff(asawa::surf<SPACE> &in, T cutoff, vector<T> &vertexWeights,
                     T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<vertex_ptr> &tverts = in.get_vertices();
     vector<coordinate_type> filteredCoordinates;
     filteredCoordinates.resize(tverts.size());
-    m2::surface_calculator<SPACE> calc;
+    asawa::surface_calculator<SPACE> calc;
 
     for (long i = 0; i < tverts.size(); i++) {
 
@@ -72,7 +72,7 @@ public:
     }
   }
 
-  static void filter(m2::surf<SPACE> &in, T strength) {
+  static void filter(asawa::surf<SPACE> &in, T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<vertex_ptr> &tverts = in.get_vertices();
     vector<coordinate_type> filteredCoordinates;
@@ -126,7 +126,7 @@ public:
     }
   }
 
-  static void cuspFilter(m2::surf<SPACE> &in, T strength) {
+  static void cuspFilter(asawa::surf<SPACE> &in, T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<vertex_ptr> &tverts = in.get_vertices();
     vector<coordinate_type> filteredCoordinates;
@@ -233,7 +233,7 @@ public:
     return ptl;
   }
 
-  static void mlsFilter(m2::surf<SPACE> &in, T strength, T dx) {
+  static void mlsFilter(asawa::surf<SPACE> &in, T strength, T dx) {
     // TIMER functionTimer(__FUNCTION__);
     vector<T> vertexWeights;
     vector<T> edgeWeights;
@@ -250,7 +250,7 @@ public:
         continue;
       coordinate_type ca(0, 0, 0);
       T wTot = 0;
-      m2::surface_calculator<SPACE> calc;
+      asawa::surface_calculator<SPACE> calc;
       vector<vertex_ptr> lverts = calc.getLocalVertices(in, v, 2);
 
       for (int j = 0; j < lverts.size(); j++) {
@@ -285,7 +285,7 @@ public:
     }
   }
 
-  static void laplacianFilter(m2::surf<SPACE> &in, T strength) {
+  static void laplacianFilter(asawa::surf<SPACE> &in, T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<T> vertexWeights;
     vector<T> edgeWeights;
@@ -311,7 +311,7 @@ public:
     }
   }
 
-  static void taubinFilter(m2::surf<SPACE> &in, T a, T b) {
+  static void taubinFilter(asawa::surf<SPACE> &in, T a, T b) {
     // TIMER functionTimer(__FUNCTION__);
     vector<T> vertexWeights;
     vector<T> edgeWeights;
@@ -354,7 +354,7 @@ public:
     }
   }
 
-  static void cacheTensor(m2::surf<SPACE> &in,
+  static void cacheTensor(asawa::surf<SPACE> &in,
                           vector<coordinate_type *> &tensorArray,
                           vector<coordinate_type> &singularArray) {
     vector<vertex_ptr> &tverts = in.get_vertices();
@@ -432,7 +432,7 @@ public:
       return coordinate_type(0, 0, 0);
   }
 
-  static void nullLaplacianFilter(m2::surf<SPACE> &in, T strength) {
+  static void nullLaplacianFilter(asawa::surf<SPACE> &in, T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<T> vertexWeights;
     vector<T> edgeWeights;
@@ -473,7 +473,7 @@ public:
     }
   }
 
-  void flaggedFilter(m2::surf<SPACE> &in, T strength) {
+  void flaggedFilter(asawa::surf<SPACE> &in, T strength) {
     // TIMER functionTimer(__FUNCTION__);
     vector<T> vertexWeights;
     vector<T> edgeWeights;
@@ -505,5 +505,5 @@ public:
     }
   }
 };
-} // namespace m2
+} // namespace asawa
 #endif

@@ -3,9 +3,12 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
+#include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdio>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -16,13 +19,13 @@
 
 #include <GaudiGraphics/geometry_logger.h>
 
-#include <manifold/coordinate_interface.hpp>
-#include <manifold/m2.hpp>
+#include <manifold/asawa/coordinate_interface.hpp>
+#include <manifold/asawa/m2.hpp>
 #include <manifold/vec_addendum.h>
 
-#include <manifold/harmonic_integrators.hpp>
+#include <manifold/calder/harmonic_integrators.hpp>
 
-using namespace m2;
+using namespace asawa;
 
 namespace hepworth {
 typedef Eigen::Triplet<double> triplet;
@@ -89,7 +92,7 @@ public:
     vec3 v0 = coord(i0, vals);
     vec3 v1 = coord(i1, vals);
     vec3 v2 = coord(i2, vals);
-    return m2::va::calculate_normal(v0, v1, v2);
+    return va::calculate_normal(v0, v1, v2);
   }
 
   static vec3 normal(face_ptr f, const vecX &vals) {
@@ -99,7 +102,7 @@ public:
     vec3 v0 = coord(fv0, vals);
     vec3 v1 = coord(fv1, vals);
     vec3 v2 = coord(fv2, vals);
-    return m2::va::calculate_normal(v0, v1, v2);
+    return va::calculate_normal(v0, v1, v2);
   }
 
   static real area(face_ptr f, const vecX &vals) {
@@ -110,7 +113,7 @@ public:
     vec3 v0 = coord(fv0, vals);
     vec3 v1 = coord(fv1, vals);
     vec3 v2 = coord(fv2, vals);
-    return m2::va::calculate_area(v0, v1, v2);
+    return va::calculate_area(v0, v1, v2);
   }
 
   static vec3 center(face_ptr f, const vecX &vals) {
@@ -230,7 +233,7 @@ public:
 
   size_t _i = -1;
   vec3 _p, _t;
-}; // namespace m2
+}; // namespace asawa
 
 template <typename SPACE> class edge_length : public constraint<SPACE> {
 public:
@@ -309,7 +312,7 @@ public:
   size_t _i0 = -1, _i1 = -1;
   coordinate_type _p0, _p1;
 
-}; // namespace m2
+}; // namespace asawa
 
 template <typename SPACE> class edge_stretch : public constraint<SPACE> {
 public:
@@ -375,6 +378,10 @@ public:
     real l = va::norm(dp);
     real invl = 1.0 / l;
     coordinate_type dldx = dp * invl;
+
+    if (isnan(invl))
+      std::cout << __FUNCTION__ << " NAN invl: " << std::endl;
+
     real de = l - _lc;
     coordinate_type dCdxi = this->_mu * de * dldx;
 
@@ -389,6 +396,9 @@ public:
     coordinate_type dp = _p1 - _p0;
     real l = va::norm(dp);
     real invl = 1.0 / l;
+    if (isnan(invl))
+      std::cout << __FUNCTION__ << " NAN invl: " << std::endl;
+
     // coordinate_type dldx = dp * invl;
     // real de = l - _lc;
     mat3 I = mat3::Identity(3, 3);
@@ -464,7 +474,7 @@ public:
   // real _E = 0.1;
   // real _T = 1;
   bool _init_rest = false;
-}; // namespace m2
+}; // namespace asawa
 
 template <typename SPACE> class shear : public constraint<SPACE> {
 public:
@@ -634,7 +644,7 @@ public:
   // real _E = 0.1;
   // real _T = 1;
   bool _init_rest = false;
-}; // namespace m2
+}; // namespace asawa
 
 // -----------------------------------------------------------------------
 
@@ -846,8 +856,8 @@ public:
     //    j
     // k <|> l
     //    i
-    vec3 N0 = m2::va::calculate_normal(_pi, _pk, _pj);
-    vec3 N1 = m2::va::calculate_normal(_pj, _pl, _pi);
+    vec3 N0 = va::calculate_normal(_pi, _pk, _pj);
+    vec3 N1 = va::calculate_normal(_pj, _pl, _pi);
     vec3 N = (N0 + N1).normalized();
     size_t ii[] = {_ik, _ii, _ij, _il};
     vec3 Ns[] = {N0, N, N, N1};
@@ -890,7 +900,7 @@ public:
   real _k;
 
   bool _init_rest = false;
-}; // namespace m2
+}; // namespace asawa
 
 ///////////////////////////////////////////////////////////
 
@@ -1011,7 +1021,7 @@ public:
                 const coordinate_type &N1, //
                 const coordinate_type &e) {
     // 2.0 tan(thet/2)
-    real sint = m2::va::sin(N0, N1, e);
+    real sint = va::sin(N0, N1, e);
     return sint;
   };
 
@@ -1021,8 +1031,8 @@ public:
                             real &phi_p,               //
                             real &phi_pp) {
 
-    real sint = m2::va::sin(N0, N1, e);
-    real cost = m2::va::cos(N0, N1, e);
+    real sint = va::sin(N0, N1, e);
+    real cost = va::cos(N0, N1, e);
 
     phi_p = 0.5 * cost;
     phi_pp = -0.25 * sint;
@@ -1079,7 +1089,7 @@ public:
                 const coordinate_type &N1, //
                 const coordinate_type &e) {
     // 2.0 tan(thet/2)
-    return m2::va::cos(N0, N1, e);
+    return va::cos(N0, N1, e);
   };
 
   void calc_phi_derivatives(const coordinate_type &N0, //
@@ -1088,8 +1098,8 @@ public:
                             real &phi_p,               //
                             real &phi_pp) {
 
-    real sint = m2::va::sin(N0, N1, e);
-    real cost = m2::va::cos(N0, N1, e);
+    real sint = va::sin(N0, N1, e);
+    real cost = va::cos(N0, N1, e);
 
     phi_p = -0.5 * sint;
     phi_pp = -0.25 * cost;
@@ -1185,9 +1195,13 @@ public:
     coordinate_type x1 = _p1;
     coordinate_type x2 = _p2;
     coordinate_type x10 = _p3;
-    A0 = m2::va::calculate_area(x00, x1, x2);
-    A1 = m2::va::calculate_area(x10, x2, x1);
+    A0 = va::calculate_area(x00, x1, x2);
+    A1 = va::calculate_area(x10, x2, x1);
 
+    if (A0 < 1e-10)
+      return false;
+    if (A1 < 1e-10)
+      return false;
     if (A0 / A1 > 4.0)
       return false;
     if (A1 / A0 > 4.0)
@@ -1212,10 +1226,10 @@ public:
     coordinate_type x2 = _p2;
     coordinate_type x10 = _p3;
 
-    N0 = m2::va::calculate_normal(x00, x1, x2);
-    N1 = m2::va::calculate_normal(x10, x2, x1);
-    A0 = m2::va::calculate_area(x00, x1, x2);
-    A1 = m2::va::calculate_area(x10, x2, x1);
+    N0 = va::calculate_normal(x00, x1, x2);
+    N1 = va::calculate_normal(x10, x2, x1);
+    A0 = va::calculate_area(x00, x1, x2);
+    A1 = va::calculate_area(x10, x2, x1);
 
     e0 = x2 - x1;
     e02 = x00 - x1;
@@ -1305,6 +1319,14 @@ public:
 
   vec12 local_gradient() {
     vec12 dtheta = d_theta();
+    if (isnan(dtheta.norm()))
+      std::cout << __FUNCTION__ << ":" << __LINE__
+                << " NAN dtheta: " << dtheta.transpose() << std::endl;
+
+    if (isnan(_psi_p))
+      std::cout << __FUNCTION__ << ":" << __LINE__ << " NAN _psi_p "
+                << std::endl;
+    assert(!isnan(_psi_p * dtheta.norm()));
     return _psi_p * dtheta;
   }
 
@@ -1397,8 +1419,12 @@ public:
     vec12 dtheta = d_theta();
 
     H = _psi_p * H + _psi_pp * dtheta * dtheta.transpose();
+    if (isnan(H.norm()))
+      std::cout << __FUNCTION__ << ":" << __LINE__
+                << " NAN H: " << H.transpose() << std::endl;
     //    if (_psi_p > 0)
     //      std::cout << _ai << " " << _psi_p << " " << _psi_pp << std::endl;
+    assert(!isnan(H.norm()));
     return -H;
   }
 
@@ -1549,8 +1575,8 @@ public:
     coordinate_type x1 = this->_p1;
     coordinate_type x2 = this->_p2;
     coordinate_type x10 = this->_p3;
-    this->A0 = m2::va::calculate_area(x00, x1, x2);
-    this->A1 = m2::va::calculate_area(x10, x2, x1);
+    this->A0 = va::calculate_area(x00, x1, x2);
+    this->A1 = va::calculate_area(x10, x2, x1);
     /*
         if (A0 / A1 > 4.0)
           return false;
@@ -1641,7 +1667,7 @@ public:
   }
 
   total_bend(surf_ptr surf) : _surf(surf) {
-    coordinate_array positions = m2::ci::get_coordinates<SPACE>(_surf);
+    coordinate_array positions = asawa::ci::get_coordinates<SPACE>(_surf);
     _positions = vec_interface<SPACE>::to(positions);
     init();
   }
@@ -1668,7 +1694,7 @@ public:
                     const coordinate_type &e) {
         real sint = 0.5 * va::norm(vec3(N1 - N0));
         real cost = 0.5 * va::norm(vec3(N1 + N0));
-        real tant = m2::va::sgn(va::determinant(N0, N1, e)) * sint / cost;
+        real tant = va::sgn(va::determinant(N0, N1, e)) * sint / cost;
         return tant;
       };
 
@@ -1802,7 +1828,7 @@ public:
       coordinate_type e_vec = c1 - c0;
 
       _phi1[i] = calc_phi(N0, N1, e_vec);
-      _e_len[i] = m2::va::norm(e_vec);
+      _e_len[i] = va::norm(e_vec);
       real phi_p = 0.0, phi_pp = 0.0;
 
       calc_phi_derivatives(_phi1[i], phi_p, phi_pp);
@@ -2249,7 +2275,7 @@ public:
       }
     }
 #endif
-#if 1
+#if 0
     edge_array edges = _surf->get_edges();
     for (auto &e : edges) {
       vertex_ptr v1 = e->v1()->vertex();
@@ -2298,6 +2324,7 @@ public:
   std::vector<real> _psi_pp; // psi double derivative
 };
 
+#if 1
 template <typename SPACE> class internal_collisions : public constraint<SPACE> {
 
 public:
@@ -2329,7 +2356,7 @@ public:
 
     vector<vec3> forces = calc_f(_surf, 0.25 * _reg);
     std::cout << " checking internal collisions" << std::endl;
-    gg::geometry_logger::field(p, forces, 1.0, gg::PresetColor::rainbow);
+    //    gg::geometry_logger::field(p, forces, 1.0, gg::PresetColor::rainbow);
 
     for (int i = 0; i < forces.size(); i++) {
       vec3 &f = forces[i];
@@ -2339,16 +2366,17 @@ public:
       real denom = f.dot(f);
       denom = denom < 1e-16 ? 1 : denom;
       // f = 0.5 * v.dot(f) / denom * f;
-      f = 0.65 * v.dot(f) / denom * f;
-
+      f = 0.75 * va::sgn(v.dot(f)) * v.dot(f) / denom * f;
       real fn = f.norm();
+
       f = fn > mx ? f * mx / fn : f;
+      f = fn == 0.0 ? 0.0 * f : f;
     }
 
     _f = vec_interface<SPACE>::to(forces);
   }
 
-  vector<typename SPACE::vec3> calc_f(m2::surf<SPACE> *mesh,
+  vector<typename SPACE::vec3> calc_f(asawa::surf<SPACE> *mesh,
                                       typename SPACE::real regLength = 0.5) {
     M2_TYPEDEFS;
 
@@ -2356,7 +2384,7 @@ public:
     typedef Eigen::Matrix<real, 4, 1> vec4;
 
     using Avg_Integrator =
-        m2::Geometry_Integrator<SPACE, vec3, triangle_type, vec3>;
+        calder::Geometry_Integrator<SPACE, vec3, triangle_type, vec3>;
 
     using ATree = typename Avg_Integrator::Tree;
     using ANode = typename Avg_Integrator::Node;
@@ -2399,13 +2427,13 @@ public:
 
       coordinate_type Nv = vertex_normals[i_c];
       coordinate_type dp = pc - pe;
-      T dist = m2::va::norm(dp);
+      T dist = va::norm(dp);
       if (node.isLeaf()) {
         for (int i = node.begin; i < node.begin + node.size; i++) {
           int ii = tree.permutation[i];
           auto tri = tris[ii];
-          bool itx = tri.rayIntersect(pe, pe + Nv, dist);
           auto Nf = tri.normal();
+          bool itx = tri.rayIntersect(pe, pe + Nv, dist);
 
           if (itx) {
             // std::cout << itx << " " << dist << std::endl;
@@ -2426,7 +2454,7 @@ public:
         continue;
       if (faces[i]->size() < 3)
         continue;
-      std::vector<triangle_type> tris = m2::ci::get_tris<SPACE>(faces[i]);
+      std::vector<triangle_type> tris = asawa::ci::get_tris<SPACE>(faces[i]);
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
 
@@ -2448,5 +2476,216 @@ public:
   surf_ptr _surf;
   real _reg;
 };
+
+#else
+template <typename SPACE> class internal_collisions : public constraint<SPACE> {
+
+public:
+  M2_TYPEDEFS;
+
+  typedef Eigen::Matrix<real, 3, 1> vec3;
+  typedef Eigen::Matrix<real, 3, 3> mat33;
+  typedef Eigen::Matrix<real, 9, 1> vec9;
+  typedef Eigen::Matrix<real, 9, 9> mat99;
+  typedef Eigen::Matrix<real, 12, 1> vec12;
+  typedef Eigen::Matrix<real, 12, 12> mat1212;
+
+  typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
+  typedef Eigen::SparseMatrix<real> sparmat;
+
+  typedef std::shared_ptr<internal_collisions<SPACE>> ptr;
+
+  static ptr create(surf_ptr surf, real reg) {
+    return std::make_shared<internal_collisions<SPACE>>(surf, reg);
+  }
+
+  internal_collisions(surf_ptr surf, real reg) : _surf(surf), _reg(reg) {}
+
+  virtual real evaluate_constraint() { return 0.0; }
+
+  virtual void preprocess(const vecX &vel) {
+    coordinate_array p = ci::get_coordinates<SPACE>(_surf);
+    coordinate_array N = ci::get_vertex_normals<SPACE>(_surf);
+
+    std::cout << "vevl" << std::endl;
+    vector<vec3> velv(p);
+    vec_interface<SPACE>::from(velv, vel);
+    std::cout << "calc: " << velv.size() << std::endl;
+
+    vector<vec3> forces = this->calc_f(_surf, N, 1.0 * _reg);
+    std::cout << " checking internal collisions" << std::endl;
+    std::cout << " forces: " << forces.size() << std::endl;
+    std::cout << " forces: " << p.size() << std::endl;
+    real C = _reg;
+    // gg::geometry_logger::field(p, forces, 2.0, gg::PresetColor::red);
+    // gg::geometry_logger::field(p, N, 1.0, gg::PresetColor::blue);
+
+    for (int i = 0; i < forces.size(); i++) {
+      vec3 &f = forces[i];
+      f -= N[i];
+      // f = vec3::Zero();
+      vec3 v = vel.segment(3 * i, 3);
+      real fnorm = f.norm();
+      real mx = 0.5 * fnorm;
+      real denom = f.dot(f);
+      denom = denom < 1e-16 ? 1 : denom;
+      // f = 0.5 * v.dot(f) / denom * f;
+      f = -1.0 * va::sgn(v.dot(f)) * v.dot(f) / denom * f;
+      real fn = f.norm();
+      f = fn > mx ? f * mx / fn : f;
+    }
+    gg::geometry_logger::field(p, forces, 1.0, gg::PresetColor::blue);
+
+    _f = vec_interface<SPACE>::to(forces);
+  }
+
+  vector<typename SPACE::vec3>
+  calc_f(asawa::surf<SPACE> *mesh,
+         const std::vector<typename SPACE::vec3> &vertVals,
+         typename SPACE::real regLength = 0.5) {
+    M2_TYPEDEFS;
+
+    typedef Eigen::Matrix<real, 3, 1> vec3;
+    typedef Eigen::Matrix<real, 4, 1> vec4;
+
+    using Avg_Integrator =
+        asawa::Geometry_Integrator<SPACE, vec3, triangle_type, vec3>;
+
+    using ATree = typename Avg_Integrator::Tree;
+    using ANode = typename Avg_Integrator::Node;
+
+    std::vector<vec3> face_normals = ci::get_normals<SPACE>(mesh);
+    coordinate_array vertex_normals = ci::get_vertex_normals<SPACE>(mesh);
+    coordinate_array evalPoints = ci::get_coordinates<SPACE>(mesh);
+
+    std::vector<vec3> faceVals = ci::verts_to_faces<SPACE>(vertVals, mesh);
+
+    if (evalPoints.empty())
+      return std::vector<vec3>();
+
+    auto pre = [faceVals](const vector<triangle_type> &tris, ANode &node,
+                          ATree &tree, vec3 &netCharge,
+                          coordinate_type &avgPoint,
+                          coordinate_type &avgNormal) -> void {
+      avgPoint = coordinate_type(0, 0, 0);
+      avgNormal = coordinate_type(0, 0, 0);
+      netCharge = coordinate_type(0, 0, 0);
+
+      T netWeight = 0;
+
+      for (int i = node.begin; i < node.begin + node.size; i++) {
+        int ii = tree.permutation[i];
+        triangle_type tri = tris[ii];
+        T w = tri.area();
+        avgPoint += w * tri.center();
+        avgNormal += w * tri.normal();
+        netCharge += w * faceVals[ii];
+        netWeight += w;
+      }
+
+      avgPoint /= netWeight;
+    };
+
+    auto computeK = [](T dist, T C) {
+#if 0
+      T d3 = dist * dist * dist;
+      T l3 = C * C * C;
+      T kappa = (1.0 - exp(-d3 / l3)) / d3;
+      return kappa / pow(4.0 * M_PI, 1.5);
+#elif 0
+      T dist3 = dist * dist * dist;
+      T l3 = C * C * C;
+      T kappa = 1.0 / (dist3);
+      return kappa / 4.0 / M_PI;
+#elif 1
+      // T dx = dist - C;
+      T dx = dist;
+
+      T C2 = C * C;
+      T X = dx * dx / 2.0 / C2;
+      T kappa = exp(-X) / pow(2.0 * M_PI * C2, 0.5);
+      return kappa;
+#endif
+    };
+
+    std::vector<real> K(evalPoints.size());
+    auto compute = [&vertex_normals, &faceVals, regLength, &K, &computeK](
+                       int i_c, const vec3 &wq, const coordinate_type &pc,
+                       const coordinate_type &pe, const coordinate_type &N,
+                       const vector<triangle_type> &tris, ANode &node,
+                       ATree &tree) -> vec3 {
+      vec3 out = z::zero<vec3>();
+
+      coordinate_type Nv = vertex_normals[i_c];
+      coordinate_type dp = pc - pe;
+      T dist = va::norm(dp);
+      if (node.isLeaf()) {
+        for (int i = node.begin; i < node.begin + node.size; i++) {
+          int ii = tree.permutation[i];
+          vec3 qi = faceVals[ii];
+          auto tri = tris[ii];
+          auto w = tri.area();
+          auto c = tri.center();
+          coordinate_type dp = c - pe;
+          T dist = va::norm(dp);
+
+          T k = computeK(dist, regLength);
+          out += w * k * qi;
+          K[i_c] += w * k;
+        }
+      } else {
+        coordinate_type dp = pc - pe;
+        T dist = dp.norm();
+        T k = computeK(dist, regLength);
+        out += k * wq;
+        K[i_c] += k * N.norm();
+      }
+      return out;
+    };
+
+    vector<face_ptr> &faces = mesh->get_faces();
+    vector<coordinate_type> normals;
+    vector<triangle_type> triangles;
+    for (int i = 0; i < faces.size(); i++) {
+      if (!mesh->has_face(i))
+        continue;
+      if (faces[i]->size() < 3)
+        continue;
+      std::vector<triangle_type> tris = asawa::ci::get_tris<SPACE>(faces[i]);
+      triangles.insert(triangles.end(), tris.begin(), tris.end());
+    }
+
+    for (auto t : triangles) {
+      normals.push_back(t.normal());
+    }
+
+    vector<vec3> u(evalPoints.size(), z::zero<vec3>());
+    Avg_Integrator integrator;
+    integrator.integrate(faceVals, triangles, evalPoints, u, pre, compute);
+    int i = 0;
+    /*
+        for (auto p : evalPoints) {
+          gg::geometry_logger::line(p, p + u[i++], vec4(1.0, 0.0, 1.0, 1.0));
+        }
+    */
+    i = 0;
+
+    for (auto &ui : u) {
+      ui /= K[i++];
+      // i++;
+    }
+
+    return u;
+  }
+
+  virtual void fill_gradient(vecX &G) { G += _f; }
+
+  virtual void get_hess_triplets(std::vector<triplet> &triplets) {}
+  vecX _f;
+  surf_ptr _surf;
+  real _reg;
+};
+#endif
+
 } // namespace hepworth
 #endif

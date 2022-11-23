@@ -5,7 +5,11 @@
 #include <GaudiGraphics/viewer.hpp>
 #include <GaudiMath/typedefs.hpp>
 #include <cassert>
-#include <manifold/m2Includes.h>
+
+#include <manifold/asawa/asawa.h>
+
+#include <manifold/vec_addendum.h>
+
 #include <nanogui/glutil.h>
 
 #include <iostream>
@@ -14,8 +18,8 @@
 namespace gg {
 
 template <typename SPACE>
-void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
-                m2::colorRGB col = m2::colorRGB(1.0, 0.5, 0.5, 1.0)) {
+void fillBuffer(asawa::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
+                asawa::colorRGB col = asawa::colorRGB(1.0, 0.5, 0.5, 1.0)) {
   using namespace nanogui;
   M2_TYPEDEFS;
   std::vector<face_ptr> faces = mesh->get_faces();
@@ -63,7 +67,7 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
 
     for (int i = 0; i < verts.size(); i++) {
       for (int j = 0; j < 3; j++) {
-        coordinate_type ci = m2::ci::get_coordinate<SPACE>(verts[i]);
+        coordinate_type ci = asawa::ci::get_coordinate<SPACE>(verts[i]);
         positions.col(i)[j] = ci[j];
       }
       colors.col(i)[0] = col.r;
@@ -75,8 +79,8 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
 };
 
 template <typename SPACE>
-void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
-                const std::vector<m2::colorRGB> &col) {
+void fillBuffer(asawa::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
+                const std::vector<asawa::colorRGB> &col) {
   using namespace nanogui;
   M2_TYPEDEFS;
   std::vector<face_ptr> faces = mesh->get_faces();
@@ -135,7 +139,7 @@ void fillBuffer(m2::surf<SPACE> *mesh, gg::BufferObjectPtr obj,
 
     for (int i = 0; i < verts.size(); i++) {
       for (int j = 0; j < 3; j++) {
-        coordinate_type ci = m2::ci::get_coordinate<SPACE>(verts[i]);
+        coordinate_type ci = asawa::ci::get_coordinate<SPACE>(verts[i]);
         positions.col(i)[j] = ci[j];
       }
 

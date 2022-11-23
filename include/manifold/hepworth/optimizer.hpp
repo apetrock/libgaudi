@@ -5,8 +5,8 @@
 #include <bits/types/wint_t.h>
 #include <vector>
 
-#include <manifold/harmonic_integrators.hpp>
-#include <manifold/m2.hpp>
+#include <manifold/asawa/m2.hpp>
+#include <manifold/calder/harmonic_integrators.hpp>
 
 #include "solver.hpp"
 
@@ -78,8 +78,8 @@ public:
     coordinate_array gc(positions);
     vec_interface<SPACE>::from(gc, g);
     coordinate_array gf =
-        m2::ci::verts_to_faces<SPACE, coordinate_type>(gc, _surf);
-    m2::mesh_calculator<SPACE> calc;
+        asawa::ci::verts_to_faces<SPACE, coordinate_type>(gc, _surf);
+    asawa::mesh_calculator<SPACE> calc;
     // this needs to be reworked to take a surface topology and a position set
     coordinate_array gn = calc.harmonicAvg(_surf, gf, positions, 1.0 * _reg);
 
@@ -90,7 +90,7 @@ public:
                            const coordinate_array &p1,
                            typename constraint_set<SPACE>::ptr constraint_set) {
     surf_ptr surf = constraint_set->_surf;
-    real reg = 3.0 * m2::ci::geometric_mean_length<SPACE>(surf);
+    real reg = 3.0 * asawa::ci::geometric_mean_length<SPACE>(surf);
 
     coordinate_array pp(p0);
     coordinate_array dp(p0);
@@ -100,9 +100,9 @@ public:
     }
 
     coordinate_array dpf =
-        m2::ci::verts_to_faces<SPACE, coordinate_type>(dp, surf);
+        asawa::ci::verts_to_faces<SPACE, coordinate_type>(dp, surf);
 
-    m2::mesh_calculator<SPACE> calc;
+    calder::mesh_calculator<SPACE> calc;
     // this needs to be reworked to take a surface topology and a position set
     coordinate_array dpn = calc.harmonicAvg(surf, dpf, p0, 1.0 * reg);
 
@@ -166,8 +166,8 @@ public:
     coordinate_array gc(positions);
     vec_interface<SPACE>::from(gc, g);
     coordinate_array gf =
-        m2::ci::verts_to_faces<SPACE, coordinate_type>(gc, _surf);
-    m2::mesh_calculator<SPACE> calc;
+        asawa::ci::verts_to_faces<SPACE, coordinate_type>(gc, _surf);
+    asawa::mesh_calculator<SPACE> calc;
     // this needs to be reworked to take a surface topology and a position set
     coordinate_array gn = calc.harmonicAvg(_surf, gf, positions, 1.0 * _reg);
 
@@ -178,7 +178,7 @@ public:
                            const coordinate_array &p1,
                            typename constraint_set<SPACE>::ptr constraint_set) {
     surf_ptr surf = constraint_set->_surf;
-    real reg = 3.0 * m2::ci::geometric_mean_length<SPACE>(surf);
+    real reg = 3.0 * asawa::ci::geometric_mean_length<SPACE>(surf);
 
     coordinate_array pp(p0);
     coordinate_array dp(p0);
@@ -188,9 +188,9 @@ public:
     }
 
     coordinate_array dpf =
-        m2::ci::verts_to_faces<SPACE, coordinate_type>(dp, surf);
+        asawa::ci::verts_to_faces<SPACE, coordinate_type>(dp, surf);
 
-    m2::mesh_calculator<SPACE> calc;
+    calder::mesh_calculator<SPACE> calc;
     // this needs to be reworked to take a surface topology and a position set
     coordinate_array dpn = calc.harmonicAvg(surf, dpf, p0, 1.0 * reg);
 

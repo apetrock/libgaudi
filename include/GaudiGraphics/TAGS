@@ -30,7 +30,7 @@ inline float Q_rsqrt( float number )Q_rsqrt521,13627
 inline Eigen::Matrix<T,3,1> fnormalize(Eigen::Matrix<T,3,1> vecin){fnormalize539,14136
 
 /home/jdelaney/code/libgaudi/src/manifold/debugger.cpp,1150
-namespace m2 {m212,182
+namespace asawa {m212,182
   bool      Debugger::instance_flag = false;instance_flag18,270
   Debugger* Debugger::global_instance = NULL;global_instance19,315
   Debugger& Debugger::get_instance(){get_instance21,362
@@ -52,7 +52,7 @@ namespace m2 {m212,182
 
 /home/jdelaney/code/libgaudi/src/manifold/m2Spring.hpp,2848
 #define __TWOMANIFOLDSPRING____TWOMANIFOLDSPRING__10,165
-namespace m2 {m220,344
+namespace asawa {m220,344
   class spring{ M2_TYPEDEFS;spring23,392
   class spring{ M2_TYPEDEFS;M2_TYPEDEFS23,392
   typedef coordinate_type							point_type ;point_type24,421
@@ -107,7 +107,7 @@ namespace m2 {m220,344
 
 /home/jdelaney/code/libgaudi/src/manifold/debugger.h,1561
 #define __MANIFOLD_DEBUGGER____MANIFOLD_DEBUGGER__14,232
-namespace m2 {m216,263
+namespace asawa {m216,263
   class Debugger{Debugger18,279
     typedef Eigen::Matrix<double,4,1> coordinate_type;coordinate_type19,297
     std::vector<coordinate_type> DebugBoxes; //center and half pointsDebugBoxes51,971
@@ -134,7 +134,7 @@ namespace m2 {m216,263
 
 /home/jdelaney/code/libgaudi/src/manifold/convex_hull.hpp,721
 #define __TWOMANICONVEXHULL____TWOMANICONVEXHULL__11,176
-namespace m2 {m221,363
+namespace asawa {m221,363
   class convex_hull  {convex_hull23,406
     struct face_bundle{face_bundle29,655
       face_ptr cface;cface30,679
@@ -150,7 +150,7 @@ namespace m2 {m221,363
 
 /home/jdelaney/code/libgaudi/src/manifold/construct.hpp,3219
 #define __TWOMANIFOLDFUNCTIONS____TWOMANIFOLDFUNCTIONS__11,179
-namespace m2 {	m214,237
+namespace asawa {	m214,237
   class geometry_helper{geometry_helper17,282
     M2_TYPEDEFS;M2_TYPEDEFS19,317
     inline coordinate_type periodicTangent(vector<coordinate_type> & path, int i){periodicTangent21,335
@@ -258,7 +258,7 @@ namespace m1 {m115,260
 
 /home/jdelaney/code/libgaudi/src/manifold/edge_point_subdividers.hpp,576
 #define __M2EDGEPOINTSUBDIVIDE____M2EDGEPOINTSUBDIVIDE__11,171
-namespace m2 {m217,365
+namespace asawa {m217,365
   class epSubdivide{epSubdivide19,408
     M2_TYPEDEFS;M2_TYPEDEFS20,429
     void inset_vertex(surf_ptr in, vertex_ptr v){inset_vertex22,456
@@ -268,7 +268,7 @@ namespace m2 {m217,365
 
 /home/jdelaney/code/libgaudi/src/manifold/manifold_singleton.h,729
 #define __MANIFOLD_SINGLETON____MANIFOLD_SINGLETON__13,209
-namespace m2 {m214,240
+namespace asawa {m214,240
   class ID{ID15,255
     bool& initialized(){return instance_flag;}initialized23,450
     bool  initialized() const {return instance_flag;}initialized24,497
@@ -291,14 +291,14 @@ al::Vec<3,T> rotate_to_xy(al::Vec<3,T> norm, al::Vec<3,T> cen, al::Vec<3,T> vec)
 al::Vec<3,T> rotate_from_xy(al::Vec<3,T> norm, al::Vec<3,T> cen, al::Vec<3,T> vec){rotate_from_xy51,1415
 al::Quat<T> naive_slerp(const al::Quat<T>& input, const al::Quat<T>& target, T amt){naive_slerp64,1810
 al::Vec<3,T> blend(T t, al::Vec<3,T> p00, al::Vec<3,T> pNorm,blend113,2847
-namespace m2 {m2159,4007
+namespace asawa {m2159,4007
   class add_handle{add_handle161,4050
     bool add(surf_ptr ob, long i, long j, T teni, T tenj){add164,4099
     bool slerp_face(T t, face_ptr fi, face_ptr fj){slerp_face255,7005
 
 /home/jdelaney/code/libgaudi/src/manifold/remesh.hpp,1905
 #define __REMESH____REMESH__18,292
-namespace m2 {m223,375
+namespace asawa {m223,375
   class remesh{remesh25,418
     remesh(){}remesh29,471
     ~remesh(){}~remesh30,486
@@ -327,7 +327,7 @@ namespace m2 {m223,375
     void reverse(surf_ref	rhs){reverse761,21331
 
 /home/jdelaney/code/libgaudi/src/manifold/manifold_singleton.cpp,377
-namespace m2 {m212,192
+namespace asawa {m212,192
   bool ID::instance_flag = false;instance_flag13,207
   ID* ID::global_instance = NULL;global_instance14,241
   ID& ID::get_instance(){get_instance16,277
@@ -338,7 +338,7 @@ namespace m2 {m212,192
 
 /home/jdelaney/code/libgaudi/src/manifold/surface_calculator.hpp,1848
 #define __M2SURFACE_CALCULATOR____M2SURFACE_CALCULATOR__2,33
-namespace m2 {m219,315
+namespace asawa {m219,315
   inline void calcSVD(typename SPACE::coordinate_type * vec,calcSVD22,357
   inline void calcSVD(typename SPACE::matrix3 & mi,calcSVD40,920
   class surface_calculator{ M2_TYPEDEFS;surface_calculator59,1471
@@ -349,16 +349,16 @@ namespace m2 {m219,315
     T cotan(face_vertex_ptr fv){cotan116,2906
     T getEdgeWeight(edge_ptr ei){getEdgeWeight125,3153
     T willmore(face_vertex_ptr fv){willmore132,3321
-    void calcDiffuseQuantity(m2::surf<SPACE>& in,calcDiffuseQuantity146,3878
-    void calcDiffuseQuantity(m2::surf<SPACE>& in,calcDiffuseQuantity187,5031
-    void calcCurveFlowNormal(m2::surf<SPACE>& in,calcCurveFlowNormal227,6151
-    void calcWillmoreEnergy(m2::surf<SPACE>& in,calcWillmoreEnergy282,7754
-    void calcDiffuseCurveFlowNormal(m2::surf<SPACE>& in,calcDiffuseCurveFlowNormal322,8770
-    std::vector<vertex_ptr> getLocalVertices(m2::surf<SPACE>& in,getLocalVertices331,9084
-    void calcCovariance(m2::surf<SPACE>& in, calcCovariance369,10120
-    std::vector<edge_ptr> getEdgesNearPoint(m2::surf<SPACE>& in,getEdgesNearPoint394,10821
-    std::vector<edge_ptr> getLocalEdges(m2::surf<SPACE>& in,getLocalEdges461,12540
-    void calculateBiDirection(m2::surf<SPACE>& in, calculateBiDirection505,13754
+    void calcDiffuseQuantity(asawa::surf<SPACE>& in,calcDiffuseQuantity146,3878
+    void calcDiffuseQuantity(asawa::surf<SPACE>& in,calcDiffuseQuantity187,5031
+    void calcCurveFlowNormal(asawa::surf<SPACE>& in,calcCurveFlowNormal227,6151
+    void calcWillmoreEnergy(asawa::surf<SPACE>& in,calcWillmoreEnergy282,7754
+    void calcDiffuseCurveFlowNormal(asawa::surf<SPACE>& in,calcDiffuseCurveFlowNormal322,8770
+    std::vector<vertex_ptr> getLocalVertices(asawa::surf<SPACE>& in,getLocalVertices331,9084
+    void calcCovariance(asawa::surf<SPACE>& in, calcCovariance369,10120
+    std::vector<edge_ptr> getEdgesNearPoint(asawa::surf<SPACE>& in,getEdgesNearPoint394,10821
+    std::vector<edge_ptr> getLocalEdges(asawa::surf<SPACE>& in,getLocalEdges461,12540
+    void calculateBiDirection(asawa::surf<SPACE>& in, calculateBiDirection505,13754
     void calculateBiDirectionField(surf_ref in,calculateBiDirectionField538,14665
     void shadeVertices(surf_ref mesh){shadeVertices586,16029
     void shadeVerticesWillmore(surf_ref mesh){shadeVerticesWillmore614,16809
@@ -423,21 +423,21 @@ class   OctreeOctree167,4088
   typedef typename SPACE::mat3          mat3;	         	\mat351,1220
   typedef typename SPACE::mat4          mat4;	         	\mat452,1278
   typedef typename SPACE::double_type	 	   T;                   \T53,1336
-  typedef	m2::face<SPACE>		    face_type;                  \face_type54,1402
-  typedef	m2::edge<SPACE>             edge_type;			\edge_type55,1463
-  typedef	m2::vertex<SPACE>	    vertex_type;	        \vertex_type56,1516
-  typedef	m2::face_vertex<SPACE>      face_vertex_type;		\face_vertex_type57,1571
-  typedef	m2::surf<SPACE>	    surf_type;	        \surf_type58,1630
-  typedef       m2::face<SPACE>*	    face_ptr;   \face_ptr59,1687
-  typedef       m2::edge<SPACE>*	    edge_ptr;   \edge_ptr60,1738
-  typedef       m2::vertex<SPACE>*      vertex_ptr;    \vertex_ptr61,1789
-  typedef       m2::face_vertex<SPACE>* face_vertex_ptr; \face_vertex_ptr62,1846
-  typedef       m2::surf<SPACE>*     surf_ptr;   \surf_ptr63,1905
-  typedef	m2::face<SPACE>&	    face_ref;	                \face_ref65,1971
-  typedef	m2::edge<SPACE>&	    edge_ref;	                \edge_ref66,2030
-  typedef	m2::vertex<SPACE>&          vertex_ref;			\vertex_ref67,2089
-  typedef	m2::face_vertex<SPACE>&     face_vertex_ref;		\face_vertex_ref68,2143
-  typedef	m2::surf<SPACE>&         surf_ref;		\surf_ref69,2201
+  typedef	asawa::face<SPACE>		    face_type;                  \face_type54,1402
+  typedef	asawa::edge<SPACE>             edge_type;			\edge_type55,1463
+  typedef	asawa::vertex<SPACE>	    vertex_type;	        \vertex_type56,1516
+  typedef	asawa::face_vertex<SPACE>      face_vertex_type;		\face_vertex_type57,1571
+  typedef	asawa::surf<SPACE>	    surf_type;	        \surf_type58,1630
+  typedef       asawa::face<SPACE>*	    face_ptr;   \face_ptr59,1687
+  typedef       asawa::edge<SPACE>*	    edge_ptr;   \edge_ptr60,1738
+  typedef       asawa::vertex<SPACE>*      vertex_ptr;    \vertex_ptr61,1789
+  typedef       asawa::face_vertex<SPACE>* face_vertex_ptr; \face_vertex_ptr62,1846
+  typedef       asawa::surf<SPACE>*     surf_ptr;   \surf_ptr63,1905
+  typedef	asawa::face<SPACE>&	    face_ref;	                \face_ref65,1971
+  typedef	asawa::edge<SPACE>&	    edge_ref;	                \edge_ref66,2030
+  typedef	asawa::vertex<SPACE>&          vertex_ref;			\vertex_ref67,2089
+  typedef	asawa::face_vertex<SPACE>&     face_vertex_ref;		\face_vertex_ref68,2143
+  typedef	asawa::surf<SPACE>&         surf_ref;		\surf_ref69,2201
   typedef vector<coordinate_type >		coordinate_array;	\coordinate_array71,2266
   typedef	vector<face_ptr>		face_array;             \face_array72,2322
   typedef	vector<edge_ptr>		edge_array;             \edge_array73,2376
@@ -457,7 +457,7 @@ class   OctreeOctree167,4088
   typedef typename list<edge_ptr>::iterator			el_iterator; \el_iterator90,3235
   typedef typename list<vertex_ptr>::iterator			vl_iterator; \vl_iterator91,3296
   typedef typename list<face_vertex_ptr>::iterator	fvl_iterator;		fvl_iterator92,3359
-namespace m2 {m296,3449
+namespace asawa {m296,3449
   struct bounding_box{bounding_box121,3829
     M2_TYPEDEFS;M2_TYPEDEFS122,3852
     coordinate_type min;min124,3879
@@ -629,7 +629,7 @@ namespace m2 {m296,3449
     int mFacePosition;mFacePosition1326,32735
     unsigned int flag;flag1328,32768
     T data;data1329,32791
-  void for_each(m2::vertex<SPACE> * v, F& func){for_each1334,32851
+  void for_each(asawa::vertex<SPACE> * v, F& func){for_each1334,32851
   class vertex{vertex1348,33155
     M2_TYPEDEFS;M2_TYPEDEFS1349,33171
     int graphColor;graphColor1351,33200
@@ -753,7 +753,7 @@ namespace m2 {m296,3449
 
 /home/jdelaney/code/libgaudi/src/manifold/graph_skinning.hpp,548
 #define __TWOMANIFOLDGRAPHSKIN____TWOMANIFOLDGRAPHSKIN__11,182
-namespace m2 {m221,353
+namespace asawa {m221,353
   class graph_skinning  {graph_skinning23,396
     M2_TYPEDEFS;M2_TYPEDEFS25,511
     T radius;radius27,540
@@ -765,7 +765,7 @@ namespace m2 {m221,353
 
 /home/jdelaney/code/libgaudi/src/manifold/objloader.hpp,1509
 #define __OBJ_LOADER____OBJ_LOADER__28,465
-namespace m2 {m230,489
+namespace asawa {m230,489
   class merge_proc {merge_proc33,597
     M2_TYPEDEFS;M2_TYPEDEFS34,618
     typedef Octree<T,vertex_type> Vtree;Vtree36,645
@@ -777,7 +777,7 @@ namespace m2 {m230,489
     typedef typename SPACE::coordinate_type VecT;VecT87,2051
     obj_loader(){}obj_loader88,2101
     ~obj_loader(){}~obj_loader89,2120
-    m2::surf<SPACE>& operator()(string s){operator ()90,2140
+    asawa::surf<SPACE>& operator()(string s){operator ()90,2140
     typedef Octree<T,vertex_type> Vtree;Vtree99,2604
     Vtree* build_octree(surf_ptr in_){build_octree100,2645
     void merge_vertices(surf_ptr in_, vector<list<face_vertex_ptr> > & corners){merge_vertices117,3098
@@ -786,15 +786,15 @@ namespace m2 {m230,489
     void stitch_edges(surf_ptr obj, vertex_ptr vert, list<face_vertex_ptr> & rFaceVertices){stitch_edges164,4628
     surf_ref buildObj(vector<coordinate_type> & inputVerts,buildObj191,5552
     surf_ref loadfile(string s){loadfile262,7489
-  void writeOBJ(m2::surf<SPACE>& obj, string filename)writeOBJ357,9969
-  void writePBRT(m2::surf<SPACE>& obj, const char* filename)writePBRT391,11112
+  void writeOBJ(asawa::surf<SPACE>& obj, string filename)writeOBJ357,9969
+  void writePBRT(asawa::surf<SPACE>& obj, const char* filename)writePBRT391,11112
 
 /home/jdelaney/code/libgaudi/src/manifold/m2Operators.h,37
 #define __M2OPPS____M2OPPS__10,267
 
 /home/jdelaney/code/libgaudi/src/manifold/make.hpp,530
 #define __TWOMANIFOLDMAKE____TWOMANIFOLDMAKE__10,175
-namespace m2 {m218,316
+namespace asawa {m218,316
   class make  {make20,359
     make(){};make24,492
     ~make(){};~make25,506
@@ -807,21 +807,21 @@ namespace m2 {m218,316
 
 /home/jdelaney/code/libgaudi/src/manifold/surface_filters.hpp,1241
 #define __M2SURFACE_FILTER____M2SURFACE_FILTER__2,29
-namespace m2{m220,341
+namespace asawa{m220,341
   class surface_filter{ M2_TYPEDEFS;surface_filter22,383
   class surface_filter{ M2_TYPEDEFS;M2_TYPEDEFS22,383
-    void filterCutoff(m2::surf<SPACE>& in,filterCutoff26,432
-    static void filter(m2::surf<SPACE>& in, T strength){filter80,1893
-    static void cuspFilter(m2::surf<SPACE>& in, T strength){cuspFilter129,3223
+    void filterCutoff(asawa::surf<SPACE>& in,filterCutoff26,432
+    static void filter(asawa::surf<SPACE>& in, T strength){filter80,1893
+    static void cuspFilter(asawa::surf<SPACE>& in, T strength){cuspFilter129,3223
     static coordinate_type laplacianFilterVertex(vertex_ptr v){laplacianFilterVertex180,4671
     static coordinate_type projectOntoLine(const coordinate_type& v0, projectOntoLine221,5643
-    static void mlsFilter(m2::surf<SPACE>& in, T strength, T dx){mlsFilter231,5970
-    static void laplacianFilter(m2::surf<SPACE>& in, T strength){laplacianFilter278,7383
-    static void taubinFilter(m2::surf<SPACE>& in, T a,T b){taubinFilter300,8116
-    static void cacheTensor(m2::surf<SPACE>& in, cacheTensor335,9228
+    static void mlsFilter(asawa::surf<SPACE>& in, T strength, T dx){mlsFilter231,5970
+    static void laplacianFilter(asawa::surf<SPACE>& in, T strength){laplacianFilter278,7383
+    static void taubinFilter(asawa::surf<SPACE>& in, T a,T b){taubinFilter300,8116
+    static void cacheTensor(asawa::surf<SPACE>& in, cacheTensor335,9228
     static coordinate_type nullLaplacianFilterVertex(vertex_ptr v,nullLaplacianFilterVertex367,10108
-    static void nullLaplacianFilter(m2::surf<SPACE>& in, T strength){nullLaplacianFilter407,11209
-    void flaggedFilter(m2::surf<SPACE>& in, T strength){flaggedFilter443,12412
+    static void nullLaplacianFilter(asawa::surf<SPACE>& in, T strength){nullLaplacianFilter407,11209
+    void flaggedFilter(asawa::surf<SPACE>& in, T strength){flaggedFilter443,12412
 
 /home/jdelaney/code/libgaudi/src/manifold/m1Includes.h,0
 
@@ -1011,7 +1011,7 @@ inline Eigen::Matrix<T,4,1> cross(const Eigen::Matrix<T,4,1>& vecA, cross303,7
 
 /home/jdelaney/code/libgaudi/src/manifold/moving_mesh.hpp,12064
 #define __M2MOVING____M2MOVING__2,21
-namespace m2 {m223,380
+namespace asawa {m223,380
   class set_operations{ M2_TYPEDEFS;set_operations26,424
   class set_operations{ M2_TYPEDEFS;M2_TYPEDEFS26,424
     static bool flip_edges(surf_ptr obj){flip_edges28,471
@@ -1075,13 +1075,13 @@ namespace m2 {m223,380
     typedef coordinate_type	point_type;point_type1298,42736
     typedef typename SPACE::triangle_type	        triangle;triangle1299,42776
     typedef typename list<coordinate_type >::iterator	pl_iterator;pl_iterator1300,42836
-    typedef typename m2::Debugger Debugger;Debugger1301,42903
+    typedef typename asawa::Debugger Debugger;Debugger1301,42903
     moving_mesh(surf_ptr obj_in){moving_mesh1304,42958
     face_bin<SPACE> & getHash(){return mFaceHash;}getHash1331,43868
     void pin_half(){pin_half1333,43920
     void drawField(){drawField1352,44356
     coordinate_type getSvdNormal(vertex_ptr v){getSvdNormal1387,45445
-    vector<coordinate_type> getFaceOffsets(m2::surf<SPACE>& in){getFaceOffsets1425,46399
+    vector<coordinate_type> getFaceOffsets(asawa::surf<SPACE>& in){getFaceOffsets1425,46399
     coordinate_type getButterflyVertexWeight(face_vertex_ptr v){getButterflyVertexWeight1443,46943
     coordinate_type getButterflyWeight(edge_ptr e){getButterflyWeight1480,48028
     coordinate_type getAverageWeight(edge_ptr e){getAverageWeight1488,48301
@@ -1251,7 +1251,7 @@ class bezier_curve{bezier_curve60,1359
 namespace m1 {m141,1226
   class control {control52,1390
     control(){}control56,1495
-    control(m2::control<T>& in){control57,1511
+    control(asawa::control<T>& in){control57,1511
     void reset_flags(){reset_flags84,2317
     size_t size_edge(){return mEdges.size();}size_edge91,2458
     size_t size_vertex(){return mVertices.size();}size_vertex92,2504
@@ -1412,7 +1412,7 @@ namespace m1 {m141,1226
 /home/jdelaney/code/libgaudi/src/manifold/bins.hpp,13709
 #define __M2BINS____M2BINS__2,19
 bool boxOverlap(space3::triangle_type& tri, boxOverlap16,237
-namespace m2 {m223,450
+namespace asawa {m223,450
   struct line_tests{line_tests25,493
     M2_TYPEDEFS;M2_TYPEDEFS26,514
     inline bool ray_triangle_intersect(const coordinate_type& r0,ray_triangle_intersect28,532
@@ -1712,7 +1712,7 @@ class HeapHeap55,1133
 
 /home/jdelaney/code/libgaudi/src/manifold/subdivide.hpp,793
 #define __SUBDIVIDE____SUBDIVIDE__10,159
-namespace m2 {m215,245
+namespace asawa {m215,245
   class subdivide{subdivide17,288
     subdivide(){}subdivide21,344
     ~subdivide(){}~subdivide22,362
@@ -1755,7 +1755,7 @@ Eigen::Matrix<T,4,1> rotate_to_xy(Eigen::Matrix<T,4,1> norm, rotate_to_xy37,10
 Eigen::Matrix<T,4,1> rotate_from_xy(Eigen::Matrix<T,4,1> norm, rotate_from_xy51,1512
 Eigen::Quaternion<T> naive_slerp(const Eigen::Quaternion<T>& input, const Eigen::Quaternion<T>& target, T amt){naive_slerp66,1990
 Eigen::Matrix<T,4,1> blend(T t, Eigen::Matrix<T,4,1> p00, Eigen::Matrix<T,4,1> pNorm,blend115,3063
-namespace m2 {m2161,4357
+namespace asawa {m2161,4357
   class add_handle{add_handle163,4400
     M2_TYPEDEFS;M2_TYPEDEFS164,4420
     bool add(surf_ptr ob, long i, long j, T teni, T tenj){add166,4447
@@ -1763,7 +1763,7 @@ namespace m2 {m2161,4357
 
 /home/jdelaney/code/libgaudi/src/manifold/modify.hpp,742
 #define __M2MODIFY____M2MODIFY__11,159
-namespace m2 {m217,245
+namespace asawa {m217,245
   class modify{modify19,288
     M2_TYPEDEFS;M2_TYPEDEFS20,304
     modify(){}modify22,333
@@ -1779,7 +1779,7 @@ namespace m2 {m217,245
 
 /home/jdelaney/code/libgaudi/src/manifold/fdt.hpp,3604
 #define __FDTBIN____FDTBIN__2,19
-namespace m2 {m219,298
+namespace asawa {m219,298
   struct LeafBlock{ LeafBlock23,361
     M2_TYPEDEFS;M2_TYPEDEFS24,382
     LeafBlock(){}LeafBlock26,404
@@ -1823,7 +1823,7 @@ namespace m2 {m219,298
     coordinate_type mcenter;mcenter194,4413
     coordinate_type mlengths;mlengths195,4442
   void testBins(){    testBins206,4678
-  makeBlock(m2::surf<SPACE> *  mesh){makeBlock244,5695
+  makeBlock(asawa::surf<SPACE> *  mesh){makeBlock244,5695
   class BlockTree : public Block<SPACE, L0, Block<SPACE, L1, Block<SPACE,L2, LeafBlock<SPACE, BLOCK_T> > > >{BlockTree269,6530
     M2_TYPEDEFS;M2_TYPEDEFS271,6641
     typedef Block<SPACE, L0, Block<SPACE, L1, Block<SPACE,L2, LeafBlock<SPACE,BLOCK_T> > > >  Root;Root274,6674
@@ -1845,12 +1845,12 @@ namespace m2 {m219,298
     int mLN0, mLN1, mLN2;mLN0407,11569
     int mLN0, mLN1, mLN2;mLN1407,11569
     int mLN0, mLN1, mLN2;mLN2407,11569
-    makeTree(m2::surf<SPACE> *  mesh){makeTree413,11720
-    makeTriTree(m2::surf<SPACE> *  mesh){makeTriTree441,12792
+    makeTree(asawa::surf<SPACE> *  mesh){makeTree413,11720
+    makeTriTree(asawa::surf<SPACE> *  mesh){makeTriTree441,12792
 
 /home/jdelaney/code/libgaudi/src/manifold/attic/m2Control.hpp,2827
 #define __TWOMANIFOLDCONTROL____TWOMANIFOLDCONTROL__10,178
-namespace m2 {	m217,330
+namespace asawa {	m217,330
   class control {				control19,374
     control(){control23,427
     control(control* rhs){control27,482
@@ -1902,7 +1902,7 @@ namespace m2 {	m217,330
 /home/jdelaney/code/libgaudi/src/manifold/attic/m2Common.hpp,639
 #define __TWOMANIFOLDCOMMON____TWOMANIFOLDCOMMON__11,175
 #define M2_TYPEDEFS	M2_TYPEDEFS29,558
-namespace m2 {m277,2872
+namespace asawa {m277,2872
   struct colorRGB {colorRGB109,3659
     double r,g,b,a;r110,3679
     double r,g,b,a;g110,3679
@@ -1916,7 +1916,7 @@ namespace m2 {m277,2872
 
 /home/jdelaney/code/libgaudi/src/manifold/attic/m2FaceVertex.hpp,3355
 #define __TWOMANIFOLDFACEVERTEX____TWOMANIFOLDFACEVERTEX__11,183
-namespace m2 {m218,335
+namespace asawa {m218,335
   class face_vertex{face_vertex20,378
     face_vertex(){face_vertex26,436
     face_vertex(const face_vertex_ref rhs){face_vertex37,655
@@ -1977,7 +1977,7 @@ namespace m2 {m218,335
 
 /home/jdelaney/code/libgaudi/src/manifold/attic/m2Edge.hpp,1759
 #define __TWOMANIFOLDEDGE____TWOMANIFOLDEDGE__10,172
-namespace m2 {m218,325
+namespace asawa {m218,325
   class edge{edge20,368
     edge(){edge25,418
     edge(face_vertex_ref in1, face_vertex_ref in2){edge33,577
@@ -2013,7 +2013,7 @@ namespace m2 {m218,325
 
 /home/jdelaney/code/libgaudi/src/manifold/attic/m2Vertex.hpp,3557
 #define __TWOMANIFOLDVERTEX____TWOMANIFOLDVERTEX__10,174
-namespace m2 {m218,342
+namespace asawa {m218,342
   class vertex{vertex20,385
     colorRGB color;color23,429
     vertex(){vertex25,450
@@ -2074,7 +2074,7 @@ namespace m2 {m218,342
 
 /home/jdelaney/code/libgaudi/src/manifold/attic/m2Face.hpp,2812
 #define __TWOMANIFOLDFACE____TWOMANIFOLDFACE__10,172
-namespace m2 {m220,376
+namespace asawa {m220,376
   class face{face22,419
     face(){face28,487
     face(vertex_ref pnt){face38,736

@@ -163,13 +163,13 @@ public:
 
   void initScene() {
 
-    m2::obj_loader<stretch> load;
-    m2::subdivide<stretch> sub;
-    m2::make<stretch> mk;
-    m2::convex_hull<stretch> ch;
+    asawa::obj_loader<stretch> load;
+    asawa::subdivide<stretch> sub;
+    asawa::make<stretch> mk;
+    asawa::convex_hull<stretch> ch;
 
-    m2::construct<stretch> bevel;
-    m2::affine<stretch> mod;
+    asawa::construct<stretch> bevel;
+    asawa::affine<stretch> mod;
     std::string start_frame = "";
     // std::string start_frame = "stretch.46.gaudi";
     if (!start_frame.empty()) {
@@ -194,7 +194,7 @@ public:
       //_meshGraph = &sub.subdivide_control(*_meshGraph);
       //_meshGraph = &sub.subdivide_control(*_meshGraph);
 
-      m2::remesh<stretch> rem;
+      asawa::remesh<stretch> rem;
       rem.triangulate(_meshGraph);
       //_meshGraph = &sub.subdivide_control(*_meshGraph);
 
@@ -208,9 +208,10 @@ public:
     }
 
     int N = 0;
-    //_integrator = new m2::surf_integrator<stretch>(_meshGraph, 0.2, 3.0,
+    //_integrator = new asawa::surf_integrator<stretch>(_meshGraph, 0.2, 3.0,
     // 0.35);
-    _integrator = new m2::surf_integrator<stretch>(_meshGraph, 0.1, 3.0, 0.5);
+    _integrator =
+        new asawa::surf_integrator<stretch>(_meshGraph, 0.1, 3.0, 0.5);
     _integrator->add_default_vertex_policy<typename stretch::real>(
         stretch::vertex_index::SMOOTH);
     _max = _integrator->_max;
@@ -230,13 +231,14 @@ public:
   }
 
   template <typename SPACE>
-  vector<m2::colorRGB> getColor(m2::surf<SPACE> *surf) {
+  vector<asawa::colorRGB> getColor(asawa::surf<SPACE> *surf) {
     M2_TYPEDEFS;
-    auto smooth = m2::ci::get<SPACE, real>(surf, SPACE::vertex_index::SMOOTH);
+    auto smooth =
+        asawa::ci::get<SPACE, real>(surf, SPACE::vertex_index::SMOOTH);
 
-    m2::cotan_curvature<SPACE> curve(surf);
+    asawa::cotan_curvature<SPACE> curve(surf);
     std::vector<real> K = curve();
-    std::vector<m2::colorRGB> vert_colors(smooth.size());
+    std::vector<asawa::colorRGB> vert_colors(smooth.size());
     int i = 0;
     for (auto v : surf->get_vertices()) {
       typename SPACE::real k = K[i];
@@ -246,8 +248,8 @@ public:
       typename SPACE::coordinate_type colorS(1.0, 0.0, 0.0);
       typename SPACE::coordinate_type colorC(0.56, 0.50, 0.60);
 
-      typename SPACE::coordinate_type mx = m2::va::mix(s, colorS, colorC);
-      vert_colors[i] = m2::colorRGB(mx[0], mx[1], mx[2], 1.0);
+      typename SPACE::coordinate_type mx = va::mix(s, colorS, colorC);
+      vert_colors[i] = asawa::colorRGB(mx[0], mx[1], mx[2], 1.0);
       i++;
     }
     return vert_colors;
@@ -271,9 +273,8 @@ public:
                   const std::vector<typename SPACE::vec3> &p1, double D = 0.1,
                   int col = 0) {
     double mx =
-        std::accumulate(p1.begin(), p1.end(), 0.0, [](double a, auto &c) {
-          return max(a, m2::va::norm(c));
-        });
+        std::accumulate(p1.begin(), p1.end(), 0.0,
+                        [](double a, auto &c) { return max(a, va::norm(c)); });
 
     for (int i = 0; i < p0.size(); i++) {
 
@@ -282,13 +283,13 @@ public:
 
       auto pa = p + D * a / mx;
       // std::cout << a.transpose() << std::endl;
-      auto c = grey(m2::va::norm(a));
+      auto c = grey(va::norm(a));
       if (col == 1)
-        c = red(m2::va::norm(a));
+        c = red(va::norm(a));
       if (col == 2)
-        c = green(m2::va::norm(a));
+        c = green(va::norm(a));
       if (col == 3)
-        c = blue(m2::va::norm(a));
+        c = blue(va::norm(a));
 
       _debugLines->pushLine(Vec4(p[0], p[1], p[2], 1.0),
                             Vec4(pa[0], pa[1], pa[2], 1.0),
@@ -298,15 +299,16 @@ public:
 
   template <typename SPACE>
   std::vector<typename SPACE::vec3>
-  make_smooth(m2::surf<stretch> *surf,
+  make_smooth(asawa::surf<stretch> *surf,
               const std::vector<typename SPACE::vec3> &field_vert,
               const std::vector<stretch::vec3> &positions, double reg) {
     M2_TYPEDEFS;
 
-    m2::mesh_calculator<SPACE> calc;
+    asawa::mesh_calculator<SPACE> calc;
 
     std::vector<typename SPACE::vec3> field_face =
-        m2::ci::verts_to_faces<SPACE, typename SPACE::vec3>(field_vert, surf);
+        asawa::ci::verts_to_faces<SPACE, typename SPACE::vec3>(field_vert,
+                                                               surf);
 
     std::vector<typename SPACE::vec3> field_vert_smooth =
         calc.harmonicAvg(surf, field_face, positions, reg);
@@ -315,15 +317,16 @@ public:
 
   template <typename SPACE>
   std::vector<typename SPACE::vec3>
-  make_div_free(m2::surf<stretch> *surf,
+  make_div_free(asawa::surf<stretch> *surf,
                 const std::vector<typename SPACE::vec3> &field_vert,
                 const std::vector<stretch::vec3> &positions, double reg) {
     M2_TYPEDEFS;
 
-    m2::mesh_calculator<SPACE> calc;
+    asawa::mesh_calculator<SPACE> calc;
 
     std::vector<typename SPACE::vec3> field_face =
-        m2::ci::verts_to_faces<SPACE, typename SPACE::vec3>(field_vert, surf);
+        asawa::ci::verts_to_faces<SPACE, typename SPACE::vec3>(field_vert,
+                                                               surf);
 
     std::vector<typename SPACE::vec3> field_vert_smooth =
         calc.harmonicAvg(surf, field_face, positions, reg);
@@ -333,7 +336,7 @@ public:
             surf, field_face, positions, reg);
 
     std::vector<typename SPACE::real> div_face =
-        m2::ci::verts_to_faces<SPACE, typename SPACE::real>(div_vert, surf);
+        asawa::ci::verts_to_faces<SPACE, typename SPACE::real>(div_vert, surf);
 
     std::vector<typename SPACE::vec3> grads =
         calc.template gradient<typename SPACE::vec3, typename SPACE::real>(
@@ -349,12 +352,12 @@ public:
   template <typename SPACE> std::vector<typename SPACE::vec3> calc_vel() {
     M2_TYPEDEFS;
 
-    m2::mesh_calculator<SPACE> calc;
+    asawa::mesh_calculator<SPACE> calc;
     std::vector<stretch::vec3> positions =
-        m2::ci::get_coordinates<stretch>(_meshGraph);
+        asawa::ci::get_coordinates<stretch>(_meshGraph);
 
     std::cout << "creating vecs" << std::endl;
-    std::vector<m2::face_triangle<SPACE>> triangles;
+    std::vector<asawa::face_triangle<SPACE>> triangles;
     auto &faces = _meshGraph->get_faces();
 
     std::cout << 1 << std::endl;
@@ -363,8 +366,8 @@ public:
         continue;
       if (faces[i]->size() < 3)
         continue;
-      std::vector<m2::face_triangle<SPACE>> tris =
-          m2::ci::get_tris<SPACE>(faces[i]);
+      std::vector<asawa::face_triangle<SPACE>> tris =
+          asawa::ci::get_tris<SPACE>(faces[i]);
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
 
@@ -390,7 +393,7 @@ public:
     std::vector<typename SPACE::mat43> cov =
         calc.template covariance(_meshGraph, centers, reg);
 
-    coordinate_type c = m2::ci::center<SPACE>(_meshGraph);
+    coordinate_type c = asawa::ci::center<SPACE>(_meshGraph);
     std::vector<typename SPACE::vec3> stretchV(positions.size());
 
     int i = 0;
@@ -402,9 +405,9 @@ public:
       coordinate_type u = U.col(k).transpose();
 
       coordinate_type s = US.row(3);
-      typename SPACE::real du = m2::va::dot(u, dp);
+      typename SPACE::real du = va::dot(u, dp);
       // std::cout << s.transpose() << std::endl;
-      stretchV[i] = m2::va::sgn(du) * s[k] * u;
+      stretchV[i] = va::sgn(du) * s[k] * u;
       i++;
     }
     // std::vector<typename SPACE::vec3> smooth_stretch =
@@ -420,12 +423,12 @@ public:
   template <typename SPACE> std::vector<typename SPACE::vec3> calc_vel_1() {
     M2_TYPEDEFS;
 
-    m2::mesh_calculator<SPACE> calc;
+    asawa::mesh_calculator<SPACE> calc;
     std::vector<stretch::vec3> positions =
-        m2::ci::get_coordinates<stretch>(_meshGraph);
+        asawa::ci::get_coordinates<stretch>(_meshGraph);
 
     std::cout << "creating vecs" << std::endl;
-    std::vector<m2::face_triangle<SPACE>> triangles;
+    std::vector<asawa::face_triangle<SPACE>> triangles;
     auto &faces = _meshGraph->get_faces();
 
     std::cout << 1 << std::endl;
@@ -434,8 +437,8 @@ public:
         continue;
       if (faces[i]->size() < 3)
         continue;
-      std::vector<m2::face_triangle<SPACE>> tris =
-          m2::ci::get_tris<SPACE>(faces[i]);
+      std::vector<asawa::face_triangle<SPACE>> tris =
+          asawa::ci::get_tris<SPACE>(faces[i]);
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
 
@@ -462,7 +465,7 @@ public:
     std::vector<typename SPACE::mat43> cov =
         calc.template curvature(_meshGraph, centers, reg);
 
-    coordinate_type c = m2::ci::center<SPACE>(_meshGraph);
+    coordinate_type c = asawa::ci::center<SPACE>(_meshGraph);
     std::vector<typename SPACE::vec3> stretchV(positions.size());
 
     int i = 0;
@@ -474,15 +477,15 @@ public:
       coordinate_type u = U.col(k).transpose();
 
       coordinate_type s = US.row(3);
-      typename SPACE::real du = m2::va::dot(u, dp);
+      typename SPACE::real du = va::dot(u, dp);
       // std::cout << s.transpose() << std::endl;
-      stretchV[i] = m2::va::sgn(du) * s[k] * u;
+      stretchV[i] = va::sgn(du) * s[k] * u;
       i++;
     }
 
     std::vector<typename SPACE::vec3> stretchF =
-        m2::ci::verts_to_faces<SPACE, typename SPACE::vec3>(stretchV,
-                                                            _meshGraph);
+        asawa::ci::verts_to_faces<SPACE, typename SPACE::vec3>(stretchV,
+                                                               _meshGraph);
 
     std::vector<typename SPACE::vec3> field_vert_smooth =
         calc.curl(_meshGraph, stretchF, positions, reg);
@@ -495,49 +498,48 @@ public:
     return field_vert_smooth;
   }
 
-/*
-  template <typename SPACE>
-  std::vector<typename SPACE::vec3> find_singularities(std::vector<typename SPACE::positions> positions) {
-    M2_TYPEDEFS;
-    using real = typename SPACE::real;
-    using vec3 = typename SPACE::vec3;
+  /*
+    template <typename SPACE>
+    std::vector<typename SPACE::vec3> find_singularities(std::vector<typename
+    SPACE::positions> positions) { M2_TYPEDEFS; using real = typename
+    SPACE::real; using vec3 = typename SPACE::vec3;
 
-    m2::mesh_calculator<SPACE> calc;
-    std::vector<typename SPACE::mat43> cov =
-        calc.template covariance(positions, reg);
+      asawa::mesh_calculator<SPACE> calc;
+      std::vector<typename SPACE::mat43> cov =
+          calc.template covariance(positions, reg);
 
-    std::vector<vec3> stretchV(positions.size());
+      std::vector<vec3> stretchV(positions.size());
 
-    int i = 0;
-    int k = 2;
-    for (auto p : positions) {
-      // coordinate_type dp = p - ccenters[i];
-      coordinate_type dp = p - c;
+      int i = 0;
+      int k = 2;
+      for (auto p : positions) {
+        // coordinate_type dp = p - ccenters[i];
+        coordinate_type dp = p - c;
 
-      typename SPACE::mat43 US = cov[i];
-      typename SPACE::mat3 U = US.block(0, 0, 3, 3);
-      coordinate_type u = U.col(k).transpose();
-      coordinate_type s = US.row(3);
-      real du = m2::va::dot(u, dp);
-      real sk = s[k];
-      stretchV[i] = 1.0 * m2::va::sgn(du) * sk * u;
-      i++;
+        typename SPACE::mat43 US = cov[i];
+        typename SPACE::mat3 U = US.block(0, 0, 3, 3);
+        coordinate_type u = U.col(k).transpose();
+        coordinate_type s = US.row(3);
+        real du = va::dot(u, dp);
+        real sk = s[k];
+        stretchV[i] = 1.0 * va::sgn(du) * sk * u;
+        i++;
+      }
     }
-  }
-*/
+  */
 
   template <typename SPACE> std::vector<typename SPACE::vec3> calc_vel_2() {
     M2_TYPEDEFS;
     using real = typename SPACE::real;
     using vec3 = typename SPACE::vec3;
 
-    m2::mesh_calculator<SPACE> calc;
-    std::vector<vec3> positions = m2::ci::get_coordinates<SPACE>(_meshGraph);
+    asawa::mesh_calculator<SPACE> calc;
+    std::vector<vec3> positions = asawa::ci::get_coordinates<SPACE>(_meshGraph);
 
     std::cout << "creating vecs" << std::endl;
     auto &faces = _meshGraph->get_faces();
 
-    std::vector<m2::face_triangle<SPACE>> tris(faces.size());
+    std::vector<asawa::face_triangle<SPACE>> tris(faces.size());
     std::vector<vec3> centers(faces.size());
     std::vector<real> areaF(faces.size());
 
@@ -547,8 +549,8 @@ public:
         continue;
       if (faces[i]->size() < 3)
         continue;
-      std::vector<m2::face_triangle<SPACE>> t =
-          m2::ci::get_tris<SPACE>(faces[i]);
+      std::vector<asawa::face_triangle<SPACE>> t =
+          asawa::ci::get_tris<SPACE>(faces[i]);
       tris[i] = t[0];
       centers[i] = t[0].center();
       areaF[i] = 1.0;
@@ -583,22 +585,22 @@ public:
     // std::vector<typename SPACE::mat43> cov =
     //     calc.template curvature(_meshGraph, ccenters, regs);
 
-    coordinate_type c = m2::ci::center<SPACE>(_meshGraph);
+    coordinate_type c = asawa::ci::center<SPACE>(_meshGraph);
     std::vector<vec3> stretchV(positions.size());
 
     int i = 0;
     int k = 2;
     for (auto p : positions) {
-      //coordinate_type dp = p - ccenters[i];
+      // coordinate_type dp = p - ccenters[i];
       coordinate_type dp = p - c;
 
       typename SPACE::mat43 US = cov[i];
       typename SPACE::mat3 U = US.block(0, 0, 3, 3);
       coordinate_type u = U.col(k).transpose();
       coordinate_type s = US.row(3);
-      real du = m2::va::dot(u, dp);
+      real du = va::dot(u, dp);
       real sk = s[k];
-      stretchV[i] = 1.0 * m2::va::sgn(du) * sk * u;
+      stretchV[i] = 1.0 * va::sgn(du) * sk * u;
       i++;
     }
     // std::vector<typename SPACE::vec3> smooth_stretch =
@@ -650,7 +652,7 @@ public:
     std::cout << " edges: " << _meshGraph->get_edges().size() << std::endl;
     std::cout << " faces: " << _meshGraph->get_faces().size() << std::endl;
     std::cout << " mean edge length: "
-              << m2::ci::geometric_mean_length<stretch>(_meshGraph)
+              << asawa::ci::geometric_mean_length<stretch>(_meshGraph)
               << std::endl;
 
     double dt = _params.dt;
@@ -663,7 +665,7 @@ public:
     // std::vector<stretch::vec3> normals = calc_vel<stretch>();
 
     std::vector<stretch::vec3> positions =
-        m2::ci::get_coordinates<stretch>(_meshGraph);
+        asawa::ci::get_coordinates<stretch>(_meshGraph);
 #if 1
     // std::cout << "print vecs" << std::endl;
 
@@ -676,12 +678,12 @@ public:
     std::cout << "integrating " << std::endl;
     double Nn = 0, NRxn = 0;
     for (int i = 0; i < normals.size(); i++) {
-      Nn += m2::va::norm<stretch::real>(normals[i]);
-      NRxn += m2::va::norm<stretch::real>(normals[i]);
+      Nn += va::norm<stretch::real>(normals[i]);
+      NRxn += va::norm<stretch::real>(normals[i]);
       positions[i] += dt * normals[i];
     }
 
-    m2::ci::set_coordinates<stretch>(positions, _meshGraph);
+    asawa::ci::set_coordinates<stretch>(positions, _meshGraph);
     this->dump_gaudi(frame);
     _meshGraph->print();
 
@@ -692,12 +694,12 @@ public:
     _meshGraph->pack();
     std::stringstream ss;
     ss << "stretch." << frame << ".obj";
-    m2::write_obj<stretch>(*_meshGraph, ss.str());
+    asawa::write_obj<stretch>(*_meshGraph, ss.str());
   }
 
   virtual void load_gaudi(std::string file_name) {
     std::cout << " loading" << std::endl;
-    m2::flattened_surf<stretch> fsurf;
+    asawa::flattened_surf<stretch> fsurf;
     fsurf.clear();
     fsurf.read(file_name);
     _meshGraph = fsurf.to_surf();
@@ -706,7 +708,7 @@ public:
 
   virtual void dump_gaudi(int frame = 0) {
     std::cout << " dumping" << std::endl;
-    m2::flattened_surf<stretch> fsurf(_meshGraph);
+    asawa::flattened_surf<stretch> fsurf(_meshGraph);
     fsurf.write("stretch." + std::to_string(frame) + ".gaudi");
   }
 
@@ -733,8 +735,8 @@ private:
   std::vector<gg::DrawablePtr> mSceneObjects;
 
   gg::BufferObjectPtr _obj = NULL;
-  m2::surf<stretch> *_meshGraph;
-  m2::surf_integrator<stretch> *_integrator;
+  asawa::surf<stretch> *_meshGraph;
+  asawa::surf_integrator<stretch> *_integrator;
 };
 
 std::string GetCurrentWorkingDir(void) {

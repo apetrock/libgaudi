@@ -19,7 +19,7 @@
 
 #include "vec_addendum.h"
 //#include "allocore/al_Allocore.hpp"
-namespace m2 {
+
 namespace va {
 
 template <typename T, typename CTYPE> class tri_box {
@@ -251,5 +251,4 @@ public:
 #undef AXISTEST_Z0
 };
 } // namespace va
-} // namespace m2
 #endif

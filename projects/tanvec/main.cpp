@@ -43,8 +43,8 @@ using std::endl;
 using namespace GaudiMath;
 
 template <typename SPACE>
-m2::aabb_tree<SPACE, typename m2::face_triangle<SPACE>>
-build_tree(m2::surf<SPACE> *mesh) {
+asawa::aabb_tree<SPACE, typename asawa::face_triangle<SPACE>>
+build_tree(asawa::surf<SPACE> *mesh) {
   using namespace nanogui;
   M2_TYPEDEFS;
   std::cout << "  building tree" << std::endl;
@@ -53,13 +53,13 @@ build_tree(m2::surf<SPACE> *mesh) {
   std::vector<triangle_type> tris;
 
   std::for_each(faces.begin(), faces.end(), [&tris](const face_ptr &f) {
-    std::vector<triangle_type> ftris = m2::ci::get_tris<SPACE>(f);
+    std::vector<triangle_type> ftris = asawa::ci::get_tris<SPACE>(f);
     tris.insert(tris.end(), ftris.begin(), ftris.end());
   });
 
-  m2::aabb_tree<SPACE, triangle_type> tree(tris);
+  asawa::aabb_tree<SPACE, triangle_type> tree(tris);
 
-  using tree_type = m2::aabb_tree<SPACE, triangle_type>;
+  using tree_type = asawa::aabb_tree<SPACE, triangle_type>;
   std::cout << "tree.nodes.size(): " << tree.nodes.size() << std::endl;
 
   return tree;
@@ -82,10 +82,10 @@ public:
     mSceneObjects.push_back(_debugLines);
 
     createGeometry();
-    //testTree();
-    //testDistance();
+    // testTree();
+    // testDistance();
     testAvg();
-    //testNormals();
+    // testNormals();
     _debugLines->renderLines();
   }
 
@@ -98,10 +98,10 @@ public:
 
   void createGeometry() {
     std::cout << "creating buffer" << std::endl;
-    m2::obj_loader<space3> load;
-    m2::affine<space3> mod;
-    m2::make<space3> mk;
-    m2::subdivide<space3> sub;
+    asawa::obj_loader<space3> load;
+    asawa::affine<space3> mod;
+    asawa::make<space3> mk;
+    asawa::subdivide<space3> sub;
     std::cout << "  loading assets" << std::endl;
     //_meshGraph = &load("assets/messer.obj");
     _meshGraph = mk.cube(1.0, 1.0, 1.0);
@@ -110,7 +110,7 @@ public:
     _meshGraph = &sub.subdivide_control(*_meshGraph);
     _meshGraph = &sub.subdivide_control(*_meshGraph);
     _meshGraph = &sub.subdivide_control(*_meshGraph);
-    m2::remesh<space3> rem;
+    asawa::remesh<space3> rem;
     rem.triangulate(_meshGraph);
 
     _meshGraph->update_all();
@@ -164,7 +164,7 @@ public:
     std::cout << "creating Points" << std::endl;
     int N = 2 << 15;
     std::vector<space3::vec3> positions = createPoints(N);
-    m2::mesh_calculator<space3> calc;
+    asawa::mesh_calculator<space3> calc;
     std::vector<double> dist = calc.calcDistanceFromMesh(_meshGraph, positions);
 
     std::vector<space3::vec3> colors;
@@ -190,11 +190,12 @@ public:
     std::vector<space3::vec3> positions = createPoints(N);
 
     std::cout << "creating vecs" << std::endl;
-    std::vector<m2::face_triangle<space3>> triangles;
+    std::vector<asawa::face_triangle<space3>> triangles;
 
     auto &faces = _meshGraph->get_faces();
     for (int i = 0; i < faces.size(); i++) {
-      std::vector<m2::face_triangle<space3>> tris = m2::ci::get_tris<space3>(faces[i]);
+      std::vector<asawa::face_triangle<space3>> tris =
+          asawa::ci::get_tris<space3>(faces[i]);
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
 
@@ -215,7 +216,7 @@ public:
       auto p = triangles[i].center();
       auto a = faceVectors[i];
       auto pa = p + 1.0 * a;
-      auto c = rainbow(m2::va::norm(a));
+      auto c = rainbow(va::norm(a));
       _debugLines->pushLine(Vec4(p[0], p[1], p[2], 1.0),
                             Vec4(pa[0], pa[1], pa[2], 1.0),
                             Vec4(c[0], c[1], c[2], 1.0));
@@ -223,7 +224,7 @@ public:
     return;
 #endif
     std::cout << "computing harmonic avg" << std::endl;
-    m2::mesh_calculator<space3> calc;
+    asawa::mesh_calculator<space3> calc;
     std::vector<space3::vec3> avgs =
         calc.harmonicAvg(_meshGraph, faceVectors, positions, reg);
 
@@ -232,7 +233,7 @@ public:
       auto p = positions[i];
       auto a = avgs[i];
       auto pa = p + a;
-      auto c = rainbow(m2::va::norm(a));
+      auto c = rainbow(va::norm(a));
       _debugLines->pushLine(Vec4(p[0], p[1], p[2], 1.0),
                             Vec4(pa[0], pa[1], pa[2], 1.0),
                             Vec4(c[0], c[1], c[2], 1.0));
@@ -245,12 +246,13 @@ public:
     std::vector<space3::vec3> positions = createPoints(N);
 
     std::cout << "creating vecs" << std::endl;
-    std::vector<m2::face_triangle<space3>> triangles;
+    std::vector<asawa::face_triangle<space3>> triangles;
     auto &faces = _meshGraph->get_faces();
     std::vector<space3::vec3> normals;
 
     for (int i = 0; i < faces.size(); i++) {
-      std::vector<m2::face_triangle<space3>> tris = m2::ci::get_tris<space3>(faces[i]);
+      std::vector<asawa::face_triangle<space3>> tris =
+          asawa::ci::get_tris<space3>(faces[i]);
       triangles.insert(triangles.end(), tris.begin(), tris.end());
     }
 
@@ -268,7 +270,7 @@ public:
       auto p = triangles[i].center();
       auto a = normals[i];
       auto pa = p + 0.1 * a;
-      auto c = rainbow(m2::va::norm(a));
+      auto c = rainbow(va::norm(a));
       _debugLines->pushLine(Vec4(p[0], p[1], p[2], 1.0),
                             Vec4(pa[0], pa[1], pa[2], 1.0),
                             Vec4(c[0], c[1], c[2], 1.0));
@@ -277,15 +279,14 @@ public:
 #endif
 
     std::cout << "computing harmonic avg" << std::endl;
-    m2::mesh_calculator<space3> calc;
+    asawa::mesh_calculator<space3> calc;
     std::vector<space3::vec3> avgs =
         calc.harmonicAvg(_meshGraph, normals, positions, reg);
 
     std::vector<space3::vec3> colors;
     double mx =
-        std::accumulate(avgs.begin(), avgs.end(), 0.0, [](double a, auto &c) {
-          return max(a, m2::va::norm(c));
-        });
+        std::accumulate(avgs.begin(), avgs.end(), 0.0,
+                        [](double a, auto &c) { return max(a, va::norm(c)); });
 
     for (int i = 0; i < avgs.size(); i++) {
       auto p = positions[i];
@@ -294,17 +295,14 @@ public:
 
       auto pa = p + 0.25 * a;
       // std::cout << a.transpose() << std::endl;
-      auto c = rainbow(m2::va::norm(a));
+      auto c = rainbow(va::norm(a));
       _debugLines->pushLine(Vec4(p[0], p[1], p[2], 1.0),
                             Vec4(pa[0], pa[1], pa[2], 1.0),
                             Vec4(c[0], c[1], c[2], 1.0));
     }
   }
 
-  virtual void onAnimate() {
-
-    gg::fillBuffer(_meshGraph, _obj);
-  }
+  virtual void onAnimate() { gg::fillBuffer(_meshGraph, _obj); }
 
   virtual void onDraw(gg::Viewer &viewer) {
     std::for_each(mSceneObjects.begin(), mSceneObjects.end(),
@@ -321,7 +319,7 @@ private:
   gg::PointBufferPtr _points;
   gg::DebugBufferPtr _debugLines;
 
-  m2::surf<space3> *_meshGraph;
+  asawa::surf<space3> *_meshGraph;
 };
 
 std::string GetCurrentWorkingDir(void) {

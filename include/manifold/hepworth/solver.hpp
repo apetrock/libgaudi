@@ -224,9 +224,11 @@ public:
     Eigen::SimplicialLDLT<sparmat> solver;
     // Eigen::ConjugateGradient<sparmat> solver;
     // Eigen::ConjugateGradient<sparmat, Eigen::Lower | Eigen::Upper,
-    //                        Eigen::DiagonalPreconditioner<double>> solver;
-    // Eigen::ConjugateGradient<sparmat, Eigen::Lower | Eigen::Upper,
-    //                         Eigen::IncompleteCholesky<double>> solver;
+    //                         Eigen::DiagonalPreconditioner<double>>
+    //    solver;
+    //    Eigen::ConjugateGradient<sparmat, Eigen::Lower | Eigen::Upper,
+    //                             Eigen::IncompleteCholesky<double>>
+    // solver;
 
     solver.compute(A);
 //    std::cout << " solver det: " << solver.determinant() << std::endl;
@@ -324,7 +326,7 @@ public:
 
     real tol = 1;
     int k = 0;
-    int max = 3;
+    int max = 1;
     real sig = 1e-6;
     real hs = hb;
     while (tol > sig) {

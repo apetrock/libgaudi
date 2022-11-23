@@ -13,7 +13,7 @@
 #include "geometry_types.hpp"
 #include "m2Includes.h"
 
-namespace m2 {
+namespace asawa {
 
 template <typename SPACE>
 inline void calcSVD(typename SPACE::coordinate_type *vec,
@@ -38,15 +38,15 @@ template <typename SPACE>
 inline void calcSVD(typename SPACE::mat3 &mi,
                     typename SPACE::coordinate_type &val) {
   M2_TYPEDEFS;
-  
+
   mat3 m3;
   for (int i = 0; i < 3; i++)
     for (int j = 0; j < 3; j++)
       m3(i, j) = mi(i, j);
   Eigen::JacobiSVD<Eigen::Matrix3d> svd(m3, Eigen::ComputeFullU);
 
-  //const mat3 U = svd.matrixU();
-  //const vec3 S = svd.singularValues();
+  // const mat3 U = svd.matrixU();
+  // const vec3 S = svd.singularValues();
 
   const Eigen::Matrix3d U = svd.matrixU();
   const Eigen::VectorXd S = svd.singularValues();
@@ -57,7 +57,8 @@ inline void calcSVD(typename SPACE::mat3 &mi,
       mi(i, j) = U(i, j);
 }
 
-template <typename SPACE> class surface_calculator : public default_interface<SPACE> {
+template <typename SPACE>
+class surface_calculator : public default_interface<SPACE> {
   M2_TYPEDEFS;
 
 public:
@@ -119,13 +120,13 @@ public:
     B.normalize();
     coordinate_type D = ci - ck;
     B.normalize();
-    
+
     return va::dot(A, C) * va::dot(B, D) - va::dot(A, B) * va::dot(C, D) -
            va::dot(B, C) * va::dot(D, A);
   }
 
   template <typename TYPE>
-  void calcDiffuseQuantity(m2::surf<SPACE> &in, vector<TYPE> &vertexWeights,
+  void calcDiffuseQuantity(asawa::surf<SPACE> &in, vector<TYPE> &vertexWeights,
                            T amt) {
 
     // TIMER function//TIMER(__FUNCTION__);
@@ -166,7 +167,7 @@ public:
     }
   }
 
-  void calcDiffuseQuantity(m2::surf<SPACE> &in, vector<T> &vertexWeights,
+  void calcDiffuseQuantity(asawa::surf<SPACE> &in, vector<T> &vertexWeights,
                            T amt) {
 
     // TIMER function//TIMER(__FUNCTION__);
@@ -206,7 +207,7 @@ public:
     }
   }
 
-  void calcCurveFlowNormal(m2::surf<SPACE> &in, vector<T> &vertexWeights,
+  void calcCurveFlowNormal(asawa::surf<SPACE> &in, vector<T> &vertexWeights,
                            vector<T> &edgeWeights) {
     // TIMER function//TIMER(__FUNCTION__);
 
@@ -261,7 +262,7 @@ public:
     }
   }
 
-  void calcWillmoreEnergy(m2::surf<SPACE> &in, vector<T> &vertexWeights) {
+  void calcWillmoreEnergy(asawa::surf<SPACE> &in, vector<T> &vertexWeights) {
     // TIMER function//TIMER(__FUNCTION__);
 
     vector<vertex_ptr> &tverts = in.get_vertices();
@@ -299,7 +300,7 @@ public:
     }
   }
 
-  void calcDiffuseCurveFlowNormal(m2::surf<SPACE> &in,
+  void calcDiffuseCurveFlowNormal(asawa::surf<SPACE> &in,
                                   vector<T> &vertexWeights) {
     // TIMER function//TIMER(__FUNCTION__);
     // vector<T> vertexWeights;
@@ -308,7 +309,7 @@ public:
     calcDiffuseQuantity(in, vertexWeights, 0.1);
   }
 
-  std::vector<vertex_ptr> getLocalVertices(m2::surf<SPACE> &in,
+  std::vector<vertex_ptr> getLocalVertices(asawa::surf<SPACE> &in,
                                            vertex_ptr seed,
                                            int maxRecDepth = 3) {
     // TIMER function//TIMER(__FUNCTION__);
@@ -346,7 +347,7 @@ public:
     return out;
   }
 
-  void calcCovariance(m2::surf<SPACE> &in, vertex_ptr v,
+  void calcCovariance(asawa::surf<SPACE> &in, vertex_ptr v,
                       coordinate_type &covVals, mat3 &covTens, T dx) {
     if (v->size() == 0)
       return;
@@ -370,7 +371,7 @@ public:
     // std::cout << lverts.size() << " " << covVals << std::endl;
   }
 
-  std::vector<edge_ptr> getEdgesNearPoint(m2::surf<SPACE> &in,
+  std::vector<edge_ptr> getEdgesNearPoint(asawa::surf<SPACE> &in,
                                           vertex_ptr seed, T eps,
                                           int maxRecDepth = 3) {
     // TIMER function//TIMER(__FUNCTION__);
@@ -397,7 +398,7 @@ public:
         edge_ptr ej = fvb->edge();
         coordinate_type cj1 = ej->v1()->vertex()->coordinate();
         coordinate_type cj2 = ej->v2()->vertex()->coordinate();
-        distance_calculator<SPACE> calc;
+        bins::distance_calculator<SPACE> calc;
         T s;
         T d = calc.distanceFromLine(cj1, cj2, c0, s);
 
@@ -435,7 +436,7 @@ public:
     return out;
   }
 
-  std::vector<edge_ptr> getLocalEdges(m2::surf<SPACE> &in, vertex_ptr seed,
+  std::vector<edge_ptr> getLocalEdges(asawa::surf<SPACE> &in, vertex_ptr seed,
                                       T eps) {
     // TIMER function//TIMER(__FUNCTION__);
     std::vector<edge_ptr> out;
@@ -477,7 +478,7 @@ public:
     return out;
   }
 
-  void calculateBiDirection(m2::surf<SPACE> &in, vertex_ptr v,
+  void calculateBiDirection(asawa::surf<SPACE> &in, vertex_ptr v,
                             coordinate_type &w, mat3 &cov, T dx) {
 
     // TIMER function//TIMER(__FUNCTION__);
@@ -630,5 +631,5 @@ public:
     }
   }
 };
-} // namespace m2
+} // namespace asawa
 #endif

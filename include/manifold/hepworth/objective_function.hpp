@@ -4,8 +4,8 @@
 #define __PENKO_OBJECTIVE__
 
 #include "constraints.hpp"
-#include "manifold/coordinate_interface.hpp"
-#include "manifold/m2.hpp"
+#include "manifold/asawa/coordinate_interface.hpp"
+#include "manifold/asawa/m2.hpp"
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
@@ -135,7 +135,7 @@ public:
   }
 
   constraint_set(const surf_ptr surf) : _surf(surf) {
-    _reg = 2.0 * m2::ci::geometric_mean_length<SPACE>(_surf);
+    _reg = 2.0 * asawa::ci::geometric_mean_length<SPACE>(_surf);
   };
 
   template <typename MAT> mat33 get33Block(MAT M, int i, int j) {
@@ -382,21 +382,22 @@ public:
     for (auto v : _surf->get_vertices()) {
 
       real Km = 0.0;
-      m2::for_each_vertex<SPACE>(v, [&Km, i, &tripletList](face_vertex_ptr fv) {
-        int j = fv->next()->vertex()->position_in_set();
-        face_vertex_ptr fvp = fv->vprev()->next();
-        face_vertex_ptr fvn = fv->vnext()->next();
-        real cotp = m2::ci::abs_cotan<SPACE>(fvp);
-        real cotn = m2::ci::abs_cotan<SPACE>(fvn);
-        assert(!isnan(cotp));
-        assert(!isnan(cotn));
-        real K = (cotp + cotn);
-        if (K > 0) {
-          tripletList.push_back(triplet(3 * i + 0, 3 * j + 0, K));
-          tripletList.push_back(triplet(3 * i + 1, 3 * j + 1, K));
-          tripletList.push_back(triplet(3 * i + 2, 3 * j + 2, K));
-        }
-      });
+      asawa::for_each_vertex<SPACE>(
+          v, [&Km, i, &tripletList](face_vertex_ptr fv) {
+            int j = fv->next()->vertex()->position_in_set();
+            face_vertex_ptr fvp = fv->vprev()->next();
+            face_vertex_ptr fvn = fv->vnext()->next();
+            real cotp = asawa::ci::abs_cotan<SPACE>(fvp);
+            real cotn = asawa::ci::abs_cotan<SPACE>(fvn);
+            assert(!isnan(cotp));
+            assert(!isnan(cotn));
+            real K = (cotp + cotn);
+            if (K > 0) {
+              tripletList.push_back(triplet(3 * i + 0, 3 * j + 0, K));
+              tripletList.push_back(triplet(3 * i + 1, 3 * j + 1, K));
+              tripletList.push_back(triplet(3 * i + 2, 3 * j + 2, K));
+            }
+          });
       tripletList.push_back(triplet(3 * i + 0, 3 * i + 0, Km));
       tripletList.push_back(triplet(3 * i + 1, 3 * i + 1, Km));
       tripletList.push_back(triplet(3 * i + 2, 3 * i + 2, Km));
