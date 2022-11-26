@@ -207,7 +207,7 @@ public:
     i = 0;
     calder::mesh_calculator<SPACE> calc;
     std::vector<typename SPACE::mat43> cov =
-        calc.template covariance(surf, p0, 2.0 * _scale);
+        calc.template covariance(surf, p0, 4.0 * _scale);
     // std::vector<typename SPACE::mat43> cov =
     //     calc.template curvature(surf, p0, 2.0 * _scale);
 
@@ -239,8 +239,8 @@ public:
                       0.1 * np1 * (m1 / s20) - //
                       0.1 * np2 * (m2 / s01);
       */
-      real r0 = -0.54, r1 = 3.6, r2 = -2.0;
-      // real r0 = 2.0, r1 = -0.75, r2 = -1.5;
+      // real r0 = -0.55, r1 = 3.6, r2 = -2.0;
+      real r0 = 2.8, r1 = -1.5, r2 = -0.5;
       // real r0 = -2.0, r1 = -6.0, r2 = 5.0;
 
       real sx = r0 * np0 * m0 + //
