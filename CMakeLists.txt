@@ -159,6 +159,8 @@ add_subdirectory(src)
 #add_subdirectory(projects/rxdiff)
 #add_subdirectory(projects/physarym)
 #add_subdirectory(projects/stretch)
+
+add_subdirectory(projects/m2refactor)
 add_subdirectory(projects/bending)
 add_subdirectory(projects/nearestpoint)
 add_subdirectory(projects/wav2fft)

@@ -990,10 +990,11 @@ public:
       flag = 0;
     }
 
-    ~face_vertex(){
-      //use this to catch instances where this gets deleted outside the manifold data structure
+    ~face_vertex() {
+      // use this to catch instances where this gets deleted outside the
+      // manifold data structure
       assert(0);
-        // mVertex->remove_face_vertex(mVertexPosition);
+      // mVertex->remove_face_vertex(mVertexPosition);
     };
 
     int position_in_set() { return mEdge->fv_position_in_set(this); }
