@@ -1,193 +1,30 @@
+
+
+#include "geometry_types.hpp"
 #include "manifold/vec_addendum.h"
 
 #include "GaudiGraphics/geometry_logger.h"
 
+#include <memory.h>
+#include <stdio.h>
 #include <vector>
 #include <zlib.h>
 
 #ifndef __ASAWA_MANIFOLD_SURFACE__
 #define __ASAWA_MANIFOLD_SURFACE__
 namespace asawa {
-typedef double real;
+
 typedef int index_t;
-typedef Eigen::Matrix<real, 3, 1> vec3;
-typedef Eigen::Matrix<real, 4, 1> vec4;
 
-void make_cube(std::vector<vec3> &vertices,
-               std::vector<std::vector<int>> &faces) {
+enum prim_type {
+  VERTEX,
+  FACE,
+  EDGE,
+  CORNER,
+};
 
-  /*
-     1------5
-   /       / \
-  /       /   \
-  0------4     7
-  \       \   /
-   \       \ /
-     2------6
-
-      z
-     /
-    o---x
-     \
-      y
-  */
-  vertices = {
-      vec3(0, 0, 0), // 0
-      vec3(0, 0, 1), // 1
-      vec3(0, 1, 0), // 2
-      vec3(0, 1, 1), // 3
-      vec3(1, 0, 0), // 4
-      vec3(1, 0, 1), // 5
-      vec3(1, 1, 0), // 6
-      vec3(1, 1, 1)  // 7
-  };
-
-  faces = {
-      {1, 0, 2, 3}, //
-      {0, 4, 6, 2}, //
-      {4, 5, 7, 6}, //
-      {1, 5, 4, 0}, //
-      {5, 1, 3, 7}, //
-      {7, 3, 2, 6},
-  };
-}
-
-void assemble_table(const std::vector<vec3> &vertices,
-                    const std::vector<std::vector<index_t>> &faces,
-                    std::vector<index_t> &corners_next,
-                    std::vector<index_t> &corners_prev,
-                    std::vector<index_t> &corners_vert,
-                    std::vector<index_t> &corners_face) {
-  std::vector<std::vector<index_t>> face_corners;
-  std::vector<index_t> flat_corners;
-
-  std::vector<std::vector<index_t>> faces_on_vertices(vertices.size());
-
-  index_t idx = 0;
-  for (index_t i = 0; i < faces.size(); i++) {
-    const std::vector<index_t> &face = faces[i];
-    std::vector<index_t> corners(face);
-
-    for (index_t j = 0; j < face.size(); j++) {
-      faces_on_vertices[face[j]].push_back(i);
-      index_t corner_idx = idx++;
-      corners[j] = corner_idx;
-      flat_corners.push_back(idx);
-    }
-    face_corners.push_back(corners);
-  }
-  /*
-  for (const auto &vert : faces_on_vertices) {
-    for (const auto &face : vert) {
-      std::cout << face << " ";
-    }
-    std::cout << std::endl;
-  }
-  */
-
-  std::vector<index_t> interaction_list;
-  for (index_t idx_vert = 0; idx_vert < faces_on_vertices.size(); idx_vert++) {
-    const std::vector<index_t> &faces_on_vert = faces_on_vertices[idx_vert];
-    for (index_t i = 0; i < faces_on_vert.size(); i++) {
-      for (index_t j = i + 1; j < faces_on_vert.size(); j++) {
-        interaction_list.push_back(faces_on_vert[i]);
-        interaction_list.push_back(faces_on_vert[j]);
-      }
-    }
-  }
-
-  std::vector<index_t> corner_index(flat_corners);
-  std::vector<bool> corner_allocated(flat_corners.size(), false);
-
-  std::vector<index_t> corners(flat_corners.size(), -1);
-  corners_next = std::vector<index_t>(flat_corners.size(), -1);
-  corners_prev = std::vector<index_t>(flat_corners.size(), -1);
-  corners_vert = std::vector<index_t>(flat_corners.size(), -1);
-  corners_face = std::vector<index_t>(flat_corners.size(), -1);
-
-  for (index_t k = 0; k < interaction_list.size(); k++) {
-    std::cout << interaction_list[k] << " ";
-  }
-  std::cout << std::endl;
-
-  int ii = 0;
-  for (index_t k = 0; k < interaction_list.size(); k += 2) {
-    std::cout << k + 0 << " " << interaction_list.size() << std::endl;
-    index_t fi = interaction_list[k + 0];
-    index_t fj = interaction_list[k + 1];
-
-    for (int i = 0; i < faces[fi].size(); i++) {
-      for (int j = 0; j < faces[fj].size(); j++) {
-        index_t i0 = i;
-        index_t i1 = (i + 1) % faces[fi].size();
-
-        index_t vi0 = faces[fi][i0];
-        index_t vi1 = faces[fi][i1];
-        index_t fi0 = face_corners[fi][i0];
-        index_t fi1 = face_corners[fi][i1];
-
-        index_t j0 = j;
-        index_t j1 = (j + 1) % face_corners[fj].size();
-
-        index_t vj0 = faces[fj][j0];
-        index_t vj1 = faces[fj][j1];
-        index_t fj0 = face_corners[fj][j0];
-        index_t fj1 = face_corners[fj][j1];
-
-        if (corner_allocated[fi0])
-          continue;
-        if (corner_allocated[fj0])
-          continue;
-
-        if (vi0 == vj1 && vj0 == vi1) {
-          corner_index[fi0] = 2 * ii + 0;
-          corner_index[fj0] = 2 * ii + 1;
-          corner_allocated[fi0] = true;
-          corner_allocated[fj0] = true;
-          corners[2 * ii + 0] = fi0;
-          corners[2 * ii + 1] = fj0;
-          corners_next[2 * ii + 0] = fi1;
-          corners_next[2 * ii + 1] = fj1;
-          corners_face[2 * ii + 0] = fi;
-          corners_face[2 * ii + 1] = fj;
-          corners_vert[2 * ii + 0] = vi0;
-          corners_vert[2 * ii + 1] = vj0;
-          ii++;
-        }
-      }
-    }
-  }
-
-  std::vector<index_t> face_start(faces.size());
-  std::vector<index_t> vert_start(vertices.size());
-
-  for (int i = 0; i < corners.size(); i++) {
-    corners[i] = corner_index[corners[i]];
-  }
-
-  for (int i = 0; i < corners_next.size(); i++) {
-    corners_next[i] = corner_index[corners_next[i]];
-  }
-
-  for (int i = 0; i < corners_face.size(); i++) {
-    face_start[corners_face[i]] = corners[i];
-  }
-
-  for (int i = 0; i < corners_vert.size(); i++) {
-    vert_start[corners_vert[i]] = corners[i];
-  }
-
-  for (int i = 0; i < face_start.size(); i++) {
-    int j_end = corners[face_start[i]];
-    int j0 = corners_next[j_end];
-    bool it = true;
-    while (it) {
-      it = j0 != j_end;
-      corners_prev[corners_next[j0]] = j0;
-      j0 = corners_next[j0];
-    }
-  }
-}
+class datum;
+typedef std::shared_ptr<datum> datum_ptr;
 
 class manifold {
 public:
@@ -248,23 +85,26 @@ public:
     swap(mFaces, tFaces);
   }
   */
+  void insert_datum(datum_ptr datum) { __data.push_back(datum); }
+  std::vector<datum_ptr> &get_data() { return __data; }
+
   size_t vert_count() { return __vert_begin.size(); }
   size_t face_count() { return __face_begin.size(); }
   size_t corner_count() { return __corners_next.size(); }
 
-  index_t other(int id) { return 2 * (id / 2) + (id + 1) % 2; };
-  index_t vnext(index_t id) { return this->next(this->other(id)); }
-  index_t vprev(index_t id) { return this->other(this->prev(id)); }
+  index_t other(int id) const { return 2 * (id / 2) + (id + 1) % 2; };
+  index_t vnext(index_t id) const { return this->next(this->other(id)); }
+  index_t vprev(index_t id) const { return this->other(this->prev(id)); }
 
-  index_t next(index_t id) { return __corners_next[id]; }
-  index_t prev(index_t id) { return __corners_prev[id]; }
-  index_t vert(index_t id) { return __corners_vert[id]; }
-  index_t face(index_t id) { return __corners_face[id]; }
+  index_t next(index_t id) const { return __corners_next[id]; }
+  index_t prev(index_t id) const { return __corners_prev[id]; }
+  index_t vert(index_t id) const { return __corners_vert[id]; }
+  index_t face(index_t id) const { return __corners_face[id]; }
 
-  index_t fbegin(index_t id) { return __face_begin[id]; }
-  index_t fend(index_t id) { return prev(__face_begin[id]); }
-  index_t vbegin(index_t id) { return __vert_begin[id]; }
-  index_t vend(index_t id) { return vprev(__vert_begin[id]); }
+  index_t fbegin(index_t id) const { return __face_begin[id]; }
+  index_t fend(index_t id) const { return prev(__face_begin[id]); }
+  index_t vbegin(index_t id) const { return __vert_begin[id]; }
+  index_t vend(index_t id) const { return vprev(__vert_begin[id]); }
 
   void set_vbegin(index_t id, index_t c) { __vert_begin[id] = c; }
   void set_fbegin(index_t id, index_t c) { __face_begin[id] = c; }
@@ -377,6 +217,118 @@ public:
 
   std::vector<index_t> __vert_begin;
   std::vector<index_t> __face_begin;
+  std::vector<datum_ptr> __data;
+};
+
+struct datum {
+public:
+  typedef std::shared_ptr<datum> ptr;
+
+  // static ptr create() { return std::make_shared<datum>(); }
+
+  datum(prim_type type) : __type(type){};
+  virtual ~datum(){};
+
+  template <class... Types>
+  void calc(index_t i, const manifold &M, Types... args) {
+    std::vector<index_t> vector;
+    add_args(vector, args...);
+    assert(!empty(vector));
+    do_calc(i, vector, M);
+  }
+
+  template <typename LastType>
+  static void add_args(std::vector<index_t> &vector, LastType arg) {
+    vector.push_back(arg);
+  };
+
+  template <typename FirstType, typename... OtherTypes>
+  static void add_args(std::vector<index_t> &vector, FirstType const &firstArg,
+                       OtherTypes... otherArgs) {
+    vector.push_back(firstArg);
+    add_args(vector, otherArgs...);
+  };
+
+  void alloc(size_t sz) { do_alloc(sz); }
+  void resize(size_t sz) { do_resize(sz); }
+  void map(index_t i, index_t it) { do_map(i, it); }
+
+  virtual void do_alloc(const size_t &sz) = 0;
+  virtual void do_resize(const size_t &sz) = 0;
+  virtual void do_calc(const index_t &i, const std::vector<index_t> &vals,
+                       const manifold &M) = 0;
+  virtual void do_map(const index_t i, const index_t it) = 0;
+
+  virtual void write(FILE *file) const = 0;
+
+  virtual void compute_vert_split(size_t v0, size_t v1) {}
+
+  virtual void read(FILE *file) = 0;
+  virtual void clear() = 0;
+  const prim_type &type() { return __type; };
+
+  prim_type __type;
+};
+
+template <typename TYPE> struct datum_t : public datum {
+public:
+  typedef std::shared_ptr<datum_t<TYPE>> ptr;
+
+  static ptr create(prim_type type, const std::vector<TYPE> &data) {
+    return std::make_shared<datum_t<TYPE>>(type, data);
+  }
+
+  datum_t(prim_type type, const std::vector<TYPE> &data)
+      : datum(type), __data(data){};
+  virtual ~datum_t(){};
+
+  std::vector<TYPE> &data() { return __data; }
+  const std::vector<TYPE> &data() const { return __data; }
+
+  virtual void do_calc(const index_t &i, const std::vector<index_t> &vals,
+                       const manifold &M) {
+    index_t ic0 = vals[0];
+    index_t ic1 = M.other(ic0);
+    index_t iv0 = M.vert(ic0);
+    index_t iv1 = M.vert(ic1);
+    std::cout << i << " " << ic0 << " " << ic1 << " " << iv0 << " " << iv1
+              << std::endl;
+    TYPE v0 = __data[iv0];
+    TYPE v1 = __data[iv1];
+    std::cout << v0.transpose() << " " << v1.transpose() << " - "
+              << __tmp.size() << std::endl;
+    __tmp[i] = 0.5 * (v0 + v1);
+  }
+  virtual void do_alloc(const size_t &sz) {
+    __tmp = std::vector<TYPE>(sz, z::zero<TYPE>());
+  }
+  virtual void do_resize(const size_t &sz) { __data.resize(sz); }
+  virtual void do_map(const index_t i, const index_t it) {
+    __data[i] = __tmp[it];
+  }
+
+  unsigned long operator[](int i) const { return __data[i]; }
+  unsigned long &operator[](int i) { return __data[i]; }
+
+  virtual void write(FILE *file) const {
+    size_t nData = __data.size();
+    size_t e;
+    e = fwrite((void *)&nData, sizeof(size_t), 1, file);
+    e = fwrite((void *)__data.data(), sizeof(TYPE), nData, file);
+  }
+
+  virtual void read(FILE *file) {
+    size_t nData;
+    size_t e;
+    e = fread((void *)&nData, sizeof(size_t), 1, file);
+    __data.resize(nData);
+    e = fread((void *)__data.data(), sizeof(TYPE), nData, file);
+  }
+
+  virtual void clear() { __data.clear(); }
+
+  std::vector<TYPE> __data;
+  std::vector<TYPE> __tmp;
 };
 
 } // namespace asawa

@@ -9,8 +9,8 @@
 
 #include "dynamic_surface.hpp"
 #include "m2_refactor.hpp"
+#include "primitive_objects.hpp"
 #include "primitive_operations.hpp"
-
 #include <vector>
 #include <zlib.h>
 
@@ -43,13 +43,14 @@ void test() {
                  corners_face);
 
   manifold *M = new manifold(corners_next, corners_vert, corners_face);
-
+  datum_t<vec3>::ptr vdata = datum_t<vec3>::create(prim_type::VERTEX, vertices);
+  M->insert_datum(vdata);
   triangulate(*M);
-  subdivide_edges(*M, vertices);
-  // collapse_edges(*M, vertices);
-  gather_edges_parallel(*M, vertices, 1.0);
-  // merge_face(*M, 3, M->other(3));
-  debug_manifold(*M, vertices);
+  subdivide_edges(*M, vdata->data());
+  collapse_edges(*M, vdata->data());
+  // gather_edges_parallel(*M, vdata->data(), 1.0);
+  //  merge_face(*M, 3, M->other(3));
+  debug_manifold(*M, vdata->data());
   delete M;
 }
 

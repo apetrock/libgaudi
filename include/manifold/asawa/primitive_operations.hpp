@@ -3,10 +3,10 @@
 #define __ASAWA_PRIM_OPS__
 
 #include "m2_refactor.hpp"
-#include "manifold/asawa/subdivide.hpp"
 #include <cassert>
 
 namespace asawa {
+typedef int index_t;
 index_t split_edge(manifold &M, //
                    const index_t &corner_index) {
 

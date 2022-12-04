@@ -26,16 +26,18 @@ void op_edges(manifold &M,              //
               std::vector<index_t> &edges_to_op,
               std::function<index_t(index_t cid, manifold &m)> func) {
 
-  std::vector<vec3> nverts(edges_to_op.size(), vec3::Zero());
+  for (auto d : M.get_data()) {
+    if (d->type() != VERTEX)
+      continue;
+    d->alloc(edges_to_op.size());
+  }
 
   for (index_t i = 0; i < edges_to_op.size(); i++) {
-    index_t ic0 = edges_to_op[i];
-    index_t ic1 = M.other(ic0);
-    index_t iv0 = M.vert(ic0);
-    index_t iv1 = M.vert(ic1);
-    vec3 v0 = verts[iv0];
-    vec3 v1 = verts[iv1];
-    nverts[i] = 0.5 * (v0 + v1);
+    for (auto d : M.get_data()) {
+      if (d->type() != VERTEX)
+        continue;
+      d->calc(i, M, edges_to_op[i]);
+    }
   }
 
   std::vector<index_t> post_edges(edges_to_op.size(), -1);
@@ -44,10 +46,18 @@ void op_edges(manifold &M,              //
     std::cout << ic0 << std::endl;
     post_edges[i] = func(ic0, M);
   }
-  verts.resize(M.vert_count());
-
+  // verts.resize(M.vert_count());
+  for (auto d : M.get_data()) {
+    if (d->type() != VERTEX)
+      continue;
+    d->resize(M.vert_count());
+  }
   for (index_t i = 0; i < post_edges.size(); i++) {
-    verts[M.vert(post_edges[i])] = nverts[i];
+    for (auto d : M.get_data()) {
+      if (d->type() != VERTEX)
+        continue;
+      d->map(M.vert(post_edges[i]), i);
+    }
   }
 }
 
