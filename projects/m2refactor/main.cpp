@@ -55,14 +55,17 @@ public:
     //    _obj = gg::BufferObject::create();
     //    _obj->init();
     //    mSceneObjects.push_back(_obj);
+    __surf = asawa::asawa_dynamic_test::create();
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }
 
   virtual void onAnimate(int frame) {
 
     // gg::fillBuffer(surf, _obj, colors);
-    std::cout << "rendering debug" << std::endl;
-    asawa::test();
+    // std::cout << "rendering debug" << std::endl;
+    // asawa::test();
+
+    __surf->step(frame);
     gg::geometry_logger::render();
   }
 
@@ -78,6 +81,8 @@ public:
   }
 
 private:
+  asawa::asawa_dynamic_test::ptr __surf;
+
   std::vector<gg::DrawablePtr> mSceneObjects;
   gg::BufferObjectPtr _obj = NULL;
 };

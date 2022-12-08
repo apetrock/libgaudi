@@ -5,7 +5,9 @@
 
 #include "GaudiGraphics/geometry_logger.h"
 
+#include <cstddef>
 #include <memory.h>
+#include <ostream>
 #include <stdio.h>
 #include <vector>
 #include <zlib.h>
@@ -28,6 +30,15 @@ typedef std::shared_ptr<datum> datum_ptr;
 
 class manifold {
 public:
+  typedef std::shared_ptr<manifold> ptr;
+
+  static ptr create(const std::vector<index_t> &corners_next,
+                    const std::vector<index_t> &corners_vert,
+                    const std::vector<index_t> &corners_face) {
+
+    return std::make_shared<manifold>(corners_next, corners_vert, corners_face);
+  }
+
   manifold(const std::vector<index_t> &corners_next,
            const std::vector<index_t> &corners_vert,
            const std::vector<index_t> &corners_face)
@@ -85,16 +96,21 @@ public:
     swap(mFaces, tFaces);
   }
   */
-  void insert_datum(datum_ptr datum) { __data.push_back(datum); }
+  index_t insert_datum(datum_ptr datum) {
+    __data.push_back(datum);
+    return __data.size() - 1;
+  }
+
+  datum_ptr &get_datum(index_t i) { return __data[i]; }
   std::vector<datum_ptr> &get_data() { return __data; }
 
-  size_t vert_count() { return __vert_begin.size(); }
-  size_t face_count() { return __face_begin.size(); }
-  size_t corner_count() { return __corners_next.size(); }
+  size_t vert_count() const { return __vert_begin.size(); }
+  size_t face_count() const { return __face_begin.size(); }
+  size_t corner_count() const { return __corners_next.size(); }
 
   index_t other(int id) const { return 2 * (id / 2) + (id + 1) % 2; };
-  index_t vnext(index_t id) const { return this->next(this->other(id)); }
-  index_t vprev(index_t id) const { return this->other(this->prev(id)); }
+  index_t vprev(index_t id) const { return this->next(this->other(id)); }
+  index_t vnext(index_t id) const { return this->other(this->prev(id)); }
 
   index_t next(index_t id) const { return __corners_next[id]; }
   index_t prev(index_t id) const { return __corners_prev[id]; }
@@ -112,13 +128,20 @@ public:
   void set_next(index_t id, index_t c) { __corners_next[id] = c; }
   void set_prev(index_t id, index_t c) { __corners_prev[id] = c; }
 
-  void set_vert(index_t id, index_t v) {
-    __corners_vert[id] = v;
-    set_vbegin(v, id);
+  void set_vert(index_t cid, index_t v) {
+    __corners_vert[cid] = v;
+    set_vbegin(v, cid);
   }
-  void set_face(index_t id, index_t f) {
-    __corners_face[id] = f;
-    set_fbegin(f, id);
+
+  void set_vert_pair(index_t c0, index_t v0, index_t v1) {
+    index_t c1 = other(c0);
+    set_vert(c0, v0);
+    set_vert(c1, v1);
+  }
+
+  void set_face(index_t cid, index_t f) {
+    __corners_face[cid] = f;
+    set_fbegin(f, cid);
   }
 
   void link(index_t c0, index_t c1) {
@@ -152,9 +175,15 @@ public:
     return __corners_next.size() - 2;
   }
 
-  void remove_vertex(index_t i) { __vert_begin[i] = -1; }
+  void remove_vertex(index_t i) {
+    std::cout << "    " << __FUNCTION__ << " " << i << std::endl;
+    __vert_begin[i] = -1;
+  }
 
-  void remove_face(index_t i) { __face_begin[i] = -1; }
+  void remove_face(index_t i) {
+    std::cout << "    " << __FUNCTION__ << " " << i << std::endl;
+    __face_begin[i] = -1;
+  }
 
   void remove_edge_pair(index_t i0) {
     // returns id of new vertex
@@ -175,7 +204,6 @@ public:
   void for_each_face(index_t i,
                      std::function<void(index_t cid, manifold &m)> func) {
     int j0 = this->fbegin(i);
-    std::cout << "i: " << i << " j0 " << j0 << std::endl;
     int j_end = this->fend(i);
     bool it = true;
     while (it) {
@@ -197,17 +225,56 @@ public:
     }
   }
 
+  std::vector<index_t> get_edge_range() const {
+    std::vector<index_t> range;
+    range.reserve(corner_count() / 2);
+    // replace this with some c++isms
+    for (int i = 0; i < corner_count(); i += 2) {
+      if (__corners_next[i] > -1)
+        range.push_back(i);
+    }
+    return range;
+  }
+
   void fupdate(index_t f) {
-    std::cout << " f" << f << ": ";
-    for_each_face(f, [f](index_t cid, manifold &m) {
-      std::cout << " " << cid;
-      m.set_face(cid, f);
-    });
-    std::cout << std::endl;
+    for_each_face(f, [f](index_t cid, manifold &m) { m.set_face(cid, f); });
   }
 
   void vupdate(index_t v) {
     for_each_vertex(v, [v](index_t cid, manifold &m) { m.set_vert(cid, v); });
+  }
+
+  size_t fsize(index_t v) {
+    size_t s = 0;
+    for_each_face(v, [&s](index_t cid, manifold &m) { s++; });
+    return s;
+  }
+
+  size_t vsize(index_t v) {
+    size_t s = 0;
+    for_each_vertex(v, [&s](index_t cid, manifold &m) { s++; });
+    return s;
+  }
+
+  void fprint(index_t f) {
+    std::cout << "f" << f << ": ";
+    for_each_face(f, [](index_t cid, manifold &m) { std::cout << cid << " "; });
+    std::cout << std::endl;
+  }
+
+  void fprintv(index_t f) {
+    std::cout << "f valence:" << f << ": ";
+    for_each_face(f, [this](index_t cid, manifold &m) {
+      std::cout << this->vert(cid) << " ";
+    });
+    std::cout << std::endl;
+  }
+
+  void vprint(index_t v) {
+    std::cout << "v" << v << ": ";
+    for_each_vertex(v,
+                    [](index_t cid, manifold &m) { std::cout << cid << " "; });
+    std::cout << std::endl;
   }
 
   std::vector<index_t> __corners_next;
@@ -291,12 +358,10 @@ public:
     index_t ic1 = M.other(ic0);
     index_t iv0 = M.vert(ic0);
     index_t iv1 = M.vert(ic1);
-    std::cout << i << " " << ic0 << " " << ic1 << " " << iv0 << " " << iv1
-              << std::endl;
+
     TYPE v0 = __data[iv0];
     TYPE v1 = __data[iv1];
-    std::cout << v0.transpose() << " " << v1.transpose() << " - "
-              << __tmp.size() << std::endl;
+
     __tmp[i] = 0.5 * (v0 + v1);
   }
   virtual void do_alloc(const size_t &sz) {
