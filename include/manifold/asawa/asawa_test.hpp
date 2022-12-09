@@ -114,9 +114,18 @@ public:
     std::vector<vec3> &dx = v_datum->data();
     std::cout << "frame: " << frame << std::endl;
 
-    if (frame == 1)
-      dx[0] = vec3(0.0, 0.0, 0.01);
+    if (frame == 1) {
 
+      dx[0] = vec3(0.0, 0.01, -0.005);
+      dx[2] = vec3(0.01, 0.00, -0.005);
+      dx[4] = vec3(-0.01, 0.0, -0.005);
+      dx[6] = vec3(0.00, -0.01, -0.005);
+
+      dx[1] = vec3(0.01, 0.0, 0.005);
+      dx[3] = vec3(0.00, -0.01, 0.005);
+      dx[5] = vec3(0.00, 0.01, 0.005);
+      dx[7] = vec3(-0.01, 0.00, 0.005);
+    }
     __surf->step(dx);
 
     vec3_datum::ptr c_datum =

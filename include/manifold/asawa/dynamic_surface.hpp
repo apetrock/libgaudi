@@ -28,6 +28,20 @@ using vec4 = Eigen::Matrix<real, 4, 1>;
 using real_datum = datum_t<real>;
 using vec3_datum = datum_t<vec3>;
 
+bool skip_edge(manifold &M, index_t corner) {
+  index_t c0 = corner;
+  index_t c1 = M.other(c0);
+  index_t v0 = M.vert(c0);
+  index_t v1 = M.vert(c1);
+  if (M.vsize(v0) < 4)
+    return true;
+  if (M.vsize(v1) < 4)
+    return true;
+  if (M.vert(M.prev(c0)) == M.vert(M.prev(c1)))
+    return true;
+  return false;
+}
+
 void op_edges(manifold &M, //
               std::vector<index_t> &edges_to_op,
               std::function<index_t(index_t cid, manifold &m)> func) {
@@ -146,6 +160,7 @@ std::vector<index_t> gather_edges(manifold &M, const comparator &comp) {
   for (int i = 0; i < edges.size(); i++) {
     index_t c0 = edges[i];
     index_t c1 = M.other(c0);
+
     index_t f0 = M.face(c0);
     index_t f1 = M.face(c1);
 
@@ -185,8 +200,17 @@ public:
     __vdatum_id = __M->insert_datum(vdata);
   };
 
-  void flip_edges() {
+  void delete_degenerates() {
+    for (int i = 0; i < __M->vert_count(); i++) {
+      if (__M->vbegin(i) < 0)
+        continue;
+      if (__M->vsize(i) < 4)
+        remove_vertex(*__M, i);
+    }
+  }
 
+  void flip_edges() {
+    std::cout << __PRETTY_FUNCTION__ << std::endl;
     std::vector<index_t> edges = __M->get_edge_range();
     for (int i = 0; i < edges.size(); i++) {
       int card = rand() % edges.size();
@@ -197,8 +221,12 @@ public:
 
     for (int i = 0; i < edges.size(); i++) {
       // std::cout << "A" << std::endl;
+
       index_t c0 = edges[i];
       index_t c1 = __M->prev(c0);
+
+      if (skip_edge(*__M, c0))
+        continue;
 
       index_t c2 = __M->other(c0);
       index_t c3 = __M->prev(c2);
@@ -206,26 +234,11 @@ public:
       vec3_datum::ptr coord_datum =
           static_pointer_cast<vec3_datum>(__M->get_datum(0));
       const std::vector<vec3> &data = coord_datum->data();
-
       vec3 v0 = data[__M->vert(c0)];
       vec3 v1 = data[__M->vert(c1)];
       vec3 v2 = data[__M->vert(c2)];
       vec3 v3 = data[__M->vert(c3)];
-      /*
-      real A0 = va::calculate_area<real>(v0, v1, v2);
-      real A1 = va::calculate_area<real>(v2, v3, v0);
 
-      if (A0 / A1 > 4.0) {
-        flip_edge(*__M, c0);
-        continue;
-      } else if (A1 / A0 > 4) {
-        flip_edge(*__M, c0);
-        continue;
-      }
-      */
-      // std::cout << A0 << "  " << A1 << " " << A0 / A1 << " " << A1 / A0
-      //           << std::endl;
-      //  interior angles
       real m01 = 1.0 / (v0 - v1).norm();
       real m12 = 1.0 / (v1 - v2).norm();
       real m23 = 1.0 / (v2 - v3).norm();
@@ -290,7 +303,7 @@ public:
              [](index_t cid, manifold &m) { return collapse_edge(m, cid); });
   }
 
-  void step(const std::vector<vec3> &dx) {
+  void update_positions(const std::vector<vec3> &dx) {
 
     vec3_datum::ptr c_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
@@ -304,10 +317,16 @@ public:
       _dx[i] = dx[i];
       coords[i] += dx[i];
     }
+  }
 
+  void step(const std::vector<vec3> &dx) {
+    update_positions(dx);
     split_edges();
+    delete_degenerates();
     collapse_edges();
+    delete_degenerates();
     flip_edges();
+    delete_degenerates();
   }
 
   manifold::ptr __M;

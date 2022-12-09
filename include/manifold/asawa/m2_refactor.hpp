@@ -119,7 +119,9 @@ public:
 
   index_t fbegin(index_t id) const { return __face_begin[id]; }
   index_t fend(index_t id) const { return prev(__face_begin[id]); }
+
   index_t vbegin(index_t id) const { return __vert_begin[id]; }
+
   index_t vend(index_t id) const { return vprev(__vert_begin[id]); }
 
   void set_vbegin(index_t id, index_t c) { __vert_begin[id] = c; }
@@ -133,20 +135,30 @@ public:
     set_vbegin(v, cid);
   }
 
-  void set_vert_pair(index_t c0, index_t v0, index_t v1) {
-    index_t c1 = other(c0);
-    set_vert(c0, v0);
-    set_vert(c1, v1);
-  }
-
   void set_face(index_t cid, index_t f) {
     __corners_face[cid] = f;
     set_fbegin(f, cid);
   }
 
   void link(index_t c0, index_t c1) {
+    assert(vert(c0) != vert(c1));
     set_next(c0, c1);
     set_prev(c1, c0);
+  }
+
+  void uber_assert() {
+    for (int i = 0; i < corner_count(); i++) {
+      index_t c0 = i;
+      index_t c1 = other(c0);
+      if (__corners_next[i] < 0)
+        continue;
+
+      if (vert(c0) == vert(c1)) {
+        std::cout << "    " << __PRETTY_FUNCTION__ << " c: " << c0 << " " << c1
+                  << " v: " << vert(c0) << " " << vert(c1) << std::endl;
+      }
+      assert(vert(c0) != vert(c1));
+    }
   }
 
   index_t insert_vertex() {
@@ -176,12 +188,12 @@ public:
   }
 
   void remove_vertex(index_t i) {
-    std::cout << "    " << __FUNCTION__ << " " << i << std::endl;
+    // std::cout << "    " << __PRETTY_FUNCTION__ << " " << i << std::endl;
     __vert_begin[i] = -1;
   }
 
   void remove_face(index_t i) {
-    std::cout << "    " << __FUNCTION__ << " " << i << std::endl;
+    // std::cout << "    " << __PRETTY_FUNCTION__ << " " << i << std::endl;
     __face_begin[i] = -1;
   }
 
@@ -256,14 +268,39 @@ public:
     return s;
   }
 
+  void cprint(index_t c0) {
+    index_t c1 = other(c0);
+    index_t c0p = prev(c0);
+    index_t c1p = prev(c1);
+
+    index_t v0 = vert(c0);
+    index_t v1 = vert(c1);
+    index_t v0p = vert(c0p);
+    index_t v1p = vert(c1p);
+    std::cout << " =========== " << std::endl;
+    std::cout << "    " << c0p << std::endl;
+    std::cout << c0 << "---" << c1 << std::endl;
+    std::cout << "    " << c1p << std::endl;
+    std::cout << "    " << v0p << std::endl;
+    std::cout << v0 << "---" << v1 << std::endl;
+    std::cout << "    " << v1p << std::endl;
+    std::cout << " vs: " << vsize(v0) << " " << vsize(v1) << std::endl;
+    std::cout << " vps: " << vsize(v0) << " " << vsize(v1) << std::endl;
+    vprint_graph_viz(v0);
+    vprint_graph_viz(v1);
+    vprint_graph_viz(v0p);
+    vprint_graph_viz(v1p);
+    std::cout << " =========== " << std::endl;
+  }
+
   void fprint(index_t f) {
-    std::cout << "f" << f << ": ";
+    std::cout << "f-" << f << ": ";
     for_each_face(f, [](index_t cid, manifold &m) { std::cout << cid << " "; });
     std::cout << std::endl;
   }
 
   void fprintv(index_t f) {
-    std::cout << "f valence:" << f << ": ";
+    std::cout << "fvs-" << f << ": ";
     for_each_face(f, [this](index_t cid, manifold &m) {
       std::cout << this->vert(cid) << " ";
     });
@@ -271,10 +308,30 @@ public:
   }
 
   void vprint(index_t v) {
-    std::cout << "v" << v << ": ";
+    std::cout << "v-" << v << ": ";
     for_each_vertex(v,
                     [](index_t cid, manifold &m) { std::cout << cid << " "; });
     std::cout << std::endl;
+  }
+
+  void vprintv(index_t v) {
+    std::cout << "vvs-" << v << ": ";
+    for_each_vertex(v, [this](index_t cid, manifold &m) {
+      std::cout << this->vert(this->next(cid)) << " ";
+    });
+    std::cout << std::endl;
+  }
+
+  void vprint_graph_viz(index_t v) {
+    std::cout << "    ========" << std::endl;
+    std::cout << "    vg-" << v << std::endl;
+    for_each_vertex(v, [this](index_t cid, manifold &m) {
+      // std::cout << "    " << cid << " -> " << this->next(cid) << std::endl;
+      // std::cout << "    " << cid << " -> v" << this->vert(cid) << std::endl;
+      std::cout << "    " << this->vert(cid) << " -> "
+                << this->vert(this->next(cid)) << std::endl;
+    });
+    std::cout << "    ========" << std::endl;
   }
 
   std::vector<index_t> __corners_next;
