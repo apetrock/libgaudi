@@ -597,13 +597,13 @@ public:
       i++;
     }
     double dt = 0.5 * pow(_scale, 2);
-    asawa::laplacian<SPACE, real> lap(surf);
+    bontecou::laplacian<SPACE, real> lap(surf);
     std::vector<real> dist = lap.heatDist(f, dt);
     //////////////////////////
     // curvature
     //////////////////////////
 
-    asawa::cotan_curvature<SPACE> curve(surf);
+    bontecou::cotan_curvature<SPACE> curve(surf);
     std::vector<real> K = curve();
     // std::for_each(K.begin(), K.end(), [](auto &k) { k = 1.0 / k; });
     real K_mean, K_stdev;

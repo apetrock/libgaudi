@@ -23,7 +23,7 @@
 #include <any>
 #include <memory>
 
-#include "geometry_types.hpp"
+#include "manifold/geometry_types.hpp"
 #include "manifold/trace.hpp"
 #include "manifold/vec_addendum.h"
 

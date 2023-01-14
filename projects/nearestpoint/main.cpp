@@ -674,7 +674,7 @@ public:
     auto hot =
         asawa::ci::get<SPACE, coordinate_type>(surf, SPACE::vertex_index::ACT);
 
-    asawa::cotan_curvature<SPACE> curve(surf);
+    bontecou::cotan_curvature<SPACE> curve(surf);
     std::vector<real> K = curve();
     real mn = K[0];
     real mx = K[0];

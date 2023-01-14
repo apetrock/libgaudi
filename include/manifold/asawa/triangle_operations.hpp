@@ -1356,7 +1356,7 @@ public:
     vertex_array &vertices = this->_surf->get_vertices();
     int i = 0;
     // asawa::area_laplacian_0<SPACE, coordinate_type> M(this->_surf);
-    asawa::laplacian3<SPACE> M(this->_surf);
+    bontecou::laplacian3<SPACE> M(this->_surf);
 
     std::cout << "ugly smoothing " << std::flush;
     coordinate_array coords = asawa::ci::get_coordinates<SPACE>(this->_surf);

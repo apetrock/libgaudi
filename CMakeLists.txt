@@ -92,7 +92,7 @@ set(CMAKE_CXX_FLAGS_UBSAN
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 
   # Optionally set things like CMAKE_CXX_STANDARD, CMAKE_POSITION_INDEPENDENT_CODE here
-
+  set (CMAKE_ENABLE_EXPORTS TRUE)
   # Let's ensure -std=c++xx instead of -std=g++xx
   set(CMAKE_CXX_EXTENSIONS OFF)
 

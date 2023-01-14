@@ -1,29 +1,96 @@
-
-
-#include "geometry_types.hpp"
-#include "manifold/vec_addendum.h"
-
-#include "GaudiGraphics/geometry_logger.h"
-
+#include <cassert>
 #include <cstddef>
+#include <cxxabi.h>
+
+#include <execinfo.h>
+#include <iostream>
 #include <memory.h>
+#include <numeric>
 #include <ostream>
 #include <stdio.h>
+#include <type_traits>
 #include <vector>
 #include <zlib.h>
 
 #ifndef __ASAWA_MANIFOLD_SURFACE__
 #define __ASAWA_MANIFOLD_SURFACE__
+
+/** Print a demangled stack backtrace of the caller function to FILE* out. */
+static inline void print_stacktrace(FILE *out = stderr,
+                                    unsigned int max_frames = 63) {
+  fprintf(out, "stack trace:\n");
+
+  // storage array for stack trace address data
+  void *addrlist[max_frames + 1];
+
+  // retrieve current stack addresses
+  int addrlen = backtrace(addrlist, sizeof(addrlist) / sizeof(void *));
+
+  if (addrlen == 0) {
+    fprintf(out, "  <empty, possibly corrupt>\n");
+    return;
+  }
+
+  // resolve addresses into strings containing "filename(function+address)",
+  // this array must be free()-ed
+  char **symbollist = backtrace_symbols(addrlist, addrlen);
+
+  // allocate string which will be filled with the demangled function name
+  size_t funcnamesize = 256;
+  char *funcname = (char *)malloc(funcnamesize);
+
+  // iterate over the returned symbol lines. skip the first, it is the
+  // address of this function.
+  for (int i = 1; i < addrlen; i++) {
+    char *begin_name = 0, *begin_offset = 0, *end_offset = 0;
+
+    // find parentheses and +address offset surrounding the mangled name:
+    // ./module(function+0x15c) [0x8048a6d]
+    for (char *p = symbollist[i]; *p; ++p) {
+      if (*p == '(')
+        begin_name = p;
+      else if (*p == '+')
+        begin_offset = p;
+      else if (*p == ')' && begin_offset) {
+        end_offset = p;
+        break;
+      }
+    }
+
+    if (begin_name && begin_offset && end_offset && begin_name < begin_offset) {
+      *begin_name++ = '\0';
+      *begin_offset++ = '\0';
+      *end_offset = '\0';
+
+      // mangled name is now in [begin_name, begin_offset) and caller
+      // offset in [begin_offset, end_offset). now apply
+      // __cxa_demangle():
+
+      int status;
+      char *ret =
+          abi::__cxa_demangle(begin_name, funcname, &funcnamesize, &status);
+      if (status == 0) {
+        funcname = ret; // use possibly realloc()-ed string
+        fprintf(out, "  %s : %s+%s\n", symbollist[i], funcname, begin_offset);
+      } else {
+        // demangling failed. Output function name as a C function with
+        // no arguments.
+        fprintf(out, "  %s : %s()+%s\n", symbollist[i], begin_name,
+                begin_offset);
+      }
+    } else {
+      // couldn't parse the line? print the whole line.
+      fprintf(out, "  %s\n", symbollist[i]);
+    }
+  }
+
+  free(funcname);
+  free(symbollist);
+}
+
 namespace asawa {
 
 typedef int index_t;
-
-enum prim_type {
-  VERTEX,
-  FACE,
-  EDGE,
-  CORNER,
-};
 
 class datum;
 typedef std::shared_ptr<datum> datum_ptr;
@@ -56,6 +123,7 @@ public:
       p_beg = std::vector<index_t>(size + 1, -1);
 
       for (int i = 0; i < c_ptr.size(); i++) {
+        // std::cout << i << " " << c_ptr[i] << " " << std::endl;
         p_beg[c_ptr[i]] = i;
       }
     };
@@ -78,24 +146,7 @@ public:
       }
     }
   }
-  /*
-  void pack() {
-    // TODO: safer pack, iterating from mRecycle[i] to mRecycle[i+1]
-    // if (mFaceRecycle.size() > 0) {
-    face_array tFaces;
 
-    int j = 0;
-    for (int i = 0; i < mFaces.size(); i++) {
-      if (mHasFace[i]) {
-        tFaces.push_back(mFaces[i]);
-        tFaces.back()->position_in_set() = j;
-        j++;
-      }
-    }
-    mHasFace = std::vector<bool>(tFaces.size(), true);
-    swap(mFaces, tFaces);
-  }
-  */
   index_t insert_datum(datum_ptr datum) {
     __data.push_back(datum);
     return __data.size() - 1;
@@ -141,6 +192,11 @@ public:
   }
 
   void link(index_t c0, index_t c1) {
+    // std::cout << __PRETTY_FUNCTION__ << c0 << " " << c1 << std::endl;
+    if (vert(c0) == vert(c1)) {
+      print_stacktrace();
+      __builtin_frame_address(1);
+    }
     assert(vert(c0) != vert(c1));
     set_next(c0, c1);
     set_prev(c1, c0);
@@ -155,10 +211,69 @@ public:
 
       if (vert(c0) == vert(c1)) {
         std::cout << "    " << __PRETTY_FUNCTION__ << " c: " << c0 << " " << c1
-                  << " v: " << vert(c0) << " " << vert(c1) << std::endl;
+                  << " v: " << vert(c0) << " " << vert(c1) //
+                  << " vs: " << vsize(vert(c0)) << " " << vsize(vert(c1))
+                  << std::endl;
       }
-      assert(vert(c0) != vert(c1));
+      // std::cout << c0 << " " << vert(c0) << std::endl;
+      if (vsize(vert(c0)) > 1)
+        assert(vert(c0) != vert(c1));
     }
+
+    for (int i = 0; i < vert_count(); i++) {
+      if (vbegin(i) < 0)
+        continue;
+
+      if (next(vbegin(i)) < 0) {
+        std::cout << "-" << __PRETTY_FUNCTION__ << " v: " << i << " "
+                  << vbegin(i) << " " << std::endl
+                  << std::flush;
+        vprintv(i);
+      }
+      assert(next(vbegin(i)) >= 0);
+
+      if (vert(vbegin(i)) != i) {
+        std::cout << "-" << __PRETTY_FUNCTION__ << " v: " //
+                  << i << " "                             //
+                  << vbegin(i) << " "                     //
+                  << vert(vbegin(i)) << " "               //
+                  << std::endl
+                  << std::flush;
+
+        for_each_vertex(i, [](index_t cid, manifold &m) {
+          std::cout << m.vert(cid) << " ";
+        });
+        std::cout << std::endl;
+      }
+      assert(vert(vbegin(i)) == i);
+    }
+
+    for (int i = 0; i < face_count(); i++) {
+      if (__face_begin[i] < 0)
+        continue;
+      if (fsize(i) != 3) {
+        std::cout << "-" << __PRETTY_FUNCTION__ << " f: " << i << " "
+                  << __face_begin[i] << " " << fsize(i) << std::endl;
+        fprintv(i);
+      }
+      assert(fsize(i) < 4);
+    }
+  }
+
+  void inflate_verts(size_t N) {
+    __vert_begin.resize(__vert_begin.size() + N, -1);
+  }
+
+  void inflate_faces(size_t N) {
+    __face_begin.resize(__face_begin.size() + N, -1);
+  }
+
+  void inflate_edge_pairs(size_t N) {
+    size_t Ns = __corners_next.size() + 2 * N;
+    __corners_next.resize(Ns, -1);
+    __corners_prev.resize(Ns, -1);
+    __corners_vert.resize(Ns, -1);
+    __corners_face.resize(Ns, -1);
   }
 
   index_t insert_vertex() {
@@ -187,8 +302,41 @@ public:
     return __corners_next.size() - 2;
   }
 
+  void swap_rows(index_t cA, index_t cB) {
+
+    index_t cAn = __corners_next[cA];
+    index_t cAp = __corners_prev[cA];
+    index_t vA = __corners_vert[cA];
+    index_t fA = __corners_face[cA];
+
+    index_t cBn = __corners_next[cB];
+    index_t cBp = __corners_prev[cB];
+    index_t vB = __corners_vert[cB];
+    index_t fB = __corners_face[cB];
+
+    set_next(prev(cA), cB);
+    set_prev(next(cA), cB);
+    set_vbegin(vA, cB);
+    set_fbegin(fA, cB);
+
+    set_next(prev(cB), cA);
+    set_prev(next(cB), cA);
+    set_vbegin(vB, cA);
+    set_fbegin(fB, cA);
+
+    __corners_next[cA] = cBn;
+    __corners_prev[cA] = cBp;
+    __corners_vert[cA] = vB;
+    __corners_face[cA] = fB;
+
+    __corners_next[cB] = cAn;
+    __corners_prev[cB] = cAp;
+    __corners_vert[cB] = vA;
+    __corners_face[cB] = fA;
+  }
+
   void remove_vertex(index_t i) {
-    // std::cout << "    " << __PRETTY_FUNCTION__ << " " << i << std::endl;
+    std::cout << "    " << __PRETTY_FUNCTION__ << " " << i << std::endl;
     __vert_begin[i] = -1;
   }
 
@@ -213,6 +361,37 @@ public:
     __corners_face[i1] = -1;
   }
 
+  std::vector<index_t> get_pack_permute(std::vector<index_t> &indices) {
+    std::vector<index_t> perm(__corners_next);
+    std::iota(perm.begin(), perm.end(), 0);
+
+    int w = 0;
+    //-----------xxxxxxx----x------
+    //           |      |
+
+    for (int r = 1; r < indices.size(); r++) {
+      if (indices[r - 1] < 0 && indices[r] > -1 && indices[w]) {
+        std::swap(perm[r], perm[w]);
+        w++;
+      }
+    }
+    return perm;
+  }
+
+  void pack(std::vector<index_t> &to_pack, index_t &rhead, index_t &whead) {
+    std::vector<index_t> cperm = get_pack_permute(__corners_next);
+    std::cout << " before: ";
+    for (int i = 0; i < __corners_next.size(); i++) {
+      std::cout << __corners_next[i] << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "  after: ";
+    for (int i = 0; i < cperm.size(); i++) {
+      std::cout << cperm[i] << " ";
+    }
+    std::cout << std::endl;
+  }
+
   void for_each_face(index_t i,
                      std::function<void(index_t cid, manifold &m)> func) {
     int j0 = this->fbegin(i);
@@ -225,12 +404,30 @@ public:
     }
   }
 
+  void for_each_face_tri(
+      index_t i,
+      std::function<void(index_t c0, index_t c1, index_t c2, manifold &m)>
+          func) {
+    int j1 = this->fbegin(i);
+    int j2 = this->next(j1);
+    int j0 = this->fend(i);
+    bool it = true;
+    while (it) {
+      it = j2 != j0;
+      func(j0, j1, j2, *this);
+      index_t jn = this->next(j2);
+      j1 = j2;
+      j2 = jn;
+    }
+  }
+
   void for_each_vertex(index_t i,
                        std::function<void(index_t cid, manifold &m)> func) {
     int j0 = this->vbegin(i);
     int j_end = this->vend(i);
     bool it = true;
-    while (it) {
+    int k = 0;
+    while (it && k++ < 100) {
       it = j0 != j_end;
       func(j0, *this);
       j0 = this->vnext(j0);
@@ -246,6 +443,68 @@ public:
         range.push_back(i);
     }
     return range;
+  }
+
+  std::vector<index_t> get_vert_range() const {
+    std::vector<index_t> range;
+    range.reserve(vert_count());
+    // replace this with some c++isms
+    for (int i = 0; i < vert_count(); i++) {
+      if (__vert_begin[i] > -1)
+        range.push_back(i);
+    }
+    return range;
+  }
+
+  std::vector<index_t> get_face_range() const {
+    std::vector<index_t> range;
+    range.reserve(face_count());
+    // replace this with some c++isms
+    for (int i = 0; i < face_count(); i++) {
+      if (__face_begin[i] > -1)
+        range.push_back(i);
+    }
+    return range;
+  }
+
+  std::vector<index_t> get_edge_vert_ids() {
+    std::vector<index_t> range;
+    range.reserve(corner_count());
+    // replace this with some c++isms
+    for (int i = 0; i < corner_count(); i += 2) {
+      if (__corners_next[i] < 0)
+        continue;
+      range.push_back(vert(i));
+      range.push_back(vert(other(i)));
+    }
+    return range;
+  }
+
+  std::vector<index_t> get_edge_map() {
+    std::vector<index_t> range;
+    range.reserve(corner_count());
+    // replace this with some c++isms
+    for (int i = 0; i < corner_count(); i += 2) {
+      if (__corners_next[i] < 0)
+        continue;
+      range.push_back(i);
+    }
+    return range;
+  }
+
+  std::vector<index_t> get_face_vert_ids() {
+    std::vector<int> faces;
+    faces.reserve(3 * face_count());
+
+    for (int i = 0; i < face_count(); i++) {
+      if (fbegin(i) < 0)
+        continue;
+
+      for_each_face(i, [&faces](int ci, asawa::manifold &M) {
+        faces.push_back(M.vert(ci));
+      });
+    }
+    return faces;
   }
 
   void fupdate(index_t f) {
@@ -290,6 +549,11 @@ public:
     vprint_graph_viz(v1);
     vprint_graph_viz(v0p);
     vprint_graph_viz(v1p);
+    vprintvs(v0);
+    vprintvs(v1);
+    vprintvs(v0p);
+    vprintvs(v1p);
+
     std::cout << " =========== " << std::endl;
   }
 
@@ -300,24 +564,42 @@ public:
   }
 
   void fprintv(index_t f) {
-    std::cout << "fvs-" << f << ": ";
+    std::cout << "fvs-" << f << ": " << std::flush;
     for_each_face(f, [this](index_t cid, manifold &m) {
-      std::cout << this->vert(cid) << " ";
+      std::cout << this->vert(cid) << " " << std::flush;
     });
-    std::cout << std::endl;
+    std::cout << std::endl << std::flush;
   }
 
   void vprint(index_t v) {
-    std::cout << "v-" << v << ": ";
-    for_each_vertex(v,
-                    [](index_t cid, manifold &m) { std::cout << cid << " "; });
-    std::cout << std::endl;
+    std::cout << "v-" << v << ": " << std::flush;
+    for_each_vertex(v, [](index_t cid, manifold &m) {
+      std::cout << cid << " " << std::flush;
+    });
+    std::cout << std::endl << std::flush;
   }
 
   void vprintv(index_t v) {
-    std::cout << "vvs-" << v << ": ";
+    std::cout << "vvs-" << v << ": " << std::flush;
     for_each_vertex(v, [this](index_t cid, manifold &m) {
-      std::cout << this->vert(this->next(cid)) << " ";
+      std::cout << this->vert(this->next(cid)) << " " << std::flush;
+    });
+    std::cout << std::endl << std::flush;
+  }
+
+  void vprintvs(index_t v) {
+    std::cout << "vvs-" << v << ": " << std::flush;
+    for_each_vertex(v, [this](index_t cid, manifold &m) {
+      std::cout << this->vsize(this->vert(this->next(cid))) << " "
+                << std::flush;
+    });
+    std::cout << std::endl << std::flush;
+  }
+
+  void vprintfs(index_t v) {
+    std::cout << "vfs-" << v << ": ";
+    for_each_vertex(v, [this](index_t cid, manifold &m) {
+      std::cout << this->fsize(this->face(cid)) << " ";
     });
     std::cout << std::endl;
   }
@@ -343,115 +625,5 @@ public:
   std::vector<index_t> __face_begin;
   std::vector<datum_ptr> __data;
 };
-
-struct datum {
-public:
-  typedef std::shared_ptr<datum> ptr;
-
-  // static ptr create() { return std::make_shared<datum>(); }
-
-  datum(prim_type type) : __type(type){};
-  virtual ~datum(){};
-
-  template <class... Types>
-  void calc(index_t i, const manifold &M, Types... args) {
-    std::vector<index_t> vector;
-    add_args(vector, args...);
-    assert(!empty(vector));
-    do_calc(i, vector, M);
-  }
-
-  template <typename LastType>
-  static void add_args(std::vector<index_t> &vector, LastType arg) {
-    vector.push_back(arg);
-  };
-
-  template <typename FirstType, typename... OtherTypes>
-  static void add_args(std::vector<index_t> &vector, FirstType const &firstArg,
-                       OtherTypes... otherArgs) {
-    vector.push_back(firstArg);
-    add_args(vector, otherArgs...);
-  };
-
-  void alloc(size_t sz) { do_alloc(sz); }
-  void resize(size_t sz) { do_resize(sz); }
-  void map(index_t i, index_t it) { do_map(i, it); }
-
-  virtual void do_alloc(const size_t &sz) = 0;
-  virtual void do_resize(const size_t &sz) = 0;
-  virtual void do_calc(const index_t &i, const std::vector<index_t> &vals,
-                       const manifold &M) = 0;
-  virtual void do_map(const index_t i, const index_t it) = 0;
-
-  virtual void write(FILE *file) const = 0;
-
-  virtual void compute_vert_split(size_t v0, size_t v1) {}
-
-  virtual void read(FILE *file) = 0;
-  virtual void clear() = 0;
-  const prim_type &type() { return __type; };
-
-  prim_type __type;
-};
-
-template <typename TYPE> struct datum_t : public datum {
-public:
-  typedef std::shared_ptr<datum_t<TYPE>> ptr;
-
-  static ptr create(prim_type type, const std::vector<TYPE> &data) {
-    return std::make_shared<datum_t<TYPE>>(type, data);
-  }
-
-  datum_t(prim_type type, const std::vector<TYPE> &data)
-      : datum(type), __data(data){};
-  virtual ~datum_t(){};
-
-  std::vector<TYPE> &data() { return __data; }
-  const std::vector<TYPE> &data() const { return __data; }
-
-  virtual void do_calc(const index_t &i, const std::vector<index_t> &vals,
-                       const manifold &M) {
-    index_t ic0 = vals[0];
-    index_t ic1 = M.other(ic0);
-    index_t iv0 = M.vert(ic0);
-    index_t iv1 = M.vert(ic1);
-
-    TYPE v0 = __data[iv0];
-    TYPE v1 = __data[iv1];
-
-    __tmp[i] = 0.5 * (v0 + v1);
-  }
-  virtual void do_alloc(const size_t &sz) {
-    __tmp = std::vector<TYPE>(sz, z::zero<TYPE>());
-  }
-  virtual void do_resize(const size_t &sz) { __data.resize(sz); }
-  virtual void do_map(const index_t i, const index_t it) {
-    __data[i] = __tmp[it];
-  }
-
-  unsigned long operator[](int i) const { return __data[i]; }
-  unsigned long &operator[](int i) { return __data[i]; }
-
-  virtual void write(FILE *file) const {
-    size_t nData = __data.size();
-    size_t e;
-    e = fwrite((void *)&nData, sizeof(size_t), 1, file);
-    e = fwrite((void *)__data.data(), sizeof(TYPE), nData, file);
-  }
-
-  virtual void read(FILE *file) {
-    size_t nData;
-    size_t e;
-    e = fread((void *)&nData, sizeof(size_t), 1, file);
-    __data.resize(nData);
-    e = fread((void *)__data.data(), sizeof(TYPE), nData, file);
-  }
-
-  virtual void clear() { __data.clear(); }
-
-  std::vector<TYPE> __data;
-  std::vector<TYPE> __tmp;
-};
-
 } // namespace asawa
 #endif

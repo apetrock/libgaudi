@@ -573,6 +573,22 @@ inline T distance_from_triangle(const VEC3<T> *tri, VEC3<T> r0) {
 }
 
 template <typename T>
+inline VEC3<T> orthogonal_project(const VEC3<T> &N, const VEC3<T> &A) {
+  // N has to be normalized
+  T dist = dot(N, A);
+  VEC3<T> out = A - dist * N;
+  return out;
+};
+
+template <typename T> MAT3<T> rejection_matrix(const VEC3<T> &N) {
+  return N * N.transpose() - MAT3<T>::Identity();
+}
+
+template <typename T> MAT3<T> projection_matrix(const VEC3<T> &N) {
+  return N * N.transpose();
+}
+
+template <typename T>
 inline vector<VEC3<T>> orthogonal_project(const VEC3<T> &norm,
                                           const vector<VEC3<T>> &verts) {
 
@@ -629,14 +645,6 @@ inline VEC3<T> project(const VEC3<T> &N, const VEC3<T> &A) {
   T dist = dot(N, A);
   T N2 = dot(N, N);
   VEC3<T> out = (dist / N2) * N;
-  return out;
-};
-
-template <typename T>
-inline VEC3<T> orthogonal_project(const VEC3<T> &N, const VEC3<T> &A) {
-  // N has to be normalized
-  T dist = dot(N, A);
-  VEC3<T> out = A - dist * N;
   return out;
 };
 

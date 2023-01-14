@@ -113,7 +113,7 @@ public:
 
   vector<asawa::colorRGB> getColor() {
     M2_TYPEDEFS;
-    asawa::cotan_curvature<SPACE> curve(_surf);
+    bontecou::cotan_curvature<SPACE> curve(_surf);
     std::vector<real> K = curve();
     real mean, stdev, mn, mx;
     calc_stdev(K, mean, stdev, mn, mx);

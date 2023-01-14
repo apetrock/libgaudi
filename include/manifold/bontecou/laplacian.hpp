@@ -27,7 +27,9 @@
 
 #include <math.h>
 
-namespace asawa {
+namespace bontecou {
+  
+using namespace asawa;
 template <typename SPACE, typename TYPE> class laplacian_base {
   M2_TYPEDEFS;
 
@@ -606,5 +608,5 @@ private:
   asawa::surf<SPACE> *_surf;
 };
 
-} // namespace asawa
+} // namespace bontecou
 #endif

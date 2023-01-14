@@ -9,8 +9,8 @@
 // files that USE the data structure
 #ifndef __M2TREE_CODE__
 #define __M2TREE_CODE__
-#include "manifold/asawa/geometry_types.hpp"
 #include "manifold/bins.hpp"
+#include "manifold/geometry_types.hpp"
 
 //#include <execution>
 #include <pstl/glue_execution_defs.h>

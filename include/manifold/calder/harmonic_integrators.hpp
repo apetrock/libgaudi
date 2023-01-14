@@ -11,8 +11,8 @@
 #define __M2HARMONIC_INTEGRATOR__
 
 #include "manifold/asawa/coordinate_interface.hpp"
-#include "manifold/asawa/geometry_types.hpp"
 #include "manifold/asawa/m2.hpp"
+#include "manifold/geometry_types.hpp"
 
 #include "tree_code.hpp"
 #include <vector>

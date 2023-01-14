@@ -31,7 +31,7 @@ template <typename SPACE> class diffuse {
 public:
   diffuse(asawa::surf<SPACE> *surf) {
     _surf = surf;
-    _M = new asawa::laplacian<SPACE, real>(surf);
+    _M = new bontecou::laplacian<SPACE, real>(surf);
   }
 
   ~diffuse() {}
@@ -45,7 +45,7 @@ public:
     M2_TYPEDEFS;
     asawa::surf<SPACE> *surf = this->_surf;
 
-    asawa::laplacian<SPACE, real> &M = *_M;
+    bontecou::laplacian<SPACE, real> &M = *_M;
 
     auto diffMult = [&M, dt, C, surf](const std::vector<real> &X) {
       std::vector<real> MX = M.multM(X);
@@ -82,7 +82,7 @@ public:
     M2_TYPEDEFS;
     asawa::surf<SPACE> *surf = this->_surf;
 
-    asawa::laplacian<SPACE, real> &M = *_M;
+    bontecou::laplacian<SPACE, real> &M = *_M;
 
     auto diffMult = [&M, dt, C, surf](const std::vector<real> &X) {
       std::vector<real> MX = M.multM(X);
@@ -115,7 +115,7 @@ public:
     return x;
   }
   asawa::surf<SPACE> *_surf;
-  asawa::laplacian<SPACE, real> *_M;
+  bontecou::laplacian<SPACE, real> *_M;
 };
 
 } // namespace asawa

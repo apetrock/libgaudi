@@ -16,6 +16,7 @@ that commemorate her well-known wire sculptures.[4][5]
 
 #include "manifold/asawa/affine.hpp"
 #include "manifold/asawa/coordinate_interface.hpp"
+#include "manifold/asawa/datums.hpp"
 #include "manifold/asawa/m2.hpp"
 #include "manifold/asawa/m2_flat.hpp"
 #include "manifold/asawa/make.hpp"
