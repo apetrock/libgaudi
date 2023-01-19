@@ -12,8 +12,8 @@
 
 #include "datum_x.hpp"
 
-#include "laplacian_refactor.hpp"
 #include "m2_refactor.hpp"
+#include "manifold/bontecou/laplacian_refactor.hpp"
 
 #include "primitive_operations.hpp"
 #include "subdivide.hpp"
@@ -52,7 +52,7 @@ real dist_line_line(manifold &M, index_t cA0, index_t cB0,
   vec3 xB0 = x[vB0];
   vec3 xB1 = x[vB1];
 
-  real d0 = 1.0 / 3.0 * ((xB0 - xA0).squaredNorm() + (xB1 - xA1).squaredNorm());
+  real d0 = 1.0 / 2.0 * ((xB0 - xA0).norm() + (xB1 - xA1).norm());
   return d0;
 };
 
@@ -381,7 +381,6 @@ public:
       if (M.vert(c0) != M.vert(c1))
         continue;
 
-      std::cout << "deg edge: " << i << std::endl;
       collapse_edge(M, c0, true);
     }
 
@@ -390,8 +389,6 @@ public:
         continue;
       if (M.fsize(i) > 2)
         continue;
-
-      std::cout << "deg face: " << i << std::endl;
       index_t c0 = M.fbegin(i);
       index_t c1 = M.other(c0);
       merge_face(M, c0, c1);
@@ -405,6 +402,10 @@ public:
         vec3 N = vert_normal(M, i, x);
         vec4 cola(0.0, 1.0, 1.0, 0.0);
         gg::geometry_logger::line(x[i], x[i] + 0.1 * N, cola);
+        M.for_each_vertex(i, [&x, &i, cola](index_t cid, manifold &m) {
+          index_t j = m.vert(m.next(cid));
+          gg::geometry_logger::line(x[i], x[j], cola);
+        });
       }
 
       if (M.vsize(i) > 3)
@@ -413,7 +414,6 @@ public:
       vec3 N = vert_normal(M, i, x);
       vec4 cola(0.2, 0.5, 1.0, 0.0);
       gg::geometry_logger::line(x[i], x[i] + 0.1 * N, cola);
-      std::cout << "removing: " << i << std::endl;
       remove_vertex(M, i);
     }
   }
@@ -441,10 +441,6 @@ public:
                            return true;
                          if (p[1] < 0)
                            return true;
-                         if (adjacent(M, p[0], p[1]))
-                           return true;
-                         if (share_faces(M, p[0], p[1]))
-                           return true;
 
                          vec3 cA = edge_center(M, p[0], x);
                          vec3 NA = edge_normal(M, p[0], x);
@@ -452,7 +448,7 @@ public:
                          vec3 NB = edge_normal(M, p[1], x);
                          real angle = va::dot(NA, NB);
 
-                         if (angle > -0.15) {
+                         if (angle > -0.75) {
                            return true;
                          }
                          vec4 cola(0.0, 1.0, 0.0, 1.0);
@@ -466,8 +462,8 @@ public:
 
     std::sort(collected.begin(), collected.end(),
               [&M, &x](const auto &pA, const auto &pB) {
-                real dA = dist_line_line_cen(M, pA[0], pA[1], x);
-                real dB = dist_line_line_cen(M, pB[0], pB[1], x);
+                real dA = dist_line_line(M, pA[0], pA[1], x);
+                real dB = dist_line_line(M, pB[0], pB[1], x);
                 return dA < dB;
               });
 
@@ -486,7 +482,7 @@ public:
     // edge_tree->debug(edges, x);
     real tol = this->_Cm * this->_Cm;
 
-    vector<std::array<index_t, 2>> collected(edge_verts.size() / 2);
+    std::vector<std::array<index_t, 2>> collected(edge_verts.size() / 2);
     //#pragma omp parallel for
     for (int i = 0; i < edge_verts.size(); i += 2) {
       index_t e0 = i / 2;
@@ -525,6 +521,54 @@ public:
 
     for (auto p : collected) {
       debug_line_line(M, p[0], p[1], x);
+    }
+
+    std::vector<index_t> f_collect(2 * collected.size());
+    for (int i = 0; i < collected.size(); i++) {
+      f_collect[2 * i + 0] = collected[i][0];
+      f_collect[2 * i + 1] = collected[i][1];
+    }
+
+    merge_op(*__M, f_collect,
+             [&x](index_t i,                         //
+                  index_t cs,                        //
+                  index_t vs,                        //
+                  index_t fs,                        //
+                  const std::vector<index_t> &edges, //
+                  manifold &M) -> corner4 {
+               index_t c0A = edges[i + 0];
+               index_t c0B = edges[i + 1];
+               return merge_edge(M, c0A, c0B, vs + 2 * i + 0, vs + 2 * i + 1);
+             });
+  }
+
+  void break_cycles() {
+    // edge e = c / 2;
+    manifold &M = *__M;
+
+    vec3_datum::ptr x_datum =
+        static_pointer_cast<vec3_datum>(__M->get_datum(0));
+    std::vector<vec3> &x = x_datum->data();
+
+    auto edges = M.get_edge_range();
+    std::vector<std::array<index_t, 2>> collected;
+
+    for (int i = 0; i < edges.size(); i++) {
+      index_t c0 = edges[i + 0];
+      index_t c1 = M.other(c0);
+      index_t v1 = M.vert(c1);
+      if (count_cycle(M, c0) < 2)
+        continue;
+
+      std::array<index_t, 2> pair = {0, 0};
+      int j = 0;
+      M.for_each_vertex(M.vert(c0), [v1, &pair, &j](index_t ci, manifold &M) {
+        index_t vi = M.vert(M.next(ci));
+        if (vi == v1 && j < 2) {
+          pair[j++] = ci;
+        }
+      });
+      collected.push_back(pair);
     }
 
     std::vector<index_t> f_collect(2 * collected.size());
@@ -709,15 +753,23 @@ public:
 
   void step(const std::vector<vec3> &dx) {
     update_positions(dx);
+
     merge_edges();
     delete_degenerates(*__M);
+
     subdivide_edges();
     delete_degenerates(*__M);
+
+    break_cycles();
+    delete_degenerates(*__M);
+
     collapse_edges();
     delete_degenerates(*__M);
+
     flip_edges();
     delete_degenerates(*__M);
-    __M->pack();
+
+    pack(*__M);
   }
 
   manifold::ptr __M;

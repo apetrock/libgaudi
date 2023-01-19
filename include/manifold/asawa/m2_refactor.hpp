@@ -1,7 +1,7 @@
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cxxabi.h>
-
 #include <execinfo.h>
 #include <iostream>
 #include <memory.h>
@@ -159,7 +159,8 @@ public:
   size_t face_count() const { return __face_begin.size(); }
   size_t corner_count() const { return __corners_next.size(); }
 
-  index_t other(int id) const { return 2 * (id / 2) + (id + 1) % 2; };
+  index_t other(index_t id) const { return 2 * (id / 2) + (id + 1) % 2; };
+  bool edge_equal(index_t c0, index_t c1) { return c0 / 2 == c1 / 2; }
   index_t vprev(index_t id) const { return this->next(this->other(id)); }
   index_t vnext(index_t id) const { return this->other(this->prev(id)); }
 
@@ -193,11 +194,13 @@ public:
 
   void link(index_t c0, index_t c1) {
     // std::cout << __PRETTY_FUNCTION__ << c0 << " " << c1 << std::endl;
+    /*
     if (vert(c0) == vert(c1)) {
       print_stacktrace();
       __builtin_frame_address(1);
     }
     assert(vert(c0) != vert(c1));
+    */
     set_next(c0, c1);
     set_prev(c1, c0);
   }
@@ -206,7 +209,7 @@ public:
     for (int i = 0; i < corner_count(); i++) {
       index_t c0 = i;
       index_t c1 = other(c0);
-      if (__corners_next[i] < 0)
+      if (next(c0) < 0)
         continue;
 
       if (vert(c0) == vert(c1)) {
@@ -215,7 +218,7 @@ public:
                   << " vs: " << vsize(vert(c0)) << " " << vsize(vert(c1))
                   << std::endl;
       }
-      // std::cout << c0 << " " << vert(c0) << std::endl;
+      // std::cout << c0 << " " << next(c0) << " " << vert(c0) << std::endl;
       if (vsize(vert(c0)) > 1)
         assert(vert(c0) != vert(c1));
     }
@@ -361,37 +364,6 @@ public:
     __corners_face[i1] = -1;
   }
 
-  std::vector<index_t> get_pack_permute(std::vector<index_t> &indices) {
-    std::vector<index_t> perm(__corners_next);
-    std::iota(perm.begin(), perm.end(), 0);
-
-    int w = 0;
-    //-----------xxxxxxx----x------
-    //           |      |
-
-    for (int r = 1; r < indices.size(); r++) {
-      if (indices[r - 1] < 0 && indices[r] > -1 && indices[w]) {
-        std::swap(perm[r], perm[w]);
-        w++;
-      }
-    }
-    return perm;
-  }
-
-  void pack(std::vector<index_t> &to_pack, index_t &rhead, index_t &whead) {
-    std::vector<index_t> cperm = get_pack_permute(__corners_next);
-    std::cout << " before: ";
-    for (int i = 0; i < __corners_next.size(); i++) {
-      std::cout << __corners_next[i] << " ";
-    }
-    std::cout << std::endl;
-    std::cout << "  after: ";
-    for (int i = 0; i < cperm.size(); i++) {
-      std::cout << cperm[i] << " ";
-    }
-    std::cout << std::endl;
-  }
-
   void for_each_face(index_t i,
                      std::function<void(index_t cid, manifold &m)> func) {
     int j0 = this->fbegin(i);
@@ -423,6 +395,7 @@ public:
 
   void for_each_vertex(index_t i,
                        std::function<void(index_t cid, manifold &m)> func) {
+
     int j0 = this->vbegin(i);
     int j_end = this->vend(i);
     bool it = true;
@@ -536,15 +509,15 @@ public:
     index_t v1 = vert(c1);
     index_t v0p = vert(c0p);
     index_t v1p = vert(c1p);
-    std::cout << " =========== " << std::endl;
-    std::cout << "    " << c0p << std::endl;
-    std::cout << c0 << "---" << c1 << std::endl;
-    std::cout << "    " << c1p << std::endl;
-    std::cout << "    " << v0p << std::endl;
-    std::cout << v0 << "---" << v1 << std::endl;
-    std::cout << "    " << v1p << std::endl;
-    std::cout << " vs: " << vsize(v0) << " " << vsize(v1) << std::endl;
-    std::cout << " vps: " << vsize(v0) << " " << vsize(v1) << std::endl;
+    std::cout << "// =========== " << std::endl;
+    std::cout << "//    " << c0p << std::endl;
+    std::cout << "//" << c0 << "---" << c1 << std::endl;
+    std::cout << "//    " << c1p << std::endl;
+    std::cout << "//    " << v0p << std::endl;
+    std::cout << "//" << v0 << "---" << v1 << std::endl;
+    std::cout << "//    " << v1p << std::endl;
+    std::cout << "// vs: " << vsize(v0) << " " << vsize(v1) << std::endl;
+    std::cout << "// vps: " << vsize(v0) << " " << vsize(v1) << std::endl;
     vprint_graph_viz(v0);
     vprint_graph_viz(v1);
     vprint_graph_viz(v0p);
@@ -554,17 +527,17 @@ public:
     vprintvs(v0p);
     vprintvs(v1p);
 
-    std::cout << " =========== " << std::endl;
+    std::cout << "// =========== " << std::endl;
   }
 
   void fprint(index_t f) {
-    std::cout << "f-" << f << ": ";
+    std::cout << "//f-" << f << ": ";
     for_each_face(f, [](index_t cid, manifold &m) { std::cout << cid << " "; });
     std::cout << std::endl;
   }
 
   void fprintv(index_t f) {
-    std::cout << "fvs-" << f << ": " << std::flush;
+    std::cout << "//fvs-" << f << ": " << std::flush;
     for_each_face(f, [this](index_t cid, manifold &m) {
       std::cout << this->vert(cid) << " " << std::flush;
     });
@@ -572,7 +545,7 @@ public:
   }
 
   void vprint(index_t v) {
-    std::cout << "v-" << v << ": " << std::flush;
+    std::cout << "//v-" << v << ": " << std::flush;
     for_each_vertex(v, [](index_t cid, manifold &m) {
       std::cout << cid << " " << std::flush;
     });
@@ -580,7 +553,7 @@ public:
   }
 
   void vprintv(index_t v) {
-    std::cout << "vvs-" << v << ": " << std::flush;
+    std::cout << "//vvs-" << v << ": " << std::flush;
     for_each_vertex(v, [this](index_t cid, manifold &m) {
       std::cout << this->vert(this->next(cid)) << " " << std::flush;
     });
@@ -588,7 +561,7 @@ public:
   }
 
   void vprintvs(index_t v) {
-    std::cout << "vvs-" << v << ": " << std::flush;
+    std::cout << "//vvs-" << v << ": " << std::flush;
     for_each_vertex(v, [this](index_t cid, manifold &m) {
       std::cout << this->vsize(this->vert(this->next(cid))) << " "
                 << std::flush;
@@ -597,7 +570,7 @@ public:
   }
 
   void vprintfs(index_t v) {
-    std::cout << "vfs-" << v << ": ";
+    std::cout << "//vfs-" << v << ": ";
     for_each_vertex(v, [this](index_t cid, manifold &m) {
       std::cout << this->fsize(this->face(cid)) << " ";
     });
@@ -605,16 +578,25 @@ public:
   }
 
   void vprint_graph_viz(index_t v) {
-    std::cout << "    ========" << std::endl;
-    std::cout << "    vg-" << v << std::endl;
+    std::cout << "//    ========" << std::endl;
+    std::cout << "//    vg-" << v << std::endl;
     for_each_vertex(v, [this](index_t cid, manifold &m) {
       // std::cout << "    " << cid << " -> " << this->next(cid) << std::endl;
-      // std::cout << "    " << cid << " -> v" << this->vert(cid) << std::endl;
+      // std::cout << "    " << cid << " -> v" << this->vert(cid) <<
+      // std::endl;
       std::cout << "    " << this->vert(cid) << " -> "
                 << this->vert(this->next(cid)) << std::endl;
     });
-    std::cout << "    ========" << std::endl;
+    std::cout << "//    ========" << std::endl;
   }
+
+  // accessors
+  std::vector<index_t> &corners_next() { return __corners_next; }
+  std::vector<index_t> &corners_prev() { return __corners_prev; }
+  std::vector<index_t> &corners_vert() { return __corners_vert; }
+  std::vector<index_t> &corners_face() { return __corners_face; }
+  std::vector<index_t> &vert_begin() { return __vert_begin; }
+  std::vector<index_t> &face_begin() { return __face_begin; }
 
   std::vector<index_t> __corners_next;
   std::vector<index_t> __corners_prev;

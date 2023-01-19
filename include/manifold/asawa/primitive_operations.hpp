@@ -2,10 +2,13 @@
 #ifndef __ASAWA_PRIM_OPS__
 #define __ASAWA_PRIM_OPS__
 
+#include "datums.hpp"
 #include "m2_refactor.hpp"
+
 #include <array>
 #include <cassert>
 #include <ostream>
+#include <vector>
 
 namespace asawa {
 typedef int index_t;
@@ -59,6 +62,7 @@ int count_cycle(manifold &M, index_t corner) {
   int t = 0;
   M.for_each_vertex(v0, [&t, v1](index_t ci, manifold &M) {
     index_t vi = M.vert(M.next(ci));
+    // std::cout << vi << " - " << v1 << std::endl;
     t += int(vi == v1);
   });
   return t;
@@ -148,6 +152,7 @@ index_t split_face(manifold &M, //
 index_t remove_dangling(manifold &M, //
                         const index_t &c0, const index_t &c1) {
   // std::cout << __func__ << std::endl;
+  std::cout << __PRETTY_FUNCTION__ << std::endl;
   index_t c0p = M.prev(c0);
   index_t c0n = M.next(c0);
   index_t c1p = M.prev(c1);
@@ -164,12 +169,14 @@ index_t remove_dangling(manifold &M, //
 
   M.vupdate(v1);
 
-  // M.uber_assert();
+  M.uber_assert();
   return f0;
 }
 
 index_t remove_cruft(manifold &M, //
                      const index_t &c0, const index_t &c1) {
+  std::cout << __PRETTY_FUNCTION__ << std::endl;
+
   index_t f0 = M.face(c0);
   index_t f1 = M.face(c1);
   index_t v0 = M.vert(c0);
@@ -268,22 +275,29 @@ index_t collapse_edge(manifold &M, //
   index_t c0 = corner_index;
   index_t c1 = M.other(c0);
 
+  // M.cprint(c0);
+  //  M.cprint(c1);
+
   index_t c0p = M.prev(c0);
   index_t c1p = M.prev(c1);
 
   index_t v0 = M.vert(c0);
   index_t v1 = M.vert(c1);
 
-  if (count_cycle(M, c0) && !degenerate)
+  if (count_cycle(M, c0) > 1 && !degenerate)
     return corner_index;
 
+  if (M.vsize(M.vert(c0)) < 3)
+    return c0;
+  if (M.vsize(M.vert(c1)) < 3)
+    return c0;
   if (M.vsize(M.vert(c0p)) < 4)
     return c0;
   if (M.vsize(M.vert(c1p)) < 4)
     return c0;
 
-  M.vprintv(v0);
-  M.vprintv(v1);
+  // M.vprintv(v0);
+  // M.vprintv(v1);
 
   merge_face(M, c0p, M.other(c0p));
   merge_face(M, c1p, M.other(c1p));
@@ -293,8 +307,8 @@ index_t collapse_edge(manifold &M, //
   assert(M.vert(c0) != M.vert(M.next(c0)));
 
   // M.vprintv(v1);
-
-  M.uber_assert();
+  if (!degenerate)
+    M.uber_assert();
   return c0;
 }
 
@@ -369,11 +383,11 @@ index_t remove_vertex(manifold &M, //
 
   std::vector<index_t> corners;
   M.for_each_vertex(v, [&corners](index_t cid, manifold &m) {
-    std::cout << m.vert(cid) << " ";
+    //    std::cout << m.vert(cid) << " ";
     // m.cprint(cid);
     corners.push_back(cid);
   });
-  std::cout << std::endl;
+  //  std::cout << std::endl;
   index_t f = -1;
   for (index_t c : corners)
     f = merge_face(M, c, M.other(c));
@@ -417,16 +431,54 @@ bool has_vert(manifold &M, index_t vA, index_t vB) {
     index_t vi = M.vert(M.next(ci));
     hasB |= int(vi == vB);
   });
+  return hasB;
+}
+
+bool corner_in_ring(manifold &M, index_t vA, index_t cB) {
+
+  bool hasB = false;
+  M.for_each_vertex(vA, [&hasB, cB](index_t ci, manifold &M) {
+    index_t cBi = M.next(ci);
+    std::cout << cBi << " " << cB << " - ";
+    hasB |= M.edge_equal(cBi, cB);
+  });
   std::cout << std::endl;
   return hasB;
 }
 
-bool adjacent(manifold &M, index_t cA0, index_t cB0) {
+bool adjacent0(manifold &M, index_t cA0, index_t cB0) {
+
   index_t cA1 = M.other(cA0);
   index_t cB1 = M.other(cB0);
-  bool ahasb1 = has_vert(M, M.vert(cA0), M.vert(cB0));
-  bool ahasb2 = has_vert(M, M.vert(cA1), M.vert(cB1));
-  return (ahasb1 || ahasb2);
+
+  index_t cA0n = M.next(cA0);
+  index_t cA1n = M.next(cA1);
+  index_t cB0n = M.next(cB0);
+  index_t cB1n = M.next(cB1);
+  std::cout << cA0n << " " << cA1n << " - " << cB0n << " " << cB1n << std::endl;
+  if (M.edge_equal(cA0n, cB0n))
+    return true;
+  if (M.edge_equal(cA0n, cB1n))
+    return true;
+  if (M.edge_equal(cA1n, cB0n))
+    return true;
+  if (M.edge_equal(cA1n, cB1n))
+    return true;
+
+  return false;
+}
+
+bool adjacent(manifold &M, index_t cA0, index_t cB0) {
+
+  index_t cA1 = M.other(cA0);
+  index_t cB1 = M.other(cB0);
+
+  bool a0ha0 = has_vert(M, M.vert(cA0), M.vert(cB0));
+  bool a1ha1 = has_vert(M, M.vert(cA1), M.vert(cB1));
+  if (a0ha0 || a1ha1)
+    return true;
+
+  return false;
 }
 
 bool share_faces(manifold &M, index_t cA0, index_t cB0) {
@@ -452,6 +504,37 @@ bool share_faces(manifold &M, index_t cA0, index_t cB0) {
   return false;
 }
 
+void weld_adajacent_edges(manifold &M, //
+                          index_t cA0, //
+                          index_t cB0) {
+
+  index_t cA1 = M.other(cA0);
+  index_t cB1 = M.other(cB0);
+
+  std::vector<index_t> corners;
+  M.for_each_vertex(M.vert(cA0), [&corners, cB0, cB1](index_t ci, manifold &M) {
+    index_t cBi = M.next(ci);
+    if (M.edge_equal(cBi, cB0))
+      corners.push_back(cBi);
+    if (M.edge_equal(cBi, cB1))
+      corners.push_back(cBi);
+  });
+
+  M.for_each_vertex(M.vert(cA1), [&corners, cB0, cB1](index_t ci, manifold &M) {
+    index_t cBi = M.next(ci);
+    if (M.edge_equal(cBi, cB0))
+      corners.push_back(cBi);
+    if (M.edge_equal(cBi, cB1))
+      corners.push_back(cBi);
+  });
+
+  for (auto c : corners) {
+    if (M.next(c) > -1) {
+      collapse_edge(M, c);
+    }
+  }
+}
+
 std::array<index_t, 4> merge_edge(manifold &M,            //
                                   index_t cA0,            //
                                   index_t cB0,            //
@@ -463,10 +546,6 @@ std::array<index_t, 4> merge_edge(manifold &M,            //
 
   // if (share_faces(M, cA0, cB0))
   //   return out;
-  if (count_cycle(M, cA0) > 1)
-    return out;
-  if (count_cycle(M, cB0) > 1)
-    return out;
 
   index_t cA1 = M.other(cA0);
   index_t cB1 = M.other(cB0);
@@ -478,12 +557,17 @@ std::array<index_t, 4> merge_edge(manifold &M,            //
   if (vA0 < 0 || vA1 < 0 || vB0 < 0 || vB1 < 0)
     return out;
 
-  if (adjacent(M, cA0, cB0) && (vA0 != vA1 || vB0 != vB1))
+  if (adjacent(M, cA0, cB0)) {
+    weld_adajacent_edges(M, cA0, cB0);
     return out;
-
-  if (vA0 == vA1)
+  }
+  /*
+  if (count_cycle(M, cA0) > 1)
     return out;
-  if (vB0 == vB1)
+  if (count_cycle(M, cB0) > 1)
+    return out;
+*/
+  if (vA0 == vA1 || vB0 == vB1)
     return out;
 
   M.swap_rows(cA1, cB1);
@@ -503,18 +587,18 @@ std::array<index_t, 4> merge_edge(manifold &M,            //
     M.vupdate(vA0);
     M.vupdate(vN0);
 
-    M.vprintv(vA0);
-    M.vprintv(vN0);
-    std::cout << "vs: " << M.vsize(vN0) << " " << M.vsize(vA0) << std::endl;
+    // M.vprintv(vA0);
+    // M.vprintv(vN0);
+    // std::cout << "vs: " << M.vsize(vN0) << " " << M.vsize(vA0) << std::endl;
   } else {
-    std::cout << "here A1!" << std::endl;
+    // std::cout << "here A1!" << std::endl;
     M.vupdate(vA0);
-    M.vprintv(vA0);
+    // M.vprintv(vA0);
     M.remove_vertex(vB0);
   }
 
   if (vA1 == vB1) {
-    std::cout << "here B0!" << std::endl;
+    // std::cout << "here B0!" << std::endl;
     index_t vN1 = new_vert1 < 0 ? M.insert_vertex() : new_vert1;
 
     out[3] = vN1;
@@ -523,20 +607,167 @@ std::array<index_t, 4> merge_edge(manifold &M,            //
     M.vupdate(vA1);
     M.vupdate(vN1);
 
-    M.vprintv(vA1);
-    M.vprintv(vN1);
-    std::cout << "vs: " << M.vsize(vN1) << " " << M.vsize(vA1) << std::endl;
+    // M.vprintv(vA1);
+    // M.vprintv(vN1);
+    // std::cout << "vs: " << M.vsize(vN1) << " " << M.vsize(vA1) << std::endl;
 
   } else {
-    std::cout << "here B1!" << std::endl;
+    // std::cout << "here B1!" << std::endl;
     M.vupdate(vA1);
 
-    M.vprintv(vA1);
+    // M.vprintv(vA1);
     M.remove_vertex(vB1);
+  }
+  /*
+  std::vector<index_t> corners;
+  M.for_each_vertex(vA0, [&corners](index_t c0, manifold &M) {
+    index_t c1 = M.other(c0);
+    if (M.vert(c0) == M.vert(c1))
+      corners.push_back(c0);
+  });
+
+  M.for_each_vertex(vA1, [&corners](index_t c0, manifold &M) {
+    index_t c1 = M.other(c0);
+    if (M.vert(c0) == M.vert(c1))
+      corners.push_back(c0);
+  });
+
+  for (index_t c : corners) {
+    if (M.next(c) < 0)
+      continue;
+    collapse_edge(M, c, true);
   }
 
   M.uber_assert();
+*/
   return out;
+}
+
+std::vector<index_t> get_pack_permutation(std::vector<index_t> &indices) {
+  std::vector<index_t> perm(indices.size());
+  std::iota(perm.begin(), perm.end(), 0);
+
+  int w = 0;
+  //-----------xxxxxxx----x------
+  //           |      |
+
+  for (int r = 1; r < indices.size(); r++) {
+    if (indices[perm[r - 1]] < 0 && indices[perm[r]] > -1 &&
+        indices[perm[w]] < 0) {
+      std::swap(perm[r], perm[w]);
+      w++;
+    } else if (indices[perm[w]] > -1) {
+      w++;
+    }
+  }
+  return perm;
+}
+
+std::vector<index_t> inverse_permutation(const std::vector<index_t> &perm) {
+  std::vector<index_t> iperm(perm.size(), -1);
+  for (int i = 0; i < perm.size(); i++) {
+    if (perm[i] > -1)
+      iperm[perm[i]] = i;
+  }
+  return iperm;
+}
+
+void apply_permutation(const std::vector<index_t> &perm,
+                       std::vector<index_t> &indices) {
+  std::vector<index_t> n_indices(indices);
+  for (int i = 0; i < indices.size(); i++) {
+    n_indices[i] = indices[perm[i]];
+  }
+  indices = n_indices;
+}
+
+size_t calc_new_size(std::vector<index_t> &indices) {
+  std::vector<index_t>::iterator position =
+      std::find(indices.begin(), indices.end(), -1);
+  int index = position - indices.begin();
+  return index;
+}
+
+void apply_inverse_permutation(const std::vector<index_t> &iperm,
+                               std::vector<index_t> &indices) {
+  for (int i = 0; i < indices.size(); i++) {
+    if (indices[i] > -1)
+      indices[i] = iperm[indices[i]];
+  }
+}
+
+void pack(manifold &M) {
+
+  index_t s = 0;
+  index_t e = s + 16;
+
+  std::cout << " indices: ";
+  for (int i = s; i < e /*__corners_next.size()*/; i++) {
+    std::cout << i << " ";
+  }
+  std::cout << std::endl;
+
+  auto debug = [s, e](const std::vector<index_t> indices, std::string txt) {
+    std::cout << txt << ": ";
+    for (int i = s; i < e /*__corners_next.size()*/; i++) {
+      if (indices[i] < 0)
+        std::cout << -1 << " ";
+      else
+        std::cout << indices[i] << " ";
+    }
+    std::cout << std::endl;
+  };
+
+  /*
+  std::vector<index_t> cperm = get_pack_permutation(__corners_next);
+  std::vector<index_t> ciperm = inverse_permutation(cperm);
+  apply_permutation(cperm, __corners_next);
+  apply_permutation(cperm, __corners_prev);
+  apply_permutation(cperm, __corners_vert);
+  apply_permutation(cperm, __corners_face);
+
+  apply_inverse_permutation(ciperm, __corners_next);
+  apply_inverse_permutation(ciperm, __corners_prev);
+  apply_inverse_permutation(ciperm, __vert_begin);
+  apply_inverse_permutation(ciperm, __face_begin);
+  */
+
+  // debug(M.vert_begin(), std::string(" before v"));
+  // debug(M.corners_vert(), std::string(" before c"));
+  std::vector<index_t> vperm = get_pack_permutation(M.vert_begin());
+  std::vector<index_t> viperm = inverse_permutation(vperm);
+  // debug(vperm, std::string(" before  perm"));
+  // debug(viperm, std::string(" before iperm"));
+
+  apply_permutation(vperm, M.vert_begin());
+  apply_inverse_permutation(viperm, M.corners_vert());
+  size_t Nv = calc_new_size(M.vert_begin());
+  M.vert_begin().resize(Nv);
+
+  for (auto d : M.get_data()) {
+    if (d->type() != VERTEX)
+      continue;
+    d->permute(vperm);
+    d->resize(Nv);
+  }
+
+  // debug(M.vert_begin(), std::string(" after v"));
+  // debug(M.corners_vert(), std::string(" after c"));
+
+  std::vector<index_t> fperm = get_pack_permutation(M.face_begin());
+  std::vector<index_t> fiperm = inverse_permutation(fperm);
+  apply_permutation(fperm, M.face_begin());
+  apply_inverse_permutation(fiperm, M.corners_face());
+  size_t Nf = calc_new_size(M.face_begin());
+  M.face_begin().resize(Nf);
+
+  for (auto d : M.get_data()) {
+    if (d->type() != FACE)
+      continue;
+    d->permute(fperm);
+    d->resize(Nf);
+  }
+  // std::cout << std::flush;
 }
 
 } // namespace asawa

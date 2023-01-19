@@ -339,7 +339,7 @@ public:
     /////////
 
     real l0 = 3.0 * avg_length(*__M, c_datum->data());
-    __surf = dynamic_surface::create(__M, 1.0 * l0, 3.0 * l0, 0.25 * l0);
+    __surf = dynamic_surface::create(__M, 1.0 * l0, 3.0 * l0, 0.5 * l0);
 
     /////////
     // weights
@@ -377,7 +377,7 @@ public:
     std::cout << "frame: " << frame << std::endl;
     _twist->get_bounds(x);
 #if 1
-    real dt = 0.02;
+    real dt = 0.005;
     for (int i = 0; i < x.size(); i++) {
       vec3 p0 = x[i];
       vec3 v0 = w[i] * _twist->op(p0);
