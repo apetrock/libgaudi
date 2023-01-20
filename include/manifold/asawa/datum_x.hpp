@@ -88,6 +88,18 @@ vec3 edge_center(manifold &M, index_t c0, const std::vector<vec3> &x) {
   vec3 x1 = x[M.vert(c1)];
   return 0.5 * (x0 + x1);
 }
+
+real face_area(manifold &M, index_t fi, const std::vector<vec3> &x) {
+  vec3 N = vec3::Zero();
+  M.for_each_face_tri(
+      fi, [&N, &x](index_t c0, index_t c1, index_t c2, asawa::manifold &M) {
+        vec3 x0 = x[M.vert(c0)];
+        vec3 x1 = x[M.vert(c1)];
+        vec3 x2 = x[M.vert(c2)];
+        N += (x1 - x0).cross(x2 - x0);
+      });
+  return N.norm();
+}
 #if 0
 template <typename SPACE>
 std::vector<typename SPACE::coordinate_type>

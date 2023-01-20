@@ -169,7 +169,7 @@ index_t remove_dangling(manifold &M, //
 
   M.vupdate(v1);
 
-  M.uber_assert();
+  // M.uber_assert();
   return f0;
 }
 
@@ -269,8 +269,8 @@ index_t subdivide_edge(manifold &M,                     //
 
 index_t collapse_edge(manifold &M, //
                       const index_t &corner_index, bool degenerate = false) {
-  std::cout << __FUNCTION__ << " " << corner_index << std::endl;
-  M.cprint(corner_index);
+  // std::cout << __FUNCTION__ << " " << corner_index << std::endl;
+  // M.cprint(corner_index);
 
   index_t c0 = corner_index;
   index_t c1 = M.other(c0);
@@ -307,8 +307,8 @@ index_t collapse_edge(manifold &M, //
   assert(M.vert(c0) != M.vert(M.next(c0)));
 
   // M.vprintv(v1);
-  if (!degenerate)
-    M.uber_assert();
+  // if (!degenerate)
+  //  M.uber_assert();
   return c0;
 }
 
@@ -370,7 +370,7 @@ index_t flip_edge(manifold &M, //
   assert(M.fsize(f1) == 3);
 
   assert(M.vert(c0i) != M.vert(c1i));
-  M.uber_assert();
+  // M.uber_assert();
 
   return c0i;
 }
@@ -392,7 +392,7 @@ index_t remove_vertex(manifold &M, //
   for (index_t c : corners)
     f = merge_face(M, c, M.other(c));
 
-  M.uber_assert();
+  // M.uber_assert();
   return f;
 }
 
@@ -472,7 +472,10 @@ bool adjacent(manifold &M, index_t cA0, index_t cB0) {
 
   index_t cA1 = M.other(cA0);
   index_t cB1 = M.other(cB0);
-
+  if (M.vert(cA0) == M.vert(cB0) && //
+      M.vert(cA1) == M.vert(cB1)) {
+    return false;
+  }
   bool a0ha0 = has_vert(M, M.vert(cA0), M.vert(cB0));
   bool a1ha1 = has_vert(M, M.vert(cA1), M.vert(cB1));
   if (a0ha0 || a1ha1)
@@ -557,10 +560,6 @@ std::array<index_t, 4> merge_edge(manifold &M,            //
   if (vA0 < 0 || vA1 < 0 || vB0 < 0 || vB1 < 0)
     return out;
 
-  if (adjacent(M, cA0, cB0)) {
-    weld_adajacent_edges(M, cA0, cB0);
-    return out;
-  }
   /*
   if (count_cycle(M, cA0) > 1)
     return out;
@@ -569,6 +568,17 @@ std::array<index_t, 4> merge_edge(manifold &M,            //
 */
   if (vA0 == vA1 || vB0 == vB1)
     return out;
+
+  if (M.vsize(vA0) < 4 || M.vsize(vA1) < 4 || //
+      M.vsize(vB0) < 4 || M.vsize(vB1) < 4) {
+    return out;
+  }
+
+  if (adjacent(M, cA0, cB0)) {
+    // weld_adajacent_edges(M, cA0, cB0);
+    std::cout << "adjacent" << std::endl;
+    return out;
+  }
 
   M.swap_rows(cA1, cB1);
   M.set_vbegin(vA0, cA0);
@@ -584,6 +594,8 @@ std::array<index_t, 4> merge_edge(manifold &M,            //
 
     out[2] = vN0;
     M.set_vbegin(vN0, cB0);
+    // M.set_vbegin(vN0, M.next(cA1));
+
     M.vupdate(vA0);
     M.vupdate(vN0);
 
@@ -604,6 +616,8 @@ std::array<index_t, 4> merge_edge(manifold &M,            //
     out[3] = vN1;
 
     M.set_vbegin(vN1, cB1);
+    // M.set_vbegin(vN1, M.next(cA0));
+
     M.vupdate(vA1);
     M.vupdate(vN1);
 

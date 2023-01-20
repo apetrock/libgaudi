@@ -134,7 +134,7 @@ public:
     real tr = pp.norm();
     real br = dpC.norm();
 
-    return tr * ppT + 1.25 * br * ppB;
+    return tr * ppT + 3.72 * br * ppB;
   }
 
   real get_weight(const vec3 &p) {
@@ -282,7 +282,7 @@ void test() {
   real l0 = 2.0 * avg_length(*M, v_datum->data());
 
   dynamic_surface::ptr surf =
-      dynamic_surface::create(M, l0, 3.0 * l0, 0.5 * l0);
+      dynamic_surface::create(M, l0, 3.0 * l0, 0.25 * l0);
 
   remove_vertex(*M, 0);
   remove_vertex(*M, 1);
@@ -339,7 +339,7 @@ public:
     /////////
 
     real l0 = 3.0 * avg_length(*__M, c_datum->data());
-    __surf = dynamic_surface::create(__M, 1.0 * l0, 3.0 * l0, 0.5 * l0);
+    __surf = dynamic_surface::create(__M, 1.0 * l0, 3.0 * l0, 0.75 * l0);
 
     /////////
     // weights
@@ -380,9 +380,9 @@ public:
     real dt = 0.005;
     for (int i = 0; i < x.size(); i++) {
       vec3 p0 = x[i];
-      vec3 v0 = w[i] * _twist->op(p0);
+      vec3 v0 = (w[i] + 2.0) * _twist->op(p0);
       vec3 pp = p0 + 0.5 * dt * v0;
-      vec3 v1 = w[i] * _twist->op(pp);
+      vec3 v1 = (w[i] + 2.0) * _twist->op(pp);
 
       dx[i] = dt * v1;
     }

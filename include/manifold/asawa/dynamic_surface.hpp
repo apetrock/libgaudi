@@ -114,6 +114,21 @@ real line_line_min(const index_t &idT, //
 std::mt19937_64 rng;
 std::uniform_real_distribution<real> unif(0.0, 1.0);
 
+void debug_line(manifold &M,        //
+                const index_t &cA0, //
+                const vector<vec3> &x) {
+
+  index_t cA1 = M.other(cA0);
+  index_t vA0 = M.vert(cA0);
+  index_t vA1 = M.vert(cA1);
+
+  const vec3 &ca0 = x[vA0];
+  const vec3 &ca1 = x[vA1];
+
+  vec4 c(unif(rng), unif(rng), unif(rng), 1.0);
+  gg::geometry_logger::line(ca0, ca1, c);
+};
+
 void debug_line_line(manifold &M,        //
                      const index_t &cA0, //
                      const index_t &cB0, //
@@ -136,6 +151,16 @@ void debug_line_line(manifold &M,        //
   gg::geometry_logger::line(cb0, cb1, c);
 
   gg::geometry_logger::line(0.5 * (ca0 + ca1), 0.5 * (cb0 + cb1), c);
+};
+
+void debug_edge_normal(manifold &M,       //
+                       const index_t &c0, //
+                       const vector<vec3> &x) {
+
+  vec3 N = edge_normal(M, c0, x);
+  vec3 cen = edge_center(M, c0, x);
+  vec4 col(unif(rng), unif(rng), unif(rng), 1.0);
+  gg::geometry_logger::line(cen, cen + 0.1 * N, col);
 };
 
 template <int OP, int C_ALLOC, int V_ALLOC, int F_ALLOC, int MSIZE>
@@ -387,10 +412,19 @@ public:
     for (int i = 0; i < M.face_count(); i++) {
       if (M.fbegin(i) < 0)
         continue;
+
+      real a0 = face_area(M, i, x);
+      if (a0 < 1e-10) {
+        // std::cout << "deg face" << std::endl;
+        //         M.fprintv(i);
+        //  M.cprint(M.fbegin(i));
+      }
+
       if (M.fsize(i) > 2)
         continue;
       index_t c0 = M.fbegin(i);
       index_t c1 = M.other(c0);
+
       merge_face(M, c0, c1);
     }
 
@@ -433,32 +467,42 @@ public:
 
   void trim_collected(manifold &M, const std::vector<vec3> &x,
                       std::vector<std::array<index_t, 2>> &collected) {
+    std::vector<bool> flags(M.corner_count() / 2, false);
+    real tol = _Cm;
+    collected.erase(std::remove_if(collected.begin(), collected.end(),
+                                   [tol, &M, &x, &flags](const auto &p) {
+                                     if (p[0] < 0)
+                                       return true;
+                                     if (p[1] < 0)
+                                       return true;
 
-    collected.erase(
-        std::remove_if(collected.begin(), collected.end(),
-                       [&M, &x](const auto &p) {
-                         if (p[0] < 0)
-                           return true;
-                         if (p[1] < 0)
-                           return true;
+                                     vec3 cenA = edge_center(M, p[0], x);
+                                     vec3 cenB = edge_center(M, p[1], x);
+                                     real dist = (cenA - cenB).norm();
 
-                         vec3 cA = edge_center(M, p[0], x);
-                         vec3 NA = edge_normal(M, p[0], x);
-                         vec3 cB = edge_center(M, p[1], x);
-                         vec3 NB = edge_normal(M, p[1], x);
-                         real angle = va::dot(NA, NB);
+                                     if (dist > tol) {
+                                       return true;
+                                     }
 
-                         if (angle > -0.75) {
-                           return true;
-                         }
-                         vec4 cola(0.0, 1.0, 0.0, 1.0);
-                         gg::geometry_logger::line(cA, cA + 0.1 * NA, cola);
-                         vec4 colb(1.0, 0.0, 0.0, 1.0);
-                         gg::geometry_logger::line(cB, cB + 0.1 * NB, colb);
+                                     vec3 NA = edge_normal(M, p[0], x);
+                                     vec3 NB = edge_normal(M, p[1], x);
+                                     real angle = va::dot(NA, NB);
 
-                         return false;
-                       }),
-        collected.end());
+                                     if (angle > -0.25) {
+                                       return true;
+                                     }
+
+                                     if (flags[p[0] / 2])
+                                       return true;
+                                     if (flags[p[1] / 2])
+                                       return true;
+
+                                     flags[p[0] / 2] = true;
+                                     flags[p[1] / 2] = true;
+
+                                     return false;
+                                   }),
+                    collected.end());
 
     std::sort(collected.begin(), collected.end(),
               [&M, &x](const auto &pA, const auto &pB) {
@@ -478,7 +522,7 @@ public:
     std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
     std::vector<index_t> edge_map = __M->get_edge_map();
 
-    edge_tree = arp::aabb_tree<2>::create(edge_verts, x);
+    edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 8);
     // edge_tree->debug(edges, x);
     real tol = this->_Cm * this->_Cm;
 
@@ -491,12 +535,15 @@ public:
                                          tol, &line_line_min);
 
       index_t c0 = edge_map[e0];
-
+      // debug_line(M, c0, x);
       index_t c1 = -1;
       if (e1 > 0) {
         // std::cout << ii << " " << nearest << std::endl;
         c1 = edge_map[e1];
         c1 = align_edges(M, c0, c1, x);
+        // debug_line_line(M, c0, c1, x);
+        // debug_edge_normal(M, c0, x);
+        // debug_edge_normal(M, c1, x);
       }
 
       if (c0 > c1)
@@ -519,25 +566,30 @@ public:
 
     auto collected = get_merge_pairs(M, x);
 
-    for (auto p : collected) {
-      debug_line_line(M, p[0], p[1], x);
-    }
-
     std::vector<index_t> f_collect(2 * collected.size());
     for (int i = 0; i < collected.size(); i++) {
       f_collect[2 * i + 0] = collected[i][0];
       f_collect[2 * i + 1] = collected[i][1];
     }
-
+    real tol = this->_Cm;
     merge_op(*__M, f_collect,
-             [&x](index_t i,                         //
-                  index_t cs,                        //
-                  index_t vs,                        //
-                  index_t fs,                        //
-                  const std::vector<index_t> &edges, //
-                  manifold &M) -> corner4 {
+             [&x, tol](index_t i,                         //
+                       index_t cs,                        //
+                       index_t vs,                        //
+                       index_t fs,                        //
+                       const std::vector<index_t> &edges, //
+                       manifold &M) -> corner4 {
                index_t c0A = edges[i + 0];
                index_t c0B = edges[i + 1];
+
+               if (M.next(c0A) < 0 || M.next(c0B) < 0) {
+                 return {-1, -1, -1, -1};
+               }
+
+               // debug_line_line(M, c0A, c0B, x);
+               // debug_edge_normal(M, c0A, x);
+               // debug_edge_normal(M, c0B, x);
+
                return merge_edge(M, c0A, c0B, vs + 2 * i + 0, vs + 2 * i + 1);
              });
   }
@@ -586,6 +638,12 @@ public:
                   manifold &M) -> corner4 {
                index_t c0A = edges[i + 0];
                index_t c0B = edges[i + 1];
+
+               debug_line_line(M, c0A, c0B, x);
+               debug_edge_normal(M, c0A, x);
+               debug_edge_normal(M, c0B, x);
+               std::cout << "break_cycle" << std::endl;
+               M.cprint(c0A);
                return merge_edge(M, c0A, c0B, vs + 2 * i + 0, vs + 2 * i + 1);
              });
   }
@@ -675,7 +733,7 @@ public:
       real tFlip = atan2(sinN1, cosN1);
       real dt = tFlip - tSame;
       // std::cout << tFlip << " " << tSame << " " << dt << std::endl;
-      real eFlip = cFlip * cFlip + 50.0 * dt * dt;
+      real eFlip = cFlip * cFlip + 150.0 * dt * dt;
       real eSame = cSame * cSame;
       // real eFlip = cFlip * cFlip + tFlip * tFlip;
       // real eSame = cSame * cSame + tSame * tSame;
@@ -754,9 +812,6 @@ public:
   void step(const std::vector<vec3> &dx) {
     update_positions(dx);
 
-    merge_edges();
-    delete_degenerates(*__M);
-
     subdivide_edges();
     delete_degenerates(*__M);
 
@@ -764,6 +819,9 @@ public:
     delete_degenerates(*__M);
 
     collapse_edges();
+    delete_degenerates(*__M);
+
+    merge_edges();
     delete_degenerates(*__M);
 
     flip_edges();

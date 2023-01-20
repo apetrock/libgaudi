@@ -238,8 +238,8 @@ template <int S> struct aabb_tree {
 public:
   typedef std::shared_ptr<aabb_tree<S>> ptr;
 
-  static ptr create(std::vector<index_t> &indices,
-                    std::vector<vec3> &vertices) {
+  static ptr create(std::vector<index_t> &indices, std::vector<vec3> &vertices,
+                    int lvl = 8) {
     return std::make_shared<aabb_tree<S>>(indices, vertices);
   }
 
@@ -249,8 +249,9 @@ public:
 
   aabb_tree(const aabb_tree &other) { *this = other; }
 
-  aabb_tree(std::vector<index_t> &indices, std::vector<vec3> &vertices) {
-    this->build(indices, vertices, 24);
+  aabb_tree(std::vector<index_t> &indices, std::vector<vec3> &vertices,
+            int lvl = 8) {
+    this->build(indices, vertices, lvl);
   }
 
   aabb_tree &operator=(const aabb_tree &rhs) {
