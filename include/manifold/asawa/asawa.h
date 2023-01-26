@@ -13,10 +13,8 @@ was renamed the Ruth Asawa San Francisco School of the Arts in 2010.[3] In 2020,
 the U.S. Postal Service honored her work by producing a series of ten stamps
 that commemorate her well-known wire sculptures.[4][5]
 */
-
 #include "manifold/asawa/affine.hpp"
 #include "manifold/asawa/coordinate_interface.hpp"
-#include "manifold/asawa/datums.hpp"
 #include "manifold/asawa/m2.hpp"
 #include "manifold/asawa/m2_flat.hpp"
 #include "manifold/asawa/make.hpp"

@@ -160,8 +160,6 @@ add_subdirectory(src)
 #add_subdirectory(projects/physarym)
 #add_subdirectory(projects/stretch)
 
-add_subdirectory(projects/calder_test)
-add_subdirectory(projects/dynamic_surface_test)
 add_subdirectory(projects/bending)
 add_subdirectory(projects/nearestpoint)
 add_subdirectory(projects/wav2fft)
