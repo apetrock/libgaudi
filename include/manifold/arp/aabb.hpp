@@ -187,21 +187,27 @@ public:
 
     c /= real(S * this->size);
 
-    mat3 M = mat3::Zero();
-    real al = 0.0;
+    vec3 mx_p;
+    index_t mx_d = 0;
     for (int i = this->begin; i < this->begin + this->size; i++) {
       for (int k = 0; k < S; k++) {
         vec3 p = vertices[indices[S * permutation[i] + k]];
         vec3 dp = p - c;
-        al += dp.squaredNorm();
-        M += dp * dp.transpose();
+
+        real n2 = dp.squaredNorm();
+        if (n2 > mx_d) {
+          mx_d = n2;
+          mx_p = dp;
+        }
       }
     }
 
-    vec3 s;
-    calcSVD(M, s);
-
-    vec3 N = M.block(0, 0, 3, 1);
+    // vec3 s;
+    //  calcSVD(M, s);
+    vec3 N = mx_p;
+    N.normalize();
+    // N = M.block(0, 0, 3, 1);
+    //  N.normalize();
     half.set(c, N);
     // half.N = vec3(0.0, 0.0, 1.0);
     //  gg::geometry_logger::line(half.center, half.center + 0.5 * half.N,
@@ -270,7 +276,7 @@ public:
     // inititalize permutation
     permutation.resize(indices.size() / S);
     leafIds.resize(indices.size() / S);
-    // nodes.reserve(points.size()*points.size());
+    nodes.reserve(4 * log(indices.size()) * indices.size());
     // permutation.reserve(points.size());
 
     for (int i = 0; i < permutation.size(); i++)
@@ -352,6 +358,7 @@ public:
         // leafIds.push_back(cNodeId);
       }
     }
+    // debug(indices, vertices);
   }
 
   void debug(const std::vector<index_t> &indices,

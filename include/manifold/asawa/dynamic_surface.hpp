@@ -642,8 +642,8 @@ public:
                debug_line_line(M, c0A, c0B, x);
                debug_edge_normal(M, c0A, x);
                debug_edge_normal(M, c0B, x);
-               std::cout << "break_cycle" << std::endl;
-               M.cprint(c0A);
+               // std::cout << "break_cycle" << std::endl;
+               // M.cprint(c0A);
                return merge_edge(M, c0A, c0B, vs + 2 * i + 0, vs + 2 * i + 1);
              });
   }

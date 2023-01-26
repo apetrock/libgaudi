@@ -339,7 +339,7 @@ public:
   }
 
   void remove_vertex(index_t i) {
-    std::cout << "    " << __PRETTY_FUNCTION__ << " " << i << std::endl;
+    // std::cout << "    " << __PRETTY_FUNCTION__ << " " << i << std::endl;
     __vert_begin[i] = -1;
   }
 

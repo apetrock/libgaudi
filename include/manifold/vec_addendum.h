@@ -29,7 +29,7 @@ using MAT = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
 template <typename T> using MAT3 = Eigen::Matrix<T, 3, 3>;
 
-template <typename T> int sgn(T val) { return (T(0) < val) - (val < T(0)); }
+template <typename T> T sgn(T val) { return T(T(0) < val) - (val < T(0)); }
 
 template <class Tf, class Tv> inline Tv linear(Tf f, const Tv &x, const Tv &y) {
   return (y - x) * f + x;
@@ -175,10 +175,10 @@ inline T cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
   T cosP = dot(dc10, dc20);
   T sinP = norm(cross(dc10, dc20));
   T cotP = cosP / sinP;
-  if (sinP > 1e-12)
+  if (sinP > 1e-4)
     return cotP;
   else
-    return 1.0;
+    return 0.0;
 }
 
 template <typename T>
@@ -188,7 +188,7 @@ inline T abs_cos(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
   T e2 = norm(VEC3<T>(c2 - c0));
   T e3 = norm(VEC3<T>(c2 - c1));
 
-  if (e1 == 0.0 || e2 == 0.0)
+  if (e1 <= 1.0e-4 || e2 <= 1.0e-4)
     return 0.0;
 
   T cos_alpha = fabs((e1 * e1 + e2 * e2 - e3 * e3) / (2.0f * e1 * e2));

@@ -152,7 +152,7 @@ index_t split_face(manifold &M, //
 index_t remove_dangling(manifold &M, //
                         const index_t &c0, const index_t &c1) {
   // std::cout << __func__ << std::endl;
-  std::cout << __PRETTY_FUNCTION__ << std::endl;
+  // std::cout << __PRETTY_FUNCTION__ << std::endl;
   index_t c0p = M.prev(c0);
   index_t c0n = M.next(c0);
   index_t c1p = M.prev(c1);
@@ -175,7 +175,7 @@ index_t remove_dangling(manifold &M, //
 
 index_t remove_cruft(manifold &M, //
                      const index_t &c0, const index_t &c1) {
-  std::cout << __PRETTY_FUNCTION__ << std::endl;
+  // std::cout << __PRETTY_FUNCTION__ << std::endl;
 
   index_t f0 = M.face(c0);
   index_t f1 = M.face(c1);
@@ -357,14 +357,14 @@ index_t flip_edge(manifold &M, //
   M.fupdate(f1);
 
   if (M.fsize(f0) != 3) {
-    std::cout << "fsize 0: " << c0i << " " << M.fsize(f0) << std::endl;
-    std::cout << "fsize 1: " << c1i << " " << M.fsize(f1) << std::endl;
+    // std::cout << "fsize 0: " << c0i << " " << M.fsize(f0) << std::endl;
+    // std::cout << "fsize 1: " << c1i << " " << M.fsize(f1) << std::endl;
     M.fprintv(f0);
   }
   assert(M.fsize(f0) == 3);
   if (M.fsize(f1) != 3) {
-    std::cout << "fsize 1: " << c1i << " " << M.fsize(f1) << std::endl;
-    std::cout << "fsize 0: " << c0i << " " << M.fsize(f0) << std::endl;
+    // std::cout << "fsize 1: " << c1i << " " << M.fsize(f1) << std::endl;
+    // std::cout << "fsize 0: " << c0i << " " << M.fsize(f0) << std::endl;
     M.fprintv(f1);
   }
   assert(M.fsize(f1) == 3);
@@ -378,8 +378,8 @@ index_t flip_edge(manifold &M, //
 index_t remove_vertex(manifold &M, //
                       const index_t &v) {
 
-  std::cout << __FUNCTION__ << " " << v << std::endl;
-  std::cout << "  vsize: " << M.vsize(v) << std::endl;
+  // std::cout << __FUNCTION__ << " " << v << std::endl;
+  // std::cout << "  vsize: " << M.vsize(v) << std::endl;
 
   std::vector<index_t> corners;
   M.for_each_vertex(v, [&corners](index_t cid, manifold &m) {
@@ -575,8 +575,8 @@ std::array<index_t, 4> merge_edge(manifold &M,            //
   }
 
   if (adjacent(M, cA0, cB0)) {
-    // weld_adajacent_edges(M, cA0, cB0);
-    std::cout << "adjacent" << std::endl;
+    weld_adajacent_edges(M, cA0, cB0);
+    // std::cout << "adjacent" << std::endl;
     return out;
   }
 
