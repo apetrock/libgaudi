@@ -58,6 +58,17 @@ void geometry_logger::box(const Vec3d &cen, const Vec3d &h,
                              Vec4(color[0], color[1], color[2], color[3]));
 }
 
+void geometry_logger::ext(const Vec3d &mn, const Vec3d &mx,
+                          const Vec4d &color) {
+  geometry_logger &logger = geometry_logger::get_instance();
+
+  Vec3d cen = 0.5 * (mx + mn);
+  Vec3d h = 0.5 * (mx - mn);
+
+  logger.debugLines->pushBox(xyzw(cen), xyzw(h),
+                             Vec4(color[0], color[1], color[2], color[3]));
+}
+
 Vec3d _rainbow(double d) {
   double r = 0.5 + 0.5 * cos(2.0 * M_PI * (d + 0.000));
   double g = 0.5 + 0.5 * cos(2.0 * M_PI * (d + 0.333));

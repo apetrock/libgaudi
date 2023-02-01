@@ -10,7 +10,6 @@
 #include <vector>
 #include <zlib.h>
 
-#include "coordinate_interface.hpp"
 #include "m2_refactor.hpp"
 #include "manifold/geometry_types.hpp"
 

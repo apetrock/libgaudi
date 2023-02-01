@@ -4,7 +4,9 @@
 #include "GaudiGraphics/geometry_logger.h"
 #include "manifold/geometry_types.hpp"
 #include "manifold/vec_addendum.h"
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <vector>
 #include <zlib.h>
@@ -25,17 +27,12 @@ extents_t calc_extents(index_t i, const std::vector<index_t> &indices,
                        const std::vector<vec3> &vertices) {
   vec3 min = vertices[indices[S * i + 0]];
   vec3 max = min;
-  // std::cout << "E: " << 2 * i << " " << indices.size() << std::endl;
-  // std::cout << "  " << indices[2 * i + 0] << " " << indices[2 * i + 1] << " "
-  //           << vertices.size() << std::endl;
-
   for (int k = 0; k < S; k++) {
     vec3 p = vertices[indices[S * i + k]];
     min = va::min(p, min);
     max = va::max(p, max);
   }
-  //  std::cout << "1:  " << min.transpose() << " - " << max.transpose()
-  //            << std::endl;
+
   return {min, max};
 }
 
@@ -67,25 +64,40 @@ extents_t inflate(extents_t e, real eps) {
   return e;
 }
 
+extents_t expand(const extents_t &e, const vec3 &x) {
+  extents_t eout;
+  eout[0] = va::min(e[0], x);
+  eout[1] = va::max(e[1], x);
+  return eout;
+}
+
+extents_t expand(const extents_t &eA, const extents_t &eB) {
+  extents_t eout;
+  eout = expand(eA, eB[0]);
+  eout = expand(eout, eB[1]);
+  return eout;
+}
+
 template <typename T, typename CTYPE> struct half_space {
 public:
   CTYPE N;
   CTYPE cen;
 
   real d;
+  real mag;
   half_space() : d(0), N(CTYPE(0, 0, 0)){};
 
   half_space(const CTYPE &cen_, const CTYPE &N_) { set(cen_, N_); };
   void set(const CTYPE &cen_, const CTYPE &N_) {
-    d = N_.dot(cen_);
-    N = N_;
+    mag = N_.norm();
+    N = N_ / mag;
+    d = N.dot(cen_);
     cen = cen_;
   }
 
   index_t left_right(const CTYPE &p) const { return int(N.dot(p) - d >= 0); }
 
   index_t intersect(const extents_t ext) const {
-
     real pmin = N.dot(ext[0]) - d;
     real pmax = N.dot(ext[1]) - d;
 
@@ -169,6 +181,9 @@ public:
     M = U;
   }
 
+  const vec3 &center() const { return half.cen; }
+  const real &mag() const { return half.mag; }
+
   void calcHalfCenter(const std::vector<index_t> &indices,
                       const std::vector<vec3> &vertices,
                       const std::vector<index_t> &permutation) {
@@ -202,16 +217,8 @@ public:
       }
     }
 
-    // vec3 s;
-    //  calcSVD(M, s);
     vec3 N = mx_p;
-    N.normalize();
-    // N = M.block(0, 0, 3, 1);
-    //  N.normalize();
     half.set(c, N);
-    // half.N = vec3(0.0, 0.0, 1.0);
-    //  gg::geometry_logger::line(half.center, half.center + 0.5 * half.N,
-    //                           vec4(1.0, 1.0 / real(level + 1), 0.0, 1.0));
   }
 
   void debug(const std::vector<index_t> &indices,
@@ -243,21 +250,22 @@ template <int S> struct aabb_tree {
 
 public:
   typedef std::shared_ptr<aabb_tree<S>> ptr;
+  typedef aabb_node<S> node;
 
   static ptr create(std::vector<index_t> &indices, std::vector<vec3> &vertices,
                     int lvl = 8) {
-    return std::make_shared<aabb_tree<S>>(indices, vertices);
+    return std::make_shared<aabb_tree<S>>(indices, vertices, lvl);
   }
 
-  using node = aabb_node<S>;
   aabb_tree() {}
   ~aabb_tree() {}
 
   aabb_tree(const aabb_tree &other) { *this = other; }
 
-  aabb_tree(std::vector<index_t> &indices, std::vector<vec3> &vertices,
-            int lvl = 8) {
-    this->build(indices, vertices, lvl);
+  aabb_tree(const std::vector<index_t> &indices,
+            const std::vector<vec3> &vertices, int lvl = 8)
+      : __x(vertices), __indices(indices) {
+    this->build(__indices, __x, lvl);
   }
 
   aabb_tree &operator=(const aabb_tree &rhs) {
@@ -275,7 +283,7 @@ public:
 
     // inititalize permutation
     permutation.resize(indices.size() / S);
-    leafIds.resize(indices.size() / S);
+    leafNodes.reserve(indices.size() / S);
     nodes.reserve(4 * log(indices.size()) * indices.size());
     // permutation.reserve(points.size());
 
@@ -361,36 +369,35 @@ public:
     // debug(indices, vertices);
   }
 
-  void debug(const std::vector<index_t> &indices,
-             const std::vector<vec3> &vertices) {
+  const std::vector<index_t> &indices() const { return this->__indices; }
+  const std::vector<vec3> &verts() const { return this->__x; }
 
-    for (auto n : nodes)
-      if (n.isLeaf()) {
-        node &pn = nodes[n.parent];
-        n.debug(indices, vertices, permutation);
-      }
+  void debug() {
+
+    for (int i = 0; i < leafNodes.size(); i++) {
+      node &n = nodes[leafNodes[i]];
+      n.debug(__indices, __x, permutation);
+    }
   }
 
   vector<node> nodes;
-  vector<index_t> leafIds;
   vector<index_t> leafNodes;
   vector<index_t> permutation;
+  const std::vector<index_t> &__indices;
+  const std::vector<vec3> &__x;
 };
 
 #if 1
 template <int ST, int SS> // T=test, S=set... DOH! T could equal tree...
 index_t getNearest(index_t &idT, const std::vector<index_t> &t_inds,
                    const vector<vec3> &t_verts, //
-                   const aabb_tree<SS> &s_tree,
-                   const std::vector<index_t> &s_inds,
-                   const vector<vec3> &s_verts, //
-                   real tol,
+                   const aabb_tree<SS> &s_tree, real tol,
                    std::function<real(const index_t &idT, //
                                       const std::vector<index_t> &t_inds,
                                       const vector<vec3> &t_verts, //
                                       const index_t &idS,          //
                                       const std::vector<index_t> &s_inds,
-                                      const vector<vec3> &s_verts)>
+                                      const std::vector<vec3> &s_verts)>
                        testAB) {
 
   // TIMER function//TIMER(__FUNCTION__);
@@ -419,13 +426,14 @@ index_t getNearest(index_t &idT, const std::vector<index_t> &t_inds,
 
         const index_t &idS = s_tree.permutation[k];
 
-        extents_t extS = calc_extents<SS>(idS, s_inds, s_verts);
+        extents_t extS =
+            calc_extents<SS>(idS, s_tree.indices(), s_tree.verts());
         if (!overlap(extT, extS)) {
           continue;
         }
 
         real dist = testAB(idT, t_inds, t_verts, //
-                           idS, s_inds, s_verts);
+                           idS, s_tree.indices(), s_tree.verts());
 
         if (dist < dmin && dist < std::numeric_limits<real>::infinity()) {
           dmin = dist;
@@ -447,6 +455,102 @@ index_t getNearest(index_t &idT, const std::vector<index_t> &t_inds,
   return idMin;
 };
 #endif
+
+template <int TREE_S, int NODE_S>
+void for_each(
+    index_t i, const aabb_tree<TREE_S> &tree,
+    const std::vector<index_t> &indices,
+    std::function<void(index_t id, const aabb_tree<TREE_S> &tree)> func) {
+  typedef typename aabb_tree<TREE_S>::node node;
+  const node &cnode = tree.nodes[tree.leafNodes[i]];
+  index_t beg = cnode.begin;
+  index_t end = beg + cnode.size;
+
+  for (int j = beg; j < end; j++) {
+    const index_t &id = tree.permutation[j];
+    for (int k = 0; k < NODE_S; k++) {
+      func(indices[NODE_S * id + k], tree);
+    }
+  }
+}
+
+template <int TREE_S, int NODE_S, typename Q0, typename Q1>
+std::vector<Q1>
+__build_pyramid(const aabb_tree<TREE_S> &tree,       //
+                const std::vector<index_t> &indices, //
+                const std::vector<Q0> &x, const Q1 &q_init,
+                std::function<Q1(const Q0 &q0, const Q1 &q1)> lfunc,
+                std::function<Q1(const Q1 &qc, const Q1 &qp)> nfunc) {
+  typedef aabb_tree<TREE_S> tree_type;
+  typedef typename tree_type::node node;
+  std::vector<Q1> charges(tree.nodes.size(), q_init);
+  // init the bounds
+
+  for (int i = 0; i < tree.leafNodes.size(); i++) {
+    Q1 q1 = charges[tree.leafNodes[i]];
+    for_each<TREE_S, NODE_S>(
+        i, tree, indices,
+        [&x, &q1, &lfunc](index_t j, const aabb_tree<TREE_S> &tree) {
+          Q0 q0 = x[j];
+          q1 = lfunc(q0, q1);
+        });
+    charges[tree.leafNodes[i]] = q1;
+  }
+
+  std::stack<int> stack(
+      std::deque<int>(tree.leafNodes.begin(), tree.leafNodes.end()));
+
+  while (stack.size() > 0) {
+    index_t cNodeId = stack.top();
+    stack.pop();
+
+    const node &cnode = tree.nodes[cNodeId];
+    index_t pNodeId = cnode.parent;
+    if (pNodeId < 0)
+      continue;
+    const node &pnode = tree.nodes[cnode.parent];
+    const Q1 &extC = charges[cNodeId];
+    const Q1 &extP = charges[pNodeId];
+
+    charges[pNodeId] = nfunc(extC, extP);
+    stack.push(pNodeId);
+  }
+  return charges;
+}
+
+template <int S>
+std::vector<extents_t> build_extents(const aabb_tree<S> &tree,
+                                     const std::vector<index_t> &indices,
+                                     const std::vector<vec3> &x) {
+  double max = std::numeric_limits<double>::max();
+  std::vector<extents_t> extents = __build_pyramid<S, S, vec3, extents_t>(
+      tree, indices, x,
+      {
+          vec3(max, max, max),
+          vec3(-max, -max, -max),
+      }, //
+      [](const vec3 &q0, const extents_t &q1) { return expand(q1, q0); },
+      [](const extents_t &qc, const extents_t &qp) { return expand(qp, qc); });
+
+  return extents;
+}
+
+template <int TREE_S, int NODE_S, typename Q>
+std::vector<Q> build_pyramid(const aabb_tree<TREE_S> &tree,
+                             const std::vector<index_t> &indices,
+                             const std::vector<Q> &x) {
+  std::vector<Q> pyramid = __build_pyramid<TREE_S, NODE_S, Q, Q>(
+      tree, indices, x,
+      z::zero<Q>(), //
+      [](const Q &p, const Q &q) { return p + q; },
+      [](const Q &qc, const Q &qp) { return qp + qc; });
+
+  return pyramid;
+}
+
+using T1 = arp::aabb_tree<1>;
+using T2 = arp::aabb_tree<2>;
+using T3 = arp::aabb_tree<3>;
 
 } // namespace arp
 #endif

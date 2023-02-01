@@ -36,6 +36,7 @@ public:
   static void line(const Vec3d &p0, const Vec3d &p1, const Vec4d &color);
 
   static void box(const Vec3d &cen, const Vec3d &h, const Vec4d &col);
+  static void ext(const Vec3d &mn, const Vec3d &mx, const Vec4d &col);
 
   static void lines(const std::vector<Vec3d> &p0, const std::vector<Vec3d> &p1,
                     const std::vector<Vec4d> &colors);

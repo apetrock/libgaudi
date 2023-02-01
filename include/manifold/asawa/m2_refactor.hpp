@@ -453,18 +453,6 @@ public:
     return range;
   }
 
-  std::vector<index_t> get_edge_map() {
-    std::vector<index_t> range;
-    range.reserve(corner_count());
-    // replace this with some c++isms
-    for (int i = 0; i < corner_count(); i += 2) {
-      if (__corners_next[i] < 0)
-        continue;
-      range.push_back(i);
-    }
-    return range;
-  }
-
   std::vector<index_t> get_face_vert_ids() {
     std::vector<int> faces;
     faces.reserve(3 * face_count());
@@ -479,6 +467,25 @@ public:
     }
     return faces;
   }
+
+  std::vector<index_t> get_range_map(const std::vector<index_t> indices,
+                                     int stride) {
+    std::vector<index_t> map;
+    map.reserve(indices.size() / stride);
+    // replace this with some c++isms
+    for (int i = 0; i < indices.size(); i += stride) {
+      if (indices[i] < 0)
+        continue;
+      map.push_back(i);
+    }
+    return map;
+  }
+
+  std::vector<index_t> get_edge_map() {
+    return get_range_map(__corners_next, 2);
+  }
+  std::vector<index_t> get_vert_map() { return get_range_map(__vert_begin, 1); }
+  std::vector<index_t> get_face_map() { return get_range_map(__face_begin, 1); }
 
   void fupdate(index_t f) {
     for_each_face(f, [f](index_t cid, manifold &m) { m.set_face(cid, f); });

@@ -522,7 +522,7 @@ public:
     std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
     std::vector<index_t> edge_map = __M->get_edge_map();
 
-    edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 8);
+    edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 64);
     // edge_tree->debug(edges, x);
     real tol = this->_Cm * this->_Cm;
 
@@ -530,8 +530,8 @@ public:
     //#pragma omp parallel for
     for (int i = 0; i < edge_verts.size(); i += 2) {
       index_t e0 = i / 2;
-      index_t e1 = arp::getNearest<2, 2>(e0, edge_verts, x,         //
-                                         *edge_tree, edge_verts, x, //
+      index_t e1 = arp::getNearest<2, 2>(e0, edge_verts, x, //
+                                         *edge_tree,        //
                                          tol, &line_line_min);
 
       index_t c0 = edge_map[e0];

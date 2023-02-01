@@ -9,116 +9,96 @@
 // files that USE the data structure
 #ifndef __M2TREE_CODE__
 #define __M2TREE_CODE__
-#include "manifold/bins.hpp"
+
+#include "datums.hpp"
 #include "manifold/geometry_types.hpp"
-
-//#include <execution>
-#include <pstl/glue_execution_defs.h>
-
-/*
-stages
-*/
-using namespace bins;
+#include <vector>
 
 namespace calder {
 
-template <typename SPACE, typename CHARGE, typename OUTPUT>
-class Simple_BarnesHutt {
-  M2_TYPEDEFS;
+template <typename TREE>
+void test_extents(const TREE &tree,                    //
+                  const std::vector<index_t> &indices, //
+                  const std::vector<vec3> &x) {
 
-public:
-  using Tree = pole_tree<SPACE>;
-  using Node = pole_node<SPACE>;
-  using ComputeAccumulation = std::function<void()>;
-  using ComputeCharge = std::function<void()>;
+  std::vector<arp::extents_t> extents = arp::build_extents(tree, indices, x);
+  for (const auto &ext : extents) {
+    vec4 c(0.5, 0.5, 0.1, 1.0);
+    gg::geometry_logger::ext(ext[0], ext[1], c);
+  }
+}
 
-  using PreComputeFcn = std::function<void(
-      const vector<CHARGE> &charges, const vector<T> &weights,
-      const vector<coordinate_type> &points, Node &node, Tree &tree,
-      const vector<int> &permutation, coordinate_type &avgPoint,
-      CHARGE &netCharge)>;
+template <typename TREE>
+void test_pyramid(const TREE &tree,                      //
+                  const std::vector<index_t> &q_indices, //
+                  const std::vector<vec3> &q,            //
+                  const std::vector<real> &q_weights) {
 
-  using ComputeFcn = std::function<OUTPUT(size_t i,                           //
-                                          const CHARGE &ci, const CHARGE &cj, //
-                                          const coordinate_type &pi,
-                                          const coordinate_type &pj, //
-                                          Node &node, Tree &tree)>;
+  std::vector<vec3> wq(q);
+  for (int i = 0; i < q.size(); i++)
+    wq[i] *= q_weights[i];
 
-  vector<OUTPUT> integrate(vector<CHARGE> &charges, vector<T> &weights,
-                           vector<coordinate_type> &chargePoints,
-                           vector<coordinate_type> &evalPoints,
-                           PreComputeFcn preComputeFcn, ComputeFcn computeFcn) {
+  datum_t<vec3>::ptr x_datum = datum_t<vec3>::create(q_indices, wq);
+  x_datum->pyramid(tree);
+  for (int i = 0; i < tree.nodes.size(); i++) {
+    vec3 cen = tree.nodes[i].center();
+    vec3 N = x_datum->__tree_data[i];
+    vec4 c(0.0, 0.5, 0.8, 1.0);
+    gg::geometry_logger::line(cen, cen + N, c);
+  }
+}
 
-    vector<OUTPUT> u(evalPoints.size(), coordinate_type(0, 0, 0));
+template <typename TREE> class fast_summation {
+  typedef typename TREE::node node;
 
-    Tree octree(chargePoints);
+  fast_summation(const TREE &tree) : __tree(tree) {}
 
-    vector<CHARGE> nodeCharges;
-    vector<coordinate_type> nodePositions;
-    nodeCharges.resize(octree.nodes.size());
-    nodePositions.resize(octree.nodes.size());
+  void add_datum(datum &x) { __data.push_back(x); }
+  template <typename T> void add_datum(std::vector<T> &x) {
+    __data.push_back(datum_t<T>::create(x));
+  }
+
+  void set_threshold(real t) { __thresh = t; }
+  template <typename Q> std::vector<Q> calc(const std::vector<vec3> &pov) {
+    for (int i = 0; i < __data.size(); i++) {
+      __data[i].pyramid(__tree);
+    }
+
+    vector<Q> u(pov.size(), z::zero<Q>());
 
     std::stack<int> stack;
     stack.push(0);
-    T netWeight = 0;
 
-    while (stack.size() > 0) {
-      int pId = stack.top();
-      stack.pop();
-      Node &pNode = octree.nodes[pId];
-      coordinate_type avgPoint(0, 0, 0);
-      CHARGE netCharge = z::zero<CHARGE>();
-      T netChargeMag = 0;
-      int N = pNode.size;
-      int beg = pNode.begin;
-
-      preComputeFcn(charges, weights, chargePoints, pNode, octree, netCharge,
-                    avgPoint);
-
-      nodeCharges[pId] = netCharge;
-      nodePositions[pId] = avgPoint;
-
-      for (int j = 0; j < 8; j++) {
-        if (pNode.children[j] != -1)
-          stack.push(pNode.children[j]);
-      }
-    }
-
-    T thresh = 0.5;
-
-    for (int i = 0; i < evalPoints.size(); i++) {
+    for (int i = 0; i < pov.size(); i++) {
       int count = 0;
 
-      coordinate_type pi = evalPoints[i];
-      CHARGE ci = charges[i];
+      vec3 pi = pov[i];
 
       std::stack<int> stack1;
       stack1.push(0);
       while (stack1.size() > 0) {
 
-        int pId = stack1.top();
+        int j = stack1.top();
         stack1.pop();
-        Node &pNode = octree.nodes[pId];
-        coordinate_type pj = nodePositions[pId];
+        node &pNode = __tree.nodes[j];
+        vec3 pj = pNode.center();
 
-        T dc = va::dist(pi, pj);
+        real dc = va::dist(pi, pj);
         // T sc = va::norm(pNode.half);
-        T sc = pNode.half.maxCoeff();
+        real sc = pNode.mag();
         // int ii = octree.permutation[pNode.begin];
 
-        if (sc / dc < thresh || pNode.isLeaf()) {
+        if (sc / dc < __thresh || pNode.isLeaf()) {
           if (pNode.isLeaf()) {
-            for (int i = pNode.begin; i < pNode.begin + pNode.size; i++) {
-              int ii = octree.permutation[i];
-              CHARGE cj = charges[ii];
-              OUTPUT ui = computeFcn(pId, ci, cj, pi, pj, pNode, octree);
-              u[i] += ui;
+            for (int jn = pNode.begin; jn < pNode.begin + pNode.size; jn++) {
+              int jj = __tree.permutation[jn];
+              // Q ui = leafComputeFcn(i, jj, pi, __data, pNode, __tree);
+              // u[i] += ui;
             }
 
           } else {
-            CHARGE cj = nodeCharges[pId];
-            OUTPUT ui = computeFcn(pId, ci, cj, pi, pj, pNode, octree);
-            u[i] += ui;
+            // Q ui = nodeComputeFcn(i, j, pi, __data, pNode, __tree);
+            // u[i] += ui;
           }
         }
 
@@ -137,113 +117,11 @@ public:
     //}
 
     return u;
-  } // integrator
-};  // simple_barnes hutt
-
-template <typename SPACE, typename CHARGE, typename PRIMITIVE, typename OUTPUT>
-class Geometry_Integrator {
-  M2_TYPEDEFS;
-
-public:
-  using Tree = aabb_tree<SPACE, PRIMITIVE>;
-  using Node = aabb_node<SPACE>;
-
-  using ComputeAccumulation = std::function<void()>;
-  using ComputeCharge = std::function<void()>;
-
-  using PreComputeFcn = std::function<void(
-      const vector<PRIMITIVE> &points, Node &node, Tree &tree,
-      CHARGE &netCharge, coordinate_type &avgPoint,
-      coordinate_type &avgNormal)>;
-
-  using ComputeFcn = std::function<OUTPUT(
-      int i, const CHARGE &q, const coordinate_type &pc,
-      const coordinate_type &pe, const coordinate_type &N,
-      const vector<PRIMITIVE> &points, Node &node, Tree &tree)>;
-
-  void integrate(vector<CHARGE> &charges, vector<PRIMITIVE> &chargePrimitives,
-                 const vector<coordinate_type> &evalPoints, vector<OUTPUT> &u,
-                 PreComputeFcn preComputeFcn, ComputeFcn computeFcn) {
-
-    Tree tree(chargePrimitives);
-
-    vector<CHARGE> nodeCharges;
-    vector<coordinate_type> nodePositions;
-    vector<coordinate_type> nodeNormals;
-    nodeCharges.resize(tree.nodes.size());
-    nodePositions.resize(tree.nodes.size());
-    nodeNormals.resize(tree.nodes.size());
-
-    std::stack<int> stack;
-    stack.push(0);
-    T netWeight = 0;
-
-    while (stack.size() > 0) {
-      int pId = stack.top();
-      stack.pop();
-      Node &pNode = tree.nodes[pId];
-      coordinate_type avgPoint(0, 0, 0);
-      coordinate_type avgNormal(0, 0, 0);
-
-      CHARGE netCharge = z::zero<CHARGE>();
-      T netChargeMag = 0;
-      preComputeFcn(chargePrimitives, pNode, tree, netCharge, avgPoint,
-                    avgNormal);
-
-      nodeCharges[pId] = netCharge;
-      nodePositions[pId] = avgPoint;
-      nodeNormals[pId] = avgNormal;
-
-      for (int j = 0; j < pNode.getNumChildren(); j++) {
-        if (pNode.children[j] != -1)
-          stack.push(pNode.children[j]);
-      }
-    }
-
-    T thresh = 0.5;
-    // std::vector<size_t> counter(evalPoints.size());
-    // std::iota(std::begin(counter), std::end(counter), 0);
-    //#pragma omp parallel for
-    for (size_t i = 0; i < evalPoints.size(); i++) {
-      // std::for_each(/*std::execution::seq, */counter.begin(), counter.end(),
-      // [&](auto &&i) {
-      int count = 0;
-      coordinate_type pi = evalPoints[i];
-
-      std::stack<int> stack1;
-      stack1.push(0);
-      while (stack1.size() > 0) {
-
-        int pId = stack1.top();
-        stack1.pop();
-        Node &pNode = tree.nodes[pId];
-        coordinate_type pj = nodePositions[pId];
-        coordinate_type Nj = nodeNormals[pId];
-
-        coordinate_type dp = pi - pj;
-
-        T dc = va::norm(dp);
-        T sc = pNode.bbox.half.maxCoeff();
-        // T sc = va::norm(pNode.bbox.half);
-
-        if (sc / dc <= thresh || pNode.isLeaf()) {
-          CHARGE cj = nodeCharges[pId];
-          OUTPUT ui =
-              computeFcn(i, cj, pj, pi, Nj, chargePrimitives, pNode, tree);
-          u[i] += ui;
-          // if(sc/dc > thresh){
-        } else {
-          for (int j = 0; j < pNode.getNumChildren(); j++) {
-            if (pNode.children[j] != -1) {
-              stack1.push(pNode.children[j]);
-            }
-          }
-        }
-      }
-    } //);
-  }   // integrator
-
-}; // geometry_integrator
-
+  }
+  real __thresh = 0.5;
+  std::vector<datum> __data;
+  const TREE &__tree;
+  const std::vector<vec3> &__vert_x;
+};
 } // namespace calder
 #endif
