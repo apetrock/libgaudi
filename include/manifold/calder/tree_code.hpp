@@ -49,17 +49,24 @@ void test_pyramid(const TREE &tree,                      //
 }
 
 template <typename TREE> class fast_summation {
-  typedef typename TREE::node node;
+  typedef typename TREE::node NODE;
 
   fast_summation(const TREE &tree) : __tree(tree) {}
 
-  void add_datum(datum &x) { __data.push_back(x); }
-  template <typename T> void add_datum(std::vector<T> &x) {
+  void bind(datum &x) { __data.push_back(x); }
+  template <typename T> void bind(std::vector<T> &x) {
     __data.push_back(datum_t<T>::create(x));
   }
-
   void set_threshold(real t) { __thresh = t; }
-  template <typename Q> std::vector<Q> calc(const std::vector<vec3> &pov) {
+
+  template <typename Q>
+  using ComputeFcn = std::function<Q(const index_t &, const index_t &,
+                                     const vec3 &, const NODE &, const TREE &)>;
+
+  template <typename Q>
+  std::vector<Q> calc(const std::vector<vec3> &pov,
+                      ComputeFcn<Q> leafComputeFcn,
+                      ComputeFcn<Q> nodeComputeFcn) {
     for (int i = 0; i < __data.size(); i++) {
       __data[i].pyramid(__tree);
     }
@@ -92,13 +99,13 @@ template <typename TREE> class fast_summation {
           if (pNode.isLeaf()) {
             for (int jn = pNode.begin; jn < pNode.begin + pNode.size; jn++) {
               int jj = __tree.permutation[jn];
-              // Q ui = leafComputeFcn(i, jj, pi, __data, pNode, __tree);
-              // u[i] += ui;
+              Q ui = leafComputeFcn(i, jj, pi, __data, pNode, __tree);
+              u[i] += ui;
             }
 
           } else {
-            // Q ui = nodeComputeFcn(i, j, pi, __data, pNode, __tree);
-            // u[i] += ui;
+            Q ui = nodeComputeFcn(i, j, pi, __data, pNode, __tree);
+            u[i] += ui;
           }
         }
 
