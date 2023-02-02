@@ -26,9 +26,9 @@
 #include "GaudiGraphics/geometry_logger.h"
 #include "GaudiGraphics/mesh_helper.hpp"
 #include "GaudiGraphics/viewer.hpp"
-//#include "manifold/asawa/asawa.h"
+//#include "gaudi/asawa/asawa.h"
 
-#include "manifold/duchamp/dynamic_surface_test.hpp"
+#include "gaudi/duchamp/dynamic_surface_test.hpp"
 
 #define TRACKBALLSIZE (0.8f)
 #define RENORMCOUNT 97
@@ -55,7 +55,7 @@ public:
     _obj = gg::BufferObject::create();
     _obj->init();
     mSceneObjects.push_back(_obj);
-    __surf = duchamp::dynamic_surface_test::create();
+    __surf = gaudi::duchamp::dynamic_surface_test::create();
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }
 
@@ -81,7 +81,7 @@ public:
   }
 
 private:
-  duchamp::dynamic_surface_test::ptr __surf;
+  gaudi::duchamp::dynamic_surface_test::ptr __surf;
 
   std::vector<gg::DrawablePtr> mSceneObjects;
   gg::BufferObjectPtr _obj = NULL;

@@ -13,9 +13,9 @@ ARPACK_LIBS = -L/usr/lib/ -llapack -L../../../arpackpp/external/ -lopenblas -lsu
 
 LDFLAGS_COMMON =  -lGL -lGLU $(PKG_LIBS) $(ARPACK_LIBS)  -lpthread -ldl -lnanogui -L../../src/nanogui/src   -L/user/lib/x86_64-linux-gnu/ -L/usr/local/lib/ -L/usr/local/lib/x86_64 -L/opt/local/lib -L../../src  -lstdc++ -lpng -lz -ljpeg -fopenmp -msse2
 
-#-I../../src/Eigen/ -I../../src/volume/ -I../../src/manifold/ -I../../src/ode-0.13/include -I../../src/ode-0.13/include/drawstuff
+#-I../../src/Eigen/ -I../../src/volume/ -I../../src/gaudi/ -I../../src/ode-0.13/include -I../../src/ode-0.13/include/drawstuff
 
-CFLAGS_COMMON = -c -Wall -DDO_PNG_OUT=0 -I./  -I../../ -I../../src -I../../src/nanogui/include -I../../src/nanoguihelpers -I../../src/eigen -I../../src/manifold/ -I../../src/quartic/ -I../../src/zither/ -I/opt/local/include -I/usr/local/include/Eigen  -O3 -DNO_FFT -fopenmp -msse2
+CFLAGS_COMMON = -c -Wall -DDO_PNG_OUT=0 -I./  -I../../ -I../../src -I../../src/nanogui/include -I../../src/nanoguihelpers -I../../src/eigen -I../../src/gaudi/ -I../../src/quartic/ -I../../src/zither/ -I/opt/local/include -I/usr/local/include/Eigen  -O3 -DNO_FFT -fopenmp -msse2
 
 #NANO_SRC = ../../src/nanogui/nanovg/nanovg.c \
 	../../src/nanogui/resources.cpp \
