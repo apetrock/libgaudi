@@ -184,7 +184,6 @@ public:
   ~FrameGrabber() { pclose(ffmpeg); }
 
   void onFrame() {
-    std::cout << "grabbing frame" << std::endl;
     glReadPixels(0, 0, _width, _height, GL_RGBA, GL_UNSIGNED_BYTE,
                  this->_buffer);
     fwrite(_buffer, sizeof(int) * _width * _height, 1, this->ffmpeg);

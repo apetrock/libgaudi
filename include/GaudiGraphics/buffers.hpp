@@ -470,7 +470,36 @@ public:
       _lines = gg::LineBuffer::create();
       _lines->initBuffer();
     }
+    if (!_points) {
+      _points = gg::PointBuffer::create();
+      _points->initBuffer();
+    }
   }
+
+  void renderPoints() {
+    using namespace nanogui;
+
+    int numVerts = mPointPositions.size();
+
+    _points->fillBuffer([&](gg::BufferObject &o) -> void {
+      o.allocateVerts(numVerts, numVerts);
+      auto &indices = o.indices();
+      auto &positions = o.positions();
+      auto &colors = o.colors();
+
+      for (int i = 0; i < mPointPositions.size(); i++) {
+        indices.col(i)[0] = i;
+
+        for (int j = 0; j < 3; j++) {
+          positions.col(i)[j] = mPointPositions[i][j];
+        }
+
+        colors.col(i)[0] = mPointColors[i][0];
+        colors.col(i)[1] = mPointColors[i][1];
+        colors.col(i)[2] = mPointColors[i][2];
+      }
+    });
+  };
 
   void renderLines() {
     using namespace nanogui;
@@ -494,7 +523,6 @@ public:
       int iP = 0;
       for (int i = 0; i < mLineIndices.size(); i++) {
         for (int j = 0; j < mLineIndices[i].cols(); j++) {
-
           indices.col(iI + j)
               << (Vec2i(iP, iP).cast<unsigned int>() + mLineIndices[i].col(j));
         }
@@ -547,6 +575,11 @@ public:
     mLineColors.push_back(col);
   };
 
+  void pushPoint(Vec4 c0, Vec4 col) {
+    mPointPositions.push_back(c0);
+    mPointColors.push_back(col);
+  };
+
   void pushLine(Vec4 c0, Vec4 c1, Vec4 col) {
     nanogui::MatrixXu indices = nanogui::MatrixXu(2, 1);
     nanogui::MatrixXf positions = nanogui::MatrixXf(3, 2);
@@ -561,6 +594,7 @@ public:
   };
 
   virtual void draw(Mat4 &mProject, Mat4 &mModelView) {
+    _points->draw(mProject, mModelView);
     _lines->draw(mProject, mModelView);
   }
 
@@ -569,14 +603,21 @@ public:
     mLineColors.clear();
     mLinePositions.clear();
     mLineIndices.clear();
+
+    mPointColors.clear();
+    mPointPositions.clear();
   }
 
 private:
   LineBufferPtr _lines;
+  PointBufferPtr _points;
 
   std::vector<Vec4> mLineColors;
   std::vector<nanogui::MatrixXf> mLinePositions;
   std::vector<nanogui::MatrixXu> mLineIndices;
+
+  std::vector<Vec4> mPointColors;
+  std::vector<Vec4> mPointPositions;
 };
 
 inline BufferObject *makeCube() {

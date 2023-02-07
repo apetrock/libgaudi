@@ -33,6 +33,7 @@ geometry_logger &geometry_logger::get_instance() {
 void geometry_logger::render() {
   geometry_logger &logger = geometry_logger::get_instance();
   logger.debugLines->renderLines();
+  logger.debugLines->renderPoints();
 }
 
 void geometry_logger::clear() {
@@ -40,10 +41,17 @@ void geometry_logger::clear() {
   logger.debugLines->clear();
 }
 
+void geometry_logger::point(const Vec3d &p0, const Vec4d &color) {
+  geometry_logger &logger = geometry_logger::get_instance();
+  logger.debugLines->pushPoint(xyzw(p0),
+                               Vec4(color[0], color[1], color[2], color[3]));
+}
+
 void geometry_logger::line4(const Vec4 &p0, const Vec4 &p1, const Vec4 &color) {
   geometry_logger &logger = geometry_logger::get_instance();
   logger.debugLines->pushLine(p0, p1, color);
 }
+
 void geometry_logger::line(const Vec3d &p0, const Vec3d &p1,
                            const Vec4d &color) {
   geometry_logger &logger = geometry_logger::get_instance();
