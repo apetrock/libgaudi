@@ -143,7 +143,7 @@ public:
               [](asawa::manifold &M, index_t c, const std::vector<vec3> &x) {
                 index_t c0p = M.prev(c);
                 index_t c1p = M.prev(M.other(c));
-                
+
                 return cotan(M, c0p, x) + cotan(M, c1p, x);
               });
   }
@@ -269,7 +269,7 @@ public:
     std::vector<real> u = diffuse(f, dt);
     int i = 0;
 
-#if 1
+#if 0
     for (int i = 0; i < __M->vert_count(); i++) {
       vec3 N = vert_normal(*__M, i, __x);
       vec3 xi = __x[i];
@@ -303,6 +303,7 @@ public:
     if (mx - mn > 1e-16) {
       std::for_each(begin(x), end(x),
                     [mn, mx](real &v) { v = (v - mn) / (mx - mn); });
+      // std::for_each(begin(x), end(x), [mn, mx](real &v) { v = (v - mn); });
     }
     // std::vector<real> x = lap.diffuse(divu, dt);
 

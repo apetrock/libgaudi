@@ -45,20 +45,6 @@ void debug_manifold(asawa::manifold &M, const std::vector<vec3> verts) {
   }
 }
 
-real avg_length(asawa::manifold &M, const std::vector<vec3> &coords) {
-  real accum = 0.0;
-  for (int i = 0; i < M.__corners_next.size(); i += 2) {
-    if (M.__corners_next[i] < 0)
-      continue;
-    int i0 = i;
-    int i1 = M.other(i0);
-    int v0 = M.vert(i0);
-    int v1 = M.vert(i1);
-    accum += (coords[M.vert(i0)] - coords[M.vert(i1)]).norm();
-  }
-  return 0.5 * accum / real(M.corner_count());
-}
-
 void center(std::vector<vec3> &coords) {
   real accum = 0.0;
   vec3 min = coords[0];
@@ -129,10 +115,11 @@ public:
 
     vec3 ppT = ppN.cross(axis);
     vec3 ppB = ppT.cross(dpCN);
+
     real tr = pp.norm();
     real br = dpC.norm();
 
-    return tr * ppT + 0.0 * br * ppB;
+    return tr * ppT + 2.0 * br * ppB;
   }
 
   real get_weight(const vec3 &p) {
@@ -277,7 +264,7 @@ void test() {
 
   vec3_datum::ptr v_datum = static_pointer_cast<vec3_datum>(M->get_datum(0));
   const std::vector<vec3> &coords = v_datum->data();
-  real l0 = 2.0 * avg_length(*M, v_datum->data());
+  real l0 = 2.0 * asawa::avg_length(*M, v_datum->data());
 
   dynamic_surface::ptr surf =
       dynamic_surface::create(M, l0, 3.0 * l0, 0.25 * l0);
@@ -336,7 +323,7 @@ public:
     // dynamic surface
     /////////
 
-    real l0 = 1.0 * avg_length(*__M, c_datum->data());
+    real l0 = 1.0 * asawa::avg_length(*__M, c_datum->data());
     __surf = dynamic_surface::create(__M, 1.0 * l0, 3.0 * l0, 1.0 * l0);
 
     /////////
@@ -357,57 +344,6 @@ public:
         datum_t<real>::create(prim_type::VERTEX, weights);
     _iw = __M->insert_datum(wdata);
   };
-
-  void test_heat() {
-
-    vec3_datum::ptr x_datum =
-        static_pointer_cast<vec3_datum>(__M->get_datum(0));
-    std::vector<vec3> &x = x_datum->data();
-
-    vec3_datum::ptr v_datum =
-        static_pointer_cast<vec3_datum>(__M->get_datum(1));
-    std::vector<vec3> &dx = v_datum->data();
-
-    real_datum::ptr w_datum =
-        static_pointer_cast<real_datum>(__M->get_datum(_iw));
-    std::vector<real> &w = w_datum->data();
-    real mx = -999.9, mn = 999.0;
-    index_t mxi = 0, mni = 0.0;
-    for (int i = 0; i < w.size(); i++) {
-      if (w[i] > mx) {
-        mx = w[i];
-        mxi = i;
-      }
-      if (w[i] < mn) {
-        mn = w[i];
-        mni = i;
-      }
-    }
-
-    std::vector<real> f(__M->vert_count(), 0.0);
-    f[mni] = 1.0;
-    // f[mxi] = -1.0;
-
-    bontecou::laplacian L(__M, x);
-    std::vector<real> d = L.heatDist(f, 1e-1);
-#if 1
-    real As = asawa::surface_area(*__M, x);
-    real l = sqrt(As);
-    bool nn = false;
-    for (int i = 0; i < __M->vert_count(); i++) {
-      vec3 N = vert_normal(*__M, i, x);
-      vec3 xi = x[i];
-
-      real sn = sin(M_PI * d[i] / 2.0);
-      real cs = cos(28.0 * M_PI * d[i]);
-      vec3 dN = pow(sn, 2.0) * cs * N;
-      dx[i] += 0.0025 * dN;
-      // gg::geometry_logger::line(xi, xi + 0.1 * dN, vec4(0.3, 0.4, 0.95,
-      // 0.5));
-    }
-#endif
-    w = d;
-  }
 
   void test_twist() {
     vec3_datum::ptr x_datum =
@@ -436,47 +372,19 @@ public:
     }
   }
 
-  void smoothMesh(real C, int N) {
-
-    vec3_datum::ptr x_datum =
-        static_pointer_cast<vec3_datum>(__M->get_datum(0));
-    std::vector<vec3> &x = x_datum->data();
-    bontecou::laplacian3 M(__M, x);
-
-    for (int k = 0; k < N; k++) {
-      std::cout << "." << std::flush;
-      M.init();
-      x = M.smooth(x, C, C + 1e-6);
-      int i = 0;
-      for (auto xi : x) {
-        if (!std::isfinite(xi.dot(xi))) {
-          std::cout << xi.transpose() << std::endl;
-          __M->vprintv(i);
-          i++;
-        }
-      }
-    }
-    // x_datum->data() = x;
-    std::cout << "done!" << std::endl;
-  }
-
   void step(int frame) {
 
     std::cout << "frame: " << frame << std::endl;
     test_twist();
-    test_heat();
 
     vec3_datum::ptr v_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(1));
     std::vector<vec3> &dx = v_datum->data();
 
-    __surf->step(dx);
+    __surf->step(1.0, dx);
 
     _twist->debug();
 #endif
-
-    smoothMesh(0.006, 5);
-    //  arp::aabb_tree<1> tree(vids, x);
 
     // debug_manifold(*__M, x_datum->data());
   }

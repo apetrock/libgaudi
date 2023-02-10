@@ -377,6 +377,19 @@ public:
     }
   }
 
+  void const_for_each_face(
+      index_t i,
+      std::function<void(index_t cid, const manifold &m)> func) const {
+    int j0 = this->fbegin(i);
+    int j_end = this->fend(i);
+    bool it = true;
+    while (it) {
+      it = j0 != j_end;
+      func(j0, *this);
+      j0 = this->next(j0);
+    }
+  }
+
   void for_each_face_tri(
       index_t i,
       std::function<void(index_t c0, index_t c1, index_t c2, manifold &m)>
@@ -394,8 +407,40 @@ public:
     }
   }
 
+  void const_for_each_face_tri(
+      index_t i,
+      std::function<void(index_t c0, index_t c1, index_t c2, const manifold &m)>
+          func) const {
+    int j1 = this->fbegin(i);
+    int j2 = this->next(j1);
+    int j0 = this->fend(i);
+    bool it = true;
+    while (it) {
+      it = j2 != j0;
+      func(j0, j1, j2, *this);
+      index_t jn = this->next(j2);
+      j1 = j2;
+      j2 = jn;
+    }
+  }
+
   void for_each_vertex(index_t i,
                        std::function<void(index_t cid, manifold &m)> func) {
+
+    int j0 = this->vbegin(i);
+    int j_end = this->vend(i);
+    bool it = true;
+    int k = 0;
+    while (it && k++ < 100) {
+      it = j0 != j_end;
+      func(j0, *this);
+      j0 = this->vnext(j0);
+    }
+  }
+
+  void const_for_each_vertex(
+      index_t i,
+      std::function<void(index_t cid, const manifold &m)> func) const {
 
     int j0 = this->vbegin(i);
     int j_end = this->vend(i);

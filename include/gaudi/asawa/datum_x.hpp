@@ -11,7 +11,6 @@
 #include <vector>
 #include <zlib.h>
 
-#include "datums.hpp"
 #include "gaudi/geometry_types.hpp"
 #include "gaudi/vec_addendum.h"
 
@@ -21,12 +20,10 @@
 #define __ASAWA_X_DATUM__
 namespace gaudi {
 namespace asawa {
-using real_datum = datum_t<real>;
-using vec3_datum = datum_t<vec3>;
 
 // break this out into new file at some point
 
-real cotan(manifold &M, index_t ci, const std::vector<vec3> &x) {
+real cotan(const manifold &M, index_t ci, const std::vector<vec3> &x) {
 
   vec3 xp = x[M.vert(M.prev(ci))];
   vec3 x0 = x[M.vert(ci)];
@@ -36,68 +33,84 @@ real cotan(manifold &M, index_t ci, const std::vector<vec3> &x) {
   // return va::cotan(x0, xp, xn);
 }
 
-vec3 edge_dir(manifold &M, index_t c0, const std::vector<vec3> &x) {
+vec3 edge_dir(const manifold &M, index_t c0, const std::vector<vec3> &x) {
   index_t c1 = M.other(c0);
   return x[M.vert(c0)] - x[M.vert(M.next(c0))];
 }
 
-vec3 face_normal(manifold &M, index_t fi, const std::vector<vec3> &x) {
-  vec3 N = vec3::Zero();
-  M.for_each_face_tri(
-      fi, [&N, &x](index_t c0, index_t c1, index_t c2, asawa::manifold &M) {
-        vec3 x0 = x[M.vert(c0)];
-        vec3 x1 = x[M.vert(c1)];
-        vec3 x2 = x[M.vert(c2)];
-        N += (x1 - x0).cross(x2 - x0);
-      });
+vec3 face_cross(const manifold &M, index_t fi, const std::vector<vec3> &x) {
+  vec3 X = vec3::Zero();
+  M.const_for_each_face_tri(fi, [&X, &x](index_t c0, index_t c1, index_t c2,
+                                         const asawa::manifold &M) {
+    vec3 x0 = x[M.vert(c0)];
+    vec3 x1 = x[M.vert(c1)];
+    vec3 x2 = x[M.vert(c2)];
+    X += (x1 - x0).cross(x2 - x0);
+  });
+  return X;
+}
+
+vec3 face_normal(const manifold &M, index_t fi, const std::vector<vec3> &x) {
+  vec3 N = face_cross(M, fi, x);
   return N.normalized();
 }
 
-vec3 vert_normal(manifold &M, index_t vi, const std::vector<vec3> &x) {
+real face_area(const manifold &M, index_t fi, const std::vector<vec3> &x) {
+  real a = 0.0;
+  vec3 N = face_cross(M, fi, x);
+  return 0.5 * N.norm();
+}
+
+vec3 vert_normal(const manifold &M, index_t vi, const std::vector<vec3> &x) {
   vec3 N = vec3::Zero();
-  M.for_each_vertex(vi, [&N, &x](index_t ci, asawa::manifold &M) {
-    N += face_normal(M, M.face(ci), x);
+  M.const_for_each_vertex(vi, [&N, &x](index_t ci, const asawa::manifold &M) {
+    N += face_cross(M, M.face(ci), x);
   });
   return N.normalized();
 }
 
-vec3 edge_normal(manifold &M, index_t c0, const std::vector<vec3> &x) {
+real vert_area(const manifold &M, index_t vi, const std::vector<vec3> &x) {
+  real A = 0.0;
+  M.const_for_each_vertex(vi, [&A, &x](index_t ci, const asawa::manifold &M) {
+    A += face_area(M, M.face(ci), x);
+  });
+  return A / 3.0;
+}
+
+real vert_cotan_weight(const manifold &M, index_t vi,
+                       const std::vector<vec3> &x) {
+  real w = 0.0;
+  M.const_for_each_vertex(vi, [&w, &x](index_t ci, const asawa::manifold &M) {
+    w += cotan(M, ci, x);
+  });
+  return 3.0;
+}
+
+vec3 edge_normal(const manifold &M, index_t c0, const std::vector<vec3> &x) {
   index_t c1 = M.other(c0);
   vec3 N = face_normal(M, M.face(c0), x);
   N += face_normal(M, M.face(c1), x);
   return N.normalized();
 }
 
-vec3 edge_center(manifold &M, index_t c0, const std::vector<vec3> &x) {
+vec3 edge_center(const manifold &M, index_t c0, const std::vector<vec3> &x) {
   index_t c1 = M.other(c0);
   vec3 x0 = x[M.vert(c0)];
   vec3 x1 = x[M.vert(c1)];
   return 0.5 * (x0 + x1);
 }
 
-vec3 face_center(manifold &M, index_t fi, const std::vector<vec3> &x) {
+vec3 face_center(const manifold &M, index_t fi, const std::vector<vec3> &x) {
   vec3 c = vec3::Zero();
   int N = 0;
-  M.for_each_face(fi, [&c, &x, &N](index_t c0, asawa::manifold &M) {
+  M.const_for_each_face(fi, [&c, &x, &N](index_t c0, const asawa::manifold &M) {
     c += x[M.vert(c0)];
     N++;
   });
   return c / real(N);
 }
 
-real face_area(manifold &M, index_t fi, const std::vector<vec3> &x) {
-  real a = 0.0;
-  M.for_each_face_tri(
-      fi, [&a, &x](index_t c0, index_t c1, index_t c2, asawa::manifold &M) {
-        vec3 x0 = x[M.vert(c0)];
-        vec3 x1 = x[M.vert(c1)];
-        vec3 x2 = x[M.vert(c2)];
-        a += (x1 - x0).cross(x2 - x0).norm();
-      });
-  return a;
-}
-
-std::vector<vec3> face_normals(manifold &M, const std::vector<vec3> &x) {
+std::vector<vec3> face_normals(const manifold &M, const std::vector<vec3> &x) {
   auto range = M.get_face_range();
   std::vector<vec3> Ns(range.size());
   int i = 0;
@@ -107,7 +120,8 @@ std::vector<vec3> face_normals(manifold &M, const std::vector<vec3> &x) {
   return Ns;
 }
 
-std::vector<vec3> vertex_normals(manifold &M, const std::vector<vec3> &x) {
+std::vector<vec3> vertex_normals(const manifold &M,
+                                 const std::vector<vec3> &x) {
   auto range = M.get_vert_range();
   std::vector<vec3> Ns(range.size());
   int i = 0;
@@ -117,7 +131,28 @@ std::vector<vec3> vertex_normals(manifold &M, const std::vector<vec3> &x) {
   return Ns;
 }
 
-std::vector<real> face_areas(manifold &M, const std::vector<vec3> &x) {
+std::vector<real> edge_cotan_weights(const manifold &M,
+                                     const std::vector<vec3> &x) {
+  auto range = M.get_edge_range();
+  std::vector<real> ws(range.size());
+  int i = 0;
+  for (auto vi : range) {
+    ws[i++] = cotan(M, i, x);
+  }
+  return ws;
+}
+
+std::vector<vec3> edge_dirs(const manifold &M, const std::vector<vec3> &x) {
+  auto range = M.get_edge_range();
+  std::vector<vec3> dirs(range.size());
+  int i = 0;
+  for (auto vi : range) {
+    dirs[i++] = edge_dir(M, i, x);
+  }
+  return dirs;
+}
+
+std::vector<real> face_areas(const manifold &M, const std::vector<vec3> &x) {
   auto range = M.get_face_range();
   std::vector<real> A(range.size());
   int i = 0;
@@ -127,7 +162,7 @@ std::vector<real> face_areas(manifold &M, const std::vector<vec3> &x) {
   return A;
 }
 
-real surface_area(manifold &M, const std::vector<vec3> &x) {
+real surface_area(const manifold &M, const std::vector<vec3> &x) {
   auto range = M.get_face_range();
   real A;
   int i = 0;
@@ -137,7 +172,21 @@ real surface_area(manifold &M, const std::vector<vec3> &x) {
   return A;
 }
 
-ext::extents_t ext(manifold &M, const std::vector<vec3> &x) {
+real avg_length(const asawa::manifold &M, const std::vector<vec3> &coords) {
+  real accum = 0.0;
+  for (int i = 0; i < M.__corners_next.size(); i += 2) {
+    if (M.__corners_next[i] < 0)
+      continue;
+    int i0 = i;
+    int i1 = M.other(i0);
+    int v0 = M.vert(i0);
+    int v1 = M.vert(i1);
+    accum += (coords[M.vert(i0)] - coords[M.vert(i1)]).norm();
+  }
+  return 0.5 * accum / real(M.corner_count());
+}
+
+ext::extents_t ext(const manifold &M, const std::vector<vec3> &x) {
   auto range = M.get_vert_range();
   double inf = std::numeric_limits<double>::max();
   ext::extents_t ext = {vec3(inf, inf, inf), vec3(-inf, -inf, -inf)};

@@ -56,7 +56,7 @@ public:
 
   fast_summation(const TREE &tree) : __tree(tree) {}
 
-  void bind(datum::ptr &x) { __data.push_back(x); }
+  void bind(const datum::ptr &x) { __data.push_back(x); }
 
   template <typename T>
   void bind(const std::vector<index_t> &indices, const std::vector<T> &x) {
@@ -82,7 +82,6 @@ public:
     vector<Q> u(pov.size(), z::zero<Q>());
 
     for (int i = 0; i < pov.size(); i++) {
-      int count = 0;
 
       vec3 pi = pov[i];
 

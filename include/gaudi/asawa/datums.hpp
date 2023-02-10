@@ -14,6 +14,8 @@
 #include "gaudi/geometry_types.hpp"
 #include "manifold.hpp"
 
+#include "datum_x.hpp"
+
 #ifndef __ASAWA_DATUM__
 #define __ASAWA_DATUM__
 namespace gaudi {
@@ -148,7 +150,32 @@ public:
 };
 
 using real_datum = datum_t<real>;
-using vec3_datum = datum_t<vec3>;
+
+struct vec3_datum : public datum_t<vec3> {
+public:
+  typedef std::shared_ptr<vec3_datum> ptr;
+
+  static ptr create(prim_type type, const std::vector<vec3> &data) {
+    return std::make_shared<vec3_datum>(type, data);
+  }
+
+  vec3_datum(prim_type type, const std::vector<vec3> &data)
+      : datum_t<vec3>(type, data){};
+  virtual ~vec3_datum(){};
+
+  virtual void do_calc(const manifold &M, const index_t &i,
+                       const std::vector<index_t> &vals) {
+    real w = 0.0;
+    vec3 vavg = z::zero<vec3>();
+    for (const auto &iv : vals) {
+      real wi = vert_area(M, iv, this->__data);
+      // real wi = vert_cotan_weight(M, iv, this->__data);
+      w += wi;
+      vavg += wi * this->__data[iv];
+    }
+    this->__data[i] = vavg / w;
+  }
+};
 
 } // namespace asawa
 } // namespace gaudi

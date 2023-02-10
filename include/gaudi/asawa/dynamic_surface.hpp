@@ -522,8 +522,8 @@ public:
     std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
     std::vector<index_t> edge_map = __M->get_edge_map();
 
-    edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 64);
-    edge_tree->debug();
+    edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 16);
+    // edge_tree->debug();
     real tol = this->_Cm * this->_Cm;
 
     std::vector<std::array<index_t, 2>> collected(edge_verts.size() / 2);
@@ -793,7 +793,7 @@ public:
                 });
   }
 
-  void update_positions(const std::vector<vec3> &dx) {
+  void update_positions(real dt, const std::vector<vec3> &dx) {
 
     vec3_datum::ptr c_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
@@ -805,12 +805,12 @@ public:
 
     for (int i = 0; i < _dx.size(); i++) {
       _dx[i] = dx[i];
-      coords[i] += dx[i];
+      coords[i] += dt * dx[i];
     }
   }
 
-  void step(const std::vector<vec3> &dx) {
-    update_positions(dx);
+  void step(real dt, const std::vector<vec3> &dx) {
+    update_positions(dt, dx);
     for (int k = 0; k < 1; k++) {
       subdivide_edges();
       delete_degenerates(*__M);
@@ -836,7 +836,7 @@ public:
   real _Cc, _Cs, _Cm; // collapse, stretch, bridge
 
   arp::aabb_tree<2>::ptr edge_tree;
-  arp::aabb_tree<3>::ptr face_tree;
+  // arp::aabb_tree<3>::ptr face_tree;
 };
 
 } // namespace asawa

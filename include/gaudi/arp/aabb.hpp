@@ -173,25 +173,39 @@ public:
     }
 
     c /= real(S * this->size);
-
+#if 1
     vec3 mx_p;
     index_t mx_d = 0;
+    vec3 var = vec3::Zero();
     for (int i = this->begin; i < this->begin + this->size; i++) {
       for (int k = 0; k < S; k++) {
         vec3 p = vertices[indices[S * permutation[i] + k]];
         vec3 dp = p - c;
-
-        real n2 = dp.squaredNorm();
-        if (n2 > mx_d) {
-          mx_d = n2;
-          mx_p = dp;
-        }
+        var += dp.cwiseProduct(dp);
       }
     }
+    var /= real(this->size);
+    index_t mx = var[0] > var[1] ? 0 : 1;
+    mx = var[mx] > var[2] ? mx : 2;
 
-    vec3 N = mx_p;
-
+    vec3 N = vec3::Zero();
+    N[mx] = 0.75 * sqrt(var[mx]);
     half.set(c, N);
+#else
+    mat3 U = mat3::Zero();
+    for (int i = this->begin; i < this->begin + this->size; i++) {
+      for (int k = 0; k < S; k++) {
+        vec3 p = vertices[indices[S * permutation[i] + k]];
+        vec3 dp = p - c;
+        U += dp * dp.transpose();
+      }
+    }
+    Eigen::JacobiSVD<mat3> svd(U, Eigen::ComputeFullU);
+    U = svd.matrixU();
+    vec3 s = svd.singularValues();
+    vec3 N = U.col(0).transpose();
+    half.set(c, 0.5 * s[0] * N);
+#endif
   }
 
   void debug(const std::vector<index_t> &indices,
@@ -234,8 +248,8 @@ public:
   typedef std::shared_ptr<aabb_tree<S>> ptr;
   typedef aabb_node<S> node;
 
-  static ptr create(std::vector<index_t> &indices, std::vector<vec3> &vertices,
-                    int lvl = 8) {
+  static ptr create(std::vector<index_t> &indices,
+                    const std::vector<vec3> &vertices, int lvl = 8) {
     return std::make_shared<aabb_tree<S>>(indices, vertices, lvl);
   }
 
@@ -366,7 +380,7 @@ public:
   void debug_half() {
     for (int i = 0; i < nodes.size(); i++) {
       node &n = nodes[i];
-      // n.debug_half();
+      n.debug_half();
       // std::cout << n.level << " " << n.children[0] << " " << n.children[1]
       //          << " " << n.size << std::endl;
       if (n.isLeaf())
@@ -491,7 +505,7 @@ __build_pyramid(const aabb_tree<TREE_S> &tree,       //
   // init the bounds
 
   for (int i = 0; i < tree.leafNodes.size(); i++) {
-    Q1 q1 = charges[tree.leafNodes[i]];
+    Q1 q1 = q_init;
     for_each<TREE_S, NODE_S>(
         i, tree, indices,
         [&x, &q1, &lfunc](index_t j, const aabb_tree<TREE_S> &tree) {
@@ -501,24 +515,29 @@ __build_pyramid(const aabb_tree<TREE_S> &tree,       //
     charges[tree.leafNodes[i]] = q1;
   }
 
-  std::stack<int> stack(
-      std::deque<int>(tree.leafNodes.begin(), tree.leafNodes.end()));
-
+  std::deque<int> stack(tree.leafNodes.begin(), tree.leafNodes.end());
+  std::vector<bool> in_queue(charges.size(), false);
   while (stack.size() > 0) {
-    index_t cNodeId = stack.top();
-    stack.pop();
+    index_t cNodeId = stack.back();
+    stack.pop_back();
 
     const node &cnode = tree.nodes[cNodeId];
     index_t pNodeId = cnode.parent;
+
     if (pNodeId < 0)
       continue;
+
     const node &pnode = tree.nodes[cnode.parent];
     const Q1 &extC = charges[cNodeId];
     const Q1 &extP = charges[pNodeId];
 
     charges[pNodeId] = nfunc(extC, extP);
-    stack.push(pNodeId);
+    if (!in_queue[pNodeId]) {
+      stack.push_front(pNodeId);
+      in_queue[pNodeId] = true;
+    }
   }
+
   return charges;
 }
 

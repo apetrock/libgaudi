@@ -42,13 +42,15 @@ public:
 
 class Viewer {
 public:
-  static ViewerPtr create(Vec2i sz) { return std::make_shared<Viewer>(sz); }
+  static ViewerPtr create(Vec2i sz, double d = 4.0) {
+    return std::make_shared<Viewer>(sz, d);
+  }
 
   Viewer() {
     // init();
   }
 
-  Viewer(Vec2i sz) { init(sz); }
+  Viewer(Vec2i sz, double d = 4.0) : mDist(d) { init(sz); }
 
   ~Viewer() {}
 
@@ -80,6 +82,7 @@ public:
 
     ball = new nanogui::Arcball();
     ball->setSize(size);
+
     mPosition = Vec4(0, 0, mDist, 1);
     this->updatePosition();
   }
@@ -150,11 +153,11 @@ protected:
 
   // variables for selection and dragging, I maintain two selection groups
   // one for widgets and one for objects
+  double mDist = 4.0;
   bool mDragging;
   Eigen::Vector2i pLast;
   Vec4 mObjCenCache;
   Vec4 mDragStart;
-  Real mDist = 6.0;
   int mode = -1;
   nanogui::Arcball *ball;
 }; // viewer
@@ -206,7 +209,7 @@ public:
 
   typedef double Real;
 
-  SimpleApp(int w = 1280, int h = 720)
+  SimpleApp(int w = 1280, int h = 720, double d = 4.0)
       : _width(w),
         _height(h), nanogui::Screen(Eigen::Vector2i(w, h), "App Simple") {
     using namespace nanogui;
@@ -218,7 +221,7 @@ public:
 
     performLayout(mNVGContext);
 
-    _viewer = gg::Viewer::create(mSize);
+    _viewer = gg::Viewer::create(mSize, d);
 
     std::cout << "size: " << mSize << std::endl;
 

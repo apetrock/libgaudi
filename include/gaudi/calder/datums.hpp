@@ -80,6 +80,52 @@ public:
 using real_datum = datum_t<real>;
 using vec3_datum = datum_t<vec3>;
 using mat3_datum = datum_t<mat3>;
+
+std::vector<mat3> build_edge_frame_pyramid(const arp::T2 &tree,
+                                           const std::vector<index_t> &indices,
+                                           const std::vector<vec3> &x) {
+  std::vector<mat3> pyramid = arp::__build_pyramid<2, 1, vec3, mat3>(
+      tree, indices, x,
+      mat3::Zero(), //
+      [](const vec3 &e, const mat3 &F) { return F + e * e.transpose(); },
+      [](const mat3 &Fc, const mat3 &Fp) { return Fp + Fc; });
+
+  return pyramid;
+}
+
+struct edge_frame_datum : public datum {
+public:
+  typedef std::shared_ptr<edge_frame_datum> ptr;
+
+  static ptr create(const std::vector<index_t> &ind,
+                    const std::vector<vec3> &data) {
+    return std::make_shared<edge_frame_datum>(ind, data);
+  }
+  edge_frame_datum(const std::vector<index_t> &ind,
+                   const std::vector<vec3> &data)
+      : __leaf_indices(ind), __leaf_data(data){};
+  virtual ~edge_frame_datum(){};
+
+  void __do_pyramid(const arp::T2 &tree) {
+    __tree_data = build_edge_frame_pyramid(tree, __leaf_indices, __leaf_data);
+  }
+
+  virtual void do_pyramid(const arp::T2 &tree) { __do_pyramid(tree); };
+  virtual void do_pyramid(const arp::T1 &tree){
+      // do_nothing
+  };
+  virtual void do_pyramid(const arp::T3 &tree){
+      // do_nothing
+  };
+
+  const std::vector<vec3> &leaf_data() const { return __leaf_data; }
+  std::vector<mat3> &node_data() { return __tree_data; }
+  const std::vector<mat3> &node_data() const { return __tree_data; }
+
+  const std::vector<index_t> &__leaf_indices;
+  const std::vector<vec3> &__leaf_data;
+  std::vector<mat3> __tree_data;
+};
 } // namespace calder
 } // namespace gaudi
 

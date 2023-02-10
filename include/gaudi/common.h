@@ -14,5 +14,6 @@ typedef Eigen::Matrix<real, 4, 1> vec4;
 
 typedef Eigen::Matrix<real, 3, 3> mat3;
 typedef Eigen::Matrix<real, 4, 4> mat4;
+
 } // namespace gaudi
 #endif
