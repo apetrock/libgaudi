@@ -54,7 +54,7 @@ public:
 
     _obj = gg::BufferObject::create();
     _obj->init();
-    // mSceneObjects.push_back(_obj);
+    mSceneObjects.push_back(_obj);
     __surf = gaudi::duchamp::fast_summation_test::create();
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }

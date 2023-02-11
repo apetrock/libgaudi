@@ -81,8 +81,10 @@ public:
 
     vector<Q> u(pov.size(), z::zero<Q>());
 
-    for (int i = 0; i < pov.size(); i++) {
+    std::vector<ext::extents_t> extents =
+        arp::build_extents(__tree, __tree.indices(), __tree.verts());
 
+    for (int i = 0; i < pov.size(); i++) {
       vec3 pi = pov[i];
 
       std::stack<int> stack1;
@@ -96,11 +98,23 @@ public:
 
         real dc = va::dist(pi, pj);
         // T sc = va::norm(pNode.half);
-        real sc = pNode.mag();
-        // std::cout << sc << " " << dc << std::endl;
-        //  int ii = octree.permutation[pNode.begin];
+        // real sc = pNode.mag();
+        ext::extents_t ext = extents[j];
+        vec3 de = ext[1] - ext[0];
+        real sc = min(de[0], min(de[1], de[2]));
+        //    std::cout << sc << " " << dc << std::endl;
+        //     int ii = octree.permutation[pNode.begin];
+
         if (sc / dc < __thresh || pNode.isLeaf()) {
+
+          vec4 c(0.0, 0.5, 0.8, 1.0);
+          if (i == 0) {
+            gg::geometry_logger::ext(ext[0], ext[1], c);
+            gg::geometry_logger::line(pi, pj, vec4(0.1, 0.7, 0.2, 0.5));
+          }
+
           if (pNode.isLeaf()) {
+
             for (int jn = pNode.begin; jn < pNode.begin + pNode.size; jn++) {
               int jj = __tree.permutation[jn];
               Q ui = leafComputeFcn(i, jj, pi, __data, pNode, __tree);

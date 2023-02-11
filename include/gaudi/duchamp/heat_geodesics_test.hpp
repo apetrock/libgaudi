@@ -139,7 +139,7 @@ public:
     // dynamic surface
     /////////
 
-    real l0 = 1.0 * asawa::avg_length(*__M, c_datum->data());
+    real l0 = 0.5 * asawa::avg_length(*__M, c_datum->data());
     __surf = dynamic_surface::create(__M, 1.0 * l0, 3.0 * l0, 1.0 * l0);
 
     /////////
@@ -256,7 +256,7 @@ public:
     f[mxi] = -1.0;
 
     bontecou::laplacian L(__M, x);
-    std::vector<real> d = L.heatDist(f, 1e-3);
+    std::vector<real> d = L.heatDist(f, 0.25);
 
     mx = 0.0;
     for (int i = 0; i < d.size(); i++) {
@@ -272,8 +272,8 @@ public:
 
       real sn = pow(sin(M_PI * d[i] / mx / 2.0), 2.0);
 
-      real cn = simple(d[i], 14.0);
-      // real cn = kolmogorov(d[i], 8.0);
+      // real cn = simple(d[i], 18.0);
+      real cn = kolmogorov(d[i], 8.0);
       // real cn = 1.0 * fib(d[i], 12.0);
       // real cn = 1.0 * freq_biased(d[i], 16.0);
       vec3 dN = cn * N;
@@ -326,7 +326,7 @@ public:
 
     __surf->step(0.1, dx);
 
-    smoothMesh(0.015, 5);
+    smoothMesh(0.015, 10);
     //  arp::aabb_tree<1> tree(vids, x);
 
     // debug_manifold(*__M, x_datum->data());

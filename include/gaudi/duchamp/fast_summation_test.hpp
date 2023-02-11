@@ -131,9 +131,12 @@ public:
     std::uniform_real_distribution<real> dist(0.0, 1.0);
     std::mt19937_64 re;
     double a_random_double = unif(re);
-
-    auto scaled_rand_vec = [dist, re, ext_t, ext_m]() mutable {
+    int i = 0;
+    auto scaled_rand_vec = [dist, re, ext_t, ext_m, &i]() mutable {
       vec3 p(dist(re), dist(re), dist(re));
+      if (i++ == 0) {
+        p = vec3(0.6, 0.6, 0.0);
+      }
       vec3 dt = ext_t[1] - ext_t[0];
       vec3 dm = ext_m[1] - ext_m[0];
 
@@ -200,7 +203,7 @@ public:
           vec3 pj = 1.0 / 3.0 * (p0 + p1 + p2);
           vec3 dp = pj - pi;
           real dist = va::norm(dp);
-          gg::geometry_logger::line(pi, pj, vec4(0.1, 0.7, 0.2, 0.5));
+          // gg::geometry_logger::line(pi, pj, vec4(0.1, 0.7, 0.2, 0.5));
 
           return va::solidAngle(pi, p0, p1, p2);
           // real kappa = computeK(dist, 0.5 * l0);
@@ -235,19 +238,24 @@ public:
     // real zp = 1.0;
 
     real zs = 0.01;
-    std::vector<vec3> pov = get_random_points(
-        10000, {vec3(0.0, 0.0, zp - zs), vec3(1.0, 1.0, zp + zs)}, M, x);
+    // std::vector<vec3> pov = get_random_points(
+    //     10000, {vec3(0.0, 0.0, zp - zs), vec3(1.0, 1.0, zp + zs)}, M, x);
 
     std::vector<vec3> E = asawa::edge_dirs(M, x);
     std::vector<real> w = asawa::edge_cotan_weights(M, x);
+    std::vector<real> wa = asawa::edge_areas(M, x);
+    std::vector<vec3> N = asawa::vertex_normals(*__M, x);
+
     std::vector<vec3> wE(E);
 
-    for (int i = 0; i < wE.size(); i++)
-      wE[i] *= w[i];
+    for (int i = 0; i < wE.size(); i++) {
+      // wE[i] *= w[i]; // * wE[i].normalized();
+      wE[i] = w[i] * wa[i] * wE[i].normalized();
+    }
 
     std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
     std::vector<index_t> edge_map = __M->get_edge_map();
-    arp::T2::ptr edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 16);
+    arp::T2::ptr edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 12);
 
     calder::fast_summation<arp::T2> sum(*edge_tree);
     sum.bind(calder::edge_frame_datum::create(edge_verts, wE));
@@ -256,48 +264,85 @@ public:
       real dist3 = dist * dist * dist;
       real l3 = C * C * C;
       // T kappa = (1.0 - exp(-dist3 / l3)) / dist3;
-      real kappa = 0.5 / M_PI / dist3;
+      real kappa = 0.5 / M_PI / (dist3 + l3);
 
       return kappa;
     };
 
     std::vector<mat3> u = sum.calc<mat3>(
-        pov,
-        [&computeK, l0](const index_t &i, const index_t &j, const vec3 &pi,
-                        const std::vector<calder::datum::ptr> &data,
-                        const arp::T2::node &node,
-                        const arp::T2 &tree) -> mat3 {
+        x,
+        [&computeK, &N, l0](const index_t &i, const index_t &j, const vec3 &pi,
+                            const std::vector<calder::datum::ptr> &data,
+                            const arp::T2::node &node,
+                            const arp::T2 &tree) -> mat3 {
           const calder::edge_frame_datum::ptr F_datum =
               static_pointer_cast<calder::edge_frame_datum>(data[0]);
 
-          const vec3 &E = F_datum->leaf_data()[j];
-          vec3 p0 = tree.vert(3 * j + 0);
-          vec3 p1 = tree.vert(3 * j + 1);
+          const vec3 &e = F_datum->leaf_data()[j];
+          vec3 p0 = tree.vert(2 * j + 0);
+          vec3 p1 = tree.vert(2 * j + 1);
           vec3 pj = 1.0 / 2.0 * (p0 + p1);
 
           vec3 dp = pj - pi;
           real dist = va::norm(dp);
-          real kappa = computeK(dist, 0.5 * l0);
-          gg::geometry_logger::line(pi, pj, vec4(0.1, 0.7, 0.2, 0.5));
-          return kappa * E * E.transpose();
+          real kappa = computeK(dist, 2.0 * l0);
+          // if (i == 1926) {
+          //   gg::geometry_logger::frame(E * E.transpose(), pj, 1.0);
+          //   gg::geometry_logger::line(pi, pj, vec4(0.8, 0.3, 0.9, 1.0));
+          //   gg::geometry_logger::line(pj, pj + E, vec4(0.0, 1.0, 1.0, 1.0));
+          //   gg::geometry_logger::line(p0, p1, vec4(1.0, 0.0, 1.0, 1.0));
+          // }
+          //
+          return kappa * e * e.transpose();
         },
-        [&computeK, l0](const index_t &i, const index_t &j, const vec3 &pi,
-                        const std::vector<calder::datum::ptr> &data,
-                        const arp::T2::node &node,
-                        const arp::T2 &tree) -> mat3 {
+        [&computeK, &N, l0](const index_t &i, const index_t &j, const vec3 &pi,
+                            const std::vector<calder::datum::ptr> &data,
+                            const arp::T2::node &node,
+                            const arp::T2 &tree) -> mat3 {
           const calder::edge_frame_datum::ptr F_datum =
               static_pointer_cast<calder::edge_frame_datum>(data[0]);
           const mat3 &E = F_datum->node_data()[j];
+
           vec3 pj = node.center();
           vec3 dp = pj - pi;
           real dist = va::norm(dp);
-          real kappa = computeK(dist, 0.5 * l0);
+          real kappa = computeK(dist, 2.0 * l0);
+          // if (i == 1926) {
+          //   gg::geometry_logger::frame(E, pj, 1.0);
+          //   gg::geometry_logger::line(pi, pj, vec4(0.1, 0.7, 0.2, 1.0));
+          // }
+
           return kappa * E;
         });
+#if 1
+    for (int i = 0; i < x.size(); i++) {
+      const vec3 &Ni = N[i];
+      mat3 R = va::rejection_matrix(Ni);
+      Eigen::JacobiSVD<mat3> svd(R * u[i], Eigen::ComputeFullU);
+      mat3 U = svd.matrixU();
+      vec3 s = svd.singularValues();
+      // U.col(0) = vec3(s[0] * U.col(0));
+      // U.col(1) = vec3(s[1] * U.col(1));
+      // U.col(2) = vec3(s[2] * U.col(2));
+      U.array().rowwise() *= s.transpose().array();
+      // gg::geometry_logger::frame(U, x[i], 0.0005);
+      gg::geometry_logger::frame(U, x[i], 2.0);
 
-    for (int i = 0; i < pov.size(); i++) {
-      gg::geometry_logger::frame(u[i], pov[i], 0.1);
+      // gg::geometry_logger::frame(u[i], x[i], 0.001);
     }
+#endif
+  }
+
+  void test_edge_pyramids(manifold &M) {
+    vec3_datum::ptr x_datum = static_pointer_cast<vec3_datum>(M.get_datum(0));
+    std::vector<vec3> &x = x_datum->data();
+    std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
+    std::vector<index_t> edge_ids = __M->get_edge_range();
+
+    std::vector<index_t> edge_map = __M->get_edge_map();
+    arp::T2::ptr edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 16);
+
+    calder::test_extents(*edge_tree, edge_verts, x);
   }
 
   void test_pyramids(manifold &M) {
@@ -328,8 +373,9 @@ public:
     real l0 = 1.0 * asawa::avg_length(*__M, x);
 
     // test_pyramids(*__M);
-    //  fast_winding(*__M, x, l0);
-    fast_frame(*__M, x, l0);
+    fast_winding(*__M, x, l0);
+    // test_edge_pyramids(*__M);
+    // fast_frame(*__M, x, l0);
   }
   int _frame;
   manifold::ptr __M;

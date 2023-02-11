@@ -115,7 +115,7 @@ std::vector<vec3> face_normals(const manifold &M, const std::vector<vec3> &x) {
   std::vector<vec3> Ns(range.size());
   int i = 0;
   for (auto vi : range) {
-    Ns[i++] = face_normal(M, i, x);
+    Ns[i++] = face_normal(M, vi, x);
   }
   return Ns;
 }
@@ -125,8 +125,8 @@ std::vector<vec3> vertex_normals(const manifold &M,
   auto range = M.get_vert_range();
   std::vector<vec3> Ns(range.size());
   int i = 0;
-  for (auto i : range) {
-    Ns[i++] = vert_normal(M, i, x);
+  for (auto vi : range) {
+    Ns[i++] = vert_normal(M, vi, x);
   }
   return Ns;
 }
@@ -136,8 +136,22 @@ std::vector<real> edge_cotan_weights(const manifold &M,
   auto range = M.get_edge_range();
   std::vector<real> ws(range.size());
   int i = 0;
-  for (auto vi : range) {
-    ws[i++] = cotan(M, i, x);
+  for (auto ci : range) {
+    ws[i++] = cotan(M, ci, x);
+  }
+  return ws;
+}
+
+std::vector<real> edge_areas(const manifold &M, const std::vector<vec3> &x) {
+  auto range = M.get_edge_range();
+  std::vector<real> ws(range.size());
+  int i = 0;
+  for (auto ci : range) {
+    int i0 = ci;
+    int i1 = M.other(i0);
+    int f0 = M.face(i0);
+    int f1 = M.face(i1);
+    ws[i++] = (face_area(M, f0, x) + face_area(M, f1, x)) / 3.0;
   }
   return ws;
 }
@@ -146,8 +160,8 @@ std::vector<vec3> edge_dirs(const manifold &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
   std::vector<vec3> dirs(range.size());
   int i = 0;
-  for (auto vi : range) {
-    dirs[i++] = edge_dir(M, i, x);
+  for (auto ci : range) {
+    dirs[i++] = edge_dir(M, ci, x);
   }
   return dirs;
 }
@@ -157,7 +171,7 @@ std::vector<real> face_areas(const manifold &M, const std::vector<vec3> &x) {
   std::vector<real> A(range.size());
   int i = 0;
   for (auto vi : range) {
-    A[i++] = face_area(M, i, x);
+    A[i++] = face_area(M, vi, x);
   }
   return A;
 }

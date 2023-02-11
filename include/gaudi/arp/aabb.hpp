@@ -248,7 +248,7 @@ public:
   typedef std::shared_ptr<aabb_tree<S>> ptr;
   typedef aabb_node<S> node;
 
-  static ptr create(std::vector<index_t> &indices,
+  static ptr create(const std::vector<index_t> &indices,
                     const std::vector<vec3> &vertices, int lvl = 8) {
     return std::make_shared<aabb_tree<S>>(indices, vertices, lvl);
   }
@@ -353,7 +353,7 @@ public:
         cNode.calcHalfCenter(indices, vertices, permutation);
         nodes.push_back(cNode);
 
-        if (cNode.size <= 2)
+        if (cNode.size < 2)
           leafNodes.push_back(cNodeId);
         else if (cNode.size < pNode.size && cNode.level < maxLevel)
           stack.push(cNodeId);
