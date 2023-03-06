@@ -11,22 +11,25 @@
 
 #include "gaudi/arp/arp.h"
 
+#include "gaudi/calder/integrators.hpp"
+
 #include "gaudi/bontecou/laplacian.hpp"
 
 #include "gaudi/asawa/dynamic_surface.hpp"
-#include "gaudi/asawa/faceloader.hpp"
-#include "gaudi/asawa/manifold.hpp"
-#include "gaudi/asawa/objloader_refactor.hpp"
+#include "gaudi/asawa/shell.hpp"
 
 #include "gaudi/asawa/datum_x.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
-#include "gaudi/asawa/primitive_operations.hpp"
+#include "gaudi/asawa/shell_operations.hpp"
+
+#include "gaudi/asawa/asset_loader.hpp"
 
 #include "gaudi/calder/tree_code.hpp"
 
 #include <array>
 
+#include <math.h>
 #include <random>
 
 #include <cmath>
@@ -67,23 +70,6 @@ void center(std::vector<vec3> &coords) {
   }
 }
 
-manifold::ptr build_bunny() {
-  std::string file("assets/bunny.obj");
-  // std::string file("assets/skeleton.obj");
-  std::vector<vec3> vertices;
-  std::vector<std::vector<int>> faces;
-  loadObjfile(file, vertices, faces);
-  // make_cube(vertices, faces);
-  // faces.pop_back();
-  std::vector<index_t> corners_next, corners_vert, corners_face;
-  assemble_table(vertices, faces, corners_next, corners_vert, corners_face);
-  manifold::ptr M = manifold::create(corners_next, corners_vert, corners_face);
-  datum_t<vec3>::ptr vdata = datum_t<vec3>::create(prim_type::VERTEX, vertices);
-  M->insert_datum(vdata);
-
-  return M;
-}
-
 class fast_summation_test {
 public:
   typedef std::shared_ptr<fast_summation_test> ptr;
@@ -91,8 +77,8 @@ public:
   static ptr create() { return std::make_shared<fast_summation_test>(); }
 
   fast_summation_test() {
-    //__M = build_cube();
-    __M = build_bunny();
+    //__M = load_cube();
+    __M = load_bunny();
 
     triangulate(*__M);
     for (int i = 0; i < __M->face_count(); i++) {
@@ -126,7 +112,7 @@ public:
     return points;
   }
   std::vector<vec3> get_random_points(const int &N, const ext::extents_t &ext_t,
-                                      manifold &M, const std::vector<vec3> &x) {
+                                      shell &M, const std::vector<vec3> &x) {
     ext::extents_t ext_m = asawa::ext(M, x);
     std::uniform_real_distribution<real> dist(0.0, 1.0);
     std::mt19937_64 re;
@@ -135,7 +121,7 @@ public:
     auto scaled_rand_vec = [dist, re, ext_t, ext_m, &i]() mutable {
       vec3 p(dist(re), dist(re), dist(re));
       if (i++ == 0) {
-        p = vec3(0.6, 0.6, 0.0);
+        p = vec3(0.57, 0.63, 0.0);
       }
       vec3 dt = ext_t[1] - ext_t[0];
       vec3 dm = ext_m[1] - ext_m[0];
@@ -152,7 +138,7 @@ public:
     return tpoints;
   }
 
-  void fast_winding(manifold &M, const std::vector<vec3> &x, real l0) {
+  void test_fast_winding(shell &M, const std::vector<vec3> &x, real l0) {
 
     real zp = 0.5 + 0.5 * sin(M_PI * real(_frame) / 100.0);
     // real zp = 1.0;
@@ -160,180 +146,35 @@ public:
     real zs = 0.01;
     std::vector<vec3> pov = get_random_points(
         10000, {vec3(0.0, 0.0, zp - zs), vec3(1.0, 1.0, zp + zs)}, M, x);
-
-    std::vector<vec3> N = asawa::face_normals(*__M, x);
-    std::vector<real> w = asawa::face_areas(*__M, x);
-    std::vector<vec3> wN(N);
-
-    for (int i = 0; i < wN.size(); i++)
-      wN[i] *= w[i];
-
-    std::vector<index_t> face_vert_ids = M.get_face_vert_ids();
-    std::vector<index_t> face_map = M.get_face_map();
-    std::vector<index_t> face_ids = M.get_face_range();
-
-    arp::T3::ptr face_tree = arp::T3::create(face_vert_ids, x, 12);
-    // face_tree->debug_half();
-
-    calder::fast_summation<arp::T3> sum(*face_tree);
-    sum.bind<vec3>(face_ids, wN);
-
-    auto computeK = [](real dist, real C) {
-      real dist3 = dist * dist * dist;
-      real l3 = C * C * C;
-      // T kappa = (1.0 - exp(-dist3 / l3)) / dist3;
-      real kappa = 0.5 / M_PI / dist3;
-
-      return kappa;
-    };
-
-    std::vector<real> u = sum.calc<real>(
-        pov,
-        [&computeK, l0](const index_t &i, const index_t &j, const vec3 &pi,
-                        const std::vector<calder::datum::ptr> &data,
-                        const arp::T3::node &node,
-                        const arp::T3 &tree) -> real {
-          const calder::vec3_datum::ptr N_datum =
-              static_pointer_cast<calder::vec3_datum>(data[0]);
-
-          const vec3 &N = N_datum->leaf_data()[j];
-          vec3 p0 = tree.vert(3 * j + 0);
-          vec3 p1 = tree.vert(3 * j + 1);
-          vec3 p2 = tree.vert(3 * j + 2);
-          vec3 pj = 1.0 / 3.0 * (p0 + p1 + p2);
-          vec3 dp = pj - pi;
-          real dist = va::norm(dp);
-          // gg::geometry_logger::line(pi, pj, vec4(0.1, 0.7, 0.2, 0.5));
-
-          return va::solidAngle(pi, p0, p1, p2);
-          // real kappa = computeK(dist, 0.5 * l0);
-          // return kappa * va::dot(N, dp);
-          // return 0.0;
-        },
-        [&computeK, l0](const index_t &i, const index_t &j, const vec3 &pi,
-                        const std::vector<calder::datum::ptr> &data,
-                        const arp::T3::node &node,
-                        const arp::T3 &tree) -> real {
-          const calder::vec3_datum::ptr N_datum =
-              static_pointer_cast<calder::vec3_datum>(data[0]);
-          const vec3 &N = N_datum->node_data()[j];
-          vec3 pj = node.center();
-          vec3 dp = pj - pi;
-          real dist = va::norm(dp);
-          real kappa = computeK(dist, 0.5 * l0);
-
-          // return kappa * dist;
-          return kappa * va::dot(N, dp);
-          // return 0.0;
-        });
+    std::vector<real> u = calder::fast_winding(M, x, pov, l0);
 
     for (int i = 0; i < pov.size(); i++) {
       gg::geometry_logger::point(pov[i], vec4(u[i], 0.4, 0.95, 0.5));
     }
   }
 
-  void fast_frame(manifold &M, const std::vector<vec3> &x, real l0) {
+  void test_parallel_transport(shell &M, const std::vector<vec3> &x,
+                               const std::vector<vec3> &Nx, real l0) {
 
-    real zp = 0.5 + 0.5 * sin(M_PI * real(_frame) / 100.0);
-    // real zp = 1.0;
+    std::vector<mat3> Us = calder::fast_frame(M, x, x, Nx, l0);
 
-    real zs = 0.01;
-    // std::vector<vec3> pov = get_random_points(
-    //     10000, {vec3(0.0, 0.0, zp - zs), vec3(1.0, 1.0, zp + zs)}, M, x);
-
-    std::vector<vec3> E = asawa::edge_dirs(M, x);
-    std::vector<real> w = asawa::edge_cotan_weights(M, x);
-    std::vector<real> wa = asawa::edge_areas(M, x);
-    std::vector<vec3> N = asawa::vertex_normals(*__M, x);
-
-    std::vector<vec3> wE(E);
-
-    for (int i = 0; i < wE.size(); i++) {
-      // wE[i] *= w[i]; // * wE[i].normalized();
-      wE[i] = w[i] * wa[i] * wE[i].normalized();
-    }
-
-    std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
-    std::vector<index_t> edge_map = __M->get_edge_map();
-    arp::T2::ptr edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 12);
-
-    calder::fast_summation<arp::T2> sum(*edge_tree);
-    sum.bind(calder::edge_frame_datum::create(edge_verts, wE));
-
-    auto computeK = [](real dist, real C) {
-      real dist3 = dist * dist * dist;
-      real l3 = C * C * C;
-      // T kappa = (1.0 - exp(-dist3 / l3)) / dist3;
-      real kappa = 0.5 / M_PI / (dist3 + l3);
-
-      return kappa;
-    };
-
-    std::vector<mat3> u = sum.calc<mat3>(
-        x,
-        [&computeK, &N, l0](const index_t &i, const index_t &j, const vec3 &pi,
-                            const std::vector<calder::datum::ptr> &data,
-                            const arp::T2::node &node,
-                            const arp::T2 &tree) -> mat3 {
-          const calder::edge_frame_datum::ptr F_datum =
-              static_pointer_cast<calder::edge_frame_datum>(data[0]);
-
-          const vec3 &e = F_datum->leaf_data()[j];
-          vec3 p0 = tree.vert(2 * j + 0);
-          vec3 p1 = tree.vert(2 * j + 1);
-          vec3 pj = 1.0 / 2.0 * (p0 + p1);
-
-          vec3 dp = pj - pi;
-          real dist = va::norm(dp);
-          real kappa = computeK(dist, 2.0 * l0);
-          // if (i == 1926) {
-          //   gg::geometry_logger::frame(E * E.transpose(), pj, 1.0);
-          //   gg::geometry_logger::line(pi, pj, vec4(0.8, 0.3, 0.9, 1.0));
-          //   gg::geometry_logger::line(pj, pj + E, vec4(0.0, 1.0, 1.0, 1.0));
-          //   gg::geometry_logger::line(p0, p1, vec4(1.0, 0.0, 1.0, 1.0));
-          // }
-          //
-          return kappa * e * e.transpose();
-        },
-        [&computeK, &N, l0](const index_t &i, const index_t &j, const vec3 &pi,
-                            const std::vector<calder::datum::ptr> &data,
-                            const arp::T2::node &node,
-                            const arp::T2 &tree) -> mat3 {
-          const calder::edge_frame_datum::ptr F_datum =
-              static_pointer_cast<calder::edge_frame_datum>(data[0]);
-          const mat3 &E = F_datum->node_data()[j];
-
-          vec3 pj = node.center();
-          vec3 dp = pj - pi;
-          real dist = va::norm(dp);
-          real kappa = computeK(dist, 2.0 * l0);
-          // if (i == 1926) {
-          //   gg::geometry_logger::frame(E, pj, 1.0);
-          //   gg::geometry_logger::line(pi, pj, vec4(0.1, 0.7, 0.2, 1.0));
-          // }
-
-          return kappa * E;
-        });
-#if 1
     for (int i = 0; i < x.size(); i++) {
-      const vec3 &Ni = N[i];
-      mat3 R = va::rejection_matrix(Ni);
-      Eigen::JacobiSVD<mat3> svd(R * u[i], Eigen::ComputeFullU);
-      mat3 U = svd.matrixU();
-      vec3 s = svd.singularValues();
-      // U.col(0) = vec3(s[0] * U.col(0));
-      // U.col(1) = vec3(s[1] * U.col(1));
-      // U.col(2) = vec3(s[2] * U.col(2));
-      U.array().rowwise() *= s.transpose().array();
-      // gg::geometry_logger::frame(U, x[i], 0.0005);
-      gg::geometry_logger::frame(U, x[i], 2.0);
 
-      // gg::geometry_logger::frame(u[i], x[i], 0.001);
+      // U.array().rowwise() *= s.transpose().array();
+      mat3 U = Us[i];
+      real thet = real(_frame) * M_PI / 120;
+      real cx = cos(thet);
+      real cy = sin(thet);
+      vec3 pf = vec3(cx, cy, 0.0);
+      pf = U * pf;
+
+      gg::geometry_logger::line(x[i] - 0.5 * pf, //
+                                x[i] + pf,       //
+                                vec4(0.0, 0.7, 1.0, 1.0));
     }
-#endif
   }
 
-  void test_edge_pyramids(manifold &M) {
+  void test_edge_pyramids(shell &M) {
     vec3_datum::ptr x_datum = static_pointer_cast<vec3_datum>(M.get_datum(0));
     std::vector<vec3> &x = x_datum->data();
     std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
@@ -345,7 +186,7 @@ public:
     calder::test_extents(*edge_tree, edge_verts, x);
   }
 
-  void test_pyramids(manifold &M) {
+  void test_pyramids(shell &M) {
     vec3_datum::ptr x_datum = static_pointer_cast<vec3_datum>(M.get_datum(0));
     std::vector<vec3> &x = x_datum->data();
     std::vector<vec3> N = asawa::face_normals(M, x);
@@ -369,16 +210,154 @@ public:
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-
+    std::vector<vec3> Nx = asawa::vertex_normals(*__M, x);
     real l0 = 1.0 * asawa::avg_length(*__M, x);
 
     // test_pyramids(*__M);
-    fast_winding(*__M, x, l0);
     // test_edge_pyramids(*__M);
-    // fast_frame(*__M, x, l0);
+    test_fast_winding(*__M, x, l0);
+    test_parallel_transport(*__M, x, Nx, 16.0 * l0);
   }
   int _frame;
-  manifold::ptr __M;
+  shell::ptr __M;
+};
+
+class transport_mesh_test {
+public:
+  typedef std::shared_ptr<transport_mesh_test> ptr;
+
+  static ptr create() { return std::make_shared<transport_mesh_test>(); }
+
+  transport_mesh_test() {
+    //__M = load_cube();
+    __M = asawa::load_bunny();
+    //__M = asawa::load_heart();
+    //__M = asawa::load_skeleton();
+
+    triangulate(*__M);
+    for (int i = 0; i < __M->face_count(); i++) {
+      if (__M->fbegin(i) > 0) {
+        assert(__M->fsize(i) == 3);
+      }
+    }
+
+    vec3_datum::ptr x_datum =
+        static_pointer_cast<vec3_datum>(__M->get_datum(0));
+    std::vector<vec3> &x = x_datum->data();
+
+    center(x);
+    // transform(x, mat3(Eigen::AngleAxisd(-0.5 * M_PI, vec3::UnitX())));
+    /////////
+    // dynamic surface
+    /////////
+
+    real l0 = 1.0 * asawa::avg_length(*__M, x);
+    __surf = dynamic_surface::create(__M, 1.0 * l0, 3.0 * l0, 1.0 * l0);
+  };
+
+  void test_parallel_transport(int frame) {
+
+    vec3_datum::ptr x_datum =
+        static_pointer_cast<vec3_datum>(__M->get_datum(0));
+    std::vector<vec3> &x = x_datum->data();
+
+    vec3_datum::ptr v_datum =
+        static_pointer_cast<vec3_datum>(__M->get_datum(1));
+    std::vector<vec3> &dx = v_datum->data();
+    std::vector<vec3> xf = asawa::face_centers(*__M, x);
+    std::vector<vec3> Nf = asawa::face_normals(*__M, x);
+
+    std::vector<vec3> N = asawa::vertex_normals(*__M, x);
+
+    real l0 = 12.0 * asawa::avg_length(*__M, x);
+    // TODO: convert this to do fast frame on face centers
+
+    std::vector<mat3> Us = calder::fast_frame(*__M, x, xf, Nf, l0);
+    std::vector<vec3> df(xf.size());
+
+    for (int i = 0; i < xf.size(); i++) {
+      mat3 U = Us[i];
+      real thet = real(frame) * M_PI / 120;
+      real cx = cos(thet);
+      real cy = sin(thet);
+      vec3 pf = vec3(cx, cy, 0.0);
+      // vec3 pf = vec3(1.0, 0.5, 0.0);
+
+      pf = 4.0 * U * pf;
+
+      df[i] = pf;
+#if 0
+
+      gg::geometry_logger::frame(U, xf[i], 0.1);
+      gg::geometry_logger::line(xf[i] - 0.1 * df[i], //
+                                xf[i] + 0.1 * df[i], //
+                                vec4(0.0, 0.7, 1.0, 1.0));
+#endif
+    }
+
+    std::vector<real> div = asawa::divergence(*__M, df, x);
+    std::cout << df.size() << " " << x.size() << " " << div.size() << std::endl;
+
+    bontecou::laplacian L(__M, x);
+    std::vector<real> p = L.solve(div);
+    std::vector<vec3> dp = asawa::gradient(*__M, p, x);
+
+    for (int i = 0; i < df.size(); i++) {
+      df[i] -= 1.0 * dp[i];
+#if 1
+      gg::geometry_logger::line(xf[i] - 0.075 * df[i], //
+                                xf[i] + 0.075 * df[i], //
+                                vec4(0.0, 0.7, 1.0, 1.0));
+#endif
+    }
+  }
+
+  void smoothMesh(real C, int N) {
+
+    vec3_datum::ptr x_datum =
+        static_pointer_cast<vec3_datum>(__M->get_datum(0));
+    std::vector<vec3> &x = x_datum->data();
+    bontecou::laplacian3 M(__M, x);
+
+    for (int k = 0; k < N; k++) {
+      std::cout << "." << std::flush;
+      M.init();
+      x = M.smooth(x, C, C + 1e-6);
+      int i = 0;
+      for (auto xi : x) {
+        if (!std::isfinite(xi.dot(xi))) {
+          std::cout << xi.transpose() << std::endl;
+          __M->vprintv(i);
+          i++;
+        }
+      }
+    }
+    // x_datum->data() = x;
+    std::cout << "done!" << std::endl;
+  }
+
+  void step(int frame) {
+
+    std::cout << "frame: " << frame << std::endl;
+    // test_twist();
+    test_parallel_transport(frame);
+
+    vec3_datum::ptr v_datum =
+        static_pointer_cast<vec3_datum>(__M->get_datum(1));
+    std::vector<vec3> &dx = v_datum->data();
+
+    __surf->step(0.1, dx);
+
+    smoothMesh(0.001, 10);
+    //   arp::aabb_tree<1> tree(vids, x);
+
+    // debug_shell(*__M, x_datum->data());
+  }
+  real omega0 = 18.0 * M_PI, phi0 = 0.0;
+  index_t _iw;
+  index_t _io;
+  shell::ptr __M;
+  dynamic_surface::ptr __surf;
 };
 
 } // namespace duchamp

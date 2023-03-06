@@ -21,9 +21,11 @@
 #include <omp.h>
 #endif
 
+#include "gaudi/common.h"
+
 #include "gaudi/asawa/datum_x.hpp"
 #include "gaudi/asawa/datums.hpp"
-#include "gaudi/asawa/manifold.hpp"
+#include "gaudi/asawa/shell.hpp"
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
@@ -48,12 +50,12 @@ Eigen::SparseMatrix<real>
 // build_edge_vert
 // build_face_vert
 //..etc
-build_lap(asawa::manifold &M,         //
-          const std::vector<vec3> &x, //
-          std::function<real(asawa::manifold &M, index_t c,
-                             const std::vector<vec3> &x)>
-              func_ij,
-          bool set_ij = true) {
+build_lap(
+    asawa::shell &M,            //
+    const std::vector<vec3> &x, //
+    std::function<real(asawa::shell &M, index_t c, const std::vector<vec3> &x)>
+        func_ij,
+    bool set_ij = true) {
 
   std::vector<index_t> verts = M.get_vert_range();
   std::vector<index_t> edges = M.get_edge_vert_ids();
@@ -67,7 +69,7 @@ build_lap(asawa::manifold &M,         //
   for (auto v : M.get_vert_range()) {
     real Km = 0.0;
     M.for_each_vertex(v, [&Km, &x, &set_ij, i, &tripletList,
-                          func_ij](index_t c, asawa::manifold &M) {
+                          func_ij](index_t c, asawa::shell &M) {
       index_t j = M.vert(M.next(c));
       real K = func_ij(M, c, x);
       Km -= K;
@@ -92,12 +94,12 @@ build_lap(asawa::manifold &M,         //
   return mat;
 }
 
-void print_lap(asawa::manifold &M,         //
-               const std::vector<vec3> &x, //
-               std::function<real(asawa::manifold &M, index_t c,
-                                  const std::vector<vec3> &x)>
-                   func_ij,
-               bool set_ij = true) {
+void print_lap(
+    asawa::shell &M,            //
+    const std::vector<vec3> &x, //
+    std::function<real(asawa::shell &M, index_t c, const std::vector<vec3> &x)>
+        func_ij,
+    bool set_ij = true) {
 
   std::vector<index_t> verts = M.get_vert_range();
   std::vector<index_t> edges = M.get_edge_vert_ids();
@@ -108,7 +110,7 @@ void print_lap(asawa::manifold &M,         //
   for (auto v : M.get_vert_range()) {
     real Km = 0.0;
     M.for_each_vertex(
-        v, [&Km, &x, &set_ij, i, func_ij](index_t c, asawa::manifold &M) {
+        v, [&Km, &x, &set_ij, i, func_ij](index_t c, asawa::shell &M) {
           index_t j = M.vert(M.next(c));
           real K = func_ij(M, c, x);
           Km -= K;
@@ -128,11 +130,9 @@ void print_lap(asawa::manifold &M,         //
 
 class laplacian {
 public:
-  typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
   typedef Eigen::SparseMatrix<real> sparmat;
 
-  laplacian(asawa::manifold::ptr M, const std::vector<vec3> &x)
-      : __M(M), __x(x) {
+  laplacian(asawa::shell::ptr M, const std::vector<vec3> &x) : __M(M), __x(x) {
     this->init();
   }
 
@@ -140,7 +140,7 @@ public:
 
   void printC() {
     print_lap(*__M, __x, //
-              [](asawa::manifold &M, index_t c, const std::vector<vec3> &x) {
+              [](asawa::shell &M, index_t c, const std::vector<vec3> &x) {
                 index_t c0p = M.prev(c);
                 index_t c1p = M.prev(M.other(c));
 
@@ -151,20 +151,21 @@ public:
   void initC() {
     _matC = build_lap<1>(
         *__M, __x, //
-        [](asawa::manifold &M, index_t c, const std::vector<vec3> &x) {
+        [](asawa::shell &M, index_t c, const std::vector<vec3> &x) {
           index_t c0p = M.prev(c);
           index_t c1p = M.prev(M.other(c));
-
-          return cotan(M, c0p, x) + cotan(M, c1p, x);
+          real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
+          ct = ct < 1e-1 ? 1e-1 : ct;
+          return ct;
         });
   }
 
   void initM() {
     _matM = build_lap<1>(
         *__M, __x,
-        [](asawa::manifold &M, index_t c, const std::vector<vec3> &x) {
+        [](asawa::shell &M, index_t c, const std::vector<vec3> &x) {
           real aj = asawa::face_area(M, M.face(c), x);
-          aj = aj < 1e-4 ? 1.0 : aj;
+          aj = aj < 1e-4 ? 1e-4 : aj;
           return -aj / 3.0;
         },
         false);
@@ -191,15 +192,6 @@ public:
 
     Eigen::VectorXd Le = _matM * Ue;
     return std::vector<real>(Le.data(), Le.data() + Le.rows() * Le.cols());
-  }
-
-  vecX to(const std::vector<real> &U) {
-    vecX Ue = Eigen::Map<const vecX, Eigen::Unaligned>(U.data(), U.size());
-    return Ue;
-  }
-
-  std::vector<real> from(vecX U) {
-    return std::vector<real>(U.data(), U.data() + U.rows() * U.cols());
   }
 
   virtual vecX solve(sparmat &A, vecX &b) {
@@ -230,7 +222,19 @@ public:
       // solving failed
       std::cout << ".....solve error! " << std::endl;
     }
+#if 0
+    real mn = 0.0;
+    std::cout << mn << std::endl;
+    for (int i = 0; i < x.rows(); i++) {
+      mn += x[i];
+    }
 
+    mn /= real(x.rows());
+    for (int i = 0; i < x.rows(); i++) {
+      if (x[i] > 1000.0 * mn)
+        std::cout << "fooey: " << i << " " << mn << " " << x[i] << std::endl;
+    }
+#endif
     return x;
   }
 
@@ -313,7 +317,7 @@ public:
   bool inited = false;
 
 private:
-  asawa::manifold::ptr __M;
+  asawa::shell::ptr __M;
   const std::vector<vec3> &__x;
   Eigen::SparseMatrix<real> _matC;
   Eigen::SparseMatrix<real> _matM;
@@ -322,8 +326,7 @@ private:
 class laplacian3 {
 
 public:
-  laplacian3(asawa::manifold::ptr M, const std::vector<vec3> &x)
-      : __M(M), __x(x) {
+  laplacian3(asawa::shell::ptr M, const std::vector<vec3> &x) : __M(M), __x(x) {
     this->init();
   }
 
@@ -333,46 +336,18 @@ public:
   void initC() {
     _matC = build_lap<3>(
         *__M, __x, //
-        [](asawa::manifold &M, index_t c, const std::vector<vec3> &x) {
+        [](asawa::shell &M, index_t c, const std::vector<vec3> &x) {
           index_t c0p = M.prev(c);
           index_t c1p = M.prev(M.other(c));
-
-          return cotan(M, c0p, x) + cotan(M, c1p, x);
+          real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
+          ct = ct < 1e-1 ? 1e-1 : ct;
+          return ct;
         });
   }
 
   void init() { this->initC(); }
 
   typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
-
-  static vec3 from(const vecX &vals, size_t i) {
-    return vec3(vals[3 * i + 0], vals[3 * i + 1], vals[3 * i + 2]);
-  };
-
-  static void to(vec3 c, vecX &vals, size_t i) {
-    vals[3 * i + 0] = c[0];
-    vals[3 * i + 1] = c[1];
-    vals[3 * i + 2] = c[2];
-  }
-
-  // these will be function pointers with a default
-  static vecX to(const std::vector<vec3> &positions) {
-    vecX out(3 * positions.size());
-    int i = 0;
-
-    for (int i = 0; i < positions.size(); i++) {
-      vec3 p = positions[i];
-      to(p, out, i);
-    }
-
-    return out;
-  }
-
-  static void from(std::vector<vec3> &positions, const vecX &x) {
-    for (int i = 0; i < positions.size(); i++) {
-      positions[i] = from(x, i);
-    }
-  }
 
   std::vector<vec3> mult(const std::vector<vec3> &U) {
     // Eigen::VectorXd test(U.data());
@@ -400,7 +375,7 @@ public:
 private:
   Eigen::SparseMatrix<real> _matC;
 
-  asawa::manifold::ptr __M;
+  asawa::shell::ptr __M;
   const std::vector<vec3> &__x;
 };
 } // namespace bontecou

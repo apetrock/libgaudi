@@ -8,7 +8,7 @@
 
 #include <gaudi/asawa/asawa.h>
 
-#include <gaudi/asawa/manifold.hpp>
+#include <gaudi/asawa/shell.hpp>
 
 #include <gaudi/vec_addendum.h>
 
@@ -38,7 +38,7 @@ struct colorRGB {
     a = aa;
   }
 };
-void fillBuffer_ref(asawa::manifold &M, gg::BufferObjectPtr obj,
+void fillBuffer_ref(asawa::shell &M, gg::BufferObjectPtr obj,
                     colorRGB col = colorRGB(1.0, 0.5, 0.5, 1.0)) {
   using namespace nanogui;
 
@@ -57,7 +57,7 @@ void fillBuffer_ref(asawa::manifold &M, gg::BufferObjectPtr obj,
     if (M.fsize(i) != 3)
       continue;
     M.for_each_face(
-        i, [&face](int ci, asawa::manifold &M) { face.push_back(M.vert(ci)); });
+        i, [&face](int ci, asawa::shell &M) { face.push_back(M.vert(ci)); });
 
     numIndices += face.size();
     faces.push_back(face);

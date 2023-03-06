@@ -13,9 +13,9 @@
 
 #include "datum_x.hpp"
 
-#include "manifold.hpp"
+#include "shell.hpp"
 
-#include "primitive_operations.hpp"
+#include "shell_operations.hpp"
 //#include "subdivide.hpp"
 
 #include <array>
@@ -39,7 +39,7 @@ using corner1 = std::array<index_t, 1>;
 using corner2 = std::array<index_t, 2>;
 using corner4 = std::array<index_t, 4>;
 
-real dist_line_line(manifold &M, index_t cA0, index_t cB0,
+real dist_line_line(shell &M, index_t cA0, index_t cB0,
                     const std::vector<vec3> &x) {
   index_t cA1 = M.other(cA0);
   index_t cB1 = M.other(cB0);
@@ -56,7 +56,7 @@ real dist_line_line(manifold &M, index_t cA0, index_t cB0,
   return d0;
 };
 
-real dist_line_line_cen(manifold &M, index_t cA0, index_t cB0,
+real dist_line_line_cen(shell &M, index_t cA0, index_t cB0,
                         const std::vector<vec3> &x) {
   index_t cA1 = M.other(cA0);
   index_t cB1 = M.other(cB0);
@@ -114,7 +114,7 @@ real line_line_min(const index_t &idT, //
 std::mt19937_64 rng;
 std::uniform_real_distribution<real> unif(0.0, 1.0);
 
-void debug_line(manifold &M,        //
+void debug_line(shell &M,           //
                 const index_t &cA0, //
                 const vector<vec3> &x) {
 
@@ -129,7 +129,7 @@ void debug_line(manifold &M,        //
   gg::geometry_logger::line(ca0, ca1, c);
 };
 
-void debug_line_line(manifold &M,        //
+void debug_line_line(shell &M,           //
                      const index_t &cA0, //
                      const index_t &cB0, //
                      const vector<vec3> &x) {
@@ -153,7 +153,7 @@ void debug_line_line(manifold &M,        //
   gg::geometry_logger::line(0.5 * (ca0 + ca1), 0.5 * (cb0 + cb1), c);
 };
 
-void debug_edge_normal(manifold &M,       //
+void debug_edge_normal(shell &M,          //
                        const index_t &c0, //
                        const vector<vec3> &x) {
 
@@ -164,7 +164,7 @@ void debug_edge_normal(manifold &M,       //
 };
 
 template <int OP, int C_ALLOC, int V_ALLOC, int F_ALLOC, int MSIZE>
-void op_edges(manifold &M, //
+void op_edges(shell &M, //
               std::vector<index_t> &edges_to_op,
               std::function<std::array<index_t, MSIZE>(
                   index_t i,                         //
@@ -172,7 +172,7 @@ void op_edges(manifold &M, //
                   index_t vs,                        //
                   index_t fs,                        //
                   const std::vector<index_t> &edges, //
-                  manifold &m)>
+                  shell &m)>
                   func) {
   int STRIDE = OP < 2 ? 1 : 2;
   size_t cstart = M.corner_count();
@@ -239,7 +239,7 @@ auto subdivide_op = op_edges<0, 3, 1, 2, 1>;
 auto collapse_op = op_edges<1, 0, 0, 0, 1>;
 auto merge_op = op_edges<2, 0, 2, 0, 4>;
 
-void subdivide_edges(manifold &M) {
+void subdivide_edges(shell &M) {
   std::vector<index_t> edges_to_divide;
   edges_to_divide.push_back(3);
   edges_to_divide.push_back(5);
@@ -251,12 +251,12 @@ void subdivide_edges(manifold &M) {
                   index_t cs, //
                   index_t vs, //
                   index_t fs, //
-                  const std::vector<index_t> &edges, manifold &m) -> corner1 {
+                  const std::vector<index_t> &edges, shell &m) -> corner1 {
                  return {subdivide_edge(m, edges[i])};
                });
 }
 
-void collapse_edges(manifold &M) {
+void collapse_edges(shell &M) {
   std::vector<index_t> edges_to_divide;
   edges_to_divide.push_back(4);
   // edges_to_divide.push_back(6);
@@ -268,21 +268,20 @@ void collapse_edges(manifold &M) {
                  index_t cs, //
                  index_t vs, //
                  index_t fs, //
-                 const std::vector<index_t> &edges, manifold &m) -> corner1 {
-                return {collapse_edge(m, edges[i])};
-              });
+                 const std::vector<index_t> &edges,
+                 shell &m) -> corner1 { return {collapse_edge(m, edges[i])}; });
 }
 
-real length(index_t c0, index_t c1, const manifold &M,
+real length(index_t c0, index_t c1, const shell &M,
             const std::vector<vec3> &data) {
   vec3 v0 = data[M.vert(c0)];
   vec3 v1 = data[M.vert(c1)];
   return (v1 - v0).norm();
 }
 
-template <typename T, typename comp> class manifold_data_comp {
+template <typename T, typename comp> class shell_data_comp {
 public:
-  manifold_data_comp(const std::vector<T> &data, real eps, const manifold &M)
+  shell_data_comp(const std::vector<T> &data, real eps, const shell &M)
       : _M(M), _data(data), _eps(eps) {}
   bool operator()(index_t c0, index_t c1) const {
     real dv = length(c0, c1, _M, _data);
@@ -315,12 +314,12 @@ public:
   }
 
   const std::vector<T> &_data;
-  const manifold &_M;
+  const shell &_M;
   real _eps;
 };
 
 template <typename comparator>
-std::vector<index_t> gather_edges(manifold &M, const comparator &comp) {
+std::vector<index_t> gather_edges(shell &M, const comparator &comp) {
   std::vector<index_t> edges = comp.get_edges();
   std::vector<bool> face_flags(M.face_count(), false);
   std::vector<index_t> edges_out;
@@ -350,7 +349,7 @@ std::vector<index_t> gather_edges(manifold &M, const comparator &comp) {
   return edges_out;
 }
 #if 0 
-void smoothMesh(manifold &M, real C, int N) {
+void smoothMesh(shell &M, real C, int N) {
 
   // return;
   vertex_array &vertices = this->_surf->get_vertices();
@@ -379,11 +378,11 @@ class dynamic_surface {
 public:
   typedef std::shared_ptr<dynamic_surface> ptr;
 
-  static ptr create(manifold::ptr M, real Cc, real Cs, real Cm) {
+  static ptr create(shell::ptr M, real Cc, real Cs, real Cm) {
     return std::make_shared<dynamic_surface>(M, Cc, Cs, Cm);
   }
 
-  dynamic_surface(manifold::ptr M, real Cc, real Cs, real Cm) : __M(M) {
+  dynamic_surface(shell::ptr M, real Cc, real Cs, real Cm) : __M(M) {
     _Cc = Cc;
     _Cs = Cs;
     _Cm = Cm;
@@ -394,7 +393,7 @@ public:
     __vdatum_id = __M->insert_datum(vdata);
   };
 
-  void delete_degenerates(manifold &M) {
+  void delete_degenerates(shell &M) {
     vec3_datum::ptr x_datum = static_pointer_cast<vec3_datum>(M.get_datum(0));
     std::vector<vec3> &x = x_datum->data();
 
@@ -431,28 +430,29 @@ public:
     for (int i = 0; i < M.vert_count(); i++) {
       if (M.vbegin(i) < 0)
         continue;
+      /*
+            if (M.vsize(i) > 16) {
+              vec3 N = vert_normal(M, i, x);
+              vec4 cola(0.0, 1.0, 1.0, 0.0);
+              gg::geometry_logger::line(x[i], x[i] + 0.1 * N, cola);
+              M.for_each_vertex(i, [&x, &i, cola](index_t cid, shell &m) {
+                index_t j = m.vert(m.next(cid));
+                gg::geometry_logger::line(x[i], x[j], cola);
+              });
 
-      if (M.vsize(i) > 16) {
-        vec3 N = vert_normal(M, i, x);
-        vec4 cola(0.0, 1.0, 1.0, 0.0);
-        gg::geometry_logger::line(x[i], x[i] + 0.1 * N, cola);
-        M.for_each_vertex(i, [&x, &i, cola](index_t cid, manifold &m) {
-          index_t j = m.vert(m.next(cid));
-          gg::geometry_logger::line(x[i], x[j], cola);
-        });
-      }
-
+            }
+      */
       if (M.vsize(i) > 3)
         continue;
 
       vec3 N = vert_normal(M, i, x);
-      vec4 cola(0.2, 0.5, 1.0, 0.0);
-      gg::geometry_logger::line(x[i], x[i] + 0.1 * N, cola);
+      // vec4 cola(0.2, 0.5, 1.0, 0.0);
+      // gg::geometry_logger::line(x[i], x[i] + 0.1 * N, cola);
       remove_vertex(M, i);
     }
   }
 
-  index_t align_edges(manifold &M, index_t cA0, index_t cB0,
+  index_t align_edges(shell &M, index_t cA0, index_t cB0,
                       const std::vector<vec3> &x) {
 
     index_t cB1 = M.other(cB0);
@@ -465,7 +465,7 @@ public:
     return cB0;
   }
 
-  void trim_collected(manifold &M, const std::vector<vec3> &x,
+  void trim_collected(shell &M, const std::vector<vec3> &x,
                       std::vector<std::array<index_t, 2>> &collected) {
     std::vector<bool> flags(M.corner_count() / 2, false);
     real tol = _Cm;
@@ -516,7 +516,7 @@ public:
     collected.erase(it, collected.end());
   }
 
-  vector<std::array<index_t, 2>> get_merge_pairs(manifold &M,
+  vector<std::array<index_t, 2>> get_merge_pairs(shell &M,
                                                  std::vector<vec3> &x) {
 
     std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
@@ -558,7 +558,7 @@ public:
 
   void merge_edges() {
     // edge e = c / 2;
-    manifold &M = *__M;
+    shell &M = *__M;
 
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
@@ -578,7 +578,7 @@ public:
                        index_t vs,                        //
                        index_t fs,                        //
                        const std::vector<index_t> &edges, //
-                       manifold &M) -> corner4 {
+                       shell &M) -> corner4 {
                index_t c0A = edges[i + 0];
                index_t c0B = edges[i + 1];
 
@@ -596,7 +596,7 @@ public:
 
   void break_cycles() {
     // edge e = c / 2;
-    manifold &M = *__M;
+    shell &M = *__M;
 
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
@@ -614,7 +614,7 @@ public:
 
       std::array<index_t, 2> pair = {0, 0};
       int j = 0;
-      M.for_each_vertex(M.vert(c0), [v1, &pair, &j](index_t ci, manifold &M) {
+      M.for_each_vertex(M.vert(c0), [v1, &pair, &j](index_t ci, shell &M) {
         index_t vi = M.vert(M.next(ci));
         if (vi == v1 && j < 2) {
           pair[j++] = ci;
@@ -635,20 +635,20 @@ public:
                   index_t vs,                        //
                   index_t fs,                        //
                   const std::vector<index_t> &edges, //
-                  manifold &M) -> corner4 {
+                  shell &M) -> corner4 {
                index_t c0A = edges[i + 0];
                index_t c0B = edges[i + 1];
 
-               debug_line_line(M, c0A, c0B, x);
-               debug_edge_normal(M, c0A, x);
-               debug_edge_normal(M, c0B, x);
+               // debug_line_line(M, c0A, c0B, x);
+               // debug_edge_normal(M, c0A, x);
+               // debug_edge_normal(M, c0B, x);
                // std::cout << "break_cycle" << std::endl;
                // M.cprint(c0A);
                return merge_edge(M, c0A, c0B, vs + 2 * i + 0, vs + 2 * i + 1);
              });
   }
 
-  bool skip_flip(manifold &M, index_t corner) {
+  bool skip_flip(shell &M, index_t corner) {
     index_t c0 = corner;
     index_t c1 = M.other(c0);
     index_t v0 = M.vert(c0);
@@ -747,7 +747,7 @@ public:
   }
 
   void subdivide_edges() {
-    using comp_great = manifold_data_comp<vec3, std::greater<real>>;
+    using comp_great = shell_data_comp<vec3, std::greater<real>>;
     vec3_datum::ptr coord_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
 
@@ -761,7 +761,7 @@ public:
                     index_t cs, //
                     index_t vs, //
                     index_t fs, //
-                    const std::vector<index_t> &edges, manifold &m) -> corner1 {
+                    const std::vector<index_t> &edges, shell &m) -> corner1 {
                    return {subdivide_edge(m, edges[i],    //
                                           vs + i,         //
                                           cs + 6 * i + 0, //
@@ -774,7 +774,7 @@ public:
   }
 
   void collapse_edges() {
-    using comp_less = manifold_data_comp<vec3, std::less<real>>;
+    using comp_less = shell_data_comp<vec3, std::less<real>>;
     vec3_datum::ptr coord_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
 
@@ -788,7 +788,7 @@ public:
                    index_t cs, //
                    index_t vs, //
                    index_t fs, //
-                   const std::vector<index_t> &edges, manifold &m) -> corner1 {
+                   const std::vector<index_t> &edges, shell &m) -> corner1 {
                   return {collapse_edge(m, edges[i])};
                 });
   }
@@ -831,7 +831,7 @@ public:
     pack(*__M);
   }
 
-  manifold::ptr __M;
+  shell::ptr __M;
   index_t __vdatum_id;
   real _Cc, _Cs, _Cm; // collapse, stretch, bridge
 

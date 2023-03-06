@@ -15,6 +15,6 @@ that commemorate her well-known wire sculptures.[4][5]
 */
 
 #include "gaudi/asawa/datums.hpp"
-#include "gaudi/asawa/manifold.hpp"
+#include "gaudi/asawa/shell.hpp"
 
 #endif

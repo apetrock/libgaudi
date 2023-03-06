@@ -98,22 +98,19 @@ public:
 
         real dc = va::dist(pi, pj);
         // T sc = va::norm(pNode.half);
-        // real sc = pNode.mag();
+        real sc = pNode.mag();
         ext::extents_t ext = extents[j];
         vec3 de = ext[1] - ext[0];
-        real sc = min(de[0], min(de[1], de[2]));
-        //    std::cout << sc << " " << dc << std::endl;
-        //     int ii = octree.permutation[pNode.begin];
+        // real sc = min(de[0], min(de[1], de[2]));
+        //     std::cout << sc << " " << dc << std::endl;
+        //      int ii = octree.permutation[pNode.begin];
 
         if (sc / dc < __thresh || pNode.isLeaf()) {
 
           vec4 c(0.0, 0.5, 0.8, 1.0);
-          if (i == 0) {
-            gg::geometry_logger::ext(ext[0], ext[1], c);
-            gg::geometry_logger::line(pi, pj, vec4(0.1, 0.7, 0.2, 0.5));
-          }
 
           if (pNode.isLeaf()) {
+            c = vec4(0.8, 0.5, 0.0, 1.0);
 
             for (int jn = pNode.begin; jn < pNode.begin + pNode.size; jn++) {
               int jj = __tree.permutation[jn];
@@ -125,6 +122,12 @@ public:
             Q ui = nodeComputeFcn(i, j, pi, __data, pNode, __tree);
             u[i] += ui;
           }
+          /*
+          if (i == 0) {
+            gg::geometry_logger::ext(ext[0], ext[1], c);
+            gg::geometry_logger::line(pi, pj, vec4(0.1, 0.7, 0.2, 0.5));
+          }
+          */
         }
 
         else {

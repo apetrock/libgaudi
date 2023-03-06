@@ -90,6 +90,7 @@ public:
   void updateFrame() {
     // cache the old rotation
     mModelRotOld = mModelRotNew;
+
     ball->setState(Quat::Identity()); // reset ball to identity
   }
 
@@ -97,6 +98,7 @@ public:
     // This is my camera model, its not a seperat object, but doesn't
     // necessarily warrant one.  All the fancy stuff was implemented in the
     // arcball class
+
     Mat4 r = ball->matrix();
     // accumulate rotations... this likely could be done with the
     // quaternions in the arcball, but this works after some fiddling
@@ -108,6 +110,14 @@ public:
     // rotate the world, then take a step back
     // get the position from the inverse  of the matrix
     mPosition = mModelRotNew.transpose() * Vec4(0, 0, mDist, 1);
+  }
+
+  void rotate_ball() {
+    Vec3 rotation(0.0, M_PI / 360.0, 0.0);
+    double angle = rotation.norm();
+    Vec3 axis = rotation.normalized();
+    Eigen::Quaternionf q(Eigen::AngleAxisf(angle, axis));
+    ball->state() *= q;
   }
 
   virtual bool onMouseButton(const Eigen::Vector2i &p, int button, bool down,
@@ -137,6 +147,11 @@ public:
     updatePosition();
     pLast = p;
     return true;
+  }
+
+  void onFrame() {
+    // rotate_ball();
+    // updatePosition();
   }
 
   Mat4 &getModelView() { return mModelView; }
@@ -293,6 +308,7 @@ public:
     if (mScene) {
       mScene->_onAnimate();
     }
+    _viewer->onFrame();
   }
 
   virtual void drawContents() {

@@ -5,7 +5,7 @@
 #include <bits/types/wint_t.h>
 #include <vector>
 
-#include <gaudi/asawa/manifold.hpp>
+#include <gaudi/asawa/shell.hpp>
 #include <gaudi/calder/harmonic_integrators.hpp>
 
 #include "solver.hpp"

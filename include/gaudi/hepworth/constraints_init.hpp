@@ -3,7 +3,7 @@
 #define __PENKO_CONSTRAINTS_INIT__
 
 #include <gaudi/asawa/coordinate_interface.hpp>
-#include <gaudi/asawa/manifold.hpp>
+#include <gaudi/asawa/shell.hpp>
 
 #include "constraints.hpp"
 #include "objective_function.hpp"

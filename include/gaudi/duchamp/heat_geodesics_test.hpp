@@ -1,21 +1,23 @@
+#include "Eigen/src/Core/util/Meta.h"
+#include "Eigen/src/Geometry/AngleAxis.h"
+
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
-
-#include "gaudi/vec_addendum.h"
+#include <ostream>
+#include <unsupported/Eigen/FFT>
 
 #include "GaudiGraphics/geometry_logger.h"
 
 #include "gaudi/arp/arp.h"
-
 #include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/vec_addendum.h"
 
+#include "gaudi/asawa/asset_loader.hpp"
 #include "gaudi/asawa/dynamic_surface.hpp"
-#include "gaudi/asawa/faceloader.hpp"
-#include "gaudi/asawa/manifold.hpp"
-#include "gaudi/asawa/objloader_refactor.hpp"
+#include "gaudi/asawa/shell.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
-#include "gaudi/asawa/primitive_operations.hpp"
+#include "gaudi/asawa/shell_operations.hpp"
 #include "gaudi/common.h"
 
 #include <array>
@@ -33,7 +35,58 @@ namespace duchamp {
 
 using namespace asawa;
 
-void debug_manifold(asawa::manifold &M, const std::vector<vec3> verts) {
+real fib(real thet, real f) {
+  real c0 = 2.0;
+  real c1 = 3.0;
+  real c2 = 5.0;
+  real c3 = 8.0;
+  real c4 = 13.0;
+  real c5 = 21.0;
+  real cs0 = 1.0 / c0 * cos(f * M_PI * (c0 * thet + 0.5));
+  real cs1 = 1.0 / c1 * cos(f * M_PI * (c1 * thet + 0.33));
+  real cs2 = 1.0 / c2 * cos(f * M_PI * (c2 * thet + 0.20));
+  real cs3 = 1.0 / c3 * cos(f * M_PI * (c3 * thet + 0.125));
+  real cs4 = 1.0 / c4 * cos(f * M_PI * (c4 * thet + 1.0 / 13.0));
+  real cs5 = 1.0 / c5 * cos(f * M_PI * (c5 * thet + 1.0 / 21.0));
+  return cs0 + cs1 + cs2 + cs3 + cs4 + cs5;
+}
+
+real kolmogorov(real thet, real f) {
+  real k = 5 / 6;
+  real c0 = pow(2.0, -k * 1.0);
+  real c1 = pow(2.0, -k * 2.0);
+  real c2 = pow(2.0, -k * 3.0);
+  real c3 = pow(2.0, -k * 4.0);
+  real c4 = pow(2.0, -k * 5.0);
+  real cs0 = c0 * sin(f * M_PI * (1.0 * thet + 1.0));
+  real cs1 = c1 * sin(f * M_PI * (2.0 * thet + 0.5));
+  real cs2 = c2 * sin(f * M_PI * (4.0 * thet + 0.25));
+  real cs3 = c3 * sin(f * M_PI * (8.0 * thet + 0.125));
+  return cs0 + cs1 + cs2 + cs3;
+}
+
+real square(real thet, real f) {
+  real x = 0.0;
+  for (int i = 0; i < 100; i++) {
+    real k = real(i);
+    real K = 2.0 * k - 1.0;
+    x += 4.0 / M_PI * 1.0 / K * sin(M_PI * K * f * thet);
+  }
+  return x;
+}
+
+real simple(real thet, real f) { return sin(M_PI * thet * f); }
+
+real freq_biased(real thet, real f) {
+  real N = 4;
+  real z = sin(M_PI * thet * f);
+  real zp0 = pow(z, 1.0 * N);
+  real zp1 = pow(1.0 - z, 64.0 * N);
+
+  return zp0 / (zp0 + zp1) - 0.5;
+}
+
+void debug_shell(asawa::shell &M, const std::vector<vec3> verts) {
   for (int i = 0; i < M.__corners_next.size(); i += 2) {
     if (M.__corners_next[i] < 0)
       continue;
@@ -60,13 +113,30 @@ void center(std::vector<vec3> &coords) {
   maxl = maxl > dl[1] ? maxl : dl[1];
   maxl = maxl > dl[2] ? maxl : dl[2];
   real s = 2.0 / maxl;
-  vec3 cen = (0.5 * (max + min) - min) * s;
   std::cout << " scale: " << s << std::endl;
-  cen -= min;
+  std::cout << " min/max: "           //
+            << min.transpose() << " " //
+            << max.transpose() << std::endl;
+
   for (auto &c : coords) {
     c -= min;
     c = s * c;
-    c -= cen;
+    c -= 0.5 * (max - min) * s;
+  }
+}
+
+void transform(std::vector<vec3> &coords, const mat3 &M) {
+  real accum = 0.0;
+  vec3 min = coords[0];
+  vec3 max = coords[0];
+
+  for (auto &c : coords) {
+    min = va::min(c, min);
+    max = va::max(c, max);
+  }
+
+  for (auto &c : coords) {
+    c = M * c;
   }
 }
 
@@ -82,36 +152,6 @@ std::array<vec3, 2> extents(std::vector<vec3> &coords) {
   return {min, max};
 }
 
-manifold::ptr build_bunny() {
-  std::string file("assets/bunny.obj");
-  // std::string file("assets/skeleton.obj");
-  std::vector<vec3> vertices;
-  std::vector<std::vector<int>> faces;
-  loadObjfile(file, vertices, faces);
-  // make_cube(vertices, faces);
-  // faces.pop_back();
-  std::vector<index_t> corners_next, corners_vert, corners_face;
-  assemble_table(vertices, faces, corners_next, corners_vert, corners_face);
-  manifold::ptr M = manifold::create(corners_next, corners_vert, corners_face);
-  datum_t<vec3>::ptr vdata = datum_t<vec3>::create(prim_type::VERTEX, vertices);
-  M->insert_datum(vdata);
-
-  return M;
-}
-
-manifold::ptr build_cube() {
-  std::vector<vec3> vertices;
-  std::vector<std::vector<int>> faces;
-  make_cube(vertices, faces);
-  std::vector<index_t> corners_next, corners_vert, corners_face;
-  assemble_table(vertices, faces, corners_next, corners_vert, corners_face);
-  manifold::ptr M = manifold::create(corners_next, corners_vert, corners_face);
-  datum_t<vec3>::ptr vdata = datum_t<vec3>::create(prim_type::VERTEX, vertices);
-  M->insert_datum(vdata);
-
-  return M;
-}
-
 class heat_geodesics_test {
 public:
   typedef std::shared_ptr<heat_geodesics_test> ptr;
@@ -119,8 +159,10 @@ public:
   static ptr create() { return std::make_shared<heat_geodesics_test>(); }
 
   heat_geodesics_test() {
-    //__M = build_cube();
-    __M = build_bunny();
+    //__M = load_cube();
+    __M = asawa::load_bunny();
+    //__M = asawa::load_heart();
+    //__M = asawa::load_skeleton();
 
     triangulate(*__M);
     for (int i = 0; i < __M->face_count(); i++) {
@@ -129,38 +171,35 @@ public:
       }
     }
 
-    vec3_datum::ptr c_datum =
+    vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
+    std::vector<vec3> &x = x_datum->data();
 
-    std::vector<vec3> &coords = c_datum->data();
-    center(coords);
-
+    center(x);
+    // transform(x, mat3(Eigen::AngleAxisd(-0.5 * M_PI, vec3::UnitX())));
     /////////
     // dynamic surface
     /////////
 
-    real l0 = 0.5 * asawa::avg_length(*__M, c_datum->data());
+    real l0 = 0.5 * asawa::avg_length(*__M, x);
     __surf = dynamic_surface::create(__M, 1.0 * l0, 3.0 * l0, 1.0 * l0);
 
     /////////
     // weights
     /////////
 
-    vec3_datum::ptr x_datum =
-        static_pointer_cast<vec3_datum>(__M->get_datum(0));
-    std::vector<vec3> &x = x_datum->data();
-
     std::vector<real> weights(__M->vert_count(), 0.0);
 
     real mx = -999.9, mn = 999.0;
     index_t mxi = 0, mni = 0.0;
+    index_t axis = 0;
     for (int i = 0; i < x.size(); i++) {
-      if (x[i][0] > mx) {
-        mx = x[i][0];
+      if (x[i][axis] > mx) {
+        mx = x[i][axis];
         mxi = i;
       }
-      if (x[i][0] < mn) {
-        mn = x[i][0];
+      if (x[i][axis] < mn) {
+        mn = x[i][axis];
         mni = i;
       }
     }
@@ -168,64 +207,132 @@ public:
     weights[mni] = 1.0;
     weights[mxi] = -1.0;
 
-    datum_t<real>::ptr wdata =
-        datum_t<real>::create(prim_type::VERTEX, weights);
-    _iw = __M->insert_datum(wdata);
+    _iw = __M->insert_datum(real_datum::create(prim_type::VERTEX, weights));
+    _io = __M->insert_datum(real_datum::create(prim_type::VERTEX, weights));
   };
 
-  real fib(real thet, real f) {
-    real c0 = 2.0;
-    real c1 = 3.0;
-    real c2 = 5.0;
-    real c3 = 8.0;
-    real c4 = 13.0;
-    real c5 = 21.0;
-    real cs0 = 1.0 / c0 * cos(f * M_PI * (c0 * thet + 0.5));
-    real cs1 = 1.0 / c1 * cos(f * M_PI * (c1 * thet + 0.33));
-    real cs2 = 1.0 / c2 * cos(f * M_PI * (c2 * thet + 0.20));
-    real cs3 = 1.0 / c3 * cos(f * M_PI * (c3 * thet + 0.125));
-    real cs4 = 1.0 / c4 * cos(f * M_PI * (c4 * thet + 1.0 / 13.0));
-    real cs5 = 1.0 / c5 * cos(f * M_PI * (c5 * thet + 1.0 / 21.0));
-    return cs0 + cs1 + cs2 + cs3 + cs4 + cs5;
-  }
-
-  real kolmogorov(real thet, real f) {
-    real k = 5 / 6;
-    real c0 = pow(2.0, -k * 1.0);
-    real c1 = pow(2.0, -k * 2.0);
-    real c2 = pow(2.0, -k * 3.0);
-    real c3 = pow(2.0, -k * 4.0);
-    real c4 = pow(2.0, -k * 5.0);
-    real cs0 = c0 * sin(f * M_PI * (1.0 * thet + 1.0));
-    real cs1 = c1 * sin(f * M_PI * (2.0 * thet + 0.5));
-    real cs2 = c2 * sin(f * M_PI * (4.0 * thet + 0.25));
-    real cs3 = c3 * sin(f * M_PI * (8.0 * thet + 0.125));
-    real cs4 = c4 * sin(f * M_PI * (16.0 * thet + 0.0625));
-    return cs0 + cs1 + cs2 + cs3 + cs4;
-  }
-
-  real square(real thet, real f) {
-    real x = 0.0;
-    for (int i = 0; i < 100; i++) {
-      real k = real(i);
-      real K = 2.0 * k - 1.0;
-      x += 4.0 / M_PI * 1.0 / K * sin(M_PI * K * f * thet);
+  real calc_objective(const std::vector<real> &offset,
+                      const std::vector<real> &dist, const real &omega,
+                      const real &phi, const real &omega_init, const real &Ks) {
+    real C = 0.0;
+    for (int i = 0; i < dist.size(); i++) {
+      real thet = dist[i];
+      real S = offset[i];
+      real st = sin(omega * thet + phi);
+      C += pow(st - S, 2);
     }
-    return x;
+    C += Ks * pow(omega - omega_init, 2);
+    return C;
   }
 
-  real simple(real thet, real f) { return sin(M_PI * thet * f); }
+  std::array<real, 3> calc_gradient(const std::vector<real> &offset,
+                                    const std::vector<real> &dist,
+                                    const real &omega, const real &phi,
+                                    const real &omega_init, const real &Ks) {
 
-  real freq_biased(real thet, real f) {
-    real N = 4;
-    real z = sin(M_PI * thet * f);
-    real zp0 = pow(z, 1.0 * N);
-    real zp1 = pow(1.0 - z, 64.0 * N);
+    real CtC = 0.0;
+    real g0 = 0.0;
+    real g1 = 0.0;
 
-    return zp0 / (zp0 + zp1) - 0.5;
+    for (int i = 0; i < dist.size(); i++) {
+      real thet = dist[i];
+      real S = offset[i];
+      real st = sin(omega * thet + phi);
+      real ct = cos(omega * thet + phi);
+
+      real g0i = 2.0 * thet * (st - S) * ct;
+      real g1i = 2.0 * (st - S) * ct;
+      g0 += g0i;
+      g1 += g1i;
+    }
+    g0 += 2.0 * Ks * (omega - omega_init);
+
+    CtC += pow(g0, 2.0);
+    CtC += pow(g1, 2.0);
+    return {g0, g1, CtC};
   }
 
-  void test_heat() {
+  std::vector<real> calc_offset(const std::vector<real> &offset,
+                                const std::vector<real> &dist, real &omega,
+                                real &phi) {
+    real omega_p = 18.0 * M_PI;
+    real phi_p = 0.0;
+    // real omega_p = omega;
+    // real phi_p = phi;
+    real omega_init = 18.0 * M_PI;
+    real Ks = 0.5;
+    real d = 1.0;
+    std::cout << "C: " << std::flush;
+    for (int k = 0; k < 40; k++) {
+      real C = calc_objective(offset, dist, omega_p, phi_p, omega_init, Ks);
+      if (k % 20 == 0)
+        std::cout << C << " -> " << std::flush;
+      auto G = calc_gradient(offset, dist, omega_p, phi_p, omega_init, Ks);
+
+      real g0 = G[0];
+      real g1 = G[1];
+      real CtC = G[2];
+
+      real alpha = 0.1 * C / CtC;
+      // clamp the search around 2.0 * PI
+      if (fabs(alpha * g0) > 0.25 * M_PI) {
+        alpha = 2.0 * M_PI / fabs(g0);
+      }
+
+      bool backtracing = true;
+      int i = 0;
+      while (backtracing) {
+        real omega_t = omega_p - alpha * g0;
+        real phi_t = phi_p - alpha * g1;
+
+        real Ci = calc_objective(offset, dist, omega_t, phi_t, omega_init, Ks);
+
+        if (Ci < C)
+          break;
+        if (i++ > 20) {
+          break;
+          alpha = 0.0;
+        }
+        alpha /= 2.0;
+      }
+      omega_p -= alpha * g0;
+      phi_p -= alpha * g1;
+    }
+
+    std::cout << " calc'd: " << omega_p << " " << phi_p << std::endl;
+
+    std::vector<real> offset_out(offset);
+    for (int i = 0; i < offset.size(); i++) {
+      real thet = dist[i];
+      offset_out[i] = sin(omega_p * thet + phi_p);
+    }
+
+    omega0 = omega_p;
+    phi0 = phi_p;
+    return offset_out;
+  }
+
+  std::vector<real> calc_mag(const std::vector<vec3> &v,
+                             const std::vector<vec3> &x) {
+    std::vector<real> m(v.size());
+    for (int i = 0; i < v.size(); i++) {
+      vec3 N = vert_normal(*__M, i, x);
+      m[i] = va::sgn(v[i].dot(N)) * v[i].norm();
+    }
+
+    auto res = std::minmax_element(begin(m), end(m));
+    real mn = *res.first;
+    real mx = *res.second;
+
+    if (mx - mn > 1e-16) {
+      std::for_each(begin(m), end(m),
+                    [mn, mx](real &v) { v = (v - mn) / (mx - mn); });
+    }
+    std::cout << "dx min/max: " << mn << " " << mx << std::endl;
+    return m;
+  }
+
+  void test_heat(int frame) {
 
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
@@ -238,6 +345,11 @@ public:
     real_datum::ptr w_datum =
         static_pointer_cast<real_datum>(__M->get_datum(_iw));
     std::vector<real> &w = w_datum->data();
+
+    real_datum::ptr o_datum =
+        static_pointer_cast<real_datum>(__M->get_datum(_io));
+    std::vector<real> &o = o_datum->data();
+
     real mx = -999.9, mn = 999.0;
     index_t mxi = 0, mni = 0.0;
     for (int i = 0; i < w.size(); i++) {
@@ -263,28 +375,23 @@ public:
       mx = max(d[i], mx);
     }
 #if 1
+
     real As = asawa::surface_area(*__M, x);
     real l = sqrt(As);
     bool nn = false;
+
+    if (frame == 0)
+      for (int i = 0; i < __M->vert_count(); i++) {
+        o[i] = sin(omega0 * d[i] + phi0);
+      }
+    else {
+      std::vector<real> o_dx = calc_mag(dx, x);
+      o = calc_offset(o_dx, d, omega0, phi0);
+    }
+
     for (int i = 0; i < __M->vert_count(); i++) {
       vec3 N = vert_normal(*__M, i, x);
-      vec3 xi = x[i];
-
-      real sn = pow(sin(M_PI * d[i] / mx / 2.0), 2.0);
-
-      // real cn = simple(d[i], 18.0);
-      real cn = kolmogorov(d[i], 8.0);
-      // real cn = 1.0 * fib(d[i], 12.0);
-      // real cn = 1.0 * freq_biased(d[i], 16.0);
-      vec3 dN = cn * N;
-      dx[i] = 0.5 * dx[i] + 0.01 * dN;
-      // vec3 dN = pow(sn, 2.0) * kolmogorov(d[i], 2.0) * N;
-      // vec3 dN = pow(sn, 2.0) * square(d[i], 12.0) * N;
-      // vec3 dN = pow(sn, 2.0) * simple(d[i], 12.0) * N;
-      // vec3 dN = pow(sn, 2.0) * freq_biased(d[i], 12.0) * N;
-
-      // gg::geometry_logger::line(xi, xi + 0.02 * dN, vec4(0.3, 0.4, 0.95,
-      // 0.5));
+      dx[i] = 0.95 * dx[i] + 0.001 * o[i] * N;
     }
 #endif
     w = d;
@@ -318,7 +425,7 @@ public:
 
     std::cout << "frame: " << frame << std::endl;
     // test_twist();
-    test_heat();
+    test_heat(frame);
 
     vec3_datum::ptr v_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(1));
@@ -329,11 +436,12 @@ public:
     smoothMesh(0.015, 10);
     //  arp::aabb_tree<1> tree(vids, x);
 
-    // debug_manifold(*__M, x_datum->data());
+    // debug_shell(*__M, x_datum->data());
   }
-
+  real omega0 = 18.0 * M_PI, phi0 = 0.0;
   index_t _iw;
-  manifold::ptr __M;
+  index_t _io;
+  shell::ptr __M;
   dynamic_surface::ptr __surf;
 };
 

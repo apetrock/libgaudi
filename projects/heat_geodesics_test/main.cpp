@@ -62,7 +62,7 @@ public:
   virtual void onAnimate(int frame) {
 
     __surf->step(frame);
-    gg::fillBuffer_ref(*__surf->__M, _obj);
+    gg::fillBuffer_ref(*__surf->__M, _obj, gg::colorRGB(0.8, 0.8, 0.75, 1.0));
     // std::cout << "rendering debug" << std::endl;
     // asawa::test();
 

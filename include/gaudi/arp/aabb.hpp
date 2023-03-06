@@ -189,7 +189,7 @@ public:
     mx = var[mx] > var[2] ? mx : 2;
 
     vec3 N = vec3::Zero();
-    N[mx] = 0.75 * sqrt(var[mx]);
+    N[mx] = 1.0 * sqrt(var[mx]);
     half.set(c, N);
 #else
     mat3 U = mat3::Zero();
@@ -357,7 +357,7 @@ public:
           leafNodes.push_back(cNodeId);
         else if (cNode.size < pNode.size && cNode.level < maxLevel)
           stack.push(cNodeId);
-        else if (cNode.size == pNode.size || cNode.level == maxLevel)
+        else
           leafNodes.push_back(cNodeId);
 
         // leafIds.push_back(cNodeId);

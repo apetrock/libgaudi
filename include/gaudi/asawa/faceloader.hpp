@@ -179,39 +179,39 @@ void assemble_table(const std::vector<vec3> &vertices,
     index_t vj = corners_vert[cj];
     index_t vjn = corners_vert[cjn];
     index_t vjp = corners_vert[cjp];
-    std::cout << ci << " " << cj << std::endl;
-    std::cout << vi << " " << vj << std::endl;
-    std::cout << " " << vi << " " << vin << " " << vip << std::endl;
-    std::cout << " " << vj << " " << vjn << " " << vjp << std::endl;
+    // std::cout << ci << " " << cj << std::endl;
+    // std::cout << vi << " " << vj << std::endl;
+    // std::cout << " " << vi << " " << vin << " " << vip << std::endl;
+    // std::cout << " " << vj << " " << vjn << " " << vjp << std::endl;
 
     if (vip == vjn) {
       corners_twin[cj] = cip;
       corners_twin[cip] = cj;
 
-      std::cout << "   ci:" << cj << " " << cip << std::endl;
-      std::cout << "   vi:" << vj << " " << vip << std::endl;
-      // std::cout << "    v: " << vi << " " << vjn << " " << vin <<
-      // std::endl;
+      // std::cout << "   ci:" << cj << " " << cip << std::endl;
+      // std::cout << "   vi:" << vj << " " << vip << std::endl;
+      //  std::cout << "    v: " << vi << " " << vjn << " " << vin <<
+      //  std::endl;
     }
     if (vjp == vin) {
       corners_twin[ci] = cjp;
       corners_twin[cjp] = ci;
 
-      std::cout << "   cj:" << ci << " " << cjp << std::endl;
-      std::cout << "   vj:" << vi << " " << vjp << std::endl;
+      // std::cout << "   cj:" << ci << " " << cjp << std::endl;
+      // std::cout << "   vj:" << vi << " " << vjp << std::endl;
 
       // std::cout << "    v: " << vi << " " << vjn << " " << vin <<
       // std::endl;
     }
   }
-
+  /*
   for (int i = 0; i < corners.size(); i++) {
     std::cout << " ci " << corner_index[i] << " ct " << corners_twin[i]
               << " cn " << corners_next[i] << " cf " << corners_face[i]
               << " cv " << corners_vert[i] << std::endl;
   }
   std::cout << std::endl;
-
+*/
   idx = 0;
   std::vector<bool> corner_allocated(flat_corners.size(), false);
   std::vector<index_t> new_corners;
@@ -243,8 +243,8 @@ void assemble_table(const std::vector<vec3> &vertices,
 
   for (int i = 0; i < new_corners_next.size(); i++) {
     if (new_corners_next[i] > 0) {
-      std::cout << " " << new_corners_next[i] << " "
-                << corner_map[new_corners_next[i]] << std::endl;
+      // std::cout << " " << new_corners_next[i] << " "
+      //           << corner_map[new_corners_next[i]] << std::endl;
       new_corners_next[i] = corner_map[new_corners_next[i]];
     }
   }
@@ -252,13 +252,13 @@ void assemble_table(const std::vector<vec3> &vertices,
   corners_next = new_corners_next;
   corners_face = new_corners_face;
   corners_vert = new_corners_vert;
-
+  /*
   for (int i = 0; i < new_corners.size(); i++) {
     std::cout << i << " ci " << new_corners[i] << " cn " << new_corners_next[i]
               << " cf " << new_corners_face[i] << " cv " << new_corners_vert[i]
               << std::endl;
   }
-
+*/
   std::vector<index_t> face_start(faces.size(), -1);
   std::vector<index_t> vert_start(vertices.size(), -1);
   for (int i = 0; i < corners_next.size(); i++) {

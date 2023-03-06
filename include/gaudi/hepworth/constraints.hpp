@@ -20,7 +20,7 @@
 #include <GaudiGraphics/geometry_logger.h>
 
 #include <gaudi/asawa/coordinate_interface.hpp>
-#include <gaudi/asawa/manifold.hpp>
+#include <gaudi/asawa/shell.hpp>
 #include <gaudi/vec_addendum.h>
 
 #include <gaudi/calder/harmonic_integrators.hpp>

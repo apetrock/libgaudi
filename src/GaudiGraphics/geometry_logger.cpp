@@ -142,13 +142,16 @@ void geometry_logger::field(const std::vector<Vec3d> &p,
 
 void geometry_logger::frame(Mat3d M, Vec3d c, double C = 1.0) {
 
-  Vec3d t0 = M.block(0, 0, 3, 1);
-  Vec3d t1 = M.block(0, 1, 3, 1);
-  Vec3d t2 = M.block(0, 2, 3, 1);
+  Vec3d t0 = M.col(0);
+  Vec3d t1 = M.col(1);
+  Vec3d t2 = M.col(2);
 
-  gg::geometry_logger::line(c - C * t0, c + C * t0, Vec4d(1.0, 0.0, 0.0, 1.0));
-  gg::geometry_logger::line(c - C * t1, c + C * t1, Vec4d(0.0, 1.0, 0.0, 1.0));
-  gg::geometry_logger::line(c - C * t2, c + C * t2, Vec4d(0.0, 0.0, 1.0, 1.0));
+  gg::geometry_logger::line(c - 0.5 * C * t0, c + C * t0,
+                            Vec4d(1.0, 0.0, 0.0, 1.0));
+  gg::geometry_logger::line(c - 0.5 * C * t1, c + C * t1,
+                            Vec4d(0.0, 1.0, 0.0, 1.0));
+  gg::geometry_logger::line(c - 0.5 * C * t2, c + C * t2,
+                            Vec4d(0.0, 0.0, 1.0, 1.0));
 }
 
 } // namespace gg

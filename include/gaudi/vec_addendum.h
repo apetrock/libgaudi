@@ -201,12 +201,10 @@ inline T abs_cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
 
   T cos_alpha = abs_cos<T>(c0, c1, c2);
 
-  if (cos_alpha == 0)
-    return 2.0;
-  if (cos_alpha == 1)
+  if (cos_alpha > 0.98)
     return 2.0;
 
-  T cotan1 = cos_alpha / sqrt(1.0f - cos_alpha * cos_alpha + 1e-16);
+  T cotan1 = cos_alpha / sqrt(1.0f - cos_alpha * cos_alpha);
   cotan1 = std::min<T>(cotan1, T(2.0));
 
   if (!std::isfinite(cotan1)) {
@@ -859,5 +857,8 @@ template <typename T> bool greater_than(const VEC3<T> &A, const VEC3<T> &B) {
 template <typename T> bool less_than(const VEC3<T> &A, const VEC3<T> &B) {
   return (A.array() < B.array()).sum() > 0;
 };
+
+
+
 } // namespace va
 #endif

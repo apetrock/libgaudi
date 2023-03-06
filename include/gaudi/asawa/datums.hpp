@@ -12,7 +12,7 @@
 
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
-#include "manifold.hpp"
+#include "shell.hpp"
 
 #include "datum_x.hpp"
 
@@ -39,7 +39,7 @@ public:
   virtual ~datum(){};
 
   template <class... Types>
-  void calc(index_t i, const manifold &M, Types... args) {
+  void calc(index_t i, const shell &M, Types... args) {
     std::vector<index_t> vector;
     add_args(vector, args...);
     assert(!empty(vector));
@@ -65,7 +65,7 @@ public:
 
   virtual void do_alloc(const size_t &sz) = 0;
   virtual void do_resize(const size_t &sz) = 0;
-  virtual void do_calc(const manifold &M, const index_t &i,
+  virtual void do_calc(const shell &M, const index_t &i,
                        const std::vector<index_t> &vals) = 0;
   virtual void do_map(const index_t i, const index_t it) = 0;
   virtual void do_permute(const std::vector<index_t> &permute) = 0;
@@ -96,7 +96,7 @@ public:
   std::vector<TYPE> &data() { return __data; }
   const std::vector<TYPE> &data() const { return __data; }
 
-  virtual void do_calc(const manifold &M, const index_t &i,
+  virtual void do_calc(const shell &M, const index_t &i,
                        const std::vector<index_t> &vals) {
     real iN = 1.0 / real(vals.size());
     TYPE vavg = z::zero<TYPE>();
@@ -163,7 +163,7 @@ public:
       : datum_t<vec3>(type, data){};
   virtual ~vec3_datum(){};
 
-  virtual void do_calc(const manifold &M, const index_t &i,
+  virtual void do_calc(const shell &M, const index_t &i,
                        const std::vector<index_t> &vals) {
     real w = 0.0;
     vec3 vavg = z::zero<vec3>();

@@ -10,12 +10,12 @@
 #include "gaudi/bontecou/laplacian.hpp"
 
 #include "gaudi/asawa/dynamic_surface.hpp"
-#include "gaudi/asawa/faceloader.hpp"
-#include "gaudi/asawa/manifold.hpp"
-#include "gaudi/asawa/objloader_refactor.hpp"
+#include "gaudi/asawa/shell.hpp"
+
+#include "gaudi/asawa/asset_loader.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
-#include "gaudi/asawa/primitive_operations.hpp"
+#include "gaudi/asawa/shell_operations.hpp"
 #include "gaudi/common.h"
 
 #include <array>
@@ -33,7 +33,7 @@ namespace duchamp {
 
 using namespace asawa;
 
-void debug_manifold(asawa::manifold &M, const std::vector<vec3> verts) {
+void debug_shell(asawa::shell &M, const std::vector<vec3> verts) {
   for (int i = 0; i < M.__corners_next.size(); i += 2) {
     if (M.__corners_next[i] < 0)
       continue;
@@ -83,7 +83,7 @@ std::array<vec3, 2> extents(std::vector<vec3> &coords) {
 }
 
 /*
-std::vector<vec3> get_normals(manifold &M, const std::vector<vec3> &x) {
+std::vector<vec3> get_normals(shell &M, const std::vector<vec3> &x) {
 
   std::vector<std::vector<int>> faces;
   for (int i = 0; i < M.face_count(); i++) {
@@ -91,7 +91,7 @@ std::vector<vec3> get_normals(manifold &M, const std::vector<vec3> &x) {
     if (M.fbegin(i) < 0)
       continue;
     M.for_each_face(
-        i, [&face](int ci, asawa::manifold &M) { face.push_back(M.vert(ci)); });
+        i, [&face](int ci, asawa::shell &M) { face.push_back(M.vert(ci)); });
 
     faces.push_back(face);
   }
@@ -228,38 +228,8 @@ public:
   vec3 __axis, __axisX, __axisY;
 };
 
-manifold::ptr build_bunny() {
-  std::string file("assets/bunny.obj");
-  // std::string file("assets/skeleton.obj");
-  std::vector<vec3> vertices;
-  std::vector<std::vector<int>> faces;
-  loadObjfile(file, vertices, faces);
-  // make_cube(vertices, faces);
-  // faces.pop_back();
-  std::vector<index_t> corners_next, corners_vert, corners_face;
-  assemble_table(vertices, faces, corners_next, corners_vert, corners_face);
-  manifold::ptr M = manifold::create(corners_next, corners_vert, corners_face);
-  datum_t<vec3>::ptr vdata = datum_t<vec3>::create(prim_type::VERTEX, vertices);
-  M->insert_datum(vdata);
-
-  return M;
-}
-
-manifold::ptr build_cube() {
-  std::vector<vec3> vertices;
-  std::vector<std::vector<int>> faces;
-  make_cube(vertices, faces);
-  std::vector<index_t> corners_next, corners_vert, corners_face;
-  assemble_table(vertices, faces, corners_next, corners_vert, corners_face);
-  manifold::ptr M = manifold::create(corners_next, corners_vert, corners_face);
-  datum_t<vec3>::ptr vdata = datum_t<vec3>::create(prim_type::VERTEX, vertices);
-  M->insert_datum(vdata);
-
-  return M;
-}
-
 void test() {
-  manifold::ptr M = build_cube();
+  shell::ptr M = asawa::load_cube();
   triangulate(*M);
 
   vec3_datum::ptr v_datum = static_pointer_cast<vec3_datum>(M->get_datum(0));
@@ -281,7 +251,7 @@ void test() {
 
   //  gather_edges_parallel(*M, vdata->data(), 1.0);
   //   merge_face(*M, 3, M->other(3));
-  debug_manifold(*M, v_datum->data());
+  debug_shell(*M, v_datum->data());
 }
 
 class dynamic_surface_test {
@@ -291,8 +261,8 @@ public:
   static ptr create() { return std::make_shared<dynamic_surface_test>(); }
 
   dynamic_surface_test() {
-    //__M = build_cube();
-    __M = build_bunny();
+    //__M = load_cube();
+    __M = load_bunny();
 
     triangulate(*__M);
     for (int i = 0; i < __M->face_count(); i++) {
@@ -386,11 +356,11 @@ public:
     _twist->debug();
 #endif
 
-    // debug_manifold(*__M, x_datum->data());
+    // debug_shell(*__M, x_datum->data());
   }
 
   index_t _iw;
-  manifold::ptr __M;
+  shell::ptr __M;
   dynamic_surface::ptr __surf;
   std::shared_ptr<spin_twist> _twist;
 };

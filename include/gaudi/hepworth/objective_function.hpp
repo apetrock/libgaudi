@@ -5,7 +5,7 @@
 
 #include "constraints.hpp"
 #include "gaudi/asawa/coordinate_interface.hpp"
-#include "gaudi/asawa/manifold.hpp"
+#include "gaudi/asawa/shell.hpp"
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
