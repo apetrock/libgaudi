@@ -9,13 +9,12 @@
 
 #include "gaudi/bontecou/laplacian.hpp"
 
-#include "gaudi/asawa/dynamic_surface.hpp"
-#include "gaudi/asawa/shell.hpp"
-
-#include "gaudi/asawa/asset_loader.hpp"
+#include "gaudi/asawa/shell/asset_loader.hpp"
+#include "gaudi/asawa/shell/dynamic.hpp"
+#include "gaudi/asawa/shell/operations.hpp"
+#include "gaudi/asawa/shell/shell.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
-#include "gaudi/asawa/shell_operations.hpp"
 #include "gaudi/common.h"
 
 #include <array>
@@ -33,7 +32,7 @@ namespace duchamp {
 
 using namespace asawa;
 
-void debug_shell(asawa::shell &M, const std::vector<vec3> verts) {
+void debug_shell(shell::shell &M, const std::vector<vec3> verts) {
   for (int i = 0; i < M.__corners_next.size(); i += 2) {
     if (M.__corners_next[i] < 0)
       continue;
@@ -229,15 +228,14 @@ public:
 };
 
 void test() {
-  shell::ptr M = asawa::load_cube();
-  triangulate(*M);
+  shell::shell::ptr M = shell::load_cube();
+  shell::triangulate(*M);
 
   vec3_datum::ptr v_datum = static_pointer_cast<vec3_datum>(M->get_datum(0));
   const std::vector<vec3> &coords = v_datum->data();
-  real l0 = 2.0 * asawa::avg_length(*M, v_datum->data());
+  real l0 = 2.0 * shell::avg_length(*M, v_datum->data());
 
-  dynamic_surface::ptr surf =
-      dynamic_surface::create(M, l0, 3.0 * l0, 0.25 * l0);
+  shell::dynamic::ptr surf = shell::dynamic::create(M, l0, 3.0 * l0, 0.25 * l0);
 
   remove_vertex(*M, 0);
   remove_vertex(*M, 1);
@@ -254,17 +252,17 @@ void test() {
   debug_shell(*M, v_datum->data());
 }
 
-class dynamic_surface_test {
+class dynamic_shell_test {
 public:
-  typedef std::shared_ptr<dynamic_surface_test> ptr;
+  typedef std::shared_ptr<dynamic_shell_test> ptr;
 
-  static ptr create() { return std::make_shared<dynamic_surface_test>(); }
+  static ptr create() { return std::make_shared<dynamic_shell_test>(); }
 
-  dynamic_surface_test() {
+  dynamic_shell_test() {
     //__M = load_cube();
-    __M = load_bunny();
+    __M = shell::load_bunny();
 
-    triangulate(*__M);
+    shell::triangulate(*__M);
     for (int i = 0; i < __M->face_count(); i++) {
       if (__M->fbegin(i) > 0) {
         assert(__M->fsize(i) == 3);
@@ -293,8 +291,8 @@ public:
     // dynamic surface
     /////////
 
-    real l0 = 1.0 * asawa::avg_length(*__M, c_datum->data());
-    __surf = dynamic_surface::create(__M, 1.0 * l0, 3.0 * l0, 1.0 * l0);
+    real l0 = 1.0 * asawa::shell::avg_length(*__M, c_datum->data());
+    __surf = shell::dynamic::create(__M, 1.0 * l0, 3.0 * l0, 1.0 * l0);
 
     /////////
     // weights
@@ -360,8 +358,8 @@ public:
   }
 
   index_t _iw;
-  shell::ptr __M;
-  dynamic_surface::ptr __surf;
+  shell::shell::ptr __M;
+  shell::dynamic::ptr __surf;
   std::shared_ptr<spin_twist> _twist;
 };
 

@@ -603,14 +603,6 @@ inline T distance_from_triangle(const VEC3<T> *tri, VEC3<T> r0) {
   }
 }
 
-template <typename T>
-inline VEC3<T> orthogonal_project(const VEC3<T> &N, const VEC3<T> &A) {
-  // N has to be normalized
-  T dist = dot(N, A);
-  VEC3<T> out = A - dist * N;
-  return out;
-};
-
 template <typename T> MAT3<T> rejection_matrix(const VEC3<T> &N) {
   return N * N.transpose() - MAT3<T>::Identity();
 }
@@ -618,6 +610,22 @@ template <typename T> MAT3<T> rejection_matrix(const VEC3<T> &N) {
 template <typename T> MAT3<T> projection_matrix(const VEC3<T> &N) {
   return N * N.transpose();
 }
+
+template <typename T> MAT3<T> skew_symmetric_matrix(const VEC3<T> &x) {
+  MAT3<T> X = MAT3<T>::Zero();
+  X.col(0) = VEC3<T>(0, x[2], -x[1]);
+  X.col(1) = VEC3<T>(-x[2], 0, x[0]);
+  X.col(2) = VEC3<T>(x[1], -x[0], 0);
+  return X;
+}
+
+template <typename T>
+inline VEC3<T> orthogonal_project(const VEC3<T> &N, const VEC3<T> &A) {
+  // N has to be normalized
+  T dist = dot(N, A);
+  VEC3<T> out = A - dist * N;
+  return out;
+};
 
 template <typename T>
 inline vector<VEC3<T>> orthogonal_project(const VEC3<T> &norm,
@@ -857,8 +865,6 @@ template <typename T> bool greater_than(const VEC3<T> &A, const VEC3<T> &B) {
 template <typename T> bool less_than(const VEC3<T> &A, const VEC3<T> &B) {
   return (A.array() < B.array()).sum() > 0;
 };
-
-
 
 } // namespace va
 #endif

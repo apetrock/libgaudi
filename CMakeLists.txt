@@ -164,7 +164,7 @@ add_subdirectory(src)
 add_subdirectory(projects/rods_test)
 add_subdirectory(projects/heat_geodesics_test)
 add_subdirectory(projects/fast_summation_test)
-add_subdirectory(projects/dynamic_surface_test)
+add_subdirectory(projects/dynamic_shell_test)
 add_subdirectory(projects/wav2fft)
 
 

@@ -9,13 +9,11 @@
 
 #include "GaudiGraphics/geometry_logger.h"
 
-#include "datums.hpp"
+#include "../datums.hpp"
 
 #include "datum_x.hpp"
-
+#include "operations.hpp"
 #include "shell.hpp"
-
-#include "shell_operations.hpp"
 //#include "subdivide.hpp"
 
 #include <array>
@@ -29,12 +27,12 @@
 #include <vector>
 #include <zlib.h>
 
-#ifndef __ASAWA_DYNAMIC_SURFACE__
-#define __ASAWA_DYNAMIC_SURFACE__
+#ifndef __ASAWA_DYNAMIC_SHELL__
+#define __ASAWA_DYNAMIC_SHELL__
 namespace gaudi {
 
 namespace asawa {
-
+namespace shell {
 using corner1 = std::array<index_t, 1>;
 using corner2 = std::array<index_t, 2>;
 using corner4 = std::array<index_t, 4>;
@@ -374,15 +372,15 @@ void smoothMesh(shell &M, real C, int N) {
 }
 #endif
 
-class dynamic_surface {
+class dynamic {
 public:
-  typedef std::shared_ptr<dynamic_surface> ptr;
+  typedef std::shared_ptr<dynamic> ptr;
 
   static ptr create(shell::ptr M, real Cc, real Cs, real Cm) {
-    return std::make_shared<dynamic_surface>(M, Cc, Cs, Cm);
+    return std::make_shared<dynamic>(M, Cc, Cs, Cm);
   }
 
-  dynamic_surface(shell::ptr M, real Cc, real Cs, real Cm) : __M(M) {
+  dynamic(shell::ptr M, real Cc, real Cs, real Cm) : __M(M) {
     _Cc = Cc;
     _Cs = Cs;
     _Cm = Cm;
@@ -524,7 +522,7 @@ public:
 
     edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 16);
     // edge_tree->debug();
-    real tol = this->_Cm * this->_Cm;
+    real tol = 0.25 * this->_Cm * this->_Cm;
 
     std::vector<std::array<index_t, 2>> collected(edge_verts.size() / 2);
     //#pragma omp parallel for
@@ -839,6 +837,7 @@ public:
   // arp::aabb_tree<3>::ptr face_tree;
 };
 
+} // namespace shell
 } // namespace asawa
 } // namespace gaudi
 #endif

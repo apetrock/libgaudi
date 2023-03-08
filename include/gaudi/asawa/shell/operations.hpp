@@ -2,7 +2,7 @@
 #ifndef __ASAWA_PRIM_OPS__
 #define __ASAWA_PRIM_OPS__
 
-#include "datums.hpp"
+//#include "datums.hpp"
 #include "shell.hpp"
 
 #include <array>
@@ -12,8 +12,9 @@
 
 namespace gaudi {
 namespace asawa {
+namespace shell {
 typedef int index_t;
-index_t split_edge(shell &M,                    //
+index_t split_edge(shell &M,                       //
                    const index_t &corner_index,    //
                    const index_t &new_vertex = -1, //
                    const index_t &new_corner = -1) {
@@ -235,7 +236,7 @@ index_t merge_face(shell &M, //
   return f0;
 }
 
-index_t subdivide_edge(shell &M,                     //
+index_t subdivide_edge(shell &M,                        //
                        const index_t &corner_index,     //
                        const index_t &new_vert = -1,    //
                        const index_t &new_corner0 = -1, //
@@ -508,7 +509,7 @@ bool share_faces(shell &M, index_t cA0, index_t cB0) {
   return false;
 }
 
-void weld_adajacent_edges(shell &M, //
+void weld_adajacent_edges(shell &M,    //
                           index_t cA0, //
                           index_t cB0) {
 
@@ -539,7 +540,7 @@ void weld_adajacent_edges(shell &M, //
   }
 }
 
-std::array<index_t, 4> merge_edge(shell &M,            //
+std::array<index_t, 4> merge_edge(shell &M,               //
                                   index_t cA0,            //
                                   index_t cB0,            //
                                   index_t new_vert0 = -1, //
@@ -758,7 +759,7 @@ void pack(shell &M) {
   M.vert_begin().resize(Nv);
 
   for (auto d : M.get_data()) {
-    if (d->type() != VERTEX)
+    if (d->type() != asawa::VERTEX)
       continue;
     d->permute(vperm);
     d->resize(Nv);
@@ -782,6 +783,8 @@ void pack(shell &M) {
   }
   // std::cout << std::flush;
 }
+
+} // namespace shell
 } // namespace asawa
 } // namespace gaudi
 #endif

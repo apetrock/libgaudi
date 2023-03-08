@@ -2,14 +2,14 @@
 #ifndef __ASAWA_PRIM_LOAD__
 #define __ASAWA_PRIM_LOAD__
 
-#include "faceloader.hpp"
-#include "objloader_refactor.hpp"
-#include "primitive_objects.hpp"
+#include "../faceloader.hpp"
+#include "../objloader_refactor.hpp"
+#include "../primitive_objects.hpp"
 #include "shell.hpp"
 
 namespace gaudi {
 namespace asawa {
-
+namespace shell {
 shell::ptr load_obj(const std::string &name) {
   std::string file(name);
   // std::string file("assets/skeleton.obj");
@@ -43,6 +43,7 @@ shell::ptr load_cube() {
 
   return M;
 }
+} // namespace shell
 } // namespace asawa
 } // namespace gaudi
 #endif

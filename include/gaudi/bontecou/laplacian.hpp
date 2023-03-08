@@ -23,9 +23,9 @@
 
 #include "gaudi/common.h"
 
-#include "gaudi/asawa/datum_x.hpp"
 #include "gaudi/asawa/datums.hpp"
-#include "gaudi/asawa/shell.hpp"
+#include "gaudi/asawa/shell/datum_x.hpp"
+#include "gaudi/asawa/shell/shell.hpp"
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
@@ -50,12 +50,12 @@ Eigen::SparseMatrix<real>
 // build_edge_vert
 // build_face_vert
 //..etc
-build_lap(
-    asawa::shell &M,            //
-    const std::vector<vec3> &x, //
-    std::function<real(asawa::shell &M, index_t c, const std::vector<vec3> &x)>
-        func_ij,
-    bool set_ij = true) {
+build_lap(asawa::shell::shell &M,     //
+          const std::vector<vec3> &x, //
+          std::function<real(asawa::shell::shell &M, index_t c,
+                             const std::vector<vec3> &x)>
+              func_ij,
+          bool set_ij = true) {
 
   std::vector<index_t> verts = M.get_vert_range();
   std::vector<index_t> edges = M.get_edge_vert_ids();
@@ -69,7 +69,7 @@ build_lap(
   for (auto v : M.get_vert_range()) {
     real Km = 0.0;
     M.for_each_vertex(v, [&Km, &x, &set_ij, i, &tripletList,
-                          func_ij](index_t c, asawa::shell &M) {
+                          func_ij](index_t c, asawa::shell::shell &M) {
       index_t j = M.vert(M.next(c));
       real K = func_ij(M, c, x);
       Km -= K;
@@ -94,12 +94,12 @@ build_lap(
   return mat;
 }
 
-void print_lap(
-    asawa::shell &M,            //
-    const std::vector<vec3> &x, //
-    std::function<real(asawa::shell &M, index_t c, const std::vector<vec3> &x)>
-        func_ij,
-    bool set_ij = true) {
+void print_lap(asawa::shell::shell &M,     //
+               const std::vector<vec3> &x, //
+               std::function<real(asawa::shell::shell &M, index_t c,
+                                  const std::vector<vec3> &x)>
+                   func_ij,
+               bool set_ij = true) {
 
   std::vector<index_t> verts = M.get_vert_range();
   std::vector<index_t> edges = M.get_edge_vert_ids();
@@ -110,7 +110,7 @@ void print_lap(
   for (auto v : M.get_vert_range()) {
     real Km = 0.0;
     M.for_each_vertex(
-        v, [&Km, &x, &set_ij, i, func_ij](index_t c, asawa::shell &M) {
+        v, [&Km, &x, &set_ij, i, func_ij](index_t c, asawa::shell::shell &M) {
           index_t j = M.vert(M.next(c));
           real K = func_ij(M, c, x);
           Km -= K;
@@ -132,30 +132,32 @@ class laplacian {
 public:
   typedef Eigen::SparseMatrix<real> sparmat;
 
-  laplacian(asawa::shell::ptr M, const std::vector<vec3> &x) : __M(M), __x(x) {
+  laplacian(asawa::shell::shell::ptr M, const std::vector<vec3> &x)
+      : __M(M), __x(x) {
     this->init();
   }
 
   ~laplacian() {}
 
   void printC() {
-    print_lap(*__M, __x, //
-              [](asawa::shell &M, index_t c, const std::vector<vec3> &x) {
-                index_t c0p = M.prev(c);
-                index_t c1p = M.prev(M.other(c));
+    print_lap(
+        *__M, __x, //
+        [](asawa::shell::shell &M, index_t c, const std::vector<vec3> &x) {
+          index_t c0p = M.prev(c);
+          index_t c1p = M.prev(M.other(c));
 
-                return cotan(M, c0p, x) + cotan(M, c1p, x);
-              });
+          return cotan(M, c0p, x) + cotan(M, c1p, x);
+        });
   }
 
   void initC() {
     _matC = build_lap<1>(
         *__M, __x, //
-        [](asawa::shell &M, index_t c, const std::vector<vec3> &x) {
+        [](asawa::shell::shell &M, index_t c, const std::vector<vec3> &x) {
           index_t c0p = M.prev(c);
           index_t c1p = M.prev(M.other(c));
           real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
-          ct = ct < 1e-1 ? 1e-1 : ct;
+          ct = ct < 1e-6 ? 1e-6 : ct;
           return ct;
         });
   }
@@ -163,9 +165,9 @@ public:
   void initM() {
     _matM = build_lap<1>(
         *__M, __x,
-        [](asawa::shell &M, index_t c, const std::vector<vec3> &x) {
-          real aj = asawa::face_area(M, M.face(c), x);
-          aj = aj < 1e-4 ? 1e-4 : aj;
+        [](asawa::shell::shell &M, index_t c, const std::vector<vec3> &x) {
+          real aj = asawa::shell::face_area(M, M.face(c), x);
+          aj = aj < 1e-8 ? 1e-8 : aj;
           return -aj / 3.0;
         },
         false);
@@ -277,11 +279,13 @@ public:
     for (int i = 0; i < __M->vert_count(); i++) {
       vec3 N = vert_normal(*__M, i, __x);
       vec3 xi = __x[i];
-      gg::geometry_logger::line(xi, xi + f[i] * N, vec4(0.9, 0.2, 0.25, 1.0));
+      // gg::geometry_logger::line(xi, xi + f[i] * N, vec4(0.9, 0.2,
+      // 0.25, 1.0));
+      gg::geometry_logger::line(xi, xi + u[i] * N, vec4(0.9, 0.2, 0.25, 1.0));
     }
 #endif
 
-    std::vector<vec3> gradU = asawa::gradient(*__M, u, __x);
+    std::vector<vec3> gradU = asawa::shell::gradient(*__M, u, __x);
 
     i = 0;
 
@@ -291,13 +295,14 @@ public:
     });
 #if 0
     for (int i = 0; i < __M->face_count(); i++) {
-      vec3 xi = asawa::face_center(*__M, i, __x);
+      vec3 xi = asawa::shell::face_center(*__M, i, __x);
       vec3 gu = 0.02 * gradU[i];
+      std::cout << gu.transpose() << std::endl;
       gg::geometry_logger::line(xi, xi + gu, vec4(0.8, 1.0, 0.35, 1.0));
     }
 #endif
 
-    std::vector<real> divu = asawa::divergence(*__M, gradU, __x);
+    std::vector<real> divu = asawa::shell::divergence(*__M, gradU, __x);
 
     std::vector<real> x = solve(divu);
     auto res = std::minmax_element(begin(x), end(x));
@@ -317,7 +322,7 @@ public:
   bool inited = false;
 
 private:
-  asawa::shell::ptr __M;
+  asawa::shell::shell::ptr __M;
   const std::vector<vec3> &__x;
   Eigen::SparseMatrix<real> _matC;
   Eigen::SparseMatrix<real> _matM;
@@ -326,7 +331,8 @@ private:
 class laplacian3 {
 
 public:
-  laplacian3(asawa::shell::ptr M, const std::vector<vec3> &x) : __M(M), __x(x) {
+  laplacian3(asawa::shell::shell::ptr M, const std::vector<vec3> &x)
+      : __M(M), __x(x) {
     this->init();
   }
 
@@ -336,7 +342,7 @@ public:
   void initC() {
     _matC = build_lap<3>(
         *__M, __x, //
-        [](asawa::shell &M, index_t c, const std::vector<vec3> &x) {
+        [](asawa::shell::shell &M, index_t c, const std::vector<vec3> &x) {
           index_t c0p = M.prev(c);
           index_t c1p = M.prev(M.other(c));
           real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
@@ -375,7 +381,7 @@ public:
 private:
   Eigen::SparseMatrix<real> _matC;
 
-  asawa::shell::ptr __M;
+  asawa::shell::shell::ptr __M;
   const std::vector<vec3> &__x;
 };
 } // namespace bontecou

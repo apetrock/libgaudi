@@ -10,8 +10,8 @@
 #ifndef __M2HARMONIC_INTEGRATOR__
 #define __M2HARMONIC_INTEGRATOR__
 
-#include "gaudi/asawa/datum_x.hpp"
-#include "gaudi/asawa/shell.hpp"
+#include "gaudi/asawa/shell/datum_x.hpp"
+#include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/geometry_types.hpp"
 
 #include "tree_code.hpp"
@@ -21,11 +21,12 @@ namespace gaudi {
 
 namespace calder {
 
-std::vector<real> fast_winding(asawa::shell &M, const std::vector<vec3> &x,
+std::vector<real> fast_winding(asawa::shell::shell &M,
+                               const std::vector<vec3> &x,
                                const std::vector<vec3> &pov, real l0) {
 
-  std::vector<vec3> N = asawa::face_normals(M, x);
-  std::vector<real> w = asawa::face_areas(M, x);
+  std::vector<vec3> N = asawa::shell::face_normals(M, x);
+  std::vector<real> w = asawa::shell::face_areas(M, x);
   std::vector<vec3> wN(N);
 
   for (int i = 0; i < wN.size(); i++)
@@ -92,12 +93,12 @@ std::vector<real> fast_winding(asawa::shell &M, const std::vector<vec3> &x,
   return u;
 }
 
-std::vector<mat3> fast_frame(asawa::shell &M, const std::vector<vec3> &x,
+std::vector<mat3> fast_frame(asawa::shell::shell &M, const std::vector<vec3> &x,
                              const std::vector<vec3> &p_pov,
                              const std::vector<vec3> &p_normals, real l0) {
-  std::vector<vec3> E = asawa::edge_dirs(M, x);
-  std::vector<real> w = asawa::edge_cotan_weights(M, x);
-  std::vector<real> wa = asawa::edge_areas(M, x);
+  std::vector<vec3> E = asawa::shell::edge_dirs(M, x);
+  std::vector<real> w = asawa::shell::edge_cotan_weights(M, x);
+  std::vector<real> wa = asawa::shell::edge_areas(M, x);
 
   std::vector<vec3> wE(E);
 

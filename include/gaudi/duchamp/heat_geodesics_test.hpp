@@ -12,12 +12,10 @@
 #include "gaudi/bontecou/laplacian.hpp"
 #include "gaudi/vec_addendum.h"
 
-#include "gaudi/asawa/asset_loader.hpp"
-#include "gaudi/asawa/dynamic_surface.hpp"
-#include "gaudi/asawa/shell.hpp"
-
 #include "gaudi/asawa/primitive_objects.hpp"
-#include "gaudi/asawa/shell_operations.hpp"
+#include "gaudi/asawa/shell/asset_loader.hpp"
+#include "gaudi/asawa/shell/dynamic.hpp"
+#include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/common.h"
 
 #include <array>
@@ -86,7 +84,7 @@ real freq_biased(real thet, real f) {
   return zp0 / (zp0 + zp1) - 0.5;
 }
 
-void debug_shell(asawa::shell &M, const std::vector<vec3> verts) {
+void debug_shell(shell::shell &M, const std::vector<vec3> verts) {
   for (int i = 0; i < M.__corners_next.size(); i += 2) {
     if (M.__corners_next[i] < 0)
       continue;
@@ -160,7 +158,7 @@ public:
 
   heat_geodesics_test() {
     //__M = load_cube();
-    __M = asawa::load_bunny();
+    __M = shell::load_bunny();
     //__M = asawa::load_heart();
     //__M = asawa::load_skeleton();
 
@@ -181,8 +179,8 @@ public:
     // dynamic surface
     /////////
 
-    real l0 = 0.5 * asawa::avg_length(*__M, x);
-    __surf = dynamic_surface::create(__M, 1.0 * l0, 3.0 * l0, 1.0 * l0);
+    real l0 = 0.5 * shell::avg_length(*__M, x);
+    __surf = shell::dynamic::create(__M, 1.0 * l0, 3.0 * l0, 1.0 * l0);
 
     /////////
     // weights
@@ -367,16 +365,21 @@ public:
     f[mni] = 1.0;
     f[mxi] = -1.0;
 
-    bontecou::laplacian L(__M, x);
-    std::vector<real> d = L.heatDist(f, 0.25);
+    std::cout << " min/max ids: " << mni << " " << mxi << " w: " << w[mni]
+              << " " << w[mxi] << std::endl;
 
+    bontecou::laplacian L(__M, x);
+    std::vector<real> d = L.heatDist(f, 0.2);
+    for (int i = 0; i < __M->vert_count(); i++) {
+      vec3 N = vert_normal(*__M, i, x);
+    }
     mx = 0.0;
     for (int i = 0; i < d.size(); i++) {
       mx = max(d[i], mx);
     }
 #if 1
 
-    real As = asawa::surface_area(*__M, x);
+    real As = shell::surface_area(*__M, x);
     real l = sqrt(As);
     bool nn = false;
 
@@ -391,10 +394,13 @@ public:
 
     for (int i = 0; i < __M->vert_count(); i++) {
       vec3 N = vert_normal(*__M, i, x);
-      dx[i] = 0.95 * dx[i] + 0.001 * o[i] * N;
+      // gg::geometry_logger::line(x[i], x[i] + 0.05 * w[i] * N,
+      //                           vec4(1.0, 0.0, 0.0, 1.0));
+
+      dx[i] = 0.5 * dx[i] + 0.01 * o[i] * N;
     }
 #endif
-    w = d;
+    w_datum->data() = d;
   }
 
   void smoothMesh(real C, int N) {
@@ -441,8 +447,8 @@ public:
   real omega0 = 18.0 * M_PI, phi0 = 0.0;
   index_t _iw;
   index_t _io;
-  shell::ptr __M;
-  dynamic_surface::ptr __surf;
+  shell::shell::ptr __M;
+  shell::dynamic::ptr __surf;
 };
 
 } // namespace duchamp

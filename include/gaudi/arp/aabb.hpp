@@ -431,8 +431,7 @@ index_t getNearest(index_t &idT, const std::vector<index_t> &t_inds,
   bool hit = false;
   // T tol = 0.05;
   ext::extents_t extT = calc_extents<ST>(idT, t_inds, t_verts);
-  ext::inflate(extT, tol);
-
+  extT = ext::inflate(extT, tol);
   while (cstack.size() > 0) {
     int cId = cstack.top();
     cstack.pop();
@@ -446,6 +445,20 @@ index_t getNearest(index_t &idT, const std::vector<index_t> &t_inds,
 
         ext::extents_t extS =
             calc_extents<SS>(idS, s_tree.indices(), s_tree.verts());
+#if 0            
+        if (idT == 0) {
+          std::cout << idS << " " << extS[0].transpose() << " "
+                    << extS[1].transpose() << std::endl;
+          std::cout << idS << " " << extT[0].transpose() << " "
+                    << extT[1].transpose() << std::endl;
+          vec3 cT = 0.5 * (extT[0] + extT[1]);
+          vec3 cS = 0.5 * (extS[0] + extS[1]);
+
+          gg::geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
+          gg::geometry_logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
+          gg::geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
+        }
+#endif
         if (!ext::overlap(extT, extS)) {
           continue;
         }

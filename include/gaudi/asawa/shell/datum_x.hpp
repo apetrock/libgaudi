@@ -15,12 +15,13 @@
 #include "gaudi/vec_addendum.h"
 
 #include "gaudi/common.h"
+#include "shell.hpp"
 
 #ifndef __ASAWA_X_DATUM__
 #define __ASAWA_X_DATUM__
 namespace gaudi {
 namespace asawa {
-
+namespace shell {
 // break this out into new file at some point
 
 real cotan(const shell &M, index_t ci, const std::vector<vec3> &x) {
@@ -41,7 +42,7 @@ vec3 edge_dir(const shell &M, index_t c0, const std::vector<vec3> &x) {
 vec3 face_cross(const shell &M, index_t fi, const std::vector<vec3> &x) {
   vec3 X = vec3::Zero();
   M.const_for_each_face_tri(
-      fi, [&X, &x](index_t c0, index_t c1, index_t c2, const asawa::shell &M) {
+      fi, [&X, &x](index_t c0, index_t c1, index_t c2, const shell &M) {
         vec3 x0 = x[M.vert(c0)];
         vec3 x1 = x[M.vert(c1)];
         vec3 x2 = x[M.vert(c2)];
@@ -63,7 +64,7 @@ real face_area(const shell &M, index_t fi, const std::vector<vec3> &x) {
 
 vec3 vert_normal(const shell &M, index_t vi, const std::vector<vec3> &x) {
   vec3 N = vec3::Zero();
-  M.const_for_each_vertex(vi, [&N, &x](index_t ci, const asawa::shell &M) {
+  M.const_for_each_vertex(vi, [&N, &x](index_t ci, const shell &M) {
     N += face_cross(M, M.face(ci), x);
   });
   return N.normalized();
@@ -71,7 +72,7 @@ vec3 vert_normal(const shell &M, index_t vi, const std::vector<vec3> &x) {
 
 real vert_area(const shell &M, index_t vi, const std::vector<vec3> &x) {
   real A = 0.0;
-  M.const_for_each_vertex(vi, [&A, &x](index_t ci, const asawa::shell &M) {
+  M.const_for_each_vertex(vi, [&A, &x](index_t ci, const shell &M) {
     A += face_area(M, M.face(ci), x);
   });
   return A / 3.0;
@@ -79,9 +80,8 @@ real vert_area(const shell &M, index_t vi, const std::vector<vec3> &x) {
 
 real vert_cotan_weight(const shell &M, index_t vi, const std::vector<vec3> &x) {
   real w = 0.0;
-  M.const_for_each_vertex(vi, [&w, &x](index_t ci, const asawa::shell &M) {
-    w += cotan(M, ci, x);
-  });
+  M.const_for_each_vertex(
+      vi, [&w, &x](index_t ci, const shell &M) { w += cotan(M, ci, x); });
   return 3.0;
 }
 
@@ -102,7 +102,7 @@ vec3 edge_center(const shell &M, index_t c0, const std::vector<vec3> &x) {
 vec3 face_center(const shell &M, index_t fi, const std::vector<vec3> &x) {
   vec3 c = vec3::Zero();
   int N = 0;
-  M.const_for_each_face(fi, [&c, &x, &N](index_t c0, const asawa::shell &M) {
+  M.const_for_each_face(fi, [&c, &x, &N](index_t c0, const shell &M) {
     c += x[M.vert(c0)];
     N++;
   });
@@ -205,7 +205,7 @@ std::vector<TYPE> vert_to_face(const shell &M, const std::vector<TYPE> &x) {
   std::vector<TYPE> vals(range.size());
   for (auto fi : range) {
     TYPE c = z::zero<TYPE>();
-    M.const_for_each_face(fi, [&c, &x](index_t c0, const asawa::shell &M) {
+    M.const_for_each_face(fi, [&c, &x](index_t c0, const shell &M) {
       c += 0.33333 * x[M.vert(c0)];
     });
     vals[fi] = c;
@@ -220,7 +220,7 @@ std::vector<TYPE> face_to_vert(const shell &M, const std::vector<TYPE> &x) {
   int i = 0;
   for (auto vi : range) {
     TYPE c = z::zero<TYPE>();
-    M.const_for_each_vertex(vi, [&c, &x](index_t c0, const asawa::shell &M) {
+    M.const_for_each_vertex(vi, [&c, &x](index_t c0, const shell &M) {
       c += 0.33333 * x[M.face(c0)];
     });
     vals[vi] = c;
@@ -238,7 +238,7 @@ real surface_area(const shell &M, const std::vector<vec3> &x) {
   return A;
 }
 
-real avg_length(const asawa::shell &M, const std::vector<vec3> &coords) {
+real avg_length(const shell &M, const std::vector<vec3> &coords) {
   real accum = 0.0;
   for (int i = 0; i < M.__corners_next.size(); i += 2) {
     if (M.__corners_next[i] < 0)
@@ -283,13 +283,13 @@ std::vector<vec3> gradient(shell &M, const std::vector<real> &u,
     real u0 = u[M.vert(M.prev(c0))];
     real u1 = u[M.vert(M.prev(c1))];
 
-    real A0 = asawa::face_area(M, M.face(c0), x);
-    real A1 = asawa::face_area(M, M.face(c1), x);
-    real iA0 = A0 < 1e-3 ? 0.0 : 1.0 / A0;
-    real iA1 = A1 < 1e-3 ? 0.0 : 1.0 / A1;
+    real A0 = face_area(M, M.face(c0), x);
+    real A1 = face_area(M, M.face(c1), x);
+    real iA0 = A0 < 1e-6 ? 0.0 : 1.0 / A0;
+    real iA1 = A1 < 1e-6 ? 0.0 : 1.0 / A1;
 
-    vec3 N0 = asawa::face_normal(M, M.face(c0), x);
-    vec3 N1 = asawa::face_normal(M, M.face(c1), x);
+    vec3 N0 = face_normal(M, M.face(c0), x);
+    vec3 N1 = face_normal(M, M.face(c1), x);
 
     vec3 dp0 = edge_dir(M, c0, x);
     vec3 dp1 = edge_dir(M, c1, x);
@@ -311,6 +311,7 @@ std::vector<vec3> gradient(shell &M, const std::vector<real> &u,
       gg::geometry_logger::line(e, e + N1, vec4(0.2, 1.0, 0.65, 1.0));
     }
 #endif
+
     gradU[M.face(c0)] += 0.5 * M0 * u0 * iA0;
     gradU[M.face(c1)] += 0.5 * M1 * u1 * iA1;
   }
@@ -353,6 +354,7 @@ std::vector<real> divergence(shell &M, const std::vector<vec3> &g,
 }
 #endif
 
+} // namespace shell
 } // namespace asawa
 } // namespace gaudi
 #endif

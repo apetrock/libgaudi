@@ -12,9 +12,10 @@
 
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
-#include "shell.hpp"
+#include "shell/datum_x.hpp"
+#include "shell/shell.hpp"
 
-#include "datum_x.hpp"
+#include "rod/rod.hpp"
 
 #ifndef __ASAWA_DATUM__
 #define __ASAWA_DATUM__
@@ -39,11 +40,19 @@ public:
   virtual ~datum(){};
 
   template <class... Types>
-  void calc(index_t i, const shell &M, Types... args) {
+  void calc(index_t i, const shell::shell &M, Types... args) {
     std::vector<index_t> vector;
     add_args(vector, args...);
     assert(!empty(vector));
     do_calc(M, i, vector);
+  }
+
+  template <class... Types>
+  void calc(index_t i, const rod::rod &R, Types... args) {
+    std::vector<index_t> vector;
+    add_args(vector, args...);
+    assert(!empty(vector));
+    do_calc(R, i, vector);
   }
 
   template <typename LastType>
@@ -65,8 +74,11 @@ public:
 
   virtual void do_alloc(const size_t &sz) = 0;
   virtual void do_resize(const size_t &sz) = 0;
-  virtual void do_calc(const shell &M, const index_t &i,
+  virtual void do_calc(const shell::shell &M, const index_t &i,
                        const std::vector<index_t> &vals) = 0;
+  virtual void do_calc(const rod::rod &R, const index_t &i,
+                       const std::vector<index_t> &vals) = 0;
+
   virtual void do_map(const index_t i, const index_t it) = 0;
   virtual void do_permute(const std::vector<index_t> &permute) = 0;
 
@@ -96,7 +108,18 @@ public:
   std::vector<TYPE> &data() { return __data; }
   const std::vector<TYPE> &data() const { return __data; }
 
-  virtual void do_calc(const shell &M, const index_t &i,
+  virtual void do_calc(const shell::shell &M, const index_t &i,
+                       const std::vector<index_t> &vals) {
+    real iN = 1.0 / real(vals.size());
+    TYPE vavg = z::zero<TYPE>();
+    for (const auto &iv : vals) {
+      vavg += iN * __data[iv];
+    }
+
+    __data[i] = vavg;
+  }
+
+  virtual void do_calc(const rod::rod &R, const index_t &i,
                        const std::vector<index_t> &vals) {
     real iN = 1.0 / real(vals.size());
     TYPE vavg = z::zero<TYPE>();
@@ -163,7 +186,7 @@ public:
       : datum_t<vec3>(type, data){};
   virtual ~vec3_datum(){};
 
-  virtual void do_calc(const shell &M, const index_t &i,
+  virtual void do_calc(const shell::shell &M, const index_t &i,
                        const std::vector<index_t> &vals) {
     real w = 0.0;
     vec3 vavg = z::zero<vec3>();
@@ -175,6 +198,9 @@ public:
     }
     this->__data[i] = vavg / w;
   }
+
+  virtual void do_calc(const rod::rod &R, const index_t &i,
+                       const std::vector<index_t> &vals) {}
 };
 
 } // namespace asawa

@@ -15,15 +15,13 @@
 
 #include "gaudi/bontecou/laplacian.hpp"
 
-#include "gaudi/asawa/dynamic_surface.hpp"
-#include "gaudi/asawa/shell.hpp"
-
-#include "gaudi/asawa/datum_x.hpp"
+#include "gaudi/asawa/shell/asset_loader.hpp"
+#include "gaudi/asawa/shell/datum_x.hpp"
+#include "gaudi/asawa/shell/dynamic.hpp"
+#include "gaudi/asawa/shell/operations.hpp"
+#include "gaudi/asawa/shell/shell.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
-#include "gaudi/asawa/shell_operations.hpp"
-
-#include "gaudi/asawa/asset_loader.hpp"
 
 #include "gaudi/calder/tree_code.hpp"
 
@@ -78,9 +76,9 @@ public:
 
   fast_summation_test() {
     //__M = load_cube();
-    __M = load_bunny();
+    __M = shell::load_bunny();
 
-    triangulate(*__M);
+    shell::triangulate(*__M);
     for (int i = 0; i < __M->face_count(); i++) {
       if (__M->fbegin(i) > 0) {
         assert(__M->fsize(i) == 3);
@@ -112,11 +110,12 @@ public:
     return points;
   }
   std::vector<vec3> get_random_points(const int &N, const ext::extents_t &ext_t,
-                                      shell &M, const std::vector<vec3> &x) {
-    ext::extents_t ext_m = asawa::ext(M, x);
+                                      shell::shell &M,
+                                      const std::vector<vec3> &x) {
+    ext::extents_t ext_m = asawa::shell::ext(M, x);
     std::uniform_real_distribution<real> dist(0.0, 1.0);
     std::mt19937_64 re;
-    double a_random_double = unif(re);
+
     int i = 0;
     auto scaled_rand_vec = [dist, re, ext_t, ext_m, &i]() mutable {
       vec3 p(dist(re), dist(re), dist(re));
@@ -138,7 +137,7 @@ public:
     return tpoints;
   }
 
-  void test_fast_winding(shell &M, const std::vector<vec3> &x, real l0) {
+  void test_fast_winding(shell::shell &M, const std::vector<vec3> &x, real l0) {
 
     real zp = 0.5 + 0.5 * sin(M_PI * real(_frame) / 100.0);
     // real zp = 1.0;
@@ -153,7 +152,7 @@ public:
     }
   }
 
-  void test_parallel_transport(shell &M, const std::vector<vec3> &x,
+  void test_parallel_transport(shell::shell &M, const std::vector<vec3> &x,
                                const std::vector<vec3> &Nx, real l0) {
 
     std::vector<mat3> Us = calder::fast_frame(M, x, x, Nx, l0);
@@ -174,7 +173,7 @@ public:
     }
   }
 
-  void test_edge_pyramids(shell &M) {
+  void test_edge_pyramids(shell::shell &M) {
     vec3_datum::ptr x_datum = static_pointer_cast<vec3_datum>(M.get_datum(0));
     std::vector<vec3> &x = x_datum->data();
     std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
@@ -186,11 +185,11 @@ public:
     calder::test_extents(*edge_tree, edge_verts, x);
   }
 
-  void test_pyramids(shell &M) {
+  void test_pyramids(shell::shell &M) {
     vec3_datum::ptr x_datum = static_pointer_cast<vec3_datum>(M.get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-    std::vector<vec3> N = asawa::face_normals(M, x);
-    std::vector<real> w = asawa::face_areas(M, x);
+    std::vector<vec3> N = asawa::shell::face_normals(M, x);
+    std::vector<real> w = asawa::shell::face_areas(M, x);
 
     std::vector<index_t> face_vert_ids = M.get_face_vert_ids();
     std::vector<index_t> face_map = M.get_face_map();
@@ -210,8 +209,8 @@ public:
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-    std::vector<vec3> Nx = asawa::vertex_normals(*__M, x);
-    real l0 = 1.0 * asawa::avg_length(*__M, x);
+    std::vector<vec3> Nx = asawa::shell::vertex_normals(*__M, x);
+    real l0 = 1.0 * asawa::shell::avg_length(*__M, x);
 
     // test_pyramids(*__M);
     // test_edge_pyramids(*__M);
@@ -219,7 +218,7 @@ public:
     test_parallel_transport(*__M, x, Nx, 16.0 * l0);
   }
   int _frame;
-  shell::ptr __M;
+  shell::shell::ptr __M;
 };
 
 class transport_mesh_test {
@@ -230,11 +229,11 @@ public:
 
   transport_mesh_test() {
     //__M = load_cube();
-    __M = asawa::load_bunny();
+    __M = asawa::shell::load_bunny();
     //__M = asawa::load_heart();
     //__M = asawa::load_skeleton();
 
-    triangulate(*__M);
+    shell::triangulate(*__M);
     for (int i = 0; i < __M->face_count(); i++) {
       if (__M->fbegin(i) > 0) {
         assert(__M->fsize(i) == 3);
@@ -251,8 +250,8 @@ public:
     // dynamic surface
     /////////
 
-    real l0 = 1.0 * asawa::avg_length(*__M, x);
-    __surf = dynamic_surface::create(__M, 1.0 * l0, 3.0 * l0, 1.0 * l0);
+    real l0 = 1.0 * asawa::shell::avg_length(*__M, x);
+    __surf = shell::dynamic::create(__M, 1.0 * l0, 3.0 * l0, 1.0 * l0);
   };
 
   void test_parallel_transport(int frame) {
@@ -264,12 +263,12 @@ public:
     vec3_datum::ptr v_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(1));
     std::vector<vec3> &dx = v_datum->data();
-    std::vector<vec3> xf = asawa::face_centers(*__M, x);
-    std::vector<vec3> Nf = asawa::face_normals(*__M, x);
+    std::vector<vec3> xf = asawa::shell::face_centers(*__M, x);
+    std::vector<vec3> Nf = asawa::shell::face_normals(*__M, x);
 
-    std::vector<vec3> N = asawa::vertex_normals(*__M, x);
+    std::vector<vec3> N = asawa::shell::vertex_normals(*__M, x);
 
-    real l0 = 12.0 * asawa::avg_length(*__M, x);
+    real l0 = 12.0 * asawa::shell::avg_length(*__M, x);
     // TODO: convert this to do fast frame on face centers
 
     std::vector<mat3> Us = calder::fast_frame(*__M, x, xf, Nf, l0);
@@ -295,12 +294,12 @@ public:
 #endif
     }
 
-    std::vector<real> div = asawa::divergence(*__M, df, x);
+    std::vector<real> div = asawa::shell::divergence(*__M, df, x);
     std::cout << df.size() << " " << x.size() << " " << div.size() << std::endl;
 
     bontecou::laplacian L(__M, x);
     std::vector<real> p = L.solve(div);
-    std::vector<vec3> dp = asawa::gradient(*__M, p, x);
+    std::vector<vec3> dp = asawa::shell::gradient(*__M, p, x);
 
     for (int i = 0; i < df.size(); i++) {
       df[i] -= 1.0 * dp[i];
@@ -356,8 +355,8 @@ public:
   real omega0 = 18.0 * M_PI, phi0 = 0.0;
   index_t _iw;
   index_t _io;
-  shell::ptr __M;
-  dynamic_surface::ptr __surf;
+  shell::shell::ptr __M;
+  shell::dynamic::ptr __surf;
 };
 
 } // namespace duchamp
