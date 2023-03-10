@@ -41,16 +41,16 @@ public:
   real _w;
 };
 
-class length : public projection_constraint {
+class growth : public projection_constraint {
 public:
-  typedef std::shared_ptr<length> ptr;
+  typedef std::shared_ptr<growth> ptr;
 
   static ptr create(const std::vector<index_t> &ids, const real &w,
                     const real &l) {
-    return std::make_shared<length>(ids, w, l);
+    return std::make_shared<growth>(ids, w, l);
   }
 
-  length(const std::vector<index_t> &ids, const real &w, const real &l)
+  growth(const std::vector<index_t> &ids, const real &w, const real &l)
       : projection_constraint(ids, w), _l(l) {}
 
   virtual void project(const vecX &q, vecX &p) {
@@ -67,7 +67,7 @@ public:
 
     // gg::geometry_logger::line(q1, q1 - _w * dq, vec4(1.0, 0.0, 1.0, 1.0));
 
-    p.block(3 * i, 0, 3, 1) = _w * dq / l;
+    p.block(3 * i, 0, 3, 1) = _w * _l * dq;
     // p.block(3 * j, 0, 3, 1) = -_w * dq / l;
   }
   virtual void fill_A(std::vector<trip> &triplets) {
@@ -75,9 +75,9 @@ public:
     index_t j = this->_ids[1];
 
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(3 * i + ax, 3 * i + ax, -_w / _l));
+      triplets.push_back(trip(3 * i + ax, 3 * i + ax, -1.0 * _w));
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(3 * i + ax, 3 * j + ax, _w / _l));
+      triplets.push_back(trip(3 * i + ax, 3 * j + ax, 1.0 * _w));
     // for (int ax = 0; ax < 3; ax++)
     //   triplets.push_back(trip(3 * j + ax, 3 * j + ax, -_w / _l));
     // for (int ax = 0; ax < 3; ax++)
@@ -108,8 +108,8 @@ public:
     vec3 dqm = qm - q0;
     vec3 dqp = qp - q0;
     vec3 N = -(dqm + dqp).normalized();
-    dqm = va::orthogonal_project(N, dqm);
-    dqp = va::orthogonal_project(N, dqp);
+    dqm = va::reject(N, dqm);
+    dqp = va::reject(N, dqp);
     p.block(3 * i0, 0, 3, 1) += _w * (dqm + dqp);
   }
   virtual void fill_A(std::vector<trip> &triplets) {
@@ -163,10 +163,11 @@ public:
     vec3 s = svd.singularValues();
     vec3 N = U.col(2).transpose();
     real r = sqrt(0.5 * s[0]);
+    r = min(r, 0.3);
     for (int i = 0; i < this->_ids.size(); i++) {
       int ii = this->_ids[i];
       vec3 qi = q.block(3 * ii, 0, 3, 1);
-      vec3 dq = va::orthogonal_project(N, vec3(qi - cen));
+      vec3 dq = va::reject(N, vec3(qi - cen));
       p.block(3 * ii, 0, 3, 1) += _w * (r * dq);
     }
   }
@@ -210,14 +211,21 @@ public:
     real l0 = _l0;
     vec3 q0 = q.block(3 * i, 0, 3, 1);
     vec3 q1 = q.block(3 * j, 0, 3, 1);
-    vec3 dq = 1.0 / l0 * (q1 - q0);
+    vec3 dq = (q1 - q0).normalized();
 
     quat u = quat(q.block(k, 0, 4, 1).data());
-    u.normalize();
     vec3 d2 = u * vec3(0, 0, 1);
-    quat du = quat::FromTwoVectors(dq, d2);
-    u = u * du;
-    //  std::cout << "a: " << dq.transpose() << std::endl;
+    quat du = quat::FromTwoVectors(d2, dq);
+
+    // vec3 d20 = u * vec3(0, 0, 0.1);
+    // gg::geometry_logger::line(q0, q0 + d20, vec4(1.0, 0.0, 0.0, 1.0));
+
+    u = du * u;
+
+    // vec3 d21 = u * vec3(0, 0, 0.1);
+    // gg::geometry_logger::line(q0, q0 + d21, vec4(0.0, 1.0, 0.0, 1.0));
+
+    //         std::cout << "a: " << dq.transpose() << std::endl;
     p.block(3 * i, 0, 3, 1) += _w * d2;
     // p.block(k, 0, 4, 1) += _w * q.block(k, 0, 4, 1);
     p.block(k, 0, 4, 1) += _w * vec4(u.coeffs().data());
@@ -271,37 +279,32 @@ public:
     quat q_min = quat::FromTwoVectors(v1, vmid);
 
     // Step 4: Rotate both quaternions to point in the same direction
-    ui = q_min * ui * q_min.inverse();
-    uj = q_min * uj * q_min.inverse();
+    ui = q_min * ui;
+    uj = q_min.conjugate() * uj;
 #elif 1
-    vec3 v1 = ui.vec().normalized();
-    vec3 v2 = uj.vec().normalized();
-
-    // Step 2: Compute the midpoint on the unit sphere
-    vec3 vmid = (v1 + v2).normalized();
-
-    // Step 3: Compute the quaternion corresponding to the midpoint
-    quat O = (ui.conjugate() * uj);
-    O.w() = 0.0;
-    // O.normalize();
-    //  Step 4: Rotate both quaternions to point in the same direction
-    ui = ui * O;
-    uj = ui * O.conjugate();
+    quat uij = ui.slerp(0.5, uj).normalized();
+    /*
+    vec3 q0 = q.block(3 * ii, 0, 3, 1);
+    vec3 d20 = ui * vec3(0, 0, 0.1);
+    gg::geometry_logger::line(q0, q0 + d20, vec4(1.0, 0.0, 0.0, 1.0));
+    vec3 d21 = uj * vec3(0, 0, 0.1);
+    gg::geometry_logger::line(q0, q0 + d21, vec4(0.0, 0.0, 1.0, 1.0));
+*/
+    ui = uij;
+    uj = uij;
+    /*
+    vec3 d22 = ui * vec3(0, 0, 0.1);
+    gg::geometry_logger::line(q0, q0 + d22, vec4(1.0, 0.0, 1.0, 1.0));
+    vec3 d23 = uj * vec3(0, 0, 0.1);
+    gg::geometry_logger::line(q0, q0 + d23, vec4(1.0, 1.0, 0.0, 1.0));
+*/
+    // ui.normalize();
+    // uj.normalize();
 
 #endif
-#if 0
-    real k = 2.0 / M_PI * acos(fabs((ui.inverse() * uj).w()));
 
-    // Step 2: Compute the average quaternion
-    quat q_avg =
-        ui * exp((1.0 / 2.0) * log((ui.inverse() * uj).inverse())) * uj;
-
-    // Step 3: Rotate both quaternions to point in the same direction
-    ui = q_avg * ui * q_avg.inverse();
-    uj = q_avg * uj * q_avg.inverse();
-#endif
-    p.block(i, 0, 4, 1) += _w * vec4(uj.coeffs().data());
-    p.block(j, 0, 4, 1) += _w * vec4(ui.coeffs().data());
+    p.block(i, 0, 4, 1) += _w * vec4(ui.coeffs().data());
+    p.block(j, 0, 4, 1) += _w * vec4(uj.coeffs().data());
   }
 
   virtual void fill_A(std::vector<trip> &triplets) {

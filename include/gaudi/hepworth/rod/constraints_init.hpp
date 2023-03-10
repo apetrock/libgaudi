@@ -23,13 +23,13 @@
 namespace gaudi {
 namespace hepworth {
 namespace rod {
-void init_length(const asawa::rod::rod &rod,
+void init_growth(const asawa::rod::rod &rod,
                  std::vector<projection_constraint::ptr> &constraints,
-                 const std::vector<real> &l0, const real &w) {
+                 const real &f, const real &w) {
   for (int i = 0; i < rod.corner_count(); i++) {
     index_t j = rod.next(i);
     // l0[i] *= 1.01;
-    constraints.push_back(length::create({i, j}, w, l0[i]));
+    constraints.push_back(growth::create({i, j}, w, f));
   }
 } // namespace
   // asawa::rod&rod,std::vector<projection_constraint::ptr>&constraints,conststd::vector<real>&l0,constreal&w)

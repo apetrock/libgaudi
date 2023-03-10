@@ -868,7 +868,7 @@ public:
       // gg::geometry_logger::line(ps[i], ps[i] + 1000 * gi,
       //                           vec4(0.0, 1.0, 0.0, 1.0));
 
-      // gi = va::orthogonal_project(N, gi);
+      // gi = va::reject(N, gi);
       // gg::geometry_logger::line(ps[i], ps[i] + 1000 * gi,
       //                           vec4(1.0, 0.0, 0.0, 1.0));
       vec_interface<SPACE>::to_plus(gi, G, ii[i]);

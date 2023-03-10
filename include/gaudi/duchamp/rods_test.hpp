@@ -21,6 +21,7 @@
 #include "gaudi/asawa/shell/operations.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
 
+#include "gaudi/hepworth/rod/collision_constraint.hpp"
 #include "gaudi/hepworth/rod/constraints.hpp"
 #include "gaudi/hepworth/rod/constraints_init.hpp"
 #include "gaudi/hepworth/rod/solver.hpp"
@@ -144,18 +145,17 @@ public:
 
     for (auto &l : l0)
       l *= 1.01;
-    for (auto &l : lp)
-      l *= 0.80;
 
-    hepworth::rod::init_length(*__R, constraints, lp, 1.0);
-    hepworth::rod::init_smooth(*__R, constraints, 16.0);
-    hepworth::rod::init_cylinder(*__R, constraints, 1.5);
+    // qhepworth::rod::init_growth(*__R, constraints, 1.5, 1.0);
+    // hepworth::rod::init_smooth(*__R, constraints, 16.0);
+    hepworth::rod::init_cylinder(*__R, constraints, 0.25);
     hepworth::rod::init_stretch_shear(*__R, constraints, l0, 0.1);
-    hepworth::rod::init_bend_twist(*__R, constraints, 2.0);
+    hepworth::rod::init_bend_twist(*__R, constraints, 0.2);
+    hepworth::rod::init_collisions(*__R, *__Rd, constraints, 0.3);
     solver.set_constraints(constraints);
-
     std::vector<vec3> f(__R->__v.size(), vec3::Zero());
-    solver.step(__R->__x, __R->__v, f, __R->__u, __R->__o);
+    // f[0][0] = 1.0;
+    solver.step(__R->__x, __R->__v, f, __R->__u, __R->__o, 0.1);
   }
 
   void step(int frame) {
@@ -165,7 +165,6 @@ public:
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-    vector<std::array<index_t, 2>> collisions = __Rd->get_collisions();
 
     step_dynamics(frame);
     __Rd->step();

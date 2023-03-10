@@ -95,17 +95,25 @@ public:
       _lmax += l;
       __l0[i] = l;
       __v[i] = vec3::Zero();
+      real rho = 1.0;
+
       real M = M_PI * _r * _r * l;
-      real J = M * _r * _r;
+      real J = l * rho * M * _r * _r;
 
       __M[i][0] = M;
       __M[i][1] = M;
       __M[i][2] = M;
 
+      __J[i][0] = 0.25 * J;
+      __J[i][1] = 0.25 * J;
+      __J[i][2] = 0.5 * J;
+      __J[i][3] = 0.0;
+      /*
       __J[i][0] = 0.0;
-      __J[i][1] = J;
-      __J[i][2] = J;
-      __J[i][3] = __J[i][1] + __J[i][2];
+      __J[i][1] = 0.0;
+      __J[i][2] = 0.0;
+      __J[i][3] = 0.0;
+*/
     }
     _lmax /= real(__corners_next.size());
     _update_frames();
@@ -169,8 +177,8 @@ public:
     return lbar;
   }
 
-  index_t next(index_t i) const { return __corners_next[i]; }
-  index_t prev(index_t i) const { return __corners_prev[i]; }
+  index_t next(index_t i) const { return i < 0 ? -1 : __corners_next[i]; }
+  index_t prev(index_t i) const { return i < 0 ? -1 : __corners_prev[i]; }
 
   void set_next(index_t id, index_t c) { __corners_next[id] = c; }
   void set_prev(index_t id, index_t c) { __corners_prev[id] = c; }
@@ -240,21 +248,23 @@ public:
       vec3 v = __v[i];
       // std::cout << i << " " << __l0[i] << " " << (c1 - c0).norm() <<
       // std::endl;
+      gg::geometry_logger::point(c0, vec4(0.0, 1.0, 0.0, 1.0));
       gg::geometry_logger::line(c0, c1, vec4(0.0, 0.7, 1.0, 1.0));
       gg::geometry_logger::line(c0, c0 + v, vec4(0.8, 0.3, 0.0, 1.0));
       quat u = __u[i];
 #if 0
-      gg::geometry_logger::line(c0, c0 + u * vec3(0.05, 0.0, 0.0),
-                                vec4(1.0, 0.0, 0.0, 1.0));
-      gg::geometry_logger::line(c0, c0 + u * vec3(0.0, 0.05, 0.0),
-                                vec4(0.0, 1.0, 0.0, 1.0));
-      gg::geometry_logger::line(c0, c0 + u * vec3(0.0, 0.0, 0.05),
-                                vec4(0.0, 0.0, 1.0, 1.0));
+      vec3 d0 = u * vec3(1, 0, 0);
+      vec3 d1 = u * vec3(0, 1, 0);
+      vec3 d2 = u * vec3(0, 0, 1);
+
+      gg::geometry_logger::line(c0, c0 + 0.03 * d0, vec4(1.0, 0.0, 0.0, 1.0));
+      gg::geometry_logger::line(c0, c0 + 0.03 * d1, vec4(0.0, 1.0, 0.0, 1.0));
+      gg::geometry_logger::line(c0, c0 + 0.03 * d2, vec4(0.0, 0.0, 1.0, 1.0));
 #endif
     }
   }
 
-  real _r = 0.02;
+  real _r = 0.2;
   real _lmax = 0.0;
   std::vector<index_t> __corners_next;
   std::vector<index_t> __corners_prev;

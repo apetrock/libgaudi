@@ -102,7 +102,7 @@ public:
   vec3 op(const vec3 &p) {
     vec3 dp = p - __cen;
     vec3 axis = __axis.normalized();
-    vec3 pp = va::orthogonal_project(axis, dp);
+    vec3 pp = va::reject(axis, dp);
 
     vec3 ppN = pp.normalized();
     vec3 pC = __r * ppN;
@@ -132,7 +132,7 @@ public:
   vec2 get_rthet(const vec3 &x, vec3 ax0, vec3 axX, vec3 axY) {
 
     vec3 dp = x - __cen;
-    vec3 pp = va::orthogonal_project(ax0, dp);
+    vec3 pp = va::reject(ax0, dp);
     real ri = pp.norm();
 
     real px = axX.dot(pp);
@@ -153,7 +153,7 @@ public:
     for (int i = 0; i < x.size(); i++) {
       vec3 p0 = x[i];
       vec3 dp = p0 - __cen;
-      vec3 pp = va::orthogonal_project(axis, dp);
+      vec3 pp = va::reject(axis, dp);
       dc += pp;
     }
 

@@ -407,16 +407,17 @@ public:
 
 #if 1
 template <int ST, int SS> // T=test, S=set... DOH! T could equal tree...
-index_t getNearest(index_t &idT, const std::vector<index_t> &t_inds,
-                   const vector<vec3> &t_verts, //
-                   const aabb_tree<SS> &s_tree, real tol,
-                   std::function<real(const index_t &idT, //
-                                      const std::vector<index_t> &t_inds,
-                                      const vector<vec3> &t_verts, //
-                                      const index_t &idS,          //
-                                      const std::vector<index_t> &s_inds,
-                                      const std::vector<vec3> &s_verts)>
-                       testAB) {
+std::vector<index_t>
+getNearest(index_t &idT, const std::vector<index_t> &t_inds,
+           const vector<vec3> &t_verts, //
+           const aabb_tree<SS> &s_tree, real tol,
+           std::function<real(const index_t &idT, //
+                              const std::vector<index_t> &t_inds,
+                              const vector<vec3> &t_verts, //
+                              const index_t &idS,          //
+                              const std::vector<index_t> &s_inds,
+                              const std::vector<vec3> &s_verts)>
+               testAB) {
 
   // TIMER function//TIMER(__FUNCTION__);
   typedef aabb_tree<SS> tree_type;
@@ -432,6 +433,7 @@ index_t getNearest(index_t &idT, const std::vector<index_t> &t_inds,
   // T tol = 0.05;
   ext::extents_t extT = calc_extents<ST>(idT, t_inds, t_verts);
   extT = ext::inflate(extT, tol);
+  std::vector<index_t> collisions;
   while (cstack.size() > 0) {
     int cId = cstack.top();
     cstack.pop();
@@ -470,6 +472,8 @@ index_t getNearest(index_t &idT, const std::vector<index_t> &t_inds,
           dmin = dist;
           idMin = idS;
         }
+        if (dist < tol && collisions.empty())
+          collisions.push_back(idS);
       }
     }
 
@@ -483,7 +487,8 @@ index_t getNearest(index_t &idT, const std::vector<index_t> &t_inds,
       cstack.push(cnode.children[1]);
     }
   }
-  return idMin;
+  collisions.push_back(idMin);
+  return collisions;
 };
 #endif
 

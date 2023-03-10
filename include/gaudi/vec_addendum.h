@@ -8,6 +8,7 @@
  */
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
+#include <array>
 #include <complex>
 #include <iostream>
 #include <math.h>
@@ -35,8 +36,29 @@ template <class Tf, class Tv> inline Tv linear(Tf f, const Tv &x, const Tv &y) {
   return (y - x) * f + x;
 }
 
-template <class Tf, class Tv> inline Tv mix(Tf f, const Tv &x, const Tv &y) {
-  return f * x + (1.0 - f) * y;
+template <class Tf, class Tv> inline Tv mix(Tf f, const Tv &x0, const Tv &x1) {
+  return (1.0 - f) * x0 + f * x1;
+}
+
+template <typename T>
+VEC3<T> catmull_rom(const VEC3<T> &p0, const VEC3<T> &p1, const VEC3<T> &p2,
+                    const VEC3<T> &p3, T t /* between 0 and 1 */,
+                    T alpha = .5f /* between 0 and 1 */) {
+  T tension = 0.0;
+  T t0 = 0.0f;
+  T t01 = pow((p1 - p0).norm(), alpha);
+  T t12 = pow((p2 - p1).norm(), alpha);
+  T t23 = pow((p3 - p2).norm(), alpha);
+
+  VEC3<T> m1 = (1.0f - tension) *
+               (p2 - p1 + t12 * ((p1 - p0) / t01 - (p2 - p0) / (t01 + t12)));
+  VEC3<T> m2 = (1.0f - tension) *
+               (p2 - p1 + t12 * ((p3 - p2) / t23 - (p3 - p1) / (t12 + t23)));
+  VEC3<T> a = 2.0f * (p1 - p2) + m1 + m2;
+  VEC3<T> b = -3.0f * (p1 - p2) - m1 - m1 - m2;
+  VEC3<T> c = m1;
+  VEC3<T> d = p1;
+  return a * t * t * t + b * t * t + c * t + d;
 }
 
 template <int N, typename T> struct vecComp {
@@ -502,8 +524,9 @@ inline T distance_from_plane(const VEC3<T> &v0, const VEC3<T> &v1,
 }
 
 template <typename T>
-inline T distance_Segment_Segment(const VEC3<T> &s00, const VEC3<T> &s01,
-                                  const VEC3<T> &s10, const VEC3<T> &s11) {
+inline std::array<T, 3>
+distance_Segment_Segment(const VEC3<T> &s00, const VEC3<T> &s01,
+                         const VEC3<T> &s10, const VEC3<T> &s11) {
   // http://geomalgorithms.com/a07-_distance.html#dist3D_Segment_to_Segment()
   //    Input:  two 3D line segments S1 and S2
   //    Return: the shortest distance between S1 and S2
@@ -568,7 +591,7 @@ inline T distance_Segment_Segment(const VEC3<T> &s00, const VEC3<T> &s01,
 
   // get the difference of the two closest points
   VEC3<T> dP = w + (sc * u) - (tc * v); // =  S1(sc) - S2(tc)
-  return norm2(dP);                     // return the closest distance
+  return {norm2(dP), sc, tc};           // return the closest distance
 }
 
 template <typename T>
@@ -620,7 +643,7 @@ template <typename T> MAT3<T> skew_symmetric_matrix(const VEC3<T> &x) {
 }
 
 template <typename T>
-inline VEC3<T> orthogonal_project(const VEC3<T> &N, const VEC3<T> &A) {
+inline VEC3<T> reject(const VEC3<T> &N, const VEC3<T> &A) {
   // N has to be normalized
   T dist = dot(N, A);
   VEC3<T> out = A - dist * N;
@@ -628,8 +651,8 @@ inline VEC3<T> orthogonal_project(const VEC3<T> &N, const VEC3<T> &A) {
 };
 
 template <typename T>
-inline vector<VEC3<T>> orthogonal_project(const VEC3<T> &norm,
-                                          const vector<VEC3<T>> &verts) {
+inline vector<VEC3<T>> reject(const VEC3<T> &norm,
+                              const vector<VEC3<T>> &verts) {
 
   T Nxx, Nxy, Nxz, Nyy, Nyz, Nzz;
 

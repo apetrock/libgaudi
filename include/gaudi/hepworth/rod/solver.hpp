@@ -73,7 +73,7 @@ public:
       quat O = o_[i];
       quat u = u_[i];
 
-      real J = J;
+      // real J = J;
       quat sO = O; // torque terms + h / J
       quat su = u;
       su.coeffs() += 0.5 * h * (u * sO).coeffs();
@@ -93,21 +93,28 @@ public:
   void step(std::vector<vec3> &x_,
             std::vector<vec3> &v_,       // velocity;
             const std::vector<vec3> &f_, // velocity;
-            std::vector<quat> &u_,
-            std::vector<quat> &o_ // omega
-  ) {
+            std::vector<quat> &u_,       // quats,
+            std::vector<quat> &o_,       // omega
+            const real &h = 0.01) {
 
     int Ni = x_.size();
     int Nm = 3 * Ni + 4 * Ni;
-    real h = 0.1;
+
+    vecX x0 = to(x_);
+    vecX u0 = to(u_);
 
     update_rotational_inertia(h, u_, o_);
     update_velocity(h, x_, v_, f_);
 
+    vecX x = to(x_);
+    vecX v = to(v_);
+    vecX u = to(u_);
+    vecX o = to(o_);
+
     matS A(Nm, Nm);
     matS &M = __M;
 
-    M.setIdentity();
+    // M.setIdentity();
     M *= 1.0 / h / h;
 
     std::vector<trip> triplets;
@@ -119,21 +126,16 @@ public:
     matS AtA = A.transpose() * A;
     std::cout << "A   sum: " << A.sum() << std::endl;
     std::cout << "AtA sum: " << AtA.sum() << std::endl;
+    std::cout << "M sum: " << M.sum() << std::endl;
 
-    vecX x = to(x_);
-    vecX v = to(v_);
-    vecX u = to(u_);
-    vecX o = to(o_);
+    // vecX x0 = x;
 
-    vecX x0 = x;
-    vecX u0 = u;
-
-    vecX q = concat(x, u);
+    vecX q = concat(x0, u0);
     vecX s = concat(x, u);
 
     vecX p = vecX::Zero(Nm);
 
-    for (int k = 0; k < 10; k++) {
+    for (int k = 0; k < 20; k++) {
       p.setZero();
       for (auto &constraint : _constraints) {
         constraint->project(q, p);
@@ -150,7 +152,7 @@ public:
     std::cout << " x norm: " << (x - x0).norm() << std::endl;
     std::cout << " u norm: " << (u - u0).norm() << std::endl;
 
-    real damp = 0.95;
+    real damp = 1.0;
     v = (1.0 - damp) / h * (x - x0);
     from(v_, v);
     from(x_, x);

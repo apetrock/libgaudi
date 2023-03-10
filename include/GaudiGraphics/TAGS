@@ -19,9 +19,9 @@ inline T angle_from_vectors(const Eigen::Matrix<T,3,1>& angA,angle_from_vectors
 inline T distance_from_line(const Eigen::Matrix<T,3,1>& la, distance_from_line317,8383
 inline T distance_from_line(Eigen::Matrix<T,2,1>& x1, distance_from_line329,8718
 inline T distance_from_plane(const Eigen::Matrix<T,3,1>& v0,distance_from_plane340,8998
-inline vector<Eigen::Matrix<T,3,1> > orthogonal_project(const Eigen::Matrix<T,3,1>& norm,orthogonal_project356,9381
+inline vector<Eigen::Matrix<T,3,1> > reject(const Eigen::Matrix<T,3,1>& norm,reject356,9381
 inline Eigen::Matrix<T,3,1> reflect(const Eigen::Matrix<T,3,1>& norm,reflect386,10167
-inline Eigen::Matrix<T,3,1> orthogonal_project(const Eigen::Matrix<T,3,1>& N,orthogonal_project411,10707
+inline Eigen::Matrix<T,3,1> reject(const Eigen::Matrix<T,3,1>& N,reject411,10707
 inline T angle_from_plane(const Eigen::Matrix<T,3,1>& norm,angle_from_plane429,11148
 inline Eigen::Matrix<T,3,1> calculate_normal(vector<Eigen::Matrix<T,3,1> > vt_list){calculate_normal459,11886
 inline Eigen::Matrix<T,3,1> calculate_average(vector<Eigen::Matrix<T,3,1> > vt_list){calculate_average476,12457

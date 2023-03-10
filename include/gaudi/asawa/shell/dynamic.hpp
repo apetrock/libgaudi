@@ -528,26 +528,28 @@ public:
     //#pragma omp parallel for
     for (int i = 0; i < edge_verts.size(); i += 2) {
       index_t e0 = i / 2;
-      index_t e1 = arp::getNearest<2, 2>(e0, edge_verts, x, //
-                                         *edge_tree,        //
-                                         tol, &line_line_min);
+      std::vector<index_t> collisions =
+          arp::getNearest<2, 2>(e0, edge_verts, x, //
+                                *edge_tree,        //
+                                tol, &line_line_min);
+      for (index_t e1 : collisions) {
+        index_t c0 = edge_map[e0];
+        // debug_line(M, c0, x);
+        index_t c1 = -1;
+        if (e1 > 0) {
+          // std::cout << ii << " " << nearest << std::endl;
+          c1 = edge_map[e1];
+          c1 = align_edges(M, c0, c1, x);
+          // debug_line_line(M, c0, c1, x);
+          // debug_edge_normal(M, c0, x);
+          // debug_edge_normal(M, c1, x);
+        }
 
-      index_t c0 = edge_map[e0];
-      // debug_line(M, c0, x);
-      index_t c1 = -1;
-      if (e1 > 0) {
-        // std::cout << ii << " " << nearest << std::endl;
-        c1 = edge_map[e1];
-        c1 = align_edges(M, c0, c1, x);
-        // debug_line_line(M, c0, c1, x);
-        // debug_edge_normal(M, c0, x);
-        // debug_edge_normal(M, c1, x);
+        if (c0 > c1)
+          std::swap(c0, c1);
+
+        collected[i / 2] = {c0, c1};
       }
-
-      if (c0 > c1)
-        std::swap(c0, c1);
-
-      collected[i / 2] = {c0, c1};
     }
 
     trim_collected(M, x, collected);

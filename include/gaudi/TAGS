@@ -958,9 +958,9 @@ template <int N,287,7162
 inline T distance_from_line(308,7628
 inline T distance_from_line(320,7915
 inline T distance_from_plane(331,8181
-inline vector<al::Vec<3,T> > orthogonal_project(347,8508
+inline vector<al::Vec<3,T> > reject(347,8508
 inline al::Vec<3,T> reflect(377,9238
-inline al::Vec<3,T> orthogonal_project(402,9746
+inline al::Vec<3,T> reject(402,9746
 inline T angle_from_plane(437,10434
 inline al::Vec<3,T> calculate_normal(467,11140
 inline al::Vec<3,T> calculate_average(484,11671
