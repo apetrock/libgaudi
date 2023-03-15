@@ -153,23 +153,12 @@ add_definitions("${NANOGUI_EXTRA_DEFS}")
 include_directories("${EIGEN_INCLUDE_DIR}" "${SPECTRA_INCLUDE_DIR}" "ext/AudioFile")
 add_subdirectory(src)
 
-#add_subdirectory(projects/hello_manifold)
-#add_subdirectory(projects/hello)
-#add_subdirectory(projects/facemergetest)
-#add_subdirectory(projects/rxdiff)
-#add_subdirectory(projects/physarym)
-#add_subdirectory(projects/stretch)
 
 
 add_subdirectory(projects/rods_test)
-add_subdirectory(projects/heat_geodesics_test)
-add_subdirectory(projects/fast_summation_test)
-add_subdirectory(projects/dynamic_shell_test)
-add_subdirectory(projects/wav2fft)
+#add_subdirectory(projects/heat_geodesics_test)
+#add_subdirectory(projects/fast_summation_test)
+#add_subdirectory(projects/dynamic_shell_test)
+#add_subdirectory(projects/wav2fft)
 
 
-#add_subdirectory(projects/tanvec)
-#add_subdirectory(projects/vortextest)
-#add_subdirectory(projects/sdftest)
-#add_subdirectory(projects/spectratest)
-#add_subdirectory(projects/zithertest)

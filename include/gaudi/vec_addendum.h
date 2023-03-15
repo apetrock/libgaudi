@@ -455,27 +455,9 @@ inline T angle_from_vectors(const VEC3<T> &angA, const VEC3<T> angB) {
   return out;
 };
 
-template <int N, typename T>
-inline bool project_on_line(const Eigen::Matrix<T, N, 1> &x0,
-                            const Eigen::Matrix<T, N, 1> &x1,
-                            const Eigen::Matrix<T, N, 1> &pt,
-                            Eigen::Matrix<T, N, 1> &pr, T eps) {
-  Eigen::Matrix<T, N, 1> Q = pt - x0;
-  Eigen::Matrix<T, N, 1> dx = x1 - x0;
-  T mdx = dx.mag();
-  Eigen::Matrix<T, N, 1> ndx = dx / mdx;
-  T t = dot(Q, ndx) / mdx;
-  pr = x0 + t * dx;
-  if (t > -eps && t <= 1 + eps) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
 template <typename T>
-inline T distance_from_line(const VEC3<T> &v0, const VEC3<T> &v1,
-                            const VEC3<T> &pt) {
+inline VEC3<T> project_on_line(const VEC3<T> &v0, const VEC3<T> &v1,
+                               const VEC3<T> &pt) {
   VEC3<T> dx = v1 - v0;
   T s = (pt - v0).dot(dx) / dx.dot(dx);
   if (s >= 1)
@@ -483,7 +465,13 @@ inline T distance_from_line(const VEC3<T> &v0, const VEC3<T> &v1,
   if (s <= 0)
     s = 0;
   VEC3<T> ptl = v0 + s * dx;
+  return ptl;
+}
 
+template <typename T>
+inline T distance_from_line(const VEC3<T> &v0, const VEC3<T> &v1,
+                            const VEC3<T> &pt) {
+  VEC3<T> ptl = project_on_line(v0, v1, pt);
   T d = (pt - ptl).norm();
   return d;
 }
@@ -840,6 +828,25 @@ inline VEC3<T> fit_sphere(const vector<VEC3<T>> &X, vector<VEC3<T>> &Xc, T &r) {
       (a * (f * m - h * k) - e * (b * m - d * k) + j * (b * h - d * f)) / delta;
   T R = sqrt(xc ^ 2 + yc ^ 2 + zc ^
              2 + (A1 - 2 * (xc * Sx + yc * Sy + zc * Sz)) / N);
+}
+
+template <typename T>
+void estimate_3D_circle(VEC3<T> p1, VEC3<T> p2, VEC3<T> p3, VEC3<T> &c,
+                        T &radius) {
+  // https: // github.com/sergarrido/random/blob/master/circle3d/circle3d.cpp
+  VEC3<T> v1 = p2 - p1;
+  VEC3<T> v2 = p3 - p1;
+  T v1v1, v2v2, v1v2;
+  v1v1 = v1.dot(v1);
+  v2v2 = v2.dot(v2);
+  v1v2 = v1.dot(v2);
+
+  T base = 0.5 / (v1v1 * v2v2 - v1v2 * v1v2);
+  T k1 = base * v2v2 * (v1v1 - v1v2);
+  T k2 = base * v1v1 * (v2v2 - v1v2);
+  c = p1 + v1 * k1 + v2 * k2; // center
+
+  radius = (c - p1).norm();
 }
 
 inline float Q_rsqrt(float number) {

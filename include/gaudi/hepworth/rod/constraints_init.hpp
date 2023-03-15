@@ -69,7 +69,7 @@ void init_cylinder(const asawa::rod::rod &rod,
     if (!in2)
       continue;
     constraints.push_back(
-        cylinder::create({ip2, ip1, ip0, i, in0, in1, in2}, 1.25));
+        cylinder::create({i, ip2, ip1, ip0, i, in0, in1, in2}, 1.25));
   }
 }
 void init_stretch_shear(const asawa::rod::rod &rod,
@@ -89,6 +89,29 @@ void init_bend_twist(const asawa::rod::rod &rod,
   for (int i = 0; i < rod.corner_count(); i++) {
     index_t j = rod.next(i);
     constraints.push_back(bend_twist::create({i, j, Ni}, w));
+  }
+}
+
+void init_angle(const asawa::rod::rod &rod,
+                std::vector<projection_constraint::ptr> &constraints,
+                const vec3 &z, const real &phi, const real &w) {
+  int Ni = rod.corner_count();
+  for (int i = 0; i < rod.corner_count(); i++) {
+    index_t j = rod.next(i);
+    constraints.push_back(angle::create({i, j, Ni}, z, phi, w));
+  }
+}
+
+void init_smooth_bend(const asawa::rod::rod &rod,
+                      std::vector<projection_constraint::ptr> &constraints,
+                      const real &w) {
+  int Ni = rod.corner_count();
+  for (int i = 0; i < rod.corner_count(); i++) {
+    index_t ip = rod.prev(i);
+
+    index_t in = rod.next(i);
+
+    constraints.push_back(smooth_bend::create({ip, i, in, Ni}, w));
   }
 }
 } // namespace rod

@@ -14,6 +14,8 @@
 //#include "subdivide.hpp"
 
 #include <array>
+#include <set>
+
 #include <cmath>
 #include <cstddef>
 #include <functional>
@@ -21,6 +23,7 @@
 #include <limits>
 #include <memory>
 #include <type_traits>
+#include <utility>
 #include <vector>
 #include <zlib.h>
 
@@ -57,19 +60,30 @@ real line_line(const index_t &idT, //
   const vec3 &xB1 = s_x[s_inds[2 * idS + 1]];
 
   std::array<real, 3> d = va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
+  real s = d[1];
+  real t = d[2];
+
+  vec3 xA = va::mix(s, xA0, xA1);
+  vec3 xB = va::mix(t, xB0, xB1);
+  vec3 dA = (xA1 - xA0).normalized();
+  vec3 dB = (xB1 - xB0).normalized();
+
+  vec3 xAB = (xB - xA).normalized();
+  // gg::geometry_logger::line(xA, xB, vec4(1.0, 1.0, 1.0, 1.0));
   /*
     real s = d[1];
     real t = d[2];
     vec3 xA = (1.0 - s) * xA0 + s * xA1;
     vec3 xB = (1.0 - t) * xB0 + t * xB1;
-    vec3 dA = (xA1 - xA0).normalized();
-    vec3 dB = (xB1 - xB0).normalized();
+
     vec3 dAB = (xA - xB).normalized();
-    if (abs(xA.dot(dAB)) < 0.1)
-      return std::numeric_limits<real>::infinity();
-    if (abs(xB.dot(dAB)) < 0.1)
-      return std::numeric_limits<real>::infinity();
   */
+
+  if (abs(dA.dot(xAB)) > 0.95)
+    return std::numeric_limits<real>::infinity();
+  if (abs(dB.dot(xAB)) > 0.95)
+    return std::numeric_limits<real>::infinity();
+
   return d[0];
 };
 
@@ -146,14 +160,18 @@ public:
     real l10 = (x1 - x0).norm();
     real ln0 = (xn - x0).norm();
     real l1n = (x1 - xn).norm();
+    real lnew = ln0 + l1n;
 
-    real l = z[c0];
-    // std::cout << " interp: " << (ln0 + l1n) / l10 << " " << ln0 / l10 << " "
-    //           << l1n / l10 << std::endl;
-    /// set<real>(c0, ln0 / l10, z);
-    // set<real>(cnew, l1n / l10, z);
-    set<real>(c0, ln0 / l10 * l, z);
-    set<real>(cnew, l1n / l10 * l, z);
+    real l0 = z[c0];
+    // real r = 0.0;
+    // real l = va::mix(r, l0, lnew);
+    //  std::cout << " interp: " << (ln0 + l1n) / l10 << " " << ln0 / l10 << " "
+    //            << l1n / l10 << std::endl;
+
+    // set<real>(c0, ln0 / l10 * l, z);
+    // set<real>(cnew, l1n / l10 * l, z);
+    set<real>(c0, ln0 / l10 * l0, z);
+    set<real>(cnew, l1n / l10 * l0, z);
   }
 
   void split_edge(index_t c00) {
@@ -187,10 +205,11 @@ public:
     edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 16);
     // calder::test_extents(*edge_tree, edge_verts, x);
     // edge_tree->debug();
-    real tol = 0.95 * R._r;
+    real tol = 1.0 * R._r;
 
     std::vector<std::array<index_t, 4>> collected(verts.size());
     //#pragma omp parallel for
+    std::set<std::pair<int, int>> hashed_pairs;
     for (int k = 0; k < edge_verts.size(); k += 2) {
       index_t i = k / 2;
       std::vector<index_t> collisions =
@@ -198,9 +217,14 @@ public:
                                 *edge_tree,       //
                                 tol, &line_line);
       for (index_t j : collisions) {
-        if (j > 0) {
-          collected[i] = {edge_verts[2.0 * i + 0], edge_verts[2.0 * i + 1],
-                          edge_verts[2.0 * j + 0], edge_verts[2.0 * j + 1]};
+        bool inset =
+            hashed_pairs.find(std::make_pair(i, j)) != hashed_pairs.end() |
+            hashed_pairs.find(std::make_pair(j, i)) != hashed_pairs.end();
+
+        if (j > -1) {
+          collected[i] = {edge_verts[2 * i + 0], edge_verts[2 * i + 1],
+                          edge_verts[2 * j + 0], edge_verts[2 * j + 1]};
+          hashed_pairs.insert(std::make_pair(i, j));
         } else
           collected[i] = {-1, -1, -1, -1};
       }
@@ -219,6 +243,7 @@ public:
       if (l > _Cs)
         split_edge(i);
     }
+    __R->update_mass();
   }
   rod::ptr __R;
   arp::aabb_tree<2>::ptr edge_tree;

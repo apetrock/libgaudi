@@ -92,11 +92,22 @@ public:
       vec3 q0 = __x[i];
       vec3 q1 = __x[j];
       real l = (q1 - q0).norm();
-      _lmax += l;
-      __l0[i] = l;
-      __v[i] = vec3::Zero();
-      real rho = 1.0;
 
+      __l0[i] = l;
+    }
+    update_mass();
+    _update_frames();
+  }
+
+  void update_mass() {
+
+    _lmax = 0.0;
+    for (int i = 0; i < __corners_next.size(); i++) {
+      if (__corners_next[i] == -1)
+        continue;
+      real l = __l0[i];
+      _lmax += l;
+      real rho = 1.0;
       real M = M_PI * _r * _r * l;
       real J = l * rho * M * _r * _r;
 
@@ -116,20 +127,56 @@ public:
 */
     }
     _lmax /= real(__corners_next.size());
-    _update_frames();
   }
 
-  quat _calc_frame(const index_t &ip, const index_t &i, const index_t &in) {
-    vec3 cp = __x[ip];
-    vec3 c0 = __x[i];
-    vec3 cn = __x[in];
+  real get_total_volume() {
+    real v = 0.0;
+    for (auto m : __M)
+      v += m[0];
+    return v;
+  }
+
+  std::array<index_t, 3> consec(index_t i) {
+    int in = next(i);
+    int ip = prev(i);
+    if (next(i) == -1) {
+      ip = prev(prev(i));
+      i = prev(i);
+      in = i;
+
+    } else if (prev(i) == -1) {
+      ip = i;
+      i = next(i);
+      in = next(next(i));
+    }
+    return {ip, i, in};
+  }
+
+  quat get_rotation(int i) {
+    auto idx = consec(i);
+    vec3 cp = __x[idx[0]];
+    vec3 c0 = __x[idx[1]];
+    vec3 cn = __x[idx[2]];
+
+    vec3 t0 = c0 - cp, t1 = cn - c0;
+    t0.normalize();
+    t1.normalize();
+
+    return quat::FromTwoVectors(t0, t1);
+  }
+
+  quat get_frenet(index_t i) {
+    auto idx = consec(i);
+    vec3 cp = __x[idx[0]];
+    vec3 c0 = __x[idx[1]];
+    vec3 cn = __x[idx[2]];
 
     vec3 dn0 = cn - c0;
     vec3 d0p = c0 - cp;
-
-    vec3 d0 = dn0.cross(d0p).normalized();
-    vec3 d1 = dn0.cross(d0).normalized();
-    vec3 d2 = d0.cross(d1).normalized();
+    vec3 dd0 = dn0 - d0p;
+    vec3 d0 = dn0.cross(dd0).normalized(); // binorm
+    vec3 d1 = dn0.cross(d0).normalized();  // norm
+    vec3 d2 = dn0.normalized();            // tan
 
     mat3 F;
     F.col(0) = d0;
@@ -137,6 +184,22 @@ public:
     F.col(2) = d2;
 
     quat q(F);
+
+    q.normalize();
+
+    return q;
+  }
+
+  quat _calc_frame(const index_t &i) {
+    auto idx = consec(i);
+    vec3 cp = __x[idx[0]];
+    vec3 c0 = __x[idx[1]];
+    vec3 cn = __x[idx[2]];
+
+    vec3 d0 = cp - cn;
+
+    quat q(Eigen::AngleAxisd(2.0 * M_PI, d0));
+
     q.normalize();
 
     return q;
@@ -145,14 +208,7 @@ public:
   void _update_frames() {
     __u.resize(__corners_next.size());
     for (int i = 0; i < __corners_next.size(); i++) {
-
-      if (next(i) == -1)
-        __u[i] = _calc_frame(prev(prev(i)), prev(i), i);
-      else if (prev(i) == -1)
-        __u[i] = _calc_frame(i, next(i), next(next(i)));
-      else
-        __u[i] = _calc_frame(prev(i), i, next(i));
-
+      __u[i] = _calc_frame(i);
       index_t j = __corners_next[i];
       vec3 q0 = __x[i];
       vec3 q1 = __x[j];
@@ -202,7 +258,7 @@ public:
     std::vector<index_t> range;
     range.reserve(corner_count());
     // replace this with some c++isms
-    for (int i = 0; i < corner_count(); i += 2) {
+    for (int i = 0; i < corner_count(); i++) {
       if (__corners_next[i] < 0)
         continue;
       range.push_back(i);
@@ -252,7 +308,7 @@ public:
       gg::geometry_logger::line(c0, c1, vec4(0.0, 0.7, 1.0, 1.0));
       gg::geometry_logger::line(c0, c0 + v, vec4(0.8, 0.3, 0.0, 1.0));
       quat u = __u[i];
-#if 0
+#if 1
       vec3 d0 = u * vec3(1, 0, 0);
       vec3 d1 = u * vec3(0, 1, 0);
       vec3 d2 = u * vec3(0, 0, 1);
@@ -264,7 +320,7 @@ public:
     }
   }
 
-  real _r = 0.2;
+  real _r = 0.05;
   real _lmax = 0.0;
   std::vector<index_t> __corners_next;
   std::vector<index_t> __corners_prev;

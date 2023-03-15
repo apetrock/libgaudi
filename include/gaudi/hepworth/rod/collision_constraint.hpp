@@ -29,13 +29,12 @@ public:
   typedef std::shared_ptr<collision> ptr;
 
   static ptr create(const std::vector<index_t> &ids, const real &w,
-                    const real &l, const real &s, const real &t) {
-    return std::make_shared<collision>(ids, w, l, s, t);
+                    const real &l) {
+    return std::make_shared<collision>(ids, w, l);
   }
 
-  collision(const std::vector<index_t> &ids, const real &w, const real &l,
-            const real &s, const real &t)
-      : projection_constraint(ids, w), _l(l), _s(s), _t(t) {}
+  collision(const std::vector<index_t> &ids, const real &w, const real &l)
+      : projection_constraint(ids, w), _l(l) {}
 
   virtual void project(const vecX &q, vecX &p) {
     index_t iA0 = this->_ids[0];
@@ -61,30 +60,37 @@ public:
     vec3 xAB = xB - xA;
 
     real l = xAB.norm();
-    real dl = (_l - l) / l;
+    real dl = (_l - l);
+    xAB /= l;
 
     real a0 = 1.0 - s;
     real a1 = s;
     real b0 = 1.0 - t;
     real b1 = t;
 
-    // gg::geometry_logger::line(xA, xB, vec4(1.0, 0.0, 1.0, 1.0));
-    // if (l < _l)
-    /*
-    gg::geometry_logger::line(xA0, xA0 - a0 * dl * xAB,
-                              vec4(1.0, 0.0, 0.0, 1.0));
-    gg::geometry_logger::line(xB0, xB0 + b0 * dl * xAB,
-                              vec4(0.0, 1.0, 0.0, 1.0));
-    gg::geometry_logger::line(xA1, xA1 - a1 * dl * xAB,
-                              vec4(1.0, 0.0, 1.0, 1.0));
-    gg::geometry_logger::line(xB1, xB1 + b1 * dl * xAB,
-                              vec4(0.0, 1.0, 1.0, 1.0));
-*/
-    p.block(3 * iA0, 0, 3, 1) += _w * (xA0 - 0.5 * a0 * dl * xAB);
-    p.block(3 * iA1, 0, 3, 1) += _w * (xA1 - 0.5 * a1 * dl * xAB);
-    p.block(3 * iB0, 0, 3, 1) += _w * (xB0 + 0.5 * b0 * dl * xAB);
-    p.block(3 * iB1, 0, 3, 1) += _w * (xB1 + 0.5 * b1 * dl * xAB);
+    if (dl > 0) {
+      // dl = max(dl, 0.25 * _l);
+      gg::geometry_logger::line(xA, xB, vec4(1.0, 1.0, 0.0, 1.0));
+      gg::geometry_logger::line(xA0, xA1, vec4(0.0, 0.8, 0.8, 1.0));
+      gg::geometry_logger::line(xA0 - 0.5 * a0 * dl * xAB,
+                                xA1 - 0.5 * a1 * dl * xAB,
+                                vec4(0.0, 1.0, 1.0, 1.0));
 
+      gg::geometry_logger::line(xB0, xB1, vec4(0.8, 0.0, 0.8, 1.0));
+      gg::geometry_logger::line(xB0 + 0.5 * b0 * dl * xAB,
+                                xB1 + 0.5 * b1 * dl * xAB,
+                                vec4(1.0, 0.0, 1.0, 1.0));
+      vec3 dX = 0.5 * dl * xAB;
+      p.block(3 * iA0, 0, 3, 1) += _w * (xA0 - a0 * dX);
+      p.block(3 * iA1, 0, 3, 1) += _w * (xA1 - a1 * dX);
+      p.block(3 * iB0, 0, 3, 1) += _w * (xB0 + b0 * dX);
+      p.block(3 * iB1, 0, 3, 1) += _w * (xB1 + b1 * dX);
+    } else {
+      p.block(3 * iA0, 0, 3, 1) += _w * xA0;
+      p.block(3 * iA1, 0, 3, 1) += _w * xA1;
+      p.block(3 * iB0, 0, 3, 1) += _w * xB0;
+      p.block(3 * iB1, 0, 3, 1) += _w * xB1;
+    }
     //    p.block(3 * j, 0, 3, 1) = -_w * dq / l;
   }
   virtual void fill_A(std::vector<trip> &triplets) {
@@ -93,19 +99,17 @@ public:
 
     index_t iB0 = this->_ids[2];
     index_t iB1 = this->_ids[3];
-
     for (int ax = 0; ax < 3; ax++)
       triplets.push_back(trip(3 * iA0 + ax, 3 * iA0 + ax, _w));
     for (int ax = 0; ax < 3; ax++)
       triplets.push_back(trip(3 * iA1 + ax, 3 * iA1 + ax, _w));
+
     for (int ax = 0; ax < 3; ax++)
       triplets.push_back(trip(3 * iB0 + ax, 3 * iB0 + ax, _w));
     for (int ax = 0; ax < 3; ax++)
       triplets.push_back(trip(3 * iB1 + ax, 3 * iB1 + ax, _w));
   }
 
-  real _t = 0.0;
-  real _s = 0.0;
   real _l = 1.0;
 };
 
@@ -115,7 +119,7 @@ void init_collisions(asawa::rod::rod &rod, asawa::rod::dynamic &dynamic,
   const std::vector<vec3> &x = rod.__x;
   vector<std::array<index_t, 4>> collisions = dynamic.get_collisions();
   for (auto &c : collisions) {
-    if (c[0] > 0) {
+    if (c[0] > -1) {
       vec3 xA0 = x[c[0]];
       vec3 xA1 = x[c[1]];
       vec3 xB0 = x[c[2]];
@@ -128,22 +132,25 @@ void init_collisions(asawa::rod::rod &rod, asawa::rod::dynamic &dynamic,
         continue;
       if (rod.next(c[1]) == c[2])
         continue;
-      std::array<real, 3> d = va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
-      real s = d[1];
-      real t = d[2];
+      // std::cout << c[0] << " " << c[1] << " - " << c[2] << " " << c[3]
+      //           << std::endl;
 
-      vec3 xA = va::mix(s, xA0, xA1);
-      vec3 xB = va::mix(t, xB0, xB1);
-      vec3 xAB = xB - xA;
+      /*
+    std::array<real, 3> d = va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
+    real s = d[1];
+    real t = d[2];
 
-      real l = xAB.norm();
-      real dl = rod._r - l;
-      if (dl < 0)
-        continue;
+    vec3 xA = va::mix(s, xA0, xA1);
+    vec3 xB = va::mix(t, xB0, xB1);
+    vec3 xAB = xB - xA;
 
-      gg::geometry_logger::line(xA, xB, vec4(1.0, 0.0, 1.0, 1.0));
+    real l = xAB.norm();
+    real dl = rod._r - l;
+    if (dl < 0)
+      continue;
+*/
       constraints.push_back(hepworth::rod::collision::create(
-          {c[0], c[1], c[2], c[3]}, w, rod._r, s, t));
+          {c[0], c[1], c[2], c[3]}, w, 1.0 * rod._r));
     }
   }
 }

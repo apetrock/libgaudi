@@ -142,18 +142,46 @@ public:
 
     std::vector<real> &l0 = __R->__l0;
     std::vector<real> lp(l0);
+    real h = 0.1;
+    real bnd = 2.0;
+    real s_vol = 4.0 / 3.0 * M_PI * pow(bnd, 3.0);
+    real r_vol = __R->get_total_volume();
+    real k = 2.5;
+    real t1 = 1.0;
+    real t0 = 1.005;
+    real att = t0 + (t1 - t0) / (1.0 + exp(-k * (r_vol - s_vol)));
+
+    std::cout << "vol:" << r_vol << "/" << s_vol << " attenuation: " << att
+              << std::endl;
 
     for (auto &l : l0)
-      l *= 1.01;
+      l *= att;
 
-    // qhepworth::rod::init_growth(*__R, constraints, 1.5, 1.0);
-    // hepworth::rod::init_smooth(*__R, constraints, 16.0);
-    hepworth::rod::init_cylinder(*__R, constraints, 0.25);
-    hepworth::rod::init_stretch_shear(*__R, constraints, l0, 0.1);
-    hepworth::rod::init_bend_twist(*__R, constraints, 0.2);
-    hepworth::rod::init_collisions(*__R, *__Rd, constraints, 0.3);
+    // hepworth::rod::init_growth(*__R, constraints, 1.5, 1.0);
+    hepworth::rod::init_smooth(*__R, constraints, 0.2);
+    // hepworth::rod::init_cylinder(*__R, constraints, 0.1);
+    hepworth::rod::init_stretch_shear(*__R, constraints, l0, 0.25);
+    hepworth::rod::init_bend_twist(*__R, constraints, 0.1);
+    // hepworth::rod::init_smooth_bend(*__R, constraints, 0.1);
+
+    // hepworth::rod::init_angle(*__R, constraints, vec3(0.1, 0.0, 0.0),
+    //                           0.5 * M_PI, 0.03);
+    hepworth::rod::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
+                              0.6 * M_PI, 0.02);
+    hepworth::rod::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
+                              0.2 * M_PI, 0.01);
+    hepworth::rod::init_collisions(*__R, *__Rd, constraints, 0.5);
     solver.set_constraints(constraints);
+
     std::vector<vec3> f(__R->__v.size(), vec3::Zero());
+    for (int i = 0; i < __R->__x.size(); i++) {
+      vec3 x = __R->__x[i];
+      real xn = x.norm();
+      if (xn > bnd) {
+        f[i] = -0.1 * (xn - bnd) / h / h * x;
+      }
+      f[i] += 1e-1 * vec3::Random();
+    }
     // f[0][0] = 1.0;
     solver.step(__R->__x, __R->__v, f, __R->__u, __R->__o, 0.1);
   }

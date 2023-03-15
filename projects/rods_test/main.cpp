@@ -55,7 +55,6 @@ public:
     _obj = gg::BufferObject::create();
     _obj->init();
     mSceneObjects.push_back(_obj);
-    //__surf = gaudi::duchamp::fast_summation_test::create();
     __surf = gaudi::duchamp::rods_test::create();
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }
@@ -63,9 +62,9 @@ public:
   virtual void onAnimate(int frame) {
 
     __surf->step(frame);
-    // gg::fillBuffer_ref(*__surf->__M, _obj);
-    //  std::cout << "rendering debug" << std::endl;
-    //  asawa::test();
+    gg::fillBuffer_ref(*__surf->__R, _obj);
+    //   std::cout << "rendering debug" << std::endl;
+    //   asawa::test();
 
     gg::geometry_logger::render();
   }

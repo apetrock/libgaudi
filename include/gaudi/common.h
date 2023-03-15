@@ -26,8 +26,9 @@ typedef Eigen::Matrix<real, 6, 6> mat6;
 typedef Eigen::Matrix<real, 8, 8> mat8;
 typedef Eigen::Matrix<real, 12, 12> mat12;
 
-typedef Eigen::Quaternion<real> quat;
+typedef Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> matX;
 
+typedef Eigen::Quaternion<real> quat;
 typedef Eigen::SparseMatrix<real> matS;
 typedef Eigen::Triplet<real> trip;
 

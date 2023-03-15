@@ -86,7 +86,7 @@ public:
                        const std::vector<vec3> &v_,
                        const std::vector<vec3> &f_) {
     for (size_t i = 0; i < v_.size(); i++) {
-      x_[i] += h * v_[i] + h * h * f_[i] + 0e-12 * vec3::Random();
+      x_[i] += h * v_[i] + h * h * f_[i];
     }
   }
 
@@ -135,24 +135,27 @@ public:
 
     vecX p = vecX::Zero(Nm);
 
-    for (int k = 0; k < 20; k++) {
+    for (int k = 0; k < 30; k++) {
       p.setZero();
       for (auto &constraint : _constraints) {
         constraint->project(q, p);
       }
 
-      std::cout << "pnorm: " << p.norm() << std::endl;
+      if (k % 10 == 0)
+        std::cout << "pnorm: " << p.norm() << std::endl;
+
       vecX b = M * s + A.transpose() * p;
       // std::cout << p << std::endl;
       matS MAtA = M + AtA;
       q = solve(MAtA, b);
+      // q = qi + dq.min(bnd).max(-bnd);
     }
 
     split(q, x, u);
     std::cout << " x norm: " << (x - x0).norm() << std::endl;
     std::cout << " u norm: " << (u - u0).norm() << std::endl;
 
-    real damp = 1.0;
+    real damp = 0.5;
     v = (1.0 - damp) / h * (x - x0);
     from(v_, v);
     from(x_, x);

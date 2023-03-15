@@ -447,32 +447,47 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
 
         ext::extents_t extS =
             calc_extents<SS>(idS, s_tree.indices(), s_tree.verts());
-#if 0            
+
+        if (!ext::overlap(extT, extS)) {
+
+          continue;
+        }
+
         if (idT == 0) {
-          std::cout << idS << " " << extS[0].transpose() << " "
-                    << extS[1].transpose() << std::endl;
-          std::cout << idS << " " << extT[0].transpose() << " "
-                    << extT[1].transpose() << std::endl;
           vec3 cT = 0.5 * (extT[0] + extT[1]);
           vec3 cS = 0.5 * (extS[0] + extS[1]);
 
           gg::geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
+        }
+        /*
+        vec3 cT = 0.5 * (extT[0] + extT[1]);
+        vec3 cS = 0.5 * (extS[0] + extS[1]);
+        gg::geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
+        gg::geometry_logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
+        gg::geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
+*/
+        real dist = testAB(idT, t_inds, t_verts, //
+                           idS, s_tree.indices(), s_tree.verts());
+#if 1
+        if (idT == t_inds[2 * 225]) {
+          std::cout << t_inds[2 * idT + 0] << " " << t_inds[2 * idT + 1]
+                    << " - " << s_tree.indices()[2 * idS + 0] << " "
+                    << s_tree.indices()[2 * idS + 1] << ": " << dist << " "
+                    << tol << std::endl;
+          vec3 cT = 0.5 * (extT[0] + extT[1]);
+          vec3 cS = 0.5 * (extS[0] + extS[1]);
+
+          // gg::geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
           gg::geometry_logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
           gg::geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
         }
 #endif
-        if (!ext::overlap(extT, extS)) {
-          continue;
-        }
 
-        real dist = testAB(idT, t_inds, t_verts, //
-                           idS, s_tree.indices(), s_tree.verts());
-
-        if (dist < dmin && dist < std::numeric_limits<real>::infinity()) {
+        if (dist < dmin) {
           dmin = dist;
           idMin = idS;
         }
-        if (dist < tol && collisions.empty())
+        if (dist < tol)
           collisions.push_back(idS);
       }
     }
