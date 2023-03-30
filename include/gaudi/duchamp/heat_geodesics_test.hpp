@@ -205,8 +205,8 @@ public:
     weights[mni] = 1.0;
     weights[mxi] = -1.0;
 
-    _iw = __M->insert_datum(real_datum::create(prim_type::VERTEX, weights));
-    _io = __M->insert_datum(real_datum::create(prim_type::VERTEX, weights));
+    _iw = __M->insert_datum(scalar_datum::create(prim_type::VERTEX, weights));
+    _io = __M->insert_datum(scalar_datum::create(prim_type::VERTEX, weights));
   };
 
   real calc_objective(const std::vector<real> &offset,
@@ -340,12 +340,12 @@ public:
         static_pointer_cast<vec3_datum>(__M->get_datum(1));
     std::vector<vec3> &dx = v_datum->data();
 
-    real_datum::ptr w_datum =
-        static_pointer_cast<real_datum>(__M->get_datum(_iw));
+    scalar_datum::ptr w_datum =
+        static_pointer_cast<scalar_datum>(__M->get_datum(_iw));
     std::vector<real> &w = w_datum->data();
 
-    real_datum::ptr o_datum =
-        static_pointer_cast<real_datum>(__M->get_datum(_io));
+    scalar_datum::ptr o_datum =
+        static_pointer_cast<scalar_datum>(__M->get_datum(_io));
     std::vector<real> &o = o_datum->data();
 
     real mx = -999.9, mn = 999.0;

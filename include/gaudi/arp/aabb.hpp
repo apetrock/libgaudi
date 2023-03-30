@@ -468,7 +468,7 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
 */
         real dist = testAB(idT, t_inds, t_verts, //
                            idS, s_tree.indices(), s_tree.verts());
-#if 1
+#if 0
         if (idT == t_inds[2 * 225]) {
           std::cout << t_inds[2 * idT + 0] << " " << t_inds[2 * idT + 1]
                     << " - " << s_tree.indices()[2 * idS + 0] << " "

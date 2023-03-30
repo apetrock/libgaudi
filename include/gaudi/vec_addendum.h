@@ -40,6 +40,10 @@ template <class Tf, class Tv> inline Tv mix(Tf f, const Tv &x0, const Tv &x1) {
   return (1.0 - f) * x0 + f * x1;
 }
 
+template <class T> inline T clamp(const T &v, const T &lb, const T &ub) {
+  return std::max(lb, std::min(v, ub));
+}
+
 template <typename T>
 VEC3<T> catmull_rom(const VEC3<T> &p0, const VEC3<T> &p1, const VEC3<T> &p2,
                     const VEC3<T> &p3, T t /* between 0 and 1 */,
@@ -197,7 +201,7 @@ inline T cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
   T cosP = dot(dc10, dc20);
   T sinP = norm(cross(dc10, dc20));
   T cotP = cosP / sinP;
-  if (sinP > 1e-4)
+  if (sinP > 1e-8)
     return cotP;
   else
     return 0.0;
@@ -210,7 +214,7 @@ inline T abs_cos(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
   T e2 = norm(VEC3<T>(c2 - c0));
   T e3 = norm(VEC3<T>(c2 - c1));
 
-  if (e1 <= 1.0e-4 || e2 <= 1.0e-4)
+  if (e1 <= 1.0e-8 || e2 <= 1.0e-8)
     return 0.0;
 
   T cos_alpha = fabs((e1 * e1 + e2 * e2 - e3 * e3) / (2.0f * e1 * e2));
@@ -224,13 +228,13 @@ inline T abs_cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
   T cos_alpha = abs_cos<T>(c0, c1, c2);
 
   if (cos_alpha > 0.98)
-    return 2.0;
+    return 4.0;
 
   T cotan1 = cos_alpha / sqrt(1.0f - cos_alpha * cos_alpha);
-  cotan1 = std::min<T>(cotan1, T(2.0));
-
+  cotan1 = std::min<T>(cotan1, T(8.0));
+  // std::cout << cotan1 << std::endl;
   if (!std::isfinite(cotan1)) {
-    return 2.0;
+    return 4.0;
     std::cout << cotan1 << " " << cos_alpha << std::endl;
     std::cout << c0.transpose() << " - " << c1.transpose() << " - "
               << c2.transpose() << std::endl;
@@ -583,7 +587,8 @@ distance_Segment_Segment(const VEC3<T> &s00, const VEC3<T> &s01,
 }
 
 template <typename T>
-inline T distance_from_triangle(const VEC3<T> *tri, VEC3<T> r0) {
+inline T distance_from_triangle(const std::array<VEC3<T>, 3> tri, VEC3<T> r0,
+                                VEC3<T> &pt) {
   // then makes sure its in the direction of the plane.
   const VEC3<T> &v0 = tri[0];
   const VEC3<T> &v1 = tri[1];
@@ -597,21 +602,77 @@ inline T distance_from_triangle(const VEC3<T> *tri, VEC3<T> r0) {
   T b10 = dot(cross(u, w), N) * iN2;
   T b20 = dot(cross(w, v), N) * iN2;
   T b12 = 1.0 - b10 - b20;
+  b10 = clamp<T>(b10, 0, 1.0);
+  b20 = clamp<T>(b20, 0, 1.0);
+  b12 = clamp<T>(b12, 0, 1.0);
 
-  if (b10 >= 0.0 && b20 >= 0.0 && b12 >= 0.0) {
-    VEC3<T> c = b10 * v2 + b20 * v1 + b12 * v0;
-    return (r0 - c).norm();
-  } else {
-#if 1
-    if (b10 <= 0) {
-      return distance_from_line(v0, v1, r0);
-    } else if (b20 <= 0) {
-      return distance_from_line(v0, v2, r0);
-    } else {
-      return distance_from_line(v1, v2, r0);
-    }
-#endif
+  pt = b10 * v2 + b20 * v1 + b12 * v0;
+  return (r0 - pt).norm();
+}
+
+template <typename T>
+VEC3<T> closest_point(const std::array<VEC3<T>, 3> tri, const VEC3<T> &p) {
+  // https://github.com/juj/MathGeoLib/blob/master/src/Geometry/Triangle.cpp
+  /** The code for Triangle-float3 test is from Christer Ericson's Real-Time
+   * Collision Detection, pp. 141-142. */
+
+  // Check if P is in vertex region outside A.
+  VEC3<T> a = tri[0];
+  VEC3<T> b = tri[1];
+  VEC3<T> c = tri[2];
+
+  VEC3<T> ab = b - a;
+  VEC3<T> ac = c - a;
+  VEC3<T> ap = p - a;
+  T d1 = dot(ab, ap);
+  T d2 = dot(ac, ap);
+  if (d1 <= 0.f && d2 <= 0.f)
+    return a; // Barycentric coordinates are (1,0,0).
+
+  // Check if P is in vertex region outside B.
+  VEC3<T> bp = p - b;
+  T d3 = dot(ab, bp);
+  T d4 = dot(ac, bp);
+  if (d3 >= 0.f && d4 <= d3)
+    return b; // Barycentric coordinates are (0,1,0).
+
+  // Check if P is in edge region of AB, and if so, return the projection of P
+  // onto AB.
+  T vc = d1 * d4 - d3 * d2;
+  if (vc <= 0.f && d1 >= 0.f && d3 <= 0.f) {
+    T v = d1 / (d1 - d3);
+    return a + v * ab; // The barycentric coordinates are (1-v, v, 0).
   }
+
+  // Check if P is in vertex region outside C.
+  VEC3<T> cp = p - c;
+  T d5 = dot(ab, cp);
+  T d6 = dot(ac, cp);
+  if (d6 >= 0.f && d5 <= d6)
+    return c; // The barycentric coordinates are (0,0,1).
+
+  // Check if P is in edge region of AC, and if so, return the projection of P
+  // onto AC.
+  T vb = d5 * d2 - d1 * d6;
+  if (vb <= 0.f && d2 >= 0.f && d6 <= 0.f) {
+    T w = d2 / (d2 - d6);
+    return a + w * ac; // The barycentric coordinates are (1-w, 0, w).
+  }
+
+  // Check if P is in edge region of BC, and if so, return the projection of P
+  // onto BC.
+  T va = d3 * d6 - d5 * d4;
+  if (va <= 0.f && d4 - d3 >= 0.f && d5 - d6 >= 0.f) {
+    T w = (d4 - d3) / (d4 - d3 + d5 - d6);
+    return b + w * (c - b); // The barycentric coordinates are (0, 1-w, w).
+  }
+
+  // P must be inside the face region. Compute the closest point through its
+  // barycentric coordinates (u,v,w).
+  T denom = 1.f / (va + vb + vc);
+  T v = vb * denom;
+  T w = vc * denom;
+  return a + ab * v + ac * w;
 }
 
 template <typename T> MAT3<T> rejection_matrix(const VEC3<T> &N) {

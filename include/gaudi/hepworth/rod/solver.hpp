@@ -111,19 +111,20 @@ public:
     vecX u = to(u_);
     vecX o = to(o_);
 
-    matS A(Nm, Nm);
-    matS &M = __M;
-
-    // M.setIdentity();
-    M *= 1.0 / h / h;
-
     std::vector<trip> triplets;
+    index_t id0 = 0;
     for (auto &constraint : _constraints) {
-      constraint->fill_A(triplets);
+      constraint->fill_A(id0, triplets);
     }
+
+    matS A(id0, Nm);
+    matS &M = __M;
+    M *= 1.0 / h / h;
 
     A.setFromTriplets(triplets.begin(), triplets.end());
     matS AtA = A.transpose() * A;
+    matS MAtA = M + AtA;
+    m_solver S(MAtA);
     std::cout << "A   sum: " << A.sum() << std::endl;
     std::cout << "AtA sum: " << AtA.sum() << std::endl;
     std::cout << "M sum: " << M.sum() << std::endl;
@@ -133,9 +134,9 @@ public:
     vecX q = concat(x0, u0);
     vecX s = concat(x, u);
 
-    vecX p = vecX::Zero(Nm);
+    vecX p = vecX::Zero(id0);
 
-    for (int k = 0; k < 30; k++) {
+    for (int k = 0; k < 50; k++) {
       p.setZero();
       for (auto &constraint : _constraints) {
         constraint->project(q, p);
@@ -146,8 +147,7 @@ public:
 
       vecX b = M * s + A.transpose() * p;
       // std::cout << p << std::endl;
-      matS MAtA = M + AtA;
-      q = solve(MAtA, b);
+      q = S.solve(b);
       // q = qi + dq.min(bnd).max(-bnd);
     }
 

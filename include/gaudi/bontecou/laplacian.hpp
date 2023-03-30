@@ -68,11 +68,17 @@ build_lap(asawa::shell::shell &M,     //
   real Kmax = -9999;
   for (auto v : M.get_vert_range()) {
     real Km = 0.0;
+    if (M.vsize(v) < 4) {
+      for (int k = 0; k < S; k++)
+        tripletList.push_back(triplet(S * i + k, S * i + k, 1.0));
+      continue;
+    }
+
     M.for_each_vertex(v, [&Km, &x, &set_ij, i, &tripletList,
                           func_ij](index_t c, asawa::shell::shell &M) {
       index_t j = M.vert(M.next(c));
       real K = func_ij(M, c, x);
-      Km -= K;
+      Km += K;
       if (!set_ij)
         return;
       for (int k = 0; k < S; k++)
@@ -83,7 +89,7 @@ build_lap(asawa::shell::shell &M,     //
     Kmax = std::max(Kmax, Km);
 
     for (int k = 0; k < S; k++)
-      tripletList.push_back(triplet(S * i + k, S * i + k, Km));
+      tripletList.push_back(triplet(S * i + k, S * i + k, -Km));
     i++;
   }
   std::cout << " min/max K: " << Kmin << "/" << Kmax << std::endl;
@@ -331,8 +337,9 @@ private:
 class laplacian3 {
 
 public:
-  laplacian3(asawa::shell::shell::ptr M, const std::vector<vec3> &x)
-      : __M(M), __x(x) {
+  laplacian3(asawa::shell::shell::ptr M, const std::vector<vec3> &x,
+             bool unitary = false)
+      : __M(M), __x(x), __unitary(unitary) {
     this->init();
   }
 
@@ -342,10 +349,11 @@ public:
   void initC() {
     _matC = build_lap<3>(
         *__M, __x, //
-        [](asawa::shell::shell &M, index_t c, const std::vector<vec3> &x) {
+        [this](asawa::shell::shell &M, index_t c, const std::vector<vec3> &x) {
           index_t c0p = M.prev(c);
           index_t c1p = M.prev(M.other(c));
           real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
+          ct = __unitary ? 1.0 : ct;
           ct = ct < 1e-1 ? 1e-1 : ct;
           return ct;
         });
@@ -375,12 +383,12 @@ public:
     from(Uc, U2);
     return Uc;
   }
-
   bool inited = false;
 
 private:
   Eigen::SparseMatrix<real> _matC;
 
+  bool __unitary;
   asawa::shell::shell::ptr __M;
   const std::vector<vec3> &__x;
 };

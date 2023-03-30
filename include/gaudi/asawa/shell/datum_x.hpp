@@ -21,9 +21,46 @@
 #define __ASAWA_X_DATUM__
 namespace gaudi {
 namespace asawa {
-namespace shell {
-// break this out into new file at some point
 
+void center(std::vector<vec3> &coords) {
+  real accum = 0.0;
+  vec3 min = coords[0];
+  vec3 max = coords[0];
+
+  for (auto &c : coords) {
+    min = va::min(c, min);
+    max = va::max(c, max);
+  }
+
+  vec3 dl = (max - min);
+  real maxl = dl[0];
+  maxl = maxl > dl[1] ? maxl : dl[1];
+  maxl = maxl > dl[2] ? maxl : dl[2];
+  real s = 2.0 / maxl;
+  vec3 cen = (0.5 * (max + min) - min) * s;
+  std::cout << " scale: " << s << std::endl;
+  cen -= min;
+  for (auto &c : coords) {
+    c -= min;
+    c = s * c;
+    c -= cen;
+  }
+}
+
+std::array<vec3, 2> extents(std::vector<vec3> &coords) {
+  real accum = 0.0;
+  vec3 min = coords[0];
+  vec3 max = coords[0];
+
+  for (auto &c : coords) {
+    min = va::min(c, min);
+    max = va::max(c, max);
+  }
+  return {min, max};
+}
+
+namespace shell {
+/*TODO: these could all be namespaced...*/
 real cotan(const shell &M, index_t ci, const std::vector<vec3> &x) {
 
   vec3 xp = x[M.vert(M.prev(ci))];
@@ -62,6 +99,16 @@ real face_area(const shell &M, index_t fi, const std::vector<vec3> &x) {
   return 0.5 * N.norm();
 }
 
+vec3 face_center(const shell &M, index_t fi, const std::vector<vec3> &x) {
+  vec3 c = vec3::Zero();
+  int N = 0;
+  M.const_for_each_face(fi, [&c, &x, &N](index_t c0, const shell &M) {
+    c += x[M.vert(c0)];
+    N++;
+  });
+  return c / real(N);
+}
+
 vec3 vert_normal(const shell &M, index_t vi, const std::vector<vec3> &x) {
   vec3 N = vec3::Zero();
   M.const_for_each_vertex(vi, [&N, &x](index_t ci, const shell &M) {
@@ -82,7 +129,24 @@ real vert_cotan_weight(const shell &M, index_t vi, const std::vector<vec3> &x) {
   real w = 0.0;
   M.const_for_each_vertex(
       vi, [&w, &x](index_t ci, const shell &M) { w += cotan(M, ci, x); });
-  return 3.0;
+  return w;
+}
+
+std::vector<real> vert_cotan_weights(const shell &M, index_t vi,
+                                     const std::vector<vec3> &x) {
+  std::vector<real> w;
+  M.const_for_each_vertex(vi, [&w, &x](index_t ci, const shell &M) {
+    w.push_back(cotan(M, ci, x));
+  });
+  return w;
+}
+
+std::vector<real> vert_unitary_weights(const shell &M, index_t vi,
+                                       const std::vector<vec3> &x) {
+  std::vector<real> w;
+  M.const_for_each_vertex(
+      vi, [&w, &x](index_t ci, const shell &M) { w.push_back(1.0); });
+  return w;
 }
 
 vec3 edge_normal(const shell &M, index_t c0, const std::vector<vec3> &x) {
@@ -99,14 +163,11 @@ vec3 edge_center(const shell &M, index_t c0, const std::vector<vec3> &x) {
   return 0.5 * (x0 + x1);
 }
 
-vec3 face_center(const shell &M, index_t fi, const std::vector<vec3> &x) {
-  vec3 c = vec3::Zero();
-  int N = 0;
-  M.const_for_each_face(fi, [&c, &x, &N](index_t c0, const shell &M) {
-    c += x[M.vert(c0)];
-    N++;
-  });
-  return c / real(N);
+real edge_length(const shell &M, index_t c0, const std::vector<vec3> &x) {
+  index_t c1 = M.other(c0);
+  vec3 x0 = x[M.vert(c0)];
+  vec3 x1 = x[M.vert(c1)];
+  return (x1 - x0).norm();
 }
 
 std::vector<vec3> face_normals(const shell &M, const std::vector<vec3> &x) {
@@ -125,6 +186,17 @@ std::vector<vec3> vertex_normals(const shell &M, const std::vector<vec3> &x) {
   int i = 0;
   for (auto vi : range) {
     Ns[i++] = vert_normal(M, vi, x);
+  }
+  return Ns;
+}
+
+std::vector<vec3> vertex_areas(const shell &M, const std::vector<vec3> &x) {
+  auto range = M.get_vert_range();
+  std::vector<vec3> Ns(range.size());
+  int i = 0;
+  for (auto vi : range) {
+    real area = vert_area(M, vi, x);
+    Ns[i++] = vec3(area, area, area);
   }
   return Ns;
 }
@@ -155,6 +227,17 @@ std::vector<real> align_edges(shell &M, const std::vector<vec3> &x) {
   return ws;
 }
 */
+
+std::vector<real> edge_lengths(const shell &M, const std::vector<vec3> &x) {
+  auto range = M.get_edge_range();
+  std::vector<real> l(range.size());
+  int i = 0;
+  for (auto ci : range) {
+    l[i++] = edge_length(M, ci, x);
+  }
+  return l;
+}
+
 std::vector<real> edge_areas(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
   std::vector<real> ws(range.size());

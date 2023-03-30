@@ -17,22 +17,13 @@
 #include <vector>
 #include <zlib.h>
 
+#include "../collision_constraint.hpp"
 #include "constraints.hpp"
 #include "gaudi/common.h"
 
 namespace gaudi {
 namespace hepworth {
 namespace rod {
-void init_growth(const asawa::rod::rod &rod,
-                 std::vector<projection_constraint::ptr> &constraints,
-                 const real &f, const real &w) {
-  for (int i = 0; i < rod.corner_count(); i++) {
-    index_t j = rod.next(i);
-    // l0[i] *= 1.01;
-    constraints.push_back(growth::create({i, j}, w, f));
-  }
-} // namespace
-  // asawa::rod&rod,std::vector<projection_constraint::ptr>&constraints,conststd::vector<real>&l0,constreal&w)
 
 void init_smooth(const asawa::rod::rod &rod,
                  std::vector<projection_constraint::ptr> &constraints,
@@ -44,7 +35,7 @@ void init_smooth(const asawa::rod::rod &rod,
     constraints.push_back(smooth::create({i, ip, in}, w));
   }
 }
-
+#if 1
 void init_cylinder(const asawa::rod::rod &rod,
                    std::vector<projection_constraint::ptr> &constraints,
                    const real &w) {
@@ -72,6 +63,8 @@ void init_cylinder(const asawa::rod::rod &rod,
         cylinder::create({i, ip2, ip1, ip0, i, in0, in1, in2}, 1.25));
   }
 }
+#endif
+
 void init_stretch_shear(const asawa::rod::rod &rod,
                         std::vector<projection_constraint::ptr> &constraints,
                         const std::vector<real> &l0, const real &w) {
@@ -102,16 +95,45 @@ void init_angle(const asawa::rod::rod &rod,
   }
 }
 
-void init_smooth_bend(const asawa::rod::rod &rod,
-                      std::vector<projection_constraint::ptr> &constraints,
-                      const real &w) {
-  int Ni = rod.corner_count();
-  for (int i = 0; i < rod.corner_count(); i++) {
-    index_t ip = rod.prev(i);
+void init_collisions(asawa::rod::rod &rod, asawa::rod::dynamic &dynamic,
+                     std::vector<projection_constraint::ptr> &constraints,
+                     const real &w) {
+  const std::vector<vec3> &x = rod.__x;
+  vector<std::array<index_t, 4>> collisions = dynamic.get_collisions();
+  for (auto &c : collisions) {
+    if (c[0] > -1) {
+      vec3 xA0 = x[c[0]];
+      vec3 xA1 = x[c[1]];
+      vec3 xB0 = x[c[2]];
+      vec3 xB1 = x[c[3]];
+      if (rod.prev(c[0]) == c[2])
+        continue;
+      if (rod.next(c[1]) == c[3])
+        continue;
+      if (rod.prev(c[0]) == c[3])
+        continue;
+      if (rod.next(c[1]) == c[2])
+        continue;
+      // std::cout << c[0] << " " << c[1] << " - " << c[2] << " " << c[3]
+      //           << std::endl;
 
-    index_t in = rod.next(i);
+      /*
+    std::array<real, 3> d = va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
+    real s = d[1];
+    real t = d[2];
 
-    constraints.push_back(smooth_bend::create({ip, i, in, Ni}, w));
+    vec3 xA = va::mix(s, xA0, xA1);
+    vec3 xB = va::mix(t, xB0, xB1);
+    vec3 xAB = xB - xA;
+
+    real l = xAB.norm();
+    real dl = rod._r - l;
+    if (dl < 0)
+      continue;
+*/
+      constraints.push_back(hepworth::edge_edge_collision::create(
+          {c[0], c[1], c[2], c[3]}, w, 1.0 * rod._r));
+    }
   }
 }
 } // namespace rod

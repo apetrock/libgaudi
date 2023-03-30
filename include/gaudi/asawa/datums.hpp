@@ -39,34 +39,6 @@ public:
   datum(prim_type type) : __type(type){};
   virtual ~datum(){};
 
-  template <class... Types>
-  void calc(index_t i, const shell::shell &M, Types... args) {
-    std::vector<index_t> vector;
-    add_args(vector, args...);
-    assert(!empty(vector));
-    do_calc(M, i, vector);
-  }
-
-  template <class... Types>
-  void calc(index_t i, const rod::rod &R, Types... args) {
-    std::vector<index_t> vector;
-    add_args(vector, args...);
-    assert(!empty(vector));
-    do_calc(R, i, vector);
-  }
-
-  template <typename LastType>
-  static void add_args(std::vector<index_t> &vector, LastType arg) {
-    vector.push_back(arg);
-  };
-
-  template <typename FirstType, typename... OtherTypes>
-  static void add_args(std::vector<index_t> &vector, FirstType const &firstArg,
-                       OtherTypes... otherArgs) {
-    vector.push_back(firstArg);
-    add_args(vector, otherArgs...);
-  };
-
   void alloc(size_t sz) { do_alloc(sz); }
   void resize(size_t sz) { do_resize(sz); }
   void map(index_t i, index_t it) { do_map(i, it); }
@@ -74,10 +46,15 @@ public:
 
   virtual void do_alloc(const size_t &sz) = 0;
   virtual void do_resize(const size_t &sz) = 0;
-  virtual void do_calc(const shell::shell &M, const index_t &i,
-                       const std::vector<index_t> &vals) = 0;
-  virtual void do_calc(const rod::rod &R, const index_t &i,
-                       const std::vector<index_t> &vals) = 0;
+  virtual size_t size() = 0;
+  virtual void calc(const shell::shell &M, const index_t &i, const real &C,
+                    const std::vector<index_t> &vals) = 0;
+
+  virtual void flip(const shell::shell &M, const index_t &i, const real &C,
+                    const std::vector<index_t> &vals) = 0;
+
+  virtual void calc(const rod::rod &R, const index_t &i, const real &C,
+                    const std::vector<index_t> &vals) = 0;
 
   virtual void do_map(const index_t i, const index_t it) = 0;
   virtual void do_permute(const std::vector<index_t> &permute) = 0;
@@ -107,9 +84,27 @@ public:
 
   std::vector<TYPE> &data() { return __data; }
   const std::vector<TYPE> &data() const { return __data; }
+  virtual size_t size() { return __data.size(); };
 
-  virtual void do_calc(const shell::shell &M, const index_t &i,
-                       const std::vector<index_t> &vals) {
+  virtual void calc(const shell::shell &M, const index_t &i, const real &C,
+                    const std::vector<index_t> &vals) {
+    if (__type == VERTEX) {
+      real iN = 1.0 / real(vals.size());
+      TYPE vavg = z::zero<TYPE>();
+      for (const auto &iv : vals) {
+        vavg += iN * __data[iv];
+      }
+      __data[i] = vavg;
+    }
+
+    else if (__type == EDGE || __type == FACE) {
+      TYPE v0 = __data[vals[0]];
+      __data[i] = C * v0;
+    }
+  }
+
+  virtual void calc(const rod::rod &R, const index_t &i, const real &C,
+                    const std::vector<index_t> &vals) {
     real iN = 1.0 / real(vals.size());
     TYPE vavg = z::zero<TYPE>();
     for (const auto &iv : vals) {
@@ -119,16 +114,8 @@ public:
     __data[i] = vavg;
   }
 
-  virtual void do_calc(const rod::rod &R, const index_t &i,
-                       const std::vector<index_t> &vals) {
-    real iN = 1.0 / real(vals.size());
-    TYPE vavg = z::zero<TYPE>();
-    for (const auto &iv : vals) {
-      vavg += iN * __data[iv];
-    }
-
-    __data[i] = vavg;
-  }
+  virtual void flip(const shell::shell &M, const index_t &i, const real &C,
+                    const std::vector<index_t> &vals) {}
 
   virtual void do_alloc(const size_t &sz) {
     __tmp = std::vector<TYPE>(sz, z::zero<TYPE>());
@@ -172,7 +159,7 @@ public:
   std::vector<TYPE> __tmp;
 };
 
-using real_datum = datum_t<real>;
+using scalar_datum = datum_t<real>;
 
 struct vec3_datum : public datum_t<vec3> {
 public:
@@ -186,8 +173,8 @@ public:
       : datum_t<vec3>(type, data){};
   virtual ~vec3_datum(){};
 
-  virtual void do_calc(const shell::shell &M, const index_t &i,
-                       const std::vector<index_t> &vals) {
+  virtual void calc(const shell::shell &M, const index_t &i, const real &C,
+                    const std::vector<index_t> &vals) {
     real w = 0.0;
     vec3 vavg = z::zero<vec3>();
     for (const auto &iv : vals) {
@@ -199,9 +186,20 @@ public:
     this->__data[i] = vavg / w;
   }
 
-  virtual void do_calc(const rod::rod &R, const index_t &i,
-                       const std::vector<index_t> &vals) {}
-};
+  virtual void flip(const shell::shell &M, const index_t &i, const real &C,
+                    const std::vector<index_t> &vals) {}
+
+  virtual void calc(const rod::rod &R, const index_t &i, const real &C,
+                    const std::vector<index_t> &vals) {}
+}; // namespace asawa
+
+std::vector<real> &get_real_data(shell::shell &M, index_t h) {
+  return static_pointer_cast<scalar_datum>(M.get_datum(h))->data();
+}
+
+std::vector<vec3> &get_vec_data(shell::shell &M, index_t h) {
+  return static_pointer_cast<vec3_datum>(M.get_datum(h))->data();
+}
 
 } // namespace asawa
 } // namespace gaudi

@@ -109,6 +109,7 @@ public:
     std::generate_n(std::back_inserter(points), N, randNormalVec(0, 0.5));
     return points;
   }
+  
   std::vector<vec3> get_random_points(const int &N, const ext::extents_t &ext_t,
                                       shell::shell &M,
                                       const std::vector<vec3> &x) {

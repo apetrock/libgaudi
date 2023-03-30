@@ -44,58 +44,6 @@ void debug_shell(shell::shell &M, const std::vector<vec3> verts) {
   }
 }
 
-void center(std::vector<vec3> &coords) {
-  real accum = 0.0;
-  vec3 min = coords[0];
-  vec3 max = coords[0];
-
-  for (auto &c : coords) {
-    min = va::min(c, min);
-    max = va::max(c, max);
-  }
-
-  vec3 dl = (max - min);
-  real maxl = dl[0];
-  maxl = maxl > dl[1] ? maxl : dl[1];
-  maxl = maxl > dl[2] ? maxl : dl[2];
-  real s = 2.0 / maxl;
-  vec3 cen = (0.5 * (max + min) - min) * s;
-  std::cout << " scale: " << s << std::endl;
-  cen -= min;
-  for (auto &c : coords) {
-    c -= min;
-    c = s * c;
-    c -= cen;
-  }
-}
-
-std::array<vec3, 2> extents(std::vector<vec3> &coords) {
-  real accum = 0.0;
-  vec3 min = coords[0];
-  vec3 max = coords[0];
-
-  for (auto &c : coords) {
-    min = va::min(c, min);
-    max = va::max(c, max);
-  }
-  return {min, max};
-}
-
-/*
-std::vector<vec3> get_normals(shell &M, const std::vector<vec3> &x) {
-
-  std::vector<std::vector<int>> faces;
-  for (int i = 0; i < M.face_count(); i++) {
-    std::vector<int> face;
-    if (M.fbegin(i) < 0)
-      continue;
-    M.for_each_face(
-        i, [&face](int ci, asawa::shell &M) { face.push_back(M.vert(ci)); });
-
-    faces.push_back(face);
-  }
-}
-*/
 class spin_twist {
 public:
   spin_twist(real r, vec3 cen, vec3 axis) : __r(r), __cen(cen), __axis(axis) {}
@@ -273,13 +221,13 @@ public:
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
 
     std::vector<vec3> &coords = c_datum->data();
-    center(coords);
+    asawa::center(coords);
 
     /////////
     // twist
     /////////
 
-    std::array<vec3, 2> ext = extents(coords);
+    std::array<vec3, 2> ext = asawa::extents(coords);
     vec3 cen = 0.5 * (ext[1] + ext[0]);
     vec3 de = (ext[1] - ext[0]);
     vec3 twist_axis = vec3(0, 0, 1);
@@ -322,8 +270,8 @@ public:
         static_pointer_cast<vec3_datum>(__M->get_datum(1));
     std::vector<vec3> &dx = v_datum->data();
 
-    real_datum::ptr w_datum =
-        static_pointer_cast<real_datum>(__M->get_datum(_iw));
+    scalar_datum::ptr w_datum =
+        static_pointer_cast<scalar_datum>(__M->get_datum(_iw));
     std::vector<real> &w = w_datum->data();
 
     _twist->get_bounds(x);

@@ -20,11 +20,14 @@ typedef Eigen::Matrix<real, 12, 1> vec12;
 
 typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
 
+typedef Eigen::Matrix<real, 2, 2> mat2;
 typedef Eigen::Matrix<real, 3, 3> mat3;
 typedef Eigen::Matrix<real, 4, 4> mat4;
 typedef Eigen::Matrix<real, 6, 6> mat6;
 typedef Eigen::Matrix<real, 8, 8> mat8;
 typedef Eigen::Matrix<real, 12, 12> mat12;
+
+typedef Eigen::Matrix<real, 3, 2> mat32;
 
 typedef Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> matX;
 
@@ -102,6 +105,47 @@ void split(const vecX &q, std::vector<vec3> &sv, std::vector<quat> &uv) {
 
 std::vector<real> from(vecX U) {
   return std::vector<real>(U.data(), U.data() + U.rows() * U.cols());
+}
+
+class m_solver {
+public:
+  m_solver(matS &A) {
+    __solver.compute(A);
+    if (__solver.info() != Eigen::Success) {
+      // decomposition failed
+      std::cout << ".....decomposition error! " << std::endl;
+    }
+  }
+  vecX solve(vecX &b) {
+    vecX x = __solver.solve(b);
+    if (__solver.info() != Eigen::Success) {
+      // solving failed
+      std::cout << ".....solve error! " << std::endl;
+    }
+    return x;
+  }
+  Eigen::SimplicialLDLT<matS> __solver;
+};
+
+vecX solve(matS &A, vecX &b) {
+
+  // Eigen::ConjugateGradient<matS, Eigen::Upper> solver;
+  Eigen::SimplicialLDLT<matS> solver;
+  solver;
+
+  solver.compute(A);
+
+  if (solver.info() != Eigen::Success) {
+    // decomposition failed
+    std::cout << ".....decomposition error! " << std::endl;
+  }
+  vecX x = solver.solve(b);
+  if (solver.info() != Eigen::Success) {
+    // solving failed
+    std::cout << ".....solve error! " << std::endl;
+  }
+
+  return x;
 }
 
 } // namespace gaudi

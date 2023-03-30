@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cxxabi.h>
@@ -82,7 +83,7 @@ public:
     __data.push_back(datum);
     return __data.size() - 1;
   }
-
+  /*incomplete data, bummer*/
   datum_ptr &get_datum(index_t i) { return __data[i]; }
   std::vector<datum_ptr> &get_data() { return __data; }
 
@@ -444,6 +445,23 @@ public:
     return faces;
   }
 
+  std::vector<index_t> get_one_ring(index_t iv) const {
+    std::vector<index_t> range;
+    this->const_for_each_vertex(iv, [&range](int ci, const shell &M) {
+      range.push_back(M.vert(M.next(ci)));
+    });
+
+    return range;
+  }
+
+  std::array<index_t, 3> get_tri(index_t i) const {
+    std::array<index_t, 3> tri = {-1, -1, -1};
+    index_t j = 0;
+    this->const_for_each_face(
+        i, [&tri, &j](int ci, const shell &M) { tri[j++] = M.vert(ci); });
+    return tri;
+  }
+
   std::vector<index_t> get_range_map(const std::vector<index_t> indices,
                                      int stride) {
     std::vector<index_t> map;
@@ -471,15 +489,15 @@ public:
     for_each_vertex(v, [v](index_t cid, shell &m) { m.set_vert(cid, v); });
   }
 
-  size_t fsize(index_t v) {
+  size_t fsize(index_t v) const {
     size_t s = 0;
-    for_each_face(v, [&s](index_t cid, shell &m) { s++; });
+    const_for_each_face(v, [&s](index_t cid, const shell &m) { s++; });
     return s;
   }
 
-  size_t vsize(index_t v) {
+  size_t vsize(index_t v) const {
     size_t s = 0;
-    for_each_vertex(v, [&s](index_t cid, shell &m) { s++; });
+    const_for_each_vertex(v, [&s](index_t cid, const shell &m) { s++; });
     return s;
   }
 

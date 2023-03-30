@@ -441,7 +441,7 @@ bool corner_in_ring(shell &M, index_t vA, index_t cB) {
   bool hasB = false;
   M.for_each_vertex(vA, [&hasB, cB](index_t ci, shell &M) {
     index_t cBi = M.next(ci);
-    std::cout << cBi << " " << cB << " - ";
+    //std::cout << cBi << " " << cB << " - ";
     hasB |= M.edge_equal(cBi, cB);
   });
   std::cout << std::endl;
@@ -457,7 +457,7 @@ bool adjacent0(shell &M, index_t cA0, index_t cB0) {
   index_t cA1n = M.next(cA1);
   index_t cB0n = M.next(cB0);
   index_t cB1n = M.next(cB1);
-  std::cout << cA0n << " " << cA1n << " - " << cB0n << " " << cB1n << std::endl;
+  //std::cout << cA0n << " " << cA1n << " - " << cB0n << " " << cB1n << std::endl;
   if (M.edge_equal(cA0n, cB0n))
     return true;
   if (M.edge_equal(cA0n, cB1n))
@@ -715,11 +715,7 @@ void pack(shell &M) {
   index_t s = 0;
   index_t e = s + 16;
 
-  std::cout << " indices: ";
-  for (int i = s; i < e /*__corners_next.size()*/; i++) {
-    std::cout << i << " ";
-  }
-  std::cout << std::endl;
+  std::cout << "*--- packing ---*" << std::endl;
 
   auto debug = [s, e](const std::vector<index_t> indices, std::string txt) {
     std::cout << txt << ": ";
@@ -732,26 +728,8 @@ void pack(shell &M) {
     std::cout << std::endl;
   };
 
-  /*
-  std::vector<index_t> cperm = get_pack_permutation(__corners_next);
-  std::vector<index_t> ciperm = inverse_permutation(cperm);
-  apply_permutation(cperm, __corners_next);
-  apply_permutation(cperm, __corners_prev);
-  apply_permutation(cperm, __corners_vert);
-  apply_permutation(cperm, __corners_face);
-
-  apply_inverse_permutation(ciperm, __corners_next);
-  apply_inverse_permutation(ciperm, __corners_prev);
-  apply_inverse_permutation(ciperm, __vert_begin);
-  apply_inverse_permutation(ciperm, __face_begin);
-  */
-
-  // debug(M.vert_begin(), std::string(" before v"));
-  // debug(M.corners_vert(), std::string(" before c"));
   std::vector<index_t> vperm = get_pack_permutation(M.vert_begin());
   std::vector<index_t> viperm = inverse_permutation(vperm);
-  // debug(vperm, std::string(" before  perm"));
-  // debug(viperm, std::string(" before iperm"));
 
   apply_permutation(vperm, M.vert_begin());
   apply_inverse_permutation(viperm, M.corners_vert());
@@ -759,10 +737,10 @@ void pack(shell &M) {
   M.vert_begin().resize(Nv);
 
   for (auto d : M.get_data()) {
-    if (d->type() != asawa::VERTEX)
-      continue;
-    d->permute(vperm);
-    d->resize(Nv);
+    if (d->type() == asawa::VERTEX) {
+      d->permute(vperm);
+      d->resize(Nv);
+    }
   }
 
   // debug(M.vert_begin(), std::string(" after v"));
@@ -770,17 +748,19 @@ void pack(shell &M) {
 
   std::vector<index_t> fperm = get_pack_permutation(M.face_begin());
   std::vector<index_t> fiperm = inverse_permutation(fperm);
+
   apply_permutation(fperm, M.face_begin());
   apply_inverse_permutation(fiperm, M.corners_face());
   size_t Nf = calc_new_size(M.face_begin());
   M.face_begin().resize(Nf);
 
   for (auto d : M.get_data()) {
-    if (d->type() != FACE)
-      continue;
-    d->permute(fperm);
-    d->resize(Nf);
+    if (d->type() == FACE) {
+      d->permute(fperm);
+      d->resize(Nf);
+    }
   }
+
   // std::cout << std::flush;
 }
 

@@ -77,7 +77,7 @@ public:
   std::vector<TYPE> __tree_data;
 };
 
-using real_datum = datum_t<real>;
+using scalar_datum = datum_t<real>;
 using vec3_datum = datum_t<vec3>;
 using mat3_datum = datum_t<mat3>;
 
