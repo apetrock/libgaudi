@@ -611,7 +611,8 @@ inline T distance_from_triangle(const std::array<VEC3<T>, 3> tri, VEC3<T> r0,
 }
 
 template <typename T>
-VEC3<T> closest_point(const std::array<VEC3<T>, 3> tri, const VEC3<T> &p) {
+inline std::array<T, 4> closest_point(const std::array<VEC3<T>, 3> tri,
+                                      const VEC3<T> &p) {
   // https://github.com/juj/MathGeoLib/blob/master/src/Geometry/Triangle.cpp
   /** The code for Triangle-float3 test is from Christer Ericson's Real-Time
    * Collision Detection, pp. 141-142. */
@@ -627,21 +628,24 @@ VEC3<T> closest_point(const std::array<VEC3<T>, 3> tri, const VEC3<T> &p) {
   T d1 = dot(ab, ap);
   T d2 = dot(ac, ap);
   if (d1 <= 0.f && d2 <= 0.f)
-    return a; // Barycentric coordinates are (1,0,0).
+    // Barycentric coordinates are (1,0,0).
+    return {(p - a).norm(), 1.0, 0.0, 0.0};
 
   // Check if P is in vertex region outside B.
   VEC3<T> bp = p - b;
   T d3 = dot(ab, bp);
   T d4 = dot(ac, bp);
   if (d3 >= 0.f && d4 <= d3)
-    return b; // Barycentric coordinates are (0,1,0).
+    // Barycentric coordinates are (0,1,0).
+    return {(p - b).norm(), 0.0, 1.0, 0.0};
 
   // Check if P is in edge region of AB, and if so, return the projection of P
   // onto AB.
   T vc = d1 * d4 - d3 * d2;
   if (vc <= 0.f && d1 >= 0.f && d3 <= 0.f) {
     T v = d1 / (d1 - d3);
-    return a + v * ab; // The barycentric coordinates are (1-v, v, 0).
+    // The barycentric coordinates are (1-v, v, 0).
+    return {(p - (a + v * ab)).norm(), 1.0 - v, v, 0.0};
   }
 
   // Check if P is in vertex region outside C.
@@ -649,14 +653,15 @@ VEC3<T> closest_point(const std::array<VEC3<T>, 3> tri, const VEC3<T> &p) {
   T d5 = dot(ab, cp);
   T d6 = dot(ac, cp);
   if (d6 >= 0.f && d5 <= d6)
-    return c; // The barycentric coordinates are (0,0,1).
+    return {(p - c).norm(), 0.0, 0.0, 1.0};
 
   // Check if P is in edge region of AC, and if so, return the projection of P
   // onto AC.
   T vb = d5 * d2 - d1 * d6;
   if (vb <= 0.f && d2 >= 0.f && d6 <= 0.f) {
     T w = d2 / (d2 - d6);
-    return a + w * ac; // The barycentric coordinates are (1-w, 0, w).
+    // The barycentric coordinates are (1-w, 0, w).
+    return {(p - (a + w * ac)).norm(), 1.0 - w, 0.0, w};
   }
 
   // Check if P is in edge region of BC, and if so, return the projection of P
@@ -664,7 +669,8 @@ VEC3<T> closest_point(const std::array<VEC3<T>, 3> tri, const VEC3<T> &p) {
   T va = d3 * d6 - d5 * d4;
   if (va <= 0.f && d4 - d3 >= 0.f && d5 - d6 >= 0.f) {
     T w = (d4 - d3) / (d4 - d3 + d5 - d6);
-    return b + w * (c - b); // The barycentric coordinates are (0, 1-w, w).
+    // The barycentric coordinates are (0, 1-w, w).
+    return {(p - (b + w * (c - b))).norm(), 0.0, 1.0 - w, w};
   }
 
   // P must be inside the face region. Compute the closest point through its
@@ -672,7 +678,7 @@ VEC3<T> closest_point(const std::array<VEC3<T>, 3> tri, const VEC3<T> &p) {
   T denom = 1.f / (va + vb + vc);
   T v = vb * denom;
   T w = vc * denom;
-  return a + ab * v + ac * w;
+  return {(p - (a + ab * v + ac * w)).norm(), va * denom, v, w};
 }
 
 template <typename T> MAT3<T> rejection_matrix(const VEC3<T> &N) {

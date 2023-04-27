@@ -109,7 +109,7 @@ public:
     }
 
     std::cout << " x norm: " << (q - q0).norm() << std::endl;
-    real damp = 0.5;
+    real damp = 0.05;
     v = (1.0 - damp) / h * (q - q0);
     from(v_, v);
     from(x_, q);

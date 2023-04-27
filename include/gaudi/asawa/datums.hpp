@@ -89,12 +89,16 @@ public:
   virtual void calc(const shell::shell &M, const index_t &i, const real &C,
                     const std::vector<index_t> &vals) {
     if (__type == VERTEX) {
-      real iN = 1.0 / real(vals.size());
-      TYPE vavg = z::zero<TYPE>();
-      for (const auto &iv : vals) {
-        vavg += iN * __data[iv];
-      }
-      __data[i] = vavg;
+      // real iN = 1.0 / real(vals.size());
+      // TYPE vavg = z::zero<TYPE>();
+      // for (const auto &iv : vals) {
+      //   vavg += iN * __data[iv];
+      // }
+      // std::cout << C
+      this->__data[i] =
+          va::mix(C, this->__data[vals[0]], this->__data[vals[1]]);
+      // this->__data[i] = va::mix(C, this->__data[0], this->__data[1]);
+      //__data[i] = vavg;
     }
 
     else if (__type == EDGE || __type == FACE) {
@@ -176,6 +180,7 @@ public:
   virtual void calc(const shell::shell &M, const index_t &i, const real &C,
                     const std::vector<index_t> &vals) {
     real w = 0.0;
+    /*
     vec3 vavg = z::zero<vec3>();
     for (const auto &iv : vals) {
       real wi = vert_area(M, iv, this->__data);
@@ -183,7 +188,8 @@ public:
       w += wi;
       vavg += wi * this->__data[iv];
     }
-    this->__data[i] = vavg / w;
+    */
+    this->__data[i] = va::mix(C, this->__data[vals[0]], this->__data[vals[1]]);
   }
 
   virtual void flip(const shell::shell &M, const index_t &i, const real &C,

@@ -431,12 +431,15 @@ public:
     return range;
   }
 
-  std::vector<index_t> get_face_vert_ids() {
+  std::vector<index_t> get_face_vert_ids(bool filter_tris = false) {
     std::vector<int> faces;
     faces.reserve(3 * face_count());
 
     for (int i = 0; i < face_count(); i++) {
       if (fbegin(i) < 0)
+        continue;
+
+      if (filter_tris && fsize(i) != 3)
         continue;
 
       for_each_face(
@@ -463,13 +466,17 @@ public:
   }
 
   std::vector<index_t> get_range_map(const std::vector<index_t> indices,
-                                     int stride) {
+                                     int stride, bool filter_tris = false) {
     std::vector<index_t> map;
     map.reserve(indices.size() / stride);
     // replace this with some c++isms
     for (int i = 0; i < indices.size(); i += stride) {
       if (indices[i] < 0)
         continue;
+
+      if (filter_tris && fsize(i) != 3)
+        continue;
+
       map.push_back(i);
     }
     return map;
@@ -479,7 +486,9 @@ public:
     return get_range_map(__corners_next, 2);
   }
   std::vector<index_t> get_vert_map() { return get_range_map(__vert_begin, 1); }
-  std::vector<index_t> get_face_map() { return get_range_map(__face_begin, 1); }
+  std::vector<index_t> get_face_map(bool filter_tris = false) {
+    return get_range_map(__face_begin, 1, filter_tris);
+  }
 
   void fupdate(index_t f) {
     for_each_face(f, [f](index_t cid, shell &m) { m.set_face(cid, f); });

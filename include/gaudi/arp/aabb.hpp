@@ -487,13 +487,14 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
           dmin = dist;
           idMin = idS;
         }
-        if (dist < tol)
+        if (dist < tol) {
           collisions.push_back(idS);
+        }
       }
     }
 
     index_t itx = cnode.half.intersect(extT);
-
+    
     if (itx <= 0 && cnode.children[0] > 0) {
       cstack.push(cnode.children[0]);
     }
@@ -502,7 +503,12 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
       cstack.push(cnode.children[1]);
     }
   }
-  collisions.push_back(idMin);
+
+  if (dmin < tol) {
+    collisions.push_back(idMin);
+  } else
+    collisions.push_back(-1);
+
   return collisions;
 };
 #endif

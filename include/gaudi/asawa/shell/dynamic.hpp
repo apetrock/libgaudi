@@ -104,8 +104,9 @@ real line_line_min(const index_t &idT, //
   real d1 = 1.0 / 2.0 * ((xB0 - xA1).norm() + (xB1 - xA0).norm());
   return min(d0, d1);
 #else
-  real d0 = (0.5 * (xA1 + xA0) - 0.5 * (xB1 + xA0)).norm();
-  return d0;
+  // real d0 = (0.5 * (xA1 + xA0) - 0.5 * (xB1 + xA0)).norm();
+  std::array<real, 3> d = va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
+  return d[0];
 #endif
 };
 
@@ -138,8 +139,10 @@ real pnt_tri_min(const index_t &idT, //
 #else
   // vec3 xN;
   // real d0 = va::distance_from_triangle({xt0, xt1, xt2}, x0, xN);
-  vec3 xN = va::closest_point({xt0, xt1, xt2}, x0);
-  return (xN - x0).norm();
+  std::array<real, 4> cp = va::closest_point({xt0, xt1, xt2}, x0);
+  vec3 xT = cp[1] * xt0 + cp[2] * xt1 + cp[3] * xt2;
+
+  return cp[0];
 #endif
 };
 
@@ -196,16 +199,18 @@ void debug_edge_normal(shell &M,          //
 };
 
 template <int OP, int C_ALLOC, int V_ALLOC, int F_ALLOC, int MSIZE>
-void op_edges(shell &M, //
-              std::vector<index_t> &edges_to_op, const std::vector<vec3> &x,
-              std::function<std::array<index_t, MSIZE>(
-                  index_t i,                         //
-                  index_t cs,                        //
-                  index_t vs,                        //
-                  index_t fs,                        //
-                  const std::vector<index_t> &edges, //
-                  shell &m)>
-                  func) {
+std::vector<std::array<index_t, MSIZE>> //
+op_edges(shell &M,                      //
+         std::vector<index_t> &edges_to_op, std::vector<real> &S,
+         const std::vector<vec3> &x,
+         std::function<
+             std::array<index_t, MSIZE>(index_t i,                         //
+                                        index_t cs,                        //
+                                        index_t vs,                        //
+                                        index_t fs,                        //
+                                        const std::vector<index_t> &edges, //
+                                        shell &m)>
+             func) {
   int STRIDE = OP < 2 ? 1 : 2;
   size_t cstart = M.corner_count();
   size_t estart = M.corner_count() / 2;
@@ -234,6 +239,8 @@ void op_edges(shell &M, //
 
       if (d->type() == EDGE) {
         if (OP == 0) {
+          real s0 = S[i];
+          real s1 = 1.0 - s0;
           index_t c0 = edges_to_op[i];
           index_t c1 = M.other(c0);
           index_t c0p = M.prev(c0);
@@ -245,14 +252,17 @@ void op_edges(shell &M, //
           real l0 = (x1 - x0).norm();
           real l1 = (x3 - x2).norm();
           real C = l1 / l0;
-          d->calc(M, estart + 3 * i + 0, 0.5, {c0 / 2});
+          d->calc(M, estart + 3 * i + 0, s1, {c0 / 2});
           d->calc(M, estart + 3 * i + 1, 0.5 * C, {c0 / 2});
           d->calc(M, estart + 3 * i + 2, 0.5 * C, {c0 / 2});
-          d->calc(M, c0 / 2, 0.5, {c0 / 2});
+          d->calc(M, c0 / 2, s0, {c0 / 2});
         }
       }
 
       if (d->type() == FACE) {
+        real s0 = S[i];
+        real s1 = 1.0 - s0;
+
         index_t c0 = edges_to_op[i];
         index_t c1 = M.other(c0);
         index_t f0 = M.face(c0);
@@ -260,10 +270,10 @@ void op_edges(shell &M, //
         real a0 = face_area(M, f0, x);
         real a1 = face_area(M, f1, x);
 
-        d->calc(M, f0, 0.5, {c0 / 2});
-        d->calc(M, f1, 0.5, {c0 / 2});
-        d->calc(M, fstart + 2 * i + 0, 0.5, {c0 / 2});
-        d->calc(M, fstart + 2 * i + 1, 0.5, {c0 / 2});
+        d->calc(M, f0, s0, {c0 / 2});
+        d->calc(M, f1, s0, {c0 / 2});
+        d->calc(M, fstart + 2 * i + 0, s1, {c0 / 2});
+        d->calc(M, fstart + 2 * i + 1, s1, {c0 / 2});
       }
 
       if (d->type() == VERTEX) {
@@ -271,20 +281,20 @@ void op_edges(shell &M, //
           // subd
           index_t c0 = edges_to_op[i];
           index_t c1 = M.other(c0);
-          d->calc(M, vstart + i, 1.0, {M.vert(c0), M.vert(c1)});
+          d->calc(M, vstart + i, S[i], {M.vert(c0), M.vert(c1)});
         } else if (OP == 1) {
           // collapse
           index_t c0 = edges_to_op[i];
           index_t c1 = M.other(c0);
-          d->calc(M, M.vert(c1), 1.0, {M.vert(c0), M.vert(c1)});
+          d->calc(M, M.vert(c1), 0.5, {M.vert(c0), M.vert(c1)});
         } else if (OP == 2) {
           // merge
           index_t cA0 = edges_to_op[i + 0];
           index_t cA1 = M.other(cA0);
           index_t cB0 = edges_to_op[i + 1];
           index_t cB1 = M.other(cB0);
-          d->calc(M, M.vert(cA0), 1.0, {M.vert(cA0), M.vert(cB0)});
-          d->calc(M, M.vert(cA1), 1.0, {M.vert(cA1), M.vert(cB1)});
+          d->calc(M, M.vert(cA0), 0.5, {M.vert(cA0), M.vert(cB0)});
+          d->calc(M, M.vert(cA1), 0.5, {M.vert(cA1), M.vert(cB1)});
           // d->calc(M.vert(cB0), M, M.vert(cA0), M.vert(cB0));
           // d->calc(M.vert(cB1), M, M.vert(cA1), M.vert(cB1));
 
@@ -297,13 +307,20 @@ void op_edges(shell &M, //
 
   //#pragma omp parallel for shared(post_edges)
   // before parallelize, need to preallocate;
+  std::vector<std::array<index_t, MSIZE>> collection(edges_to_op.size());
+
   for (index_t i = 0; i < edges_to_op.size(); i += STRIDE) {
     index_t ic0 = edges_to_op[i];
     //#pragma omp critical
-    if (M.next(ic0) < 0)
+    if (M.next(ic0) < 0) {
+      collection[i].fill(-1);
       continue;
+    }
+
     auto p = func(i, cstart, vstart, fstart, edges_to_op, M);
+    collection[i] = p;
   }
+  return collection;
 }
 
 // template <int STRIDE, int C_ALLOC, int V_ALLOC, int F_ALLOC, int MSIZE>
@@ -319,7 +336,8 @@ void subdivide_edges(shell &M) {
   edges_to_divide.push_back(8);
   edges_to_divide.push_back(13);
   edges_to_divide.push_back(21);
-  subdivide_op(M, edges_to_divide, x,
+  std::vector<real> S(edges_to_divide.size(), 0.5);
+  subdivide_op(M, edges_to_divide, S, x,
                [](index_t i,  //
                   index_t cs, //
                   index_t vs, //
@@ -337,7 +355,9 @@ void collapse_edges(shell &M) {
   // edges_to_divide.push_back(9);
   //  edges_to_divide.push_back(14);
   edges_to_divide.push_back(22);
-  collapse_op(M, edges_to_divide, x,
+
+  std::vector<real> S(edges_to_divide.size(), 0.5);
+  collapse_op(M, edges_to_divide, S, x,
               [](index_t i,  //
                  index_t cs, //
                  index_t vs, //
@@ -563,7 +583,7 @@ public:
                                      vec3 NB = edge_normal(M, p[1], x);
                                      real angle = va::dot(NA, NB);
 
-                                     if (angle > -0.5) {
+                                     if (angle > -0.0) {
                                        return true;
                                      }
 
@@ -578,18 +598,6 @@ public:
                                      return false;
                                    }),
                     collected.end());
-    /*
-    std::sort(collected.begin(), collected.end(),
-              [&M, &x](const auto &pA, const auto &pB) {
-                real dA = dist_line_line(M, pA[0], pA[1], x);
-                real dB = dist_line_line(M, pB[0], pB[1], x);
-                return dA < dB;
-              });
-
-    auto it = std::unique(collected.begin(), collected.end());
-
-    collected.erase(it, collected.end());
-    */
   }
 
   vector<std::array<index_t, 2>>
@@ -622,7 +630,6 @@ public:
       }
     }
 
-    trim_edge_edge_collected(M, x, collected);
     return collected;
   }
 
@@ -632,10 +639,10 @@ public:
     std::vector<index_t> verts = __M->get_vert_range();
     std::vector<index_t> verts_map = __M->get_vert_map();
 
-    std::vector<index_t> face_verts = __M->get_face_vert_ids();
-    std::vector<index_t> face_map = __M->get_face_map();
+    std::vector<index_t> face_verts = __M->get_face_vert_ids(true);
+    std::vector<index_t> face_map = __M->get_face_map(true);
 
-    arp::aabb_tree<3>::ptr tri_tree =
+    arp::aabb_tree<3>::ptr face_tree =
         arp::aabb_tree<3>::create(face_verts, x, 16);
 
     std::vector<std::array<index_t, 2>> collected(verts.size());
@@ -643,14 +650,17 @@ public:
     for (int i = 0; i < verts.size(); i++) {
       std::vector<index_t> collisions =
           arp::getNearest<1, 3>(i, verts, x, //
-                                *tri_tree,   //
+                                *face_tree,  //
                                 tol, &pnt_tri_min);
+
       for (index_t iti : collisions) {
         index_t iv = verts_map[i];
         index_t it = -1;
+
         if (iti > 0) {
           it = face_map[iti];
         }
+
         collected[i] = {iv, it};
       }
     }
@@ -663,7 +673,9 @@ public:
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-    return get_edge_edge_collisions(M, x, tol);
+    std::vector<std::array<index_t, 2>> collected =
+        get_edge_edge_collisions(M, x, tol);
+    return collected;
   }
 
   vector<std::array<index_t, 2>> get_pnt_tri_collisions(real tol) {
@@ -684,14 +696,15 @@ public:
     // edge_tree->debug();
     real tol = 0.25 * this->_Cm * this->_Cm;
     auto collected = get_edge_edge_collisions(M, x, tol);
+    trim_edge_edge_collected(M, x, collected);
 
     std::vector<index_t> f_collect(2 * collected.size());
     for (int i = 0; i < collected.size(); i++) {
       f_collect[2 * i + 0] = collected[i][0];
       f_collect[2 * i + 1] = collected[i][1];
     }
-
-    merge_op(*__M, f_collect, x,
+    std::vector<real> S(f_collect.size(), 0.5);
+    merge_op(*__M, f_collect, S, x,
              [&x, tol](index_t i,                         //
                        index_t cs,                        //
                        index_t vs,                        //
@@ -748,7 +761,8 @@ public:
       f_collect[2 * i + 1] = collected[i][1];
     }
 
-    merge_op(*__M, f_collect, x,
+    std::vector<real> S(f_collect.size(), 0.5);
+    merge_op(*__M, f_collect, S, x,
              [&x](index_t i,                         //
                   index_t cs,                        //
                   index_t vs,                        //
@@ -872,7 +886,8 @@ public:
 
     std::vector<index_t> edges_to_divide = gather_edges<comp_great>(*__M, cmp);
 
-    subdivide_op(*__M, edges_to_divide, x,
+    std::vector<real> S(edges_to_divide.size(), 0.5);
+    subdivide_op(*__M, edges_to_divide, S, x,
                  [](index_t i,  //
                     index_t cs, //
                     index_t vs, //
@@ -896,7 +911,8 @@ public:
 
     std::vector<index_t> edges_to_divide = gather_edges<comp_less>(*__M, cmp);
 
-    collapse_op(*__M, edges_to_divide, x,
+    std::vector<real> S(edges_to_divide.size(), 0.5);
+    collapse_op(*__M, edges_to_divide, S, x,
                 [](index_t i,  //
                    index_t cs, //
                    index_t vs, //

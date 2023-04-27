@@ -23,8 +23,6 @@
 namespace gaudi {
 namespace hepworth {
 
-/*TODO: this assumes a tube, appropriate for rods, need normals to properly use
- * on meshes*/
 class edge_edge_collision : public projection_constraint {
 public:
   typedef std::shared_ptr<edge_edge_collision> ptr;
@@ -82,15 +80,15 @@ public:
                                 xB1 + 0.5 * b1 * dl * xAB,
                                 vec4(1.0, 0.0, 1.0, 1.0));
       vec3 dX = 1.0 * dl * xAB;
-      p.block(_id0 + 0, 0, 3, 1) += _w * (xA0 - a0 * dX);
-      p.block(_id0 + 3, 0, 3, 1) += _w * (xA1 - a1 * dX);
-      p.block(_id0 + 6, 0, 3, 1) += _w * (xB0 + b0 * dX);
-      p.block(_id0 + 9, 0, 3, 1) += _w * (xB1 + b1 * dX);
+      p.block(_id0 + 0, 0, 3, 1) = _w * (xA0 - a0 * dX);
+      p.block(_id0 + 3, 0, 3, 1) = _w * (xA1 - a1 * dX);
+      p.block(_id0 + 6, 0, 3, 1) = _w * (xB0 + b0 * dX);
+      p.block(_id0 + 9, 0, 3, 1) = _w * (xB1 + b1 * dX);
     } else {
-      p.block(_id0 + 0, 0, 3, 1) += _w * xA0;
-      p.block(_id0 + 3, 0, 3, 1) += _w * xA1;
-      p.block(_id0 + 6, 0, 3, 1) += _w * xB0;
-      p.block(_id0 + 9, 0, 3, 1) += _w * xB1;
+      p.block(_id0 + 0, 0, 3, 1) = _w * xA0;
+      p.block(_id0 + 3, 0, 3, 1) = _w * xA1;
+      p.block(_id0 + 6, 0, 3, 1) = _w * xB0;
+      p.block(_id0 + 9, 0, 3, 1) = _w * xB1;
     }
     //    p.block(3 * j, 0, 3, 1) = -_w * dq / l;
   }
@@ -120,12 +118,14 @@ class edge_edge_normal_collision : public projection_constraint {
 public:
   typedef std::shared_ptr<edge_edge_normal_collision> ptr;
 
-  static ptr create(const std::vector<index_t> &ids, const real &w) {
-    return std::make_shared<edge_edge_normal_collision>(ids, w);
+  static ptr create(const std::vector<index_t> &ids, const real &eps,
+                    const real &w) {
+    return std::make_shared<edge_edge_normal_collision>(ids, eps, w);
   }
 
-  edge_edge_normal_collision(const std::vector<index_t> &ids, const real &w)
-      : projection_constraint(ids, w) {}
+  edge_edge_normal_collision(const std::vector<index_t> &ids, const real &eps,
+                             const real &w)
+      : projection_constraint(ids, w), _eps(eps) {}
 
   virtual void project(const vecX &q, vecX &p) {
     index_t i00 = this->_ids[0];
@@ -156,7 +156,7 @@ public:
     vec3 dA = (x01 - x00).normalized();
     vec3 dB = (x11 - x10).normalized();
 
-    vec3 xAB = xB - xA;
+    vec3 xAB = xA - xB;
 
     real l = xAB.norm();
 
@@ -168,34 +168,41 @@ public:
     vec3 N11 = (x11p - x11).cross(x10 - x11).normalized();
     vec3 N1 = (N10 + N11).normalized();
 
-    real h = N1.dot(xAB / l);
-    if (h >= 0) {
+    real h = N1.dot(xAB) - _eps;
+    if (h < 0) {
+      real dp = 1e-7;
+      real db = pow(l - dp, 2) * log(l / dp); // barrier potential...
+      // vec3 dX = db * xAB / l;
+      vec3 dX = xAB - _eps * xAB / l;
+
+      gg::geometry_logger::line(xA, xB, vec4(1.0, 0.0, 0.0, 1.0));
+      gg::geometry_logger::line(xA, xA - dX, vec4(0.5, 0.2, 0.0, 1.0));
+      gg::geometry_logger::line(xB, xB + dX, vec4(0.5, 0.0, 0.2, 1.0));
+
       gg::geometry_logger::line(x00, x01, vec4(0.0, 1.0, 0.5, 1.0));
       gg::geometry_logger::line(x10, x11, vec4(1.0, 0.5, 1.0, 1.0));
 
-      gg::geometry_logger::line(xA, xB, vec4(1.0, 0.0, 1.0, 1.0));
-      gg::geometry_logger::line(xB, xB + 0.05 * N1, vec4(0.0, 0.5, 0.5, 1.0));
-      gg::geometry_logger::line(xB, xB + 0.05 * N10, vec4(1.0, 1.0, 0.0, 1.0));
-      gg::geometry_logger::line(xB, xB + 0.05 * N11, vec4(0.0, 1.0, 1.0, 1.0));
-      p.block(_id0 + 0, 0, 3, 1) += _w * (x00 - a0 * xAB);
-      p.block(_id0 + 3, 0, 3, 1) += _w * (x01 - a1 * xAB);
-      p.block(_id0 + 6, 0, 3, 1) += _w * (x00 + b0 * xAB);
-      p.block(_id0 + 9, 0, 3, 1) += _w * (x01 + b1 * xAB);
+      p.block(_id0 + 0, 0, 3, 1) = _w * (x00 - a0 * dX);
+      p.block(_id0 + 3, 0, 3, 1) = _w * (x01 - a1 * dX);
+      p.block(_id0 + 6, 0, 3, 1) = _w * (x10 + b0 * dX);
+      p.block(_id0 + 9, 0, 3, 1) = _w * (x11 + b1 * dX);
     } else {
-      p.block(_id0 + 0, 0, 3, 1) += _w * x00;
-      p.block(_id0 + 3, 0, 3, 1) += _w * x01;
-      p.block(_id0 + 6, 0, 3, 1) += _w * x00;
-      p.block(_id0 + 9, 0, 3, 1) += _w * x01;
+
+      gg::geometry_logger::line(xA, xB, vec4(0.0, 1.0, 0.0, 1.0));
+      p.block(_id0 + 0, 0, 3, 1) = _w * x00;
+      p.block(_id0 + 3, 0, 3, 1) = _w * x01;
+      p.block(_id0 + 6, 0, 3, 1) = _w * x10;
+      p.block(_id0 + 9, 0, 3, 1) = _w * x11;
     }
     //    p.block(3 * j, 0, 3, 1) = -_w * dq / l;
   }
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
     _id0 = id0;
     index_t iA0 = this->_ids[0];
-    index_t iA1 = this->_ids[1];
+    index_t iA1 = this->_ids[2];
 
-    index_t iB0 = this->_ids[2];
-    index_t iB1 = this->_ids[3];
+    index_t iB0 = this->_ids[4];
+    index_t iB1 = this->_ids[6];
     for (int ax = 0; ax < 3; ax++)
       triplets.push_back(trip(_id0 + 0 + ax, 3 * iA0 + ax, _w));
     for (int ax = 0; ax < 3; ax++)
@@ -207,18 +214,21 @@ public:
       triplets.push_back(trip(_id0 + 9 + ax, 3 * iB1 + ax, _w));
     id0 += 12;
   }
+  real _eps;
 };
 
 class pnt_tri_collision : public projection_constraint {
 public:
   typedef std::shared_ptr<pnt_tri_collision> ptr;
 
-  static ptr create(const std::vector<index_t> &ids, const real &w) {
-    return std::make_shared<pnt_tri_collision>(ids, w);
+  static ptr create(const std::vector<index_t> &ids, const vec3 &Nv,
+                    const real &eps, const real &w) {
+    return std::make_shared<pnt_tri_collision>(ids, Nv, eps, w);
   }
 
-  pnt_tri_collision(const std::vector<index_t> &ids, const real &w)
-      : projection_constraint(ids, w) {}
+  pnt_tri_collision(const std::vector<index_t> &ids, const vec3 &Nv,
+                    const real &eps, const real &w)
+      : projection_constraint(ids, w), _Nv(Nv), _eps(eps) {}
 
   virtual void project(const vecX &q, vecX &p) {
     index_t iP = this->_ids[0];
@@ -234,28 +244,42 @@ public:
     vec3 c = 0.3333 * (xT0 + xT1 + xT2);
     // vec3 xN;
     // real d0 = va::distance_from_triangle({xT0, xT1, xT2}, xP, xN);
-    vec3 xN = va::closest_point({xT0, xT1, xT2}, xP);
-    vec3 N = (xT1 - xT0).cross(xT2 - xT0).normalized();
-    vec3 dx = (xP - xN).normalized();
-    real h = N.dot(dx);
-    // gg::geometry_logger::line(c, c + 0.1 * N, vec4(1.0, 0.0, 0.0, 1.0));
-    //  gg::geometry_logger::line(xT0, xT1, vec4(1.0, 0.5, 0.0, 1.0));
-    //  gg::geometry_logger::line(xT0, xT2, vec4(1.0, 0.5, 0.0, 1.0));
-    //   gg::geometry_logger::line(xP, xN, vec4(0.5, 0.0, 1.0, 1.0));
+    std::array<real, 4> cp = va::closest_point({xT0, xT1, xT2}, xP);
+    real u = cp[1];
+    real v = cp[2];
+    real w = cp[3];
 
-    if (h < 0) {
-      gg::geometry_logger::line(xP, xN, vec4(1.0, 0.0, 0.0, 1.0));
-      p.block(_id0 + 0, 0, 3, 1) += _w * xN;
-      p.block(_id0 + 3, 0, 3, 1) += _w * xT0;
-      p.block(_id0 + 6, 0, 3, 1) += _w * xT1;
-      p.block(_id0 + 9, 0, 3, 1) += _w * xT2;
+    vec3 xN = u * xT0 + v * xT1 + w * xT2;
+
+    vec3 N = (xT1 - xT0).cross(xT2 - xT0).normalized();
+    vec3 dx = (xP - xN);
+    real d = dx.norm();
+    real h = -va::sgn(_Nv.dot(dx)) * N.dot(dx);
+    real db = pow(h - _eps, 2) * log(h / _eps); // barrier potential...
+
+    if (h < _eps + db) {
+      db = d + _eps;
+      real dh = (_eps - h) + db;
+      // gg::geometry_logger::line(xP, xP + db * N, vec4(1.0, 0.0, 0.0, 1.0));
+      // gg::geometry_logger::line(xN, xN + dx, vec4(1.0, 0.0, 0.0, 1.0));
+      // gg::geometry_logger::line(xN, xN + _eps * N, vec4(1.0, 1.0, 0.0, 1.0));
+      // gg::geometry_logger::line(xT0, xT1, vec4(0.75, 0.0, 0.25, 1.0));
+      // gg::geometry_logger::line(xT1, xT2, vec4(0.75, 0.0, 0.25, 1.0));
+      // gg::geometry_logger::line(xT2, xT0, vec4(0.75, 0.0, 0.25, 1.0));
+      vec3 Nt = dx.normalized();
+      p.block(_id0 + 0, 0, 3, 1) = _w * (xN + dh * Nt);
+      p.block(_id0 + 3, 0, 3, 1) = _w * (xT0 - u * dh * Nt);
+      p.block(_id0 + 6, 0, 3, 1) = _w * (xT1 - v * dh * Nt);
+      p.block(_id0 + 9, 0, 3, 1) = _w * (xT2 - w * dh * Nt);
 
     } else {
-      gg::geometry_logger::line(xP, xN, vec4(0.0, 1.0, 0.0, 1.0));
-      p.block(_id0 + 0, 0, 3, 1) += _w * xP;
-      p.block(_id0 + 3, 0, 3, 1) += _w * xT0;
-      p.block(_id0 + 6, 0, 3, 1) += _w * xT1;
-      p.block(_id0 + 9, 0, 3, 1) += _w * xT2;
+      // gg::geometry_logger::line(xN, xN + dx, vec4(0.0, 1.0, 0.0, 1.0));
+      // gg::geometry_logger::line(xN, xN + _eps * N, vec4(1.0, 1.0, 0.0, 1.0));
+
+      p.block(_id0 + 0, 0, 3, 1) = _w * xP;
+      p.block(_id0 + 3, 0, 3, 1) = _w * xT0;
+      p.block(_id0 + 6, 0, 3, 1) = _w * xT1;
+      p.block(_id0 + 9, 0, 3, 1) = _w * xT2;
     }
   }
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
@@ -275,6 +299,8 @@ public:
       triplets.push_back(trip(_id0 + 9 + ax, 3 * iT2 + ax, _w));
     id0 += 12;
   }
+  vec3 _Nv;
+  real _eps;
 };
 
 } // namespace hepworth

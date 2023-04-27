@@ -108,21 +108,45 @@ public:
     solver.set_mass(m);
 
     int i = 0;
-    for (auto &l : l0)
-      l *= 1.0 + 0.01;
+    auto range = __M->get_edge_range();
+    for (auto c0 : range) {
+      if (std::isnan(l0[c0 / 2]))
+        continue;
+      real ct = asawa::shell::cotan(*__M, c0, x);
+      // real ctp = (ct - 0.1) * (ct - 0.3) * (ct - 0.4);
+      real a = 3.0;
+      real b = 3.5;
+      real c = -1.0;
+      real d = -0.2;
+      real e = 0.1;
+      real ctp = a * pow(ct, 4.0) + //
+                 b * pow(ct, 3.0) + //
+                 c * pow(ct, 2.0) + //
+                 d * ct +           //
+                 e;
+      // real ctp = 0.5 * exp(2.0 * ct - 3.0);
+
+      std::cout << ct << " " << ctp << std::endl;
+      l0[c0 / 2] *= 1 + 0.01 * ctp;
+    }
+    //    for (auto &l : l0) {
+    //      l *= 1.01;
+    //    }
 
     std::cout << "l[0]: " << l0[0] << std::endl;
-    hepworth::shell::init_edge_strain(*__M, constraints, x, l0, 1.02, 1.0e-4);
-    hepworth::shell::init_pinned(*__M, constraints, x, 1.0e-0);
+    hepworth::shell::init_edge_growth(*__M, constraints, x, l0, 1.01, 1.0e-3);
+    hepworth::shell::init_pinned(*__M, constraints, x, 4.0e0);
     hepworth::shell::init_bending(*__M, constraints, x, 1.0e-3);
-    hepworth::shell::init_laplacian(*__M, constraints, x, 3.0e-1, true);
-    hepworth::shell::init_area(*__M, constraints, x, 5.0e-3);
+    hepworth::shell::init_laplacian(*__M, constraints, x, 1.25e-3, true);
+    hepworth::shell::init_area(*__M, constraints, x, 6.0e-1);
 
     //  hepworth::shell::init_cross(*__M, constraints, 1.05, 0.1);
-    hepworth::shell::init_edge_edge_collisions(*__M, *__surf, constraints, x,
-                                               1.0 * __surf->_Cm, 1.2);
-    hepworth::shell::init_pnt_tri_collisions(*__M, *__surf, constraints, x,
-                                             1.0 * __surf->_Cm, 1.2);
+    real eps = 1.5 * __surf->_Cm;
+    // hepworth::shell::init_edge_edge_collisions(*__M, *__surf, constraints,
+    // x,
+    //                                            eps, 0.5 * eps, 1.0e0);
+    hepworth::shell::init_pnt_tri_collisions(*__M, *__surf, constraints, x, eps,
+                                             0.5 * eps, 10.0);
     solver.set_constraints(constraints);
 
     real bnd = 2.0;

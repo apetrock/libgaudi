@@ -1,3 +1,4 @@
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -5,8 +6,11 @@
 
 #include <execinfo.h>
 #include <iostream>
+#include <map>
 #include <memory.h>
 #include <ostream>
+#include <set>
+#include <stack>
 #include <stdio.h>
 #include <vector>
 #include <zlib.h>
@@ -71,7 +75,7 @@ real cotan(const shell &M, index_t ci, const std::vector<vec3> &x) {
   // return va::cotan(x0, xp, xn);
 }
 
-vec3 edge_dir(const shell &M, index_t c0, const std::vector<vec3> &x) {
+vec3 edge_tangent(const shell &M, index_t c0, const std::vector<vec3> &x) {
   index_t c1 = M.other(c0);
   return x[M.vert(c0)] - x[M.vert(M.next(c0))];
 }
@@ -217,7 +221,7 @@ std::vector<real> align_edges(shell &M, const std::vector<vec3> &x) {
   std::vector<real> ws(range.size());
   int i = 0;
   for (auto ci : range) {
-    vec3 dx = edge_dir(M, ci, x);
+    vec3 dx = edge_tangent(M, ci, x);
 
     vec3 xf0 = x[M.vert(ci)];
     vec3 xf1 = x[M.vert(M.next(ci))];
@@ -252,12 +256,12 @@ std::vector<real> edge_areas(const shell &M, const std::vector<vec3> &x) {
   return ws;
 }
 
-std::vector<vec3> edge_dirs(const shell &M, const std::vector<vec3> &x) {
+std::vector<vec3> edge_tangents(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
   std::vector<vec3> dirs(range.size());
   int i = 0;
   for (auto ci : range) {
-    dirs[i++] = edge_dir(M, ci, x);
+    dirs[i++] = edge_tangent(M, ci, x);
   }
   return dirs;
 }
@@ -345,7 +349,6 @@ ext::extents_t ext(const shell &M, const std::vector<vec3> &x) {
   }
   return ext;
 }
-#if 1
 
 std::vector<vec3> gradient(shell &M, const std::vector<real> &u,
                            const std::vector<vec3> &x) {
@@ -374,8 +377,8 @@ std::vector<vec3> gradient(shell &M, const std::vector<real> &u,
     vec3 N0 = face_normal(M, M.face(c0), x);
     vec3 N1 = face_normal(M, M.face(c1), x);
 
-    vec3 dp0 = edge_dir(M, c0, x);
-    vec3 dp1 = edge_dir(M, c1, x);
+    vec3 dp0 = edge_tangent(M, c0, x);
+    vec3 dp1 = edge_tangent(M, c1, x);
 
     // real sgn = va::sgn(N0, N1, dp);
     vec3 M0 = dp0.cross(N0);
@@ -421,7 +424,7 @@ std::vector<real> divergence(shell &M, const std::vector<vec3> &g,
     vec3 g1 = g[M.face(c1)];
 
     vec3 dp = v1 - v0;
-    vec3 dp0 = edge_dir(M, c0, x);
+    vec3 dp0 = edge_tangent(M, c0, x);
     real s = va::sgn(dp0.dot(dp));
 
     real cot0 = cotan(M, c0, x);
@@ -435,7 +438,6 @@ std::vector<real> divergence(shell &M, const std::vector<vec3> &g,
 
   return divu;
 }
-#endif
 
 } // namespace shell
 } // namespace asawa

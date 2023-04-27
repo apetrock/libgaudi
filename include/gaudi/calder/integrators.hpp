@@ -96,7 +96,7 @@ std::vector<real> fast_winding(asawa::shell::shell &M,
 std::vector<mat3> fast_frame(asawa::shell::shell &M, const std::vector<vec3> &x,
                              const std::vector<vec3> &p_pov,
                              const std::vector<vec3> &p_normals, real l0) {
-  std::vector<vec3> E = asawa::shell::edge_dirs(M, x);
+  std::vector<vec3> E = asawa::shell::edge_tangents(M, x);
   std::vector<real> w = asawa::shell::edge_cotan_weights(M, x);
   std::vector<real> wa = asawa::shell::edge_areas(M, x);
 

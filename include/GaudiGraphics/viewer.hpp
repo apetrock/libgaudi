@@ -224,7 +224,7 @@ public:
 
   typedef double Real;
 
-  SimpleApp(int w = 1280, int h = 720, double d = 4.0)
+  SimpleApp(int w = 1280, int h = 720, double d = 4.0, bool grab = true)
       : _width(w),
         _height(h), nanogui::Screen(Eigen::Vector2i(w, h), "App Simple") {
     using namespace nanogui;
@@ -245,7 +245,8 @@ public:
     glDepthFunc(GL_LESS);
     // Cull triangles which normal is not towards the camera
     glEnable(GL_CULL_FACE);
-    _frameGrabber = FrameGrabber::create(_width, _height);
+    if (grab)
+      _frameGrabber = FrameGrabber::create(_width, _height);
   }
 
   ~SimpleApp() {}
@@ -326,7 +327,7 @@ public:
 
     glDisable(GL_DEPTH_TEST);
 
-    if (this->_animate) {
+    if (this->_animate && _frameGrabber) {
       _frameGrabber->onFrame();
     }
 
