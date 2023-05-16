@@ -160,11 +160,16 @@ vec3 edge_normal(const shell &M, index_t c0, const std::vector<vec3> &x) {
   return N.normalized();
 }
 
-vec3 edge_center(const shell &M, index_t c0, const std::vector<vec3> &x) {
+vec3 edge_vert(const shell &M, index_t c0, const real &s,
+               const std::vector<vec3> &x) {
   index_t c1 = M.other(c0);
   vec3 x0 = x[M.vert(c0)];
   vec3 x1 = x[M.vert(c1)];
-  return 0.5 * (x0 + x1);
+  return va::mix(s, x0, x1);
+}
+
+vec3 edge_center(const shell &M, index_t c0, const std::vector<vec3> &x) {
+  return edge_vert(M, c0, 0.5, x);
 }
 
 real edge_length(const shell &M, index_t c0, const std::vector<vec3> &x) {

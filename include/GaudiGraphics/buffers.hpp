@@ -1,6 +1,7 @@
 #ifndef __BUFFEROBJECT__
 #define __BUFFEROBJECT__
 
+#include <GaudiGraphics/shaders.hpp>
 #include <GaudiGraphics/viewer.hpp>
 #include <GaudiMath/typedefs.hpp>
 #include <nanogui/glutil.h>
@@ -9,6 +10,7 @@
 #include <string>
 
 namespace gg {
+
 using namespace GaudiMath;
 inline std::string realToString(float f) {
   std::ostringstream convert; // stream used for the conversion
@@ -192,30 +194,6 @@ public:
     }
   }
 
-  virtual void updateShaderAttributes() {
-    // mDispShader->uploadAttrib("vertexNormal_modelspace", mVertNormals);
-    mDispShader->uploadIndices(mIndices);
-    mDispShader->uploadAttrib("vertexPosition_modelspace", mPositions);
-    mDispShader->uploadAttrib("vertexColor_modelspace", mColors);
-  }
-
-  virtual void initDisplayShader() {
-    // std::cout << " system: ";
-    // system("less ../../src/shaders/standard.vs");
-    mId = rand();
-    int Number = mId;           // number to be converted to a string
-    std::string Result;         // string which will contain the result
-    std::ostringstream convert; // stream used for the conversion
-    convert << "a_standard_shader: "
-            << Number; // insert the textual representation of 'Number' in the
-                       // characters in the stream
-    Result = convert.str();
-
-    mDispShader->initFromFiles(
-        /* An identifying name */
-        convert.str(), "src/shaders/standard.vs", "src/shaders/standard.fs");
-  };
-
   virtual void updateModel() {
     // first rotation
     mMatrix = mRot;
@@ -277,11 +255,36 @@ public:
     updateModel();
   }
 
+  virtual void initDisplayShader() {
+    // std::cout << " system: ";
+    // system("less ../../src/shaders/standard.vs");
+    mId = rand();
+    int Number = mId;           // number to be converted to a string
+    std::string Result;         // string which will contain the result
+    std::ostringstream convert; // stream used for the conversion
+    convert << "a_standard_shader: "
+            << Number; // insert the textual representation of 'Number' in the
+                       // characters in the stream
+    Result = convert.str();
+
+    // mDispShader->init(
+    //     convert.str(), get_shader("f_buff_vert"), get_shader("f_buff_frag"));
+    mDispShader->init(convert.str(), get_shader("g_buff_vert"),
+                      get_shader("g_buff_frag"));
+  };
+
+  virtual void updateShaderAttributes() {
+    // mDispShader->uploadAttrib("aNormal", mVertNormals);
+    mDispShader->uploadIndices(mIndices);
+    mDispShader->uploadAttrib("aPos", mPositions);
+    mDispShader->uploadAttrib("aColor", mColors);
+  }
+
   virtual void draw(Mat4 &mProject, Mat4 &mModelView) {
     bind();
     Mat4 matrix = this->matrix();
     Mat4 mvp = mProject * mModelView * matrix;
-    this->displayShader().setUniform("MVP", mvp);
+    this->displayShader().setUniform("P", mProject);
     this->displayShader().setUniform("V", mModelView);
     this->displayShader().setUniform("M", this->matrix());
     this->displayShader().setUniform("LightPosition_worldspace",
@@ -358,39 +361,12 @@ public:
     // system("less src/shaders/standard.vs");
     mDispShader->init(
         /* An identifying name */
-        "a_point_shader",
-
-        /* Vertex shader */
-
-        "#version 330\n"
-        "layout(location = 0) in vec3 vertexPosition_modelspace;\n"
-        "layout(location = 1) in vec2 vertexUV;\n"
-        "layout(location = 3) in vec3 vertexColor_modelspace;\n"
-        "out vec2 UV;\n"
-        "out vec3 Color_cameraspace;\n"
-        "uniform mat4 MVP;\n"
-
-        "void main() {\n"
-
-        "    Color_cameraspace = vertexColor_modelspace;\n"
-        "    UV = vertexUV;\n"
-        "    gl_Position = MVP * vec4(vertexPosition_modelspace, 1.0);\n"
-        "}",
-
-        /* Fragment shader */
-        "#version 330\n"
-        "in vec2 UV;\n"
-        "in vec3 Position_worldspace;\n"
-        "in vec3 Color_cameraspace;\n"
-
-        "out vec4 color;\n"
-        "void main() {\n"
-        "    color = vec4(Color_cameraspace, 1.0);\n"
-        "}");
+        "a_point_shader", get_shader("dbg_point_vert"),
+        get_shader("dbg_point_frag"));
 
     mDispShader->bind();
     mDispShader->uploadIndices(mIndices);
-    mDispShader->uploadAttrib("vertexPosition_modelspace", mPositions);
+    mDispShader->uploadAttrib("aPos", mPositions);
   };
 
   void fillBuffer(std::function<void(BufferObject &)> buildFunc) {
@@ -401,8 +377,8 @@ public:
 
   virtual void updateShaderAttributes() {
     mDispShader->uploadIndices(mIndices);
-    mDispShader->uploadAttrib("vertexPosition_modelspace", mPositions);
-    mDispShader->uploadAttrib("vertexColor_modelspace", mColors);
+    mDispShader->uploadAttrib("aPos", mPositions);
+    mDispShader->uploadAttrib("aColor", mColors);
   }
 
   virtual void draw(Mat4 &mProject, Mat4 &mModelView) {
@@ -410,6 +386,7 @@ public:
     Mat4 matrix = this->matrix();
     Mat4 mvp = mProject * mModelView * matrix;
     this->displayShader().setUniform("MVP", mvp);
+
     updateShaderAttributes();
 
     glPointSize(1.5);
@@ -435,6 +412,19 @@ public:
     mColors.resize(3, nVerts);
   };
 
+  void initDisplayShader() {
+    // std::cout << " system: ";
+    // system("less src/shaders/standard.vs");
+    mDispShader->init(
+        /* An identifying name */
+        "a_line_shader", get_shader("dbg_line_vert"),
+        get_shader("dbg_line_frag"), get_shader("dbg_line_geom"));
+
+    mDispShader->bind();
+    mDispShader->uploadIndices(mIndices);
+    mDispShader->uploadAttrib("aPos", mPositions);
+  };
+
   void fillBuffer(std::function<void(BufferObject &)> buildFunc) {
     buildFunc(*this);
     calcBbox();
@@ -445,7 +435,10 @@ public:
     bind();
     Mat4 matrix = this->matrix();
     Mat4 mvp = mProject * mModelView * matrix;
-    this->displayShader().setUniform("MVP", mvp);
+    this->displayShader().setUniform("P", mProject);
+    this->displayShader().setUniform("V", mModelView);
+    this->displayShader().setUniform("M", this->matrix());
+
     updateShaderAttributes();
 
     this->displayShader().drawIndexed(GL_LINES, 0, mIndices.cols());

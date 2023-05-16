@@ -464,10 +464,12 @@ inline VEC3<T> project_on_line(const VEC3<T> &v0, const VEC3<T> &v1,
                                const VEC3<T> &pt) {
   VEC3<T> dx = v1 - v0;
   T s = (pt - v0).dot(dx) / dx.dot(dx);
-  if (s >= 1)
+  if (s > 1) {
     s = 1;
-  if (s <= 0)
+  }
+  if (s < 0) {
     s = 0;
+  }
   VEC3<T> ptl = v0 + s * dx;
   return ptl;
 }
@@ -478,6 +480,18 @@ inline T distance_from_line(const VEC3<T> &v0, const VEC3<T> &v1,
   VEC3<T> ptl = project_on_line(v0, v1, pt);
   T d = (pt - ptl).norm();
   return d;
+}
+
+template <typename T>
+inline bool contained_in_line(const VEC3<T> &v0, const VEC3<T> &v1,
+                              const VEC3<T> &pt) {
+  VEC3<T> dx = v1 - v0;
+  T s = (pt - v0).dot(dx) / dx.dot(dx);
+  if (s > 1 || s < 0) {
+    // std::cout << "s out of bounds: " << s << std::endl;
+    return false;
+  }
+  return true;
 }
 
 template <typename T>
