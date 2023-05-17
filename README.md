@@ -37,6 +37,11 @@ libGaudi is a topological dynamic mesh library.  In addition to handling the com
 * How about a full path tracer?
 * Seperate the viewer into a seperate project
 
+
+### Dependencies:
+  viewer: Nanogui, GLFW, Eigen, 
+  Mesh Library: Eigen
+    
 ### Some examples:
 <p align="center">
   <img src="images/noodles.png" width="256" height="256"/>
