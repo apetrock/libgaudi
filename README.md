@@ -1,19 +1,51 @@
 <!-- ABOUT THE PROJECT -->
-## About The Project
+# libGaudi
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
+<p align="center">
+  <img src="images/bunny.png" />
+</p>
 
-There are many great README templates available on GitHub; however, I didn't find one that really suited my needs so I created this enhanced one. I want to create a README template so amazing that it'll be the last one you ever need -- I think this is it.
+## About
 
-Here's why:
-* Your time should be focused on creating something amazing. A project that solves a problem and helps others
-* You shouldn't be doing the same tasks over and over like creating a README from scratch
-* You should implement DRY principles to the rest of your life :smile:
+libGaudi is a topological dynamic mesh library.  In addition to handling the common edge splits and collapses, it also handles an edge-edge merge.  Why not just use [El Topo](https://www.cs.ubc.ca/labs/imager/tr/2009/eltopo/eltopo.html)? libGaudi handles topological merges a little differently, via vertex merge and edge rotation.  Its perhaps a little more elegant than the topological operation El Topo uses... but there is also a lot of other stuff thats fun to use.  The mesh structure is completely pointerless and dataless.  Data is handled as a seperate class with custom predicates to determine what happens when the topology changes. 
 
-Of course, no one template will serve all projects since your needs may be different. So I'll be adding more in the near future. You may also suggest changes by forking this repo and creating a pull request or opening an issue. Thanks to all the people have contributed to expanding this template!
+### Project Features:
+* Almost completely headerless, except for a singleton visual debugging logger
+* Pointerless, dataless, half edge mesh data structure
+* Data is stored in seperate arrays with the ability to add custom split/collapse predicates, coordinates are not baked into the half edge structure
+* Generic BVH tree for handling simplex structures
+* Hierarchical integrator for solutions to Poisson equation / Boundary integrals
+* Fast Winding Number solver
+* Surface Direction Field solver
+* Geodesic Heat Solver
+* Projection based mesh solver similar to [ShapeOp](https://www.shapeop.org/) for rods and meshes which supports implicit collisions and some other interesting constraints
+* Geodesic walks on the mesh surface and subsequent subdivision while preserving underlying data
+* Debugging is an immediate-mode like logger that lets you push a handful of primitives to be rendered each frame using geometry shaders.
+* Screen Space Ambient Occlusion
 
-Use the `BLANK_README.md` to get started.
+
+### Future work:
+* Improve predicates to properly handle face/edge data
+* No parallelism/No GPU, that stuff takes time and is tricky with graph data structures, but I want to?
+* BVH parallism, improve confusing API
+* Repulsive Curves/Surfaces solver
+* Surface Reaction Diffusion solver
+* Biased Poisson solve based on input direction field
+* Combined Rods/Mesh projection solver
+* Add ability to scrape the debug logger to make completely headerless
+* Screen Space Color Bleed
+* How about a full path tracer?
+* Seperate the viewer into a seperate project
+
+### Some examples:
+<p align="center">
+  <img src="images/noodles.png" width="256" height="256"/>
+  <img src="images/dendritic.png" width="256" height="256"/>
+  <img src="images/funny.png" width="256" height="256"/>
+  <img src="images/growth.png" width="256" height="256"/>
+  <img src="images/repulsive.png" width="256" height="256"/>
+  <img src="images/wandering.png" width="256" height="256"/>
+</p>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-[product-screenshot]: images/bunny.png
