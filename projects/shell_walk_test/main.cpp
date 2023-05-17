@@ -103,7 +103,7 @@ public:
 
   typedef double Real;
 
-  App(std::string file) : gg::SimpleApp(1280, 720, 4.0, false) {
+  App(std::string file) : gg::SimpleApp(1280, 720, 4.0, true) {
     this->setScene(scene = Scene::create());
     this->initUI();
   }

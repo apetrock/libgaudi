@@ -152,15 +152,15 @@ void main(){
   {   
       mat4 MVP = P * V * M;
 
-      vec4 worldPos = M * vec4(aPos, 1.0);
+      vec4 worldPos = V * M * vec4(aPos, 1.0);
       FragPos = worldPos.xyz; 
       TexCoords = aTexCoords;
       
       mat3 normalMatrix = transpose(inverse(mat3(M)));
       Normal = normalMatrix * aNormal;
       Color = aColor;
-      gl_Position =  MVP * vec4(aPos,1);
-      gl_Position = P * V * worldPos;
+      //gl_Position =  MVP * vec4(aPos,1);
+      gl_Position = P * worldPos;
   }
 )";
 
@@ -262,20 +262,25 @@ uniform vec3 viewPos;
 void main()
 {             
     // retrieve data from gbuffer
+
+    
     vec3 FragPos = texture(gPosition, TexCoords).rgb;
     vec3 Normal = texture(gNormal, TexCoords).rgb;
     vec3 Diffuse = texture(gAlbedoSpec, TexCoords).rgb;
     float AmbientOcclusion = texture(ssao, TexCoords).r;
     
     //FragColor = vec4(Normal, 1.0);
-    //FragColor = vec4(AmbientOcclusion, 0.0, 0.0, 1.0);
+    //FragColor = vec4(vec3(AmbientOcclusion), 1.0);
     //return;
     
-    float Specular = 0.2;
+    float Specular = 0.5;
     // then calculate lighting as usual
 
-    vec3 ambient  = 0.5 * AmbientOcclusion * Diffuse; // hard-coded ambient component
-    vec3 lighting  = ambient; // hard-coded ambient component
+    vec3 ambient  =  Diffuse; // hard-coded ambient component
+    vec3 lighting  = vec3(0.0); // hard-coded ambient component
+    //FragColor = vec4(lighting, 1.0);
+    //return;
+
     vec3 viewDir  = normalize(viewPos - FragPos);
     //for(int i = 0; i < NR_LIGHTS; ++i)
     for(int i = 0; i < 1; ++i)
@@ -288,8 +293,8 @@ void main()
         
         vec3 lcol = 5.0 * vec3(1.0, 1.0, 1.0);
         vec3 lpos = vec3(1.0, 1.0, 1.0);
-        float llin = 0.7;
-        float lquad = 1.8;
+        float llin = 0.05;
+        float lquad = 0.8;
 
         vec3 lightDir = normalize(lpos - FragPos);
 
@@ -308,13 +313,34 @@ void main()
         specular *= attenuation;
         lighting += diffuse + specular;
     }
-    FragColor = vec4(lighting, 1.0);
+
+
+    vec2 tc = 1.0 + TexCoords;
+    if(tc.x < 0.5)
+      FragColor = vec4((0.5 * lighting + 1.0 * AmbientOcclusion * ambient), 1.0);
+    else
+      FragColor = vec4((lighting + 0.3 * ambient), 1.0);
 }
 )";
 
   std::string ssao_sqr_frag =
       R"(
         #version 330 core
+
+#define KSIZE 256
+#define PSI  1.533751168755204288118041 
+#define PHI  sqrt(2.0)
+#define ROOT3  sqrt(3.0)
+
+#define GPHI 0.5 * (1.0 +  sqrt(5.0))
+
+#define LIGHT_POWER 20.
+#define SPECULAR_POWER 20.
+#define AMBIENT .3
+
+#define PI     3.14159265
+#define TWO_PI 6.28318530
+
 out float FragColor;
 
 in vec2 TexCoords;
@@ -323,36 +349,93 @@ uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D texNoise;
 
-uniform vec3 samples[64];
+uniform vec3 samples[256];
 
 // parameters (you'd probably want to use them as uniforms to more easily tweak the effect)
-int kernelSize = 64;
-float radius = 0.5;
-float bias = 0.025;
+
+float radius = 0.2;
+float bias = -0.01;
 
 // tile noise texture over screen based on screen dimensions divided by noise size
-const vec2 noiseScale = vec2(800.0/4.0, 600.0/4.0); 
+const vec2 noiseScale = vec2(1280.0/4.0, 720.0/4.0); 
+
+struct quat
+{
+    float s;
+    vec3 v;
+};
+
+vec3 rotate(quat q, vec3 p) // NOTE: order of parameters copies order of applying rotation matrix: M v
+{
+    return p + 2.0 * cross(q.v, cross(q.v, p) + q.s * p); // suggested by mla, requires q to be unit (i.e. normalized)
+
+    // Derive to https://en.wikipedia.org/wiki/Euler%E2%80%93Rodrigues_formula#Vector_formulation
+    //return p + 2.0 * cross(q.v, cross(q.v, p)) + 2.0 * cross(q.v, q.s * p); // cross-product is distributive
+    //return p + 2.0 * cross(q.v, q.s * p) + 2.0 * cross(q.v, cross(q.v, p)); // vector addition is commutative
+    //return p + 2.0 * q.s * cross(q.v, p) + 2.0 * cross(q.v, cross(q.v, p)); // scalar can be factored-out
+    // translate variable names
+    vec3 x = p;
+    float a = q.s;
+    vec3 omega = q.v;
+    return x + 2.0 * a * cross(omega, x) + 2.0 * cross(omega, cross(omega, x)); // Euler Rodrigues' Formula
+}
 
 uniform mat4 projection;
+vec3 getSphere(int i){
+    float N = float(KSIZE);
+    float t = float(i) / N;
+    float phi = GPHI;
+    float psi = ROOT3;
+    float sqti = sqrt(t);
+    float sqt1i = sqrt(1.0 - t);
+    float thet = 2.0 * PI *N * t;
+    float NtP = (N * t) / PSI;
+    float t0 = NtP - floor(NtP);
+    float x0 =  sqti * sin(thet / PHI);
+    float x1 =  sqti * cos(thet / PHI);
+    float y0 =  sqt1i * sin(thet / PSI);
+    float y1 =  sqt1i * cos(thet / PSI);
+    quat q = quat(y0, vec3(y1, x0, x1));
+    vec3 p0 = 1.0 * pow(t0, 2.5/3.0) * vec3(1.0, 0.0, 0.0);
+    return rotate(q, p0);
+}
+
+float gold_noise(in vec2 xy, in float seed)
+{
+  return fract(tan(distance(xy*GPHI, xy)*seed)*xy.x);
+}
+
+vec3 rvec(vec2 t){
+  return vec3 (gold_noise(t, 0.0 * GPHI),  // r
+                    gold_noise(t, 1.0 * GPHI),  // g
+                    gold_noise(t, 2.0* GPHI)); // b
+}
 
 void main()
 {
-  //FragColor =0.5;
-  //return;
+
     // get input for SSAO algorithm
     vec3 fragPos = texture(gPosition, TexCoords).xyz;
     vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
-    vec3 randomVec = normalize(texture(texNoise, TexCoords * noiseScale).xyz);
+    vec3 randomVec = normalize(rvec(500.0 * TexCoords));
+    //vec3 randomVec = normalize(texture(texNoise, TexCoords * noiseScale).xyz);
+    
     // create TBN change-of-basis matrix: from tangent-space to view-space
     vec3 tangent = normalize(randomVec - normal * dot(randomVec, normal));
     vec3 bitangent = cross(normal, tangent);
+
     mat3 TBN = mat3(tangent, bitangent, normal);
     // iterate over the sample kernel and calculate occlusion factor
     float occlusion = 0.0;
-    for(int i = 0; i < kernelSize; ++i)
+
+    for(int i = 0; i < KSIZE; ++i)
     {
         // get sample position
-        vec3 samplePos = TBN * samples[i]; // from tangent to view-space
+        //vec3 samplePos = TBN * samples[i]; // from tangent to view-space
+        vec3 sphere = getSphere(i);
+        if(sphere.z < 0.0) continue;
+        vec3 samplePos = TBN * sphere; // from tangent to view-space
+        
         samplePos = fragPos + samplePos * radius; 
         
         // project sample position (to sample texture) (to get position on screen/texture)
@@ -360,17 +443,22 @@ void main()
         offset = projection * offset; // from view to clip-space
         offset.xyz /= offset.w; // perspective divide
         offset.xyz = offset.xyz * 0.5 + 0.5; // transform to range 0.0 - 1.0
-        
+
+        //occlusion += texture(gPosition, offset.xy).z;
+
         // get sample depth
         float sampleDepth = texture(gPosition, offset.xy).z; // get depth value of kernel sample
         
         // range check & accumulate
         float rangeCheck = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));
+        //occlusion += (sampleDepth >= samplePos.z + bias ? 1.0 : 0.0);           
+        //occlusion += rangeCheck;
         occlusion += (sampleDepth >= samplePos.z + bias ? 1.0 : 0.0) * rangeCheck;           
     }
-    occlusion = 1.0 - (occlusion / kernelSize);
+    //occlusion /= kernelSize;
+    occlusion = 1.0 - (occlusion / float(KSIZE));
     
-    FragColor = occlusion;
+    FragColor = pow(occlusion, 2.5);
 }
 )";
 
@@ -454,8 +542,9 @@ void main()
         void main() {
             mat4 MVP = P * V * M;
             color_vert = aColor;
-            wpos_vert = (M * vec4(aPos, 1.0)).xyz;
-            gl_Position = MVP * vec4(aPos, 1.0);
+            vec4 wpos = V * M * vec4(aPos, 1.0);
+            wpos_vert = wpos.xyz;
+            gl_Position = P * wpos;
         }
 )";
 
@@ -478,7 +567,7 @@ out vec3 color_frag;
 void main() {
   mat4 MVP = P * V * M;
 
-  float r = 0.0015;
+  float r = 0.003;
     vec3 p0 = wpos_vert[0];
     vec3 p1 = wpos_vert[1];
     
@@ -514,12 +603,12 @@ void main() {
             vec3 t1 = p0 - (z1 * T + r1 * circ[i1]);
             
             wpos_frag = t0;
-            gl_Position = P * V * vec4(t0, 1.0);
+            gl_Position = P * vec4(t0, 1.0);
             color_frag = color_vert[0];
             EmitVertex();
 
             wpos_frag = t1;
-            gl_Position = P * V * vec4(t1, 1.0);
+            gl_Position = P * vec4(t1, 1.0);
             color_frag = color_vert[1];
             EmitVertex();
           }
@@ -536,12 +625,12 @@ void main() {
             vec3 t1 = p1 + z1 * T - r1 * circ[i1];
             
             wpos_frag = t0;
-            gl_Position = P * V * vec4(t0, 1.0);
+            gl_Position = P * vec4(t0, 1.0);
             color_frag = color_vert[0];
             EmitVertex();
 
             wpos_frag = t1;
-            gl_Position = P * V* vec4(t1, 1.0);
+            gl_Position = P * vec4(t1, 1.0);
             color_frag = color_vert[1];
             EmitVertex();
           }
@@ -553,12 +642,12 @@ void main() {
         vec3 t1 = p1 + r * circ[i1];
         
         wpos_frag = t0;
-        gl_Position = P * V * vec4(t0, 1.0);
+        gl_Position = P * vec4(t0, 1.0);
         color_frag = color_vert[0];
         EmitVertex();
 
         wpos_frag = t1;
-        gl_Position = P * V * vec4(t1, 1.0);
+        gl_Position = P * vec4(t1, 1.0);
         color_frag = color_vert[1];
         EmitVertex();
     }
@@ -581,6 +670,7 @@ void main() {
         in vec3 wpos_frag;
 
         void main() {
+            
           	vec3 ec_normal = normalize(cross(dFdx(wpos_frag), dFdy(wpos_frag)));
             gAlbedoSpec = vec4(color_frag, 1.0);
             gNormal = ec_normal;

@@ -162,7 +162,7 @@ public:
   }
 
   void onFrame() {
-    // rotate_ball();
+    rotate_ball();
     // updatePosition();
   }
 
@@ -186,7 +186,7 @@ protected:
 
   // variables for selection and dragging, I maintain two selection groups
   // one for widgets and one for objects
-  double mDist = 4.0;
+  double mDist = 3.0;
   bool mDragging;
   Eigen::Vector2i pLast;
   Vec4 mObjCenCache;
@@ -220,6 +220,7 @@ public:
   ~FrameGrabber() { pclose(ffmpeg); }
 
   void onFrame() {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glReadPixels(0, 0, _width, _height, GL_RGBA, GL_UNSIGNED_BYTE,
                  this->_buffer);
     fwrite(_buffer, sizeof(int) * _width * _height, 1, this->ffmpeg);
@@ -590,7 +591,7 @@ public:
     for (unsigned int i = 0; i < 64; ++i)
       this->mShader.setUniform("samples[" + std::to_string(i) + "]",
                                ssaoKernel[i]);
-
+    std::cout << view->getProjection() << std::endl;
     this->mShader.setUniform("projection", view->getProjection());
     this->mShader.setUniform("gPosition", 0);
     this->mShader.setUniform("gNormal", 1);

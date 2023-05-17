@@ -120,7 +120,7 @@ public:
     vec3 N = asawa::shell::edge_normal(*__M, test, x);
     vec3 T = asawa::shell::edge_tangent(*__M, test, x).normalized();
     vec3 B = N.cross(T).normalized();
-    real thet = 0.001 * 2.0 * M_PI * (frame + 10);
+    real thet = 0.0000001 * 2.0 * M_PI * (frame + 10);
     vec3 dir = std::cos(thet) * T + std::sin(thet) * B;
     std::vector<index_t> corners;
     std::vector<real> S;
@@ -161,8 +161,8 @@ public:
 
                          return true;
                        });
-    shell::crack_edges(*__M, corners, S, 1e-2);
-    smoothMesh(0.01, 10);
+    // shell::crack_edges(*__M, corners, S, 1e-2);
+    // smoothMesh(0.01, 10);
   }
   real _h = 0.1;
   index_t _il0;
