@@ -11,7 +11,7 @@
 
 #include "rod.hpp"
 
-//#include "subdivide.hpp"
+// #include "subdivide.hpp"
 
 #include <array>
 #include <set>
@@ -194,44 +194,57 @@ public:
   }
 
 #if 1
-  vector<std::array<index_t, 4>> get_collisions() {
+  vector<std::array<index_t, 4>>
+  get_collisions(const std::vector<index_t> &edge_verts_B, //
+                 const std::vector<vec3> &x_B) {
     rod &R = *__R;
-    std::vector<vec3> &x = R.__x;
 
-    std::vector<index_t> verts = __R->get_vert_range();
-    std::vector<index_t> edge_verts = __R->get_edge_vert_ids();
-    std::vector<index_t> edge_map = __R->get_edge_map();
+    std::vector<vec3> &x_A = R.__x;
+    std::vector<index_t> verts_A = R.get_vert_range();
+    std::vector<index_t> edge_verts_A = R.get_edge_vert_ids();
+    std::vector<index_t> edge_map_A = R.get_edge_map();
 
-    edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 16);
+    edge_tree = arp::aabb_tree<2>::create(edge_verts_A, x_A, 16);
     // calder::test_extents(*edge_tree, edge_verts, x);
     // edge_tree->debug();
     real tol = 1.0 * R._r;
 
-    std::vector<std::array<index_t, 4>> collected(verts.size());
-    //#pragma omp parallel for
-    std::set<std::pair<int, int>> hashed_pairs;
-    for (int k = 0; k < edge_verts.size(); k += 2) {
-      index_t i = k / 2;
-      std::vector<index_t> collisions =
-          arp::getNearest<2, 2>(i, edge_verts, x, //
-                                *edge_tree,       //
-                                tol, &line_line);
-      for (index_t j : collisions) {
-        bool inset =
-            hashed_pairs.find(std::make_pair(i, j)) != hashed_pairs.end() |
-            hashed_pairs.find(std::make_pair(j, i)) != hashed_pairs.end();
+    std::cout << " 0 " << std::endl;
 
+    std::vector<std::array<index_t, 4>> collected(edge_verts_B.size() / 2);
+    for (int k = 0; k < edge_verts_B.size(); k += 2) {
+      index_t i = k / 2;
+
+      std::vector<index_t> collisions =
+          arp::getNearest<2, 2>(i, edge_verts_B, x_B, //
+                                *edge_tree,           //
+                                tol, &line_line);
+
+      for (index_t j : collisions) {
         if (j > -1) {
-          collected[i] = {edge_verts[2 * i + 0], edge_verts[2 * i + 1],
-                          edge_verts[2 * j + 0], edge_verts[2 * j + 1]};
-          hashed_pairs.insert(std::make_pair(i, j));
-        } else
+          collected[i] = {edge_verts_B[2 * i + 0], edge_verts_B[2 * i + 1],
+                          edge_verts_A[2 * j + 0], edge_verts_A[2 * j + 1]};
+        } else {
           collected[i] = {-1, -1, -1, -1};
+        }
       }
     }
 
     return collected;
   }
+#endif
+
+#if 1
+  vector<std::array<index_t, 4>> get_internal_collisions() {
+    rod &R = *__R;
+    std::vector<vec3> &x = R.__x;
+
+    std::vector<index_t> verts = R.get_vert_range();
+    std::vector<index_t> edge_verts = R.get_edge_vert_ids();
+
+    return get_collisions(edge_verts, x);
+  }
+
 #endif
   void step() {
 

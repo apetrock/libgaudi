@@ -33,9 +33,14 @@ namespace gaudi {
 
 namespace asawa {
 namespace shell {
+
 using corner1 = std::array<index_t, 1>;
 using corner2 = std::array<index_t, 2>;
 using corner4 = std::array<index_t, 4>;
+
+using OpPredicateFcn = std::function<bool(shell &M, const index_t &)>;
+using MergePredicateFcn =
+    std::function<bool(shell &M, const index_t &, const index_t &)>;
 
 real dist_line_line(shell &M, index_t cA0, index_t cB0,
                     const std::vector<vec3> &x) {
@@ -242,20 +247,14 @@ op_edges(shell &M,                      //
           real s0 = S[i];
           real s1 = 1.0 - s0;
           index_t c0 = edges_to_op[i];
-          index_t c1 = M.other(c0);
-          index_t c0p = M.prev(c0);
-          index_t c1p = M.prev(c1);
-          vec3 x0 = x[M.vert(c0)];
-          vec3 x1 = x[M.vert(c1)];
-          vec3 x2 = x[M.vert(c0p)];
-          vec3 x3 = x[M.vert(c1p)];
-          real l0 = (x1 - x0).norm();
-          real l1 = (x3 - x2).norm();
-          real C = l1 / l0;
-          d->calc(M, estart + 3 * i + 0, s1, {c0 / 2});
-          d->calc(M, estart + 3 * i + 1, 0.5 * C, {c0 / 2});
-          d->calc(M, estart + 3 * i + 2, 0.5 * C, {c0 / 2});
-          d->calc(M, c0 / 2, s0, {c0 / 2});
+          index_t e0 = estart + 3 * i + 0;
+          index_t e1 = estart + 3 * i + 1;
+          index_t e2 = estart + 3 * i + 2;
+          d->subdivide(M, c0 / 2, e0, e1, e2, s0, c0);
+        }
+        if (OP == 1) {
+          index_t c0 = edges_to_op[i];
+          d->collapse(M, c0);
         }
       }
 
@@ -269,37 +268,37 @@ op_edges(shell &M,                      //
         index_t f1 = M.face(c1);
         real a0 = face_area(M, f0, x);
         real a1 = face_area(M, f1, x);
-
-        d->calc(M, f0, s0, {c0 / 2});
-        d->calc(M, f1, s0, {c0 / 2});
-        d->calc(M, fstart + 2 * i + 0, s1, {c0 / 2});
-        d->calc(M, fstart + 2 * i + 1, s1, {c0 / 2});
+        if (OP == 0) {
+          index_t fs0 = fstart + 2 * i + 0;
+          index_t fs1 = fstart + 2 * i + 1;
+          d->subdivide(M, f0, f1, fs0, fs1, s0, c0);
+        } else if (OP == 1) {
+          d->collapse(M, c0);
+        }
       }
 
       if (d->type() == VERTEX) {
         if (OP == 0) {
           // subd
           index_t c0 = edges_to_op[i];
-          index_t c1 = M.other(c0);
-          d->calc(M, vstart + i, S[i], {M.vert(c0), M.vert(c1)});
+          d->subdivide(M, vstart + i, -1, -1, -1, S[i], c0);
         } else if (OP == 1) {
           // collapse
           index_t c0 = edges_to_op[i];
-          index_t c1 = M.other(c0);
-          d->calc(M, M.vert(c1), 0.5, {M.vert(c0), M.vert(c1)});
+          d->collapse(M, c0);
         } else if (OP == 2) {
           // merge
           index_t cA0 = edges_to_op[i + 0];
           index_t cA1 = M.other(cA0);
           index_t cB0 = edges_to_op[i + 1];
           index_t cB1 = M.other(cB0);
-          d->calc(M, M.vert(cA0), 0.5, {M.vert(cA0), M.vert(cB0)});
-          d->calc(M, M.vert(cA1), 0.5, {M.vert(cA1), M.vert(cB1)});
-          // d->calc(M.vert(cB0), M, M.vert(cA0), M.vert(cB0));
-          // d->calc(M.vert(cB1), M, M.vert(cA1), M.vert(cB1));
-
-          d->calc(M, vstart + 2 * i + 0, 1.0, {M.vert(cA0), M.vert(cB0)});
-          d->calc(M, vstart + 2 * i + 1, 1.0, {M.vert(cA1), M.vert(cB1)});
+          index_t vs0 = vstart + 2 * i + 0;
+          index_t vs1 = vstart + 2 * i + 1;
+          d->merge(M,                        //
+                   M.vert(cA0), M.vert(cA1), //
+                   vs0, vs1,                 //
+                   M.vert(cA0), M.vert(cA1), //
+                   M.vert(cB0), M.vert(cB1));
         }
       }
     }
@@ -498,7 +497,9 @@ public:
       index_t c1 = M.other(i);
       if (M.vert(c0) != M.vert(c1))
         continue;
-
+      for (auto d : M.get_data()) {
+        d->collapse(M, c0);
+      }
       collapse_edge(M, c0, true);
     }
 
@@ -517,7 +518,9 @@ public:
         continue;
       index_t c0 = M.fbegin(i);
       index_t c1 = M.other(c0);
-
+      for (auto d : M.get_data()) {
+        d->collapse(M, c0);
+      }
       merge_face(M, c0, c1);
     }
 
@@ -601,29 +604,34 @@ public:
   }
 
   vector<std::array<index_t, 2>>
-  get_edge_edge_collisions(shell &M, std::vector<vec3> &x, real tol) {
+  get_edge_edge_collisions(const std::vector<index_t> &  edge_verts_t, //
+                           const std::vector<index_t> &  edge_map_t,
+                           const std::vector<vec3> &x_t, 
+                            shell &M, real tol) {
+    vec3_datum::ptr x_datum =
+        static_pointer_cast<vec3_datum>(__M->get_datum(0));
+    std::vector<vec3> &x_m = x_datum->data();
 
-    std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
-    std::vector<index_t> edge_map = __M->get_edge_map();
+    std::vector<index_t> edge_verts_m = __M->get_edge_vert_ids();
+    std::vector<index_t> edge_map_m = __M->get_edge_map();
 
-    edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 16);
+    edge_tree = arp::aabb_tree<2>::create(edge_verts_m, x_m, 16);
 
-    std::vector<std::array<index_t, 2>> collected(edge_verts.size() / 2);
+    std::vector<std::array<index_t, 2>> collected(edge_verts_t.size() / 2);
     //#pragma omp parallel for
-    for (int i = 0; i < edge_verts.size(); i += 2) {
+    for (int i = 0; i < edge_verts_t.size(); i += 2) {
       index_t e0 = i / 2;
       std::vector<index_t> collisions =
-          arp::getNearest<2, 2>(e0, edge_verts, x, //
+          arp::getNearest<2, 2>(e0, edge_verts_t, x_t, //
                                 *edge_tree,        //
                                 tol, &line_line_min);
       for (index_t e1 : collisions) {
-        index_t c0 = edge_map[e0];
+        index_t c0 = edge_map_t[e0];
         // debug_line(M, c0, x);
         index_t c1 = -1;
         if (e1 > 0) {
           // std::cout << ii << " " << nearest << std::endl;
-          c1 = edge_map[e1];
-          c1 = align_edges(M, c0, c1, x);
+          c1 = edge_map_m[e1];
         }
 
         collected[i / 2] = {c0, c1};
@@ -634,31 +642,35 @@ public:
   }
 
   vector<std::array<index_t, 2>>
-  get_pnt_tri_collisions(shell &M, std::vector<vec3> &x, real tol) {
+  get_pnt_tri_collisions(
+    std::vector<index_t> verts_t,
+    std::vector<index_t> verts_map_t,
+    std::vector<vec3> &x_t, 
+    shell &M, real tol) {
 
-    std::vector<index_t> verts = __M->get_vert_range();
-    std::vector<index_t> verts_map = __M->get_vert_map();
-
-    std::vector<index_t> face_verts = __M->get_face_vert_ids(true);
-    std::vector<index_t> face_map = __M->get_face_map(true);
+    vec3_datum::ptr x_datum =
+        static_pointer_cast<vec3_datum>(__M->get_datum(0));
+    std::vector<vec3> &x_m = x_datum->data();
+    std::vector<index_t> face_verts_m = __M->get_face_vert_ids(true);
+    std::vector<index_t> face_map_m = __M->get_face_map(true);
 
     arp::aabb_tree<3>::ptr face_tree =
-        arp::aabb_tree<3>::create(face_verts, x, 16);
+        arp::aabb_tree<3>::create(face_verts_m, x_m, 16);
 
-    std::vector<std::array<index_t, 2>> collected(verts.size());
+    std::vector<std::array<index_t, 2>> collected(verts_t.size());
     //#pragma omp parallel for
-    for (int i = 0; i < verts.size(); i++) {
+    for (int i = 0; i < verts_t.size(); i++) {
       std::vector<index_t> collisions =
-          arp::getNearest<1, 3>(i, verts, x, //
+          arp::getNearest<1, 3>(i, verts_t, x_t, //
                                 *face_tree,  //
                                 tol, &pnt_tri_min);
 
       for (index_t iti : collisions) {
-        index_t iv = verts_map[i];
+        index_t iv = verts_map_t[i];
         index_t it = -1;
 
         if (iti > 0) {
-          it = face_map[iti];
+          it = face_map_m[iti];
         }
 
         collected[i] = {iv, it};
@@ -668,22 +680,37 @@ public:
     return collected;
   }
 
-  vector<std::array<index_t, 2>> get_edge_edge_collisions(real tol) {
+  vector<std::array<index_t, 2>> get_internal_edge_edge_collisions(real tol) {
     shell &M = *__M;
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
+
+
+    std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
+    std::vector<index_t> edge_map = __M->get_edge_map();
+
     std::vector<std::array<index_t, 2>> collected =
-        get_edge_edge_collisions(M, x, tol);
+        get_edge_edge_collisions(edge_verts, edge_map, x, M, tol);
+
+    for(auto &c : collected){
+      if(c[0] > -1 && c[1] > -1){
+          c[1] = align_edges(M, c[0], c[1], x);
+      }
+    }
+
     return collected;
   }
 
-  vector<std::array<index_t, 2>> get_pnt_tri_collisions(real tol) {
+  vector<std::array<index_t, 2>> get_internal_pnt_tri_collisions(real tol) {
     shell &M = *__M;
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-    return get_pnt_tri_collisions(M, x, tol);
+    std::vector<index_t> verts = __M->get_vert_range();
+    std::vector<index_t> verts_map = __M->get_vert_map();
+
+    return get_pnt_tri_collisions(verts, verts_map,x, M, tol);
   }
 
   void merge_edges() {
@@ -695,7 +722,7 @@ public:
     std::vector<vec3> &x = x_datum->data();
     // edge_tree->debug();
     real tol = 0.25 * this->_Cm * this->_Cm;
-    auto collected = get_edge_edge_collisions(M, x, tol);
+    auto collected = get_internal_edge_edge_collisions(tol);
     trim_edge_edge_collected(M, x, collected);
 
     std::vector<index_t> f_collect(2 * collected.size());
@@ -801,7 +828,7 @@ public:
   }
 
   void flip_edges() {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
+
     std::vector<index_t> edges = __M->get_edge_range();
     for (int i = 0; i < edges.size(); i++) {
       int card = rand() % edges.size();
@@ -809,6 +836,10 @@ public:
       edges[i] = edges[card];
       edges[card] = et;
     }
+
+    if (_flip_pred)
+      std::remove_if(edges.begin(), edges.end(),
+                     [this](index_t c) { return _flip_pred(*__M, c); });
 
     for (int i = 0; i < edges.size(); i++) {
       // std::cout << "A" << std::endl;
@@ -911,13 +942,19 @@ public:
 
     std::vector<index_t> edges_to_divide = gather_edges<comp_less>(*__M, cmp);
 
+    if (_collapse_pred)
+      std::remove_if(edges_to_divide.begin(), edges_to_divide.end(),
+                     [this](index_t c) { return _collapse_pred(*__M, c); });
+
     std::vector<real> S(edges_to_divide.size(), 0.5);
     collapse_op(*__M, edges_to_divide, S, x,
-                [](index_t i,  //
-                   index_t cs, //
-                   index_t vs, //
-                   index_t fs, //
-                   const std::vector<index_t> &edges, shell &m) -> corner1 {
+                [this](index_t i,  //
+                       index_t cs, //
+                       index_t vs, //
+                       index_t fs, //
+                       const std::vector<index_t> &edges, shell &m) -> corner1 {
+                  if (_collapse_pred && _collapse_pred(m, edges[i]))
+                    return {-1};
                   return {collapse_edge(m, edges[i])};
                 });
   }
@@ -935,19 +972,23 @@ public:
 
   void step(bool merge_edges_ = true) {
     for (int k = 0; k < 1; k++) {
+      std::cout << "subd" << std::endl;
       subdivide_edges();
       delete_degenerates(*__M);
-
+      std::cout << "break" << std::endl;
       break_cycles();
       delete_degenerates(*__M);
-
+      std::cout << "collapse" << std::endl;
       collapse_edges();
       delete_degenerates(*__M);
+
       if (merge_edges_) {
+        std::cout << "merge" << std::endl;
         merge_edges();
         delete_degenerates(*__M);
       }
 
+      std::cout << "flip" << std::endl;
       flip_edges();
       delete_degenerates(*__M);
     }
@@ -960,9 +1001,17 @@ public:
     step();
   }
 
+  void set_flip_pred(OpPredicateFcn f) { _flip_pred = f; }
+  void set_merge_pred(MergePredicateFcn f) { _merge_pred = f; }
+  void set_collapse_pred(OpPredicateFcn f) { _collapse_pred = f; }
+
   shell::ptr __M;
   index_t __vdatum_id;
   real _Cc, _Cs, _Cm; // collapse, stretch, bridge
+
+  OpPredicateFcn _flip_pred;
+  MergePredicateFcn _merge_pred;
+  OpPredicateFcn _collapse_pred;
 
   arp::aabb_tree<2>::ptr edge_tree;
   // arp::aabb_tree<3>::ptr face_tree;

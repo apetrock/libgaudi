@@ -161,7 +161,7 @@ public:
 
                          return true;
                        });
-    // shell::crack_edges(*__M, corners, S, 1e-2);
+    shell::crack_edges(*__M, corners, S, 1e-2);
     // smoothMesh(0.01, 10);
   }
   real _h = 0.1;

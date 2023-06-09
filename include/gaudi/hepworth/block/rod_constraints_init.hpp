@@ -1,5 +1,5 @@
-#ifndef __HEP_ROD_CONSTRAINTS_INIT__
-#define __HEP_ROD_CONSTRAINTS_INIT__
+#ifndef __HEP_ROD_BLOCK_CONSTRAINTS_INIT__
+#define __HEP_ROD_BLOCK_CONSTRAINTS_INIT__
 
 #include <algorithm>
 #include <array>
@@ -17,28 +17,28 @@
 #include <vector>
 #include <zlib.h>
 
-#include "../collision_constraint.hpp"
-#include "constraints.hpp"
+#include "rod_collision_constraint.hpp"
+#include "rod_constraints.hpp"
 #include "gaudi/common.h"
 
 namespace gaudi {
 namespace hepworth {
-namespace rod {
+namespace block {
 
 void init_smooth(const asawa::rod::rod &rod,
                  std::vector<projection_constraint::ptr> &constraints,
-                 const real &w) {
+                 const real &w, std::vector<sim_block::ptr> blocks) {
 
   for (int i = 0; i < rod.corner_count(); i++) {
     index_t in = rod.next(i);
     index_t ip = rod.prev(i);
-    constraints.push_back(smooth::create({i, ip, in}, w));
+    constraints.push_back(smooth::create({i, ip, in}, w, blocks));
   }
 }
 #if 1
 void init_cylinder(const asawa::rod::rod &rod,
                    std::vector<projection_constraint::ptr> &constraints,
-                   const real &w) {
+                   const real &w, std::vector<sim_block::ptr> blocks) {
 
   for (int i = 0; i < rod.corner_count(); i++) {
     index_t ip0 = rod.prev(i);
@@ -60,44 +60,44 @@ void init_cylinder(const asawa::rod::rod &rod,
     if (!in2)
       continue;
     constraints.push_back(
-        cylinder::create({i, ip2, ip1, ip0, i, in0, in1, in2}, 1.25));
+        cylinder::create({i, ip2, ip1, ip0, i, in0, in1, in2}, 1.25, blocks));
   }
 }
 #endif
 
 void init_stretch_shear(const asawa::rod::rod &rod,
                         std::vector<projection_constraint::ptr> &constraints,
-                        const std::vector<real> &l0, const real &w) {
+                        const std::vector<real> &l0, const real &w, std::vector<sim_block::ptr> blocks) {
   int Ni = rod.corner_count();
   for (int i = 0; i < rod.corner_count(); i++) {
     index_t j = rod.next(i);
-    constraints.push_back(stretch_shear::create({i, j, i, Ni}, w, l0[i]));
+    constraints.push_back(stretch_shear::create({i, j, i, Ni}, w, l0[i], blocks));
   }
 }
 
 void init_bend_twist(const asawa::rod::rod &rod,
                      std::vector<projection_constraint::ptr> &constraints,
-                     const real &w) {
+                     const real &w, std::vector<sim_block::ptr> blocks) {
   int Ni = rod.corner_count();
   for (int i = 0; i < rod.corner_count(); i++) {
     index_t j = rod.next(i);
-    constraints.push_back(bend_twist::create({i, j, Ni}, w));
+    constraints.push_back(bend_twist::create({i, j, Ni}, w, blocks));
   }
 }
 
 void init_angle(const asawa::rod::rod &rod,
                 std::vector<projection_constraint::ptr> &constraints,
-                const vec3 &z, const real &phi, const real &w) {
+                const vec3 &z, const real &phi, const real &w, std::vector<sim_block::ptr> blocks) {
   int Ni = rod.corner_count();
   for (int i = 0; i < rod.corner_count(); i++) {
     index_t j = rod.next(i);
-    constraints.push_back(angle::create({i, j, Ni}, z, phi, w));
+    constraints.push_back(angle::create({i, j, Ni}, z, phi, w, blocks));
   }
 }
 
 void init_collisions(asawa::rod::rod &rod, asawa::rod::dynamic &dynamic,
                      std::vector<projection_constraint::ptr> &constraints,
-                     const real &w) {
+                     const real &w, std::vector<sim_block::ptr> blocks) {
   const std::vector<vec3> &x = rod.__x;
   vector<std::array<index_t, 4>> collisions = dynamic.get_internal_collisions();
   for (auto &c : collisions) {
@@ -131,8 +131,8 @@ void init_collisions(asawa::rod::rod &rod, asawa::rod::dynamic &dynamic,
     if (dl < 0)
       continue;
 */
-      constraints.push_back(hepworth::edge_edge_collision::create(
-          {c[0], c[1], c[2], c[3]}, w, 1.0 * rod._r));
+      constraints.push_back(rod_collision::create(
+          {c[0], c[1], c[2], c[3]}, w, 1.0 * rod._r, blocks));
     }
   }
 }

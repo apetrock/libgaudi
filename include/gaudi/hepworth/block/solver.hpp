@@ -18,8 +18,9 @@
 #include <vector>
 #include <zlib.h>
 
-#include "constraints.hpp"
+#include "block_constraint.hpp"
 #include "gaudi/common.h"
+#include "sim_block.hpp"
 
 ///////////////////////////////////////////////////////
 // solver
@@ -27,44 +28,58 @@
 
 namespace gaudi {
 namespace hepworth {
-namespace shell {
+namespace block {
 class projection_solver {
 public:
   projection_solver() {}
+  vecX solve(matS &A, vecX &b) {
 
-  void set_mass(const std::vector<vec3> &m) {
+    // Eigen::ConjugateGradient<matS, Eigen::Upper> solver;
+    Eigen::SimplicialLDLT<matS> solver;
+    solver;
 
-    vecX M = to(m);
+    solver.compute(A);
 
+    if (solver.info() != Eigen::Success) {
+      // decomposition failed
+      std::cout << ".....decomposition error! " << std::endl;
+    }
+    vecX x = solver.solve(b);
+    if (solver.info() != Eigen::Success) {
+      // solving failed
+      std::cout << ".....solve error! " << std::endl;
+    }
+
+    return x;
+  }
+
+  void set_mass(std::vector<sim_block::ptr> &blocks) {
+
+    vecX M;
+    for (auto &block : blocks) {
+      block->map_mass(M);
+    }
     std::vector<trip> triplets;
     for (int i = 0; i < M.rows(); i++) {
       triplets.push_back(trip(i, i, M[i]));
-      // triplets.push_back(trip(i, i, 0.15));
     }
     __M = matS(M.size(), M.size());
     __M.setFromTriplets(triplets.begin(), triplets.end());
   }
 
-  void update_velocity(const real &h, std::vector<vec3> &x_,
-                       const std::vector<vec3> &v_,
-                       const std::vector<vec3> &f_) {
-    for (size_t i = 0; i < v_.size(); i++) {
-      x_[i] += h * v_[i] + h * h * f_[i];
+  void step(std::vector<sim_block::ptr> &blocks, const real &h = 0.01,
+            const int &ITS = 50) {
+
+    vecX q;
+    vecX s;
+    set_mass(blocks);
+
+    for (auto &block : blocks) {
+      block->map_to_x(q);
+      block->integrate_inertia(h);
+      block->map_to_x(s);
     }
-  }
-
-  void step(std::vector<vec3> &x_,
-            std::vector<vec3> &v_,       // velocity;
-            const std::vector<vec3> &f_, // velocity;
-            const real &h = 0.01) {
-
-    int Ni = 3 * x_.size();
-
-    vecX q0 = to(x_);
-    vecX v = to(v_);
-    vecX f = to(f_);
-
-    vecX q = q0 + h * v + h * h * f;
+    int Nm = q.size();
 
     std::vector<trip> triplets;
     index_t id0 = 0;
@@ -72,12 +87,10 @@ public:
       constraint->fill_A(id0, triplets);
     }
 
-    // std::cout << A.rows() << " " << A.cols() << " " << triplets.size()
-    //          << std::endl;
-    matS A(id0, Ni);
+    matS A(id0, Nm);
     matS &M = __M;
     M *= 1.0 / h / h;
-
+    std::cout << "Nm: " << Nm << std::endl;
     A.setFromTriplets(triplets.begin(), triplets.end());
     matS AtA = A.transpose() * A;
     matS MAtA = M + AtA;
@@ -86,33 +99,26 @@ public:
     std::cout << "AtA sum: " << AtA.sum() << std::endl;
     std::cout << "M sum: " << M.sum() << std::endl;
 
-    // vecX x0 = x;
-    vecX s = q;
     vecX p = vecX::Zero(id0);
 
-    for (int k = 0; k < 30; k++) {
+    for (int k = 0; k < ITS; k++) {
       p.setZero();
       for (auto &constraint : _constraints) {
         constraint->project(q, p);
       }
 
-      if (k % 1 == 0) {
-        std::cout << "pnorm: " << p.norm() << std::endl;
-        std::cout << "ATpnorm: " << (A.transpose() * p).norm() << std::endl;
-      }
+      if (k % 10 == 0)
+        std::cout << "k: " << k << " -pnorm: " << p.norm() << std::endl;
 
       vecX b = M * s + A.transpose() * p;
-
+      // std::cout << p << std::endl;
       q = S.solve(b);
-
       // q = qi + dq.min(bnd).max(-bnd);
     }
 
-    std::cout << " x norm: " << (q - q0).norm() << std::endl;
-    real damp = 0.05;
-    v = (1.0 - damp) / h * (q - q0);
-    from(v_, v);
-    from(x_, q);
+    for (auto &block : blocks) {
+      block->map_from_x(q, h, 0.5);
+    }
   }
 
   void
@@ -123,7 +129,7 @@ public:
   matS __M;
   std::vector<projection_constraint::ptr> _constraints;
 };
-} // namespace shell
+} // namespace block
 } // namespace hepworth
 } // namespace gaudi
 

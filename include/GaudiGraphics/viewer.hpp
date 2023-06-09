@@ -125,11 +125,12 @@ public:
   }
 
   void rotate_ball() {
-    Vec3 rotation(0.0, M_PI / 360.0, 0.0);
+    Vec3 rotation(0.0, 0.25 * M_PI / 360.0, 0.0);
     double angle = rotation.norm();
     Vec3 axis = rotation.normalized();
     Eigen::Quaternionf q(Eigen::AngleAxisf(angle, axis));
     ball->state() *= q;
+    updatePosition();
   }
 
   virtual bool onMouseButton(const Eigen::Vector2i &p, int button, bool down,
@@ -162,8 +163,8 @@ public:
   }
 
   void onFrame() {
-    rotate_ball();
-    // updatePosition();
+    // rotate_ball();
+    //  updatePosition();
   }
 
   Mat4 &getModelView() { return mModelView; }
@@ -430,9 +431,11 @@ public:
 
   virtual unsigned int getFBO() override { return gBuffer; }
 
+  virtual unsigned int getAlbedo() { return gAlbedoSpec; }
   virtual unsigned int getPositionTexture() { return gPosition; }
   virtual unsigned int getNormalTexture() { return gNormal; }
   virtual void setSsaoTexture(unsigned int tex) { ssaoTexture = tex; }
+  virtual void setBleedTexture(unsigned int tex) { bleedTexture = tex; }
 
   virtual void render(ViewerPtr view) override {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -446,6 +449,8 @@ public:
     glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, ssaoTexture);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, bleedTexture);
 
     std::cout << "gs: " << gBuffer << " " << gPosition << " " << gNormal << " "
               << gAlbedoSpec << std::endl;
@@ -454,6 +459,7 @@ public:
     this->mShader.setUniform("gNormal", 1);
     this->mShader.setUniform("gAlbedoSpec", 2);
     this->mShader.setUniform("ssao", 3);
+    this->mShader.setUniform("bleed", 4);
 
     this->mShader.setUniform("viewPos", view->getPosition3());
     this->draw();
@@ -465,7 +471,7 @@ public:
   }
 
   unsigned int gBuffer;
-  unsigned int gPosition, gNormal, gAlbedoSpec, ssaoTexture;
+  unsigned int gPosition, gNormal, gAlbedoSpec, ssaoTexture, bleedTexture;
   unsigned int mRboDepth;
 };
 
@@ -483,7 +489,7 @@ public:
     initKernel();
     initNoise();
     initShader();
-    std::cout << "Deferred Shading effect created" << std::endl;
+    std::cout << "SSAO Shading effect created" << std::endl;
     std::cout << _width << " " << _height << std::endl;
   }
 
@@ -587,15 +593,18 @@ public:
     glBindTexture(GL_TEXTURE_2D, gNormal);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, noiseTexture);
-
-    for (unsigned int i = 0; i < 64; ++i)
-      this->mShader.setUniform("samples[" + std::to_string(i) + "]",
-                               ssaoKernel[i]);
+    /*
+        for (unsigned int i = 0; i < 64; ++i)
+          this->mShader.setUniform("samples[" + std::to_string(i) + "]",
+                                   ssaoKernel[i]);
+    */
     std::cout << view->getProjection() << std::endl;
     this->mShader.setUniform("projection", view->getProjection());
     this->mShader.setUniform("gPosition", 0);
     this->mShader.setUniform("gNormal", 1);
     this->mShader.setUniform("texNoise", 2);
+    this->mShader.setUniform("viewPos", view->getPosition3());
+
     this->draw();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
@@ -604,6 +613,208 @@ public:
   std::vector<Vec3> ssaoKernel;
   unsigned int ssaoFBO;
   unsigned int ssaoColorBuffer;
+
+  // nanogui::GLShader mBlurShader;
+};
+
+class ColorBleedEffect;
+using ColorBleedEffectPtr = std::shared_ptr<ColorBleedEffect>;
+
+class ColorBleedEffect : public RenderingEffect {
+public:
+  static ColorBleedEffectPtr create(int w = 1280, int h = 720) {
+    return std::make_shared<ColorBleedEffect>(w, h);
+  }
+
+  ColorBleedEffect(int w = 1280, int h = 720) : RenderingEffect(w, h) {
+    initFbo();
+    initKernel();
+    initShader();
+    std::cout << "Color Bleed Shading effect created" << std::endl;
+    std::cout << _width << " " << _height << std::endl;
+  }
+
+  ~ColorBleedEffect() {}
+  void initKernel() {
+    // generate sample kernel
+    // ----------------------
+    std::uniform_real_distribution<GLfloat> randomFloats(
+        0.0, 1.0); // generates random floats between 0.0 and 1.0
+    std::default_random_engine generator;
+
+    for (unsigned int i = 0; i < 64; ++i) {
+      Vec3 sample(randomFloats(generator) * 2.0 - 1.0, //
+                  randomFloats(generator) * 2.0 - 1.0, //
+                  randomFloats(generator));
+      sample.normalize();
+
+      sample *= randomFloats(generator);
+      Real scale = Real(i) / 64.0;
+
+      // scale samples s.t. they're more aligned to center of kernel
+      Real f = 0.1;
+      scale = (1.0 - f) * 1.0 + f * scale * scale;
+      sample *= scale;
+      ssaoKernel.push_back(sample);
+    }
+  }
+
+  virtual void initFbo() override {
+
+    // also create framebuffer to hold SSAO processing stage
+    // -----------------------------------------------------
+
+    glGenFramebuffers(1, &ssaoFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
+    // SSAO color buffer
+
+    // position color buffer
+    glGenTextures(1, &ssaoColorBuffer);
+    glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, _width, _height, 0, GL_RGBA,
+                 GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                           ssaoColorBuffer, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+      std::cout << "SSAO Framebuffer not complete!" << std::endl;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  }
+
+  virtual void initShader() override {
+    this->mShader.bind();
+    this->mShader.init("deffered_shader", get_shader("sqr_vert"),
+                       get_shader("bleed_sqr_frag"));
+    // this->mShader.init("hdr_shader", get_shader("hdr_sqr_vert"),
+    //                    get_shader("hdr_sqr_frag"));
+  }
+
+  virtual unsigned int getFBO() override { return ssaoFBO; }
+
+  virtual void setAlbedo(unsigned int tex) { gAlbedoSpec = tex; }
+  virtual void setPositionTexture(unsigned int tex) { gPosition = tex; }
+  virtual void setNormalTexture(unsigned int tex) { gNormal = tex; }
+  virtual unsigned int getBleedTexture() { return ssaoColorBuffer; }
+
+  virtual void render(ViewerPtr view) override {
+
+    // 2. generate SSAO texture
+    // ------------------------
+    glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    mShader.bind();
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, gPosition);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, gNormal);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, noiseTexture);
+    /*
+        for (unsigned int i = 0; i < 64; ++i)
+          this->mShader.setUniform("samples[" + std::to_string(i) + "]",
+                                   ssaoKernel[i]);
+    */
+    std::cout << view->getProjection() << std::endl;
+    this->mShader.setUniform("projection", view->getProjection());
+    this->mShader.setUniform("gPosition", 0);
+    this->mShader.setUniform("gNormal", 1);
+    this->mShader.setUniform("gAlbedoSpec", 2);
+    this->mShader.setUniform("texNoise", 3);
+    this->draw();
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  }
+
+  unsigned int gPosition, gNormal, gAlbedoSpec;
+  unsigned int noiseTexture;
+  std::vector<Vec3> ssaoKernel;
+  unsigned int ssaoFBO;
+  unsigned int ssaoColorBuffer;
+
+  // nanogui::GLShader mBlurShader;
+};
+
+class BlurEffect;
+using BlurEffectPtr = std::shared_ptr<BlurEffect>;
+
+class BlurEffect : public RenderingEffect {
+public:
+  static BlurEffectPtr create(int w = 1280, int h = 720) {
+    return std::make_shared<BlurEffect>(w, h);
+  }
+
+  BlurEffect(int w = 1280, int h = 720) : RenderingEffect(w, h) {
+    initFbo();
+    initShader();
+    std::cout << "Color Bleed Shading effect created" << std::endl;
+    std::cout << _width << " " << _height << std::endl;
+  }
+
+  ~BlurEffect() {}
+
+  virtual void initFbo() override {
+
+    // also create framebuffer to hold SSAO processing stage
+    // -----------------------------------------------------
+
+    glGenFramebuffers(1, &blurFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, blurFBO);
+    // SSAO color buffer
+
+    // position color buffer
+    glGenTextures(1, &blurColorBuffer);
+    glBindTexture(GL_TEXTURE_2D, blurColorBuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, _width, _height, 0, GL_RGBA,
+                 GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                           blurColorBuffer, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+      std::cout << "SSAO Framebuffer not complete!" << std::endl;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  }
+
+  virtual void initShader() override {
+    this->mShader.bind();
+    this->mShader.init("deffered_blur_shader", get_shader("sqr_vert"),
+                       get_shader("blur_sqr_frag"));
+  }
+
+  virtual unsigned int getFBO() override { return blurFBO; }
+
+  virtual void setTarget(unsigned int tex) { gTarget = tex; }
+  virtual void setNormal(unsigned int tex) { gNormal = tex; }
+  virtual unsigned int getBlurred() { return blurColorBuffer; }
+
+  virtual void render(ViewerPtr view) override {
+
+    // 2. generate SSAO texture
+    // ------------------------
+    glBindFramebuffer(GL_FRAMEBUFFER, blurFBO);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    mShader.bind();
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, gTarget);
+
+    this->mShader.setUniform("projection", view->getProjection());
+    this->mShader.setUniform("targetInput", 0);
+
+    this->draw();
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  }
+
+  unsigned int gTarget, gNormal;
+  unsigned int blurFBO;
+  unsigned int blurColorBuffer;
 
   // nanogui::GLShader mBlurShader;
 };
@@ -646,16 +857,40 @@ public:
     if (grab)
       _frameGrabber = FrameGrabber::create(_width, _height);
 
-    _renderingEffects.resize(2);
+    _renderingEffects.resize(4);
+    //_renderingEffects[0] = SsaoShadingEffect::create(_width, _height);
     _renderingEffects[0] = SsaoShadingEffect::create(_width, _height);
-    _renderingEffects[1] = DeferredShadingEffect::create(_width, _height);
+    _renderingEffects[1] = ColorBleedEffect::create(_width, _height);
+    _renderingEffects[2] = BlurEffect::create(_width, _height);
+    _renderingEffects[3] = DeferredShadingEffect::create(_width, _height);
+
+    //    SsaoShadingEffectPtr ssao =
+    //        std::dynamic_pointer_cast<SsaoShadingEffect>(_renderingEffects[0]);
     SsaoShadingEffectPtr ssao =
         std::dynamic_pointer_cast<SsaoShadingEffect>(_renderingEffects[0]);
+
+    ColorBleedEffectPtr bleed =
+        std::dynamic_pointer_cast<ColorBleedEffect>(_renderingEffects[1]);
+
+    BlurEffectPtr blur =
+        std::dynamic_pointer_cast<BlurEffect>(_renderingEffects[2]);
+
     DeferredShadingEffectPtr deffered =
-        std::dynamic_pointer_cast<DeferredShadingEffect>(_renderingEffects[1]);
+        std::dynamic_pointer_cast<DeferredShadingEffect>(_renderingEffects[3]);
+
     ssao->setPositionTexture(deffered->getPositionTexture());
     ssao->setNormalTexture(deffered->getNormalTexture());
+
+    bleed->setPositionTexture(deffered->getPositionTexture());
+    bleed->setNormalTexture(deffered->getNormalTexture());
+    bleed->setAlbedo(deffered->getAlbedo());
+
+    blur->setTarget(bleed->getBleedTexture());
+    blur->setNormal(deffered->getNormalTexture());
+
     deffered->setSsaoTexture(ssao->getSsaoTexture());
+    deffered->setBleedTexture(blur->getBlurred());
+
     //_renderingEffect = HdrEffect::create(_width, _height);
   }
 
@@ -719,6 +954,7 @@ public:
     if (mScene) {
       mScene->_onAnimate();
     }
+
     _viewer->onFrame();
   }
 
@@ -728,10 +964,13 @@ public:
 
     if (this->_animate) {
       this->animate();
+
+      if (_rotate_ball)
+        _viewer->rotate_ball();
     }
 
     glEnable(GL_DEPTH_TEST);
-    glBindFramebuffer(GL_FRAMEBUFFER, _renderingEffects[1]->getFBO());
+    glBindFramebuffer(GL_FRAMEBUFFER, _renderingEffects[3]->getFBO());
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     if (mScene)
@@ -755,6 +994,7 @@ public:
 
 private:
   bool _animate = false;
+  bool _rotate_ball = true;
   unsigned int _frame = 0;
   ScenePtr mScene;
   gg::ViewerPtr _viewer;

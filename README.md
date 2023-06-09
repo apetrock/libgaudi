@@ -22,6 +22,7 @@ libGaudi is a topological dynamic mesh library.  In addition to handling the com
 * Geodesic walks on the mesh surface and subsequent subdivision while preserving underlying data
 * Debugging is an immediate-mode like logger that lets you push a handful of primitives to be rendered each frame using geometry shaders.
 * Screen Space Ambient Occlusion
+* Simple Framebuffer Grabber for grabbing mpeg movies
 
 
 ### Future work:
@@ -41,7 +42,7 @@ libGaudi is a topological dynamic mesh library.  In addition to handling the com
 ### Dependencies:
   viewer: Nanogui, GLFW, Eigen, 
   Mesh Library: Eigen
-    
+
 ### Some examples:
 <p align="center">
   <img src="images/noodles.png" width="256" height="256"/>

@@ -47,14 +47,28 @@ public:
   virtual void do_alloc(const size_t &sz) = 0;
   virtual void do_resize(const size_t &sz) = 0;
   virtual size_t size() = 0;
-  virtual void calc(const shell::shell &M, const index_t &i, const real &C,
-                    const std::vector<index_t> &vals) = 0;
 
-  virtual void flip(const shell::shell &M, const index_t &i, const real &C,
-                    const std::vector<index_t> &vals) = 0;
+  /*migrate these calcs to be less generic and specialized for each op*/
 
-  virtual void calc(const rod::rod &R, const index_t &i, const real &C,
-                    const std::vector<index_t> &vals) = 0;
+  virtual void subdivide(const shell::shell &M, //
+                         const index_t &i0, const index_t &i1,
+                         const index_t &i2, const index_t &i3, //
+                         const real &s, const index_t &source_corner){};
+
+  virtual void collapse(const shell::shell &M, const index_t &i){};
+
+  virtual void merge(const shell::shell &M,                //
+                     const index_t &i0, const index_t &i1, //
+                     const index_t &i2, const index_t &i3, //
+                     const index_t vA0, const index_t vA1, //
+                     const index_t vB0, const index_t vB1) {}
+
+  virtual void flip(const shell::shell &M, const index_t &i,
+                    const index_t &prim_id, const real &C,
+                    const std::vector<index_t> &vals){};
+
+  virtual void calc(const rod::rod &R, const index_t &i, const index_t &prim_id,
+                    const real &C, const std::vector<index_t> &vals) = 0;
 
   virtual void do_map(const index_t i, const index_t it) = 0;
   virtual void do_permute(const std::vector<index_t> &permute) = 0;
@@ -86,7 +100,8 @@ public:
   const std::vector<TYPE> &data() const { return __data; }
   virtual size_t size() { return __data.size(); };
 
-  virtual void calc(const shell::shell &M, const index_t &i, const real &C,
+  virtual void calc(const shell::shell &M, const index_t &i,
+                    const index_t &prim_id, const real &C,
                     const std::vector<index_t> &vals) {
     if (__type == VERTEX) {
       // real iN = 1.0 / real(vals.size());
@@ -107,8 +122,67 @@ public:
     }
   }
 
-  virtual void calc(const rod::rod &R, const index_t &i, const real &C,
-                    const std::vector<index_t> &vals) {
+  virtual void subdivide(const shell::shell &M, //
+                         const index_t &i0, const index_t &i1,
+                         const index_t &i2, const index_t &i3, //
+                         const real &s, const index_t &source_corner) {
+    index_t c0 = source_corner;
+    index_t c1 = M.other(c0);
+    if (__type == VERTEX) {
+      index_t v0 = M.vert(c0);
+      index_t v1 = M.vert(c1);
+      this->__data[i0] = va::mix(s, this->__data[v0], this->__data[v1]);
+    } else if (__type == EDGE) {
+      index_t f0 = M.face(c0);
+      index_t f1 = M.face(c1);
+      /*not implemented*/
+    } else if (__type == FACE) {
+      index_t e0 = c0 / 2;
+      /*not implemented*/
+    }
+  };
+
+  virtual void collapse(const shell::shell &M, const index_t &i) {
+    index_t c0 = i;
+    index_t c1 = M.other(c0);
+    if (__type == VERTEX) {
+      index_t v0 = M.vert(c0);
+      index_t v1 = M.vert(c1);
+      this->__data[v0] = va::mix(0.5, this->__data[v0], this->__data[v1]);
+    } else if (__type == EDGE) {
+      index_t f0 = M.face(c0);
+      index_t f1 = M.face(c1);
+      /*not implemented*/
+    } else if (__type == FACE) {
+      index_t e0 = c0 / 2;
+      /*not implemented*/
+    }
+  };
+
+  virtual void merge(const shell::shell &M,                //
+                     const index_t &i0, const index_t &i1, //
+                     const index_t &i2, const index_t &i3, //
+                     const index_t vA0, const index_t vA1, //
+                     const index_t vB0, const index_t vB1) {
+    TYPE tvA0 = this->__data[vA0];
+    TYPE tvA1 = this->__data[vA1];
+    TYPE tvB0 = this->__data[vB0];
+    TYPE tvB1 = this->__data[vB1];
+
+    if (__type == VERTEX) {
+      this->__data[i0] = va::mix(0.5, this->__data[vA0], this->__data[vB0]);
+      this->__data[i1] = va::mix(0.5, this->__data[vA1], this->__data[vB1]);
+      this->__data[i2] = va::mix(1.0, this->__data[vA0], this->__data[vB0]);
+      this->__data[i3] = va::mix(1.0, this->__data[vA1], this->__data[vB1]);
+    } else if (__type == EDGE) {
+      // index_t f0 = M.face(c0);
+      // index_t f1 = M.face(c1);
+      /*not implemented*/
+    }
+  };
+
+  virtual void calc(const rod::rod &R, const index_t &i, const index_t &prim_id,
+                    const real &C, const std::vector<index_t> &vals) {
     real iN = 1.0 / real(vals.size());
     TYPE vavg = z::zero<TYPE>();
     for (const auto &iv : vals) {
@@ -118,8 +192,7 @@ public:
     __data[i] = vavg;
   }
 
-  virtual void flip(const shell::shell &M, const index_t &i, const real &C,
-                    const std::vector<index_t> &vals) {}
+  virtual void flip(const shell::shell &M, const index_t &i) {}
 
   virtual void do_alloc(const size_t &sz) {
     __tmp = std::vector<TYPE>(sz, z::zero<TYPE>());
@@ -164,40 +237,66 @@ public:
 };
 
 using scalar_datum = datum_t<real>;
+using vec3_datum = datum_t<vec3>;
 
-struct vec3_datum : public datum_t<vec3> {
+struct rod_datum : public datum_t<int> {
 public:
-  typedef std::shared_ptr<vec3_datum> ptr;
+  typedef std::shared_ptr<rod_datum> ptr;
 
-  static ptr create(prim_type type, const std::vector<vec3> &data) {
-    return std::make_shared<vec3_datum>(type, data);
+  static ptr create(prim_type type, const std::vector<int> &data) {
+    return std::make_shared<rod_datum>(type, data);
   }
 
-  vec3_datum(prim_type type, const std::vector<vec3> &data)
-      : datum_t<vec3>(type, data){};
-  virtual ~vec3_datum(){};
+  rod_datum(prim_type type, const std::vector<int> &data)
+      : datum_t<int>(type, data){};
+  virtual ~rod_datum(){};
 
-  virtual void calc(const shell::shell &M, const index_t &i, const real &C,
+  virtual void calc(const shell::shell &M, const index_t &i,
+                    const index_t &prim_id, const real &C,
                     const std::vector<index_t> &vals) {
     real w = 0.0;
-    /*
-    vec3 vavg = z::zero<vec3>();
-    for (const auto &iv : vals) {
-      real wi = vert_area(M, iv, this->__data);
-      // real wi = vert_cotan_weight(M, iv, this->__data);
-      w += wi;
-      vavg += wi * this->__data[iv];
-    }
-    */
-    this->__data[i] = va::mix(C, this->__data[vals[0]], this->__data[vals[1]]);
+    bool val = this->__data[i];
+    if (val && (prim_id == 0 || prim_id == 1))
+      this->__data[i] = 1;
+    else
+      this->__data[i] = 0;
   }
 
-  virtual void flip(const shell::shell &M, const index_t &i, const real &C,
+  virtual void subdivide(const shell::shell &M, //
+                         const index_t &i0, const index_t &i1,
+                         const index_t &i2, const index_t &i3, //
+                         const real &s, const index_t &source_corner) {
+    index_t c0 = source_corner;
+    index_t c1 = M.other(c0);
+    if (__type == EDGE) {
+      bool val = this->__data[source_corner / 2];
+      if (val) {
+        this->__data[i0] = 1;
+        this->__data[i1] = 1;
+        this->__data[i2] = 0;
+        this->__data[i3] = 0;
+      } else {
+        this->__data[i0] = 0;
+        this->__data[i1] = 0;
+        this->__data[i2] = 0;
+        this->__data[i3] = 0;
+      }
+      /*not implemented*/
+    }
+  };
+
+  virtual void flip(const shell::shell &M, const index_t &i,
+                    const index_t &prim_id, const real &C,
                     const std::vector<index_t> &vals) {}
 
-  virtual void calc(const rod::rod &R, const index_t &i, const real &C,
-                    const std::vector<index_t> &vals) {}
+  virtual void calc(const rod::rod &R, const index_t &i, const index_t &prim_id,
+                    const real &C, const std::vector<index_t> &vals) {}
+
 }; // namespace asawa
+
+std::vector<int> &get_rod_data(shell::shell &M, index_t h) {
+  return static_pointer_cast<rod_datum>(M.get_datum(h))->data();
+}
 
 std::vector<real> &get_real_data(shell::shell &M, index_t h) {
   return static_pointer_cast<scalar_datum>(M.get_datum(h))->data();

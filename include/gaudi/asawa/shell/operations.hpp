@@ -95,6 +95,9 @@ index_t merge_edge(shell &M, //
   index_t v1 = M.vert(c1);
   index_t f0 = M.face(c0);
   index_t f1 = M.face(c1);
+  std::cout << "c: " << c0 << " " << c1 << " " << c0n << " " << c0p << " "
+            << c1n << " " << c1p << std::endl;
+  std::cout << "v: " << v0 << " " << v1 << " " << f0 << " " << f1 << std::endl;
 
   if (v0 != v1)
     M.remove_vertex(v0);
@@ -370,9 +373,8 @@ index_t flip_edge(shell &M, //
     M.fprintv(f1);
   }
   assert(M.fsize(f1) == 3);
-
-  assert(M.vert(c0i) != M.vert(c1i));
-  // M.uber_assert();
+  // assert(M.vert(c0i) != M.vert(c1i));
+  //  M.uber_assert();
 
   return c0i;
 }
@@ -441,7 +443,7 @@ bool corner_in_ring(shell &M, index_t vA, index_t cB) {
   bool hasB = false;
   M.for_each_vertex(vA, [&hasB, cB](index_t ci, shell &M) {
     index_t cBi = M.next(ci);
-    //std::cout << cBi << " " << cB << " - ";
+    // std::cout << cBi << " " << cB << " - ";
     hasB |= M.edge_equal(cBi, cB);
   });
   std::cout << std::endl;
@@ -457,7 +459,8 @@ bool adjacent0(shell &M, index_t cA0, index_t cB0) {
   index_t cA1n = M.next(cA1);
   index_t cB0n = M.next(cB0);
   index_t cB1n = M.next(cB1);
-  //std::cout << cA0n << " " << cA1n << " - " << cB0n << " " << cB1n << std::endl;
+  // std::cout << cA0n << " " << cA1n << " - " << cB0n << " " << cB1n <<
+  // std::endl;
   if (M.edge_equal(cA0n, cB0n))
     return true;
   if (M.edge_equal(cA0n, cB1n))

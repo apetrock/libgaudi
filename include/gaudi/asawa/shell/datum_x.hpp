@@ -75,6 +75,20 @@ real cotan(const shell &M, index_t ci, const std::vector<vec3> &x) {
   // return va::cotan(x0, xp, xn);
 }
 
+real angle(const shell &M, index_t ci, const std::vector<vec3> &x) {
+
+  vec3 xp = x[M.vert(M.prev(ci))];
+  vec3 x0 = x[M.vert(ci)];
+  vec3 xn = x[M.vert(M.next(ci))];
+  vec3 e0 = (xp - x0).normalized();
+  vec3 e1 = (xn - x0).normalized();
+  real ede = e0.dot(e1);
+  ede = va::clamp(ede, 0.0, 1.0 - 1e-8);
+  ede = acos(ede);
+
+  return ede;
+  }
+
 vec3 edge_tangent(const shell &M, index_t c0, const std::vector<vec3> &x) {
   index_t c1 = M.other(c0);
   return x[M.vert(c0)] - x[M.vert(M.next(c0))];
@@ -116,7 +130,8 @@ vec3 face_center(const shell &M, index_t fi, const std::vector<vec3> &x) {
 vec3 vert_normal(const shell &M, index_t vi, const std::vector<vec3> &x) {
   vec3 N = vec3::Zero();
   M.const_for_each_vertex(vi, [&N, &x](index_t ci, const shell &M) {
-    N += face_cross(M, M.face(ci), x);
+    real ede = angle(M, ci, x);
+    N += ede * face_cross(M, M.face(ci), x);
   });
   return N.normalized();
 }
@@ -128,6 +143,7 @@ real vert_area(const shell &M, index_t vi, const std::vector<vec3> &x) {
   });
   return A / 3.0;
 }
+
 
 real vert_cotan_weight(const shell &M, index_t vi, const std::vector<vec3> &x) {
   real w = 0.0;
@@ -141,6 +157,17 @@ std::vector<real> vert_cotan_weights(const shell &M, index_t vi,
   std::vector<real> w;
   M.const_for_each_vertex(vi, [&w, &x](index_t ci, const shell &M) {
     w.push_back(cotan(M, ci, x));
+  });
+  return w;
+}
+
+std::vector<real> vert_angle_weights(const shell &M, index_t vi,
+                                     const std::vector<vec3> &x) {
+  std::vector<real> w;
+  M.const_for_each_vertex(vi, [&w, &x](index_t ci, const shell &M) {
+    real thet = angle(M, ci, x);
+    real A = face_area(M, M.face(ci), x);
+    w.push_back(thet * A);
   });
   return w;
 }

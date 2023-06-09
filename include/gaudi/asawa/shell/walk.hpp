@@ -14,6 +14,7 @@
 
 #include <list>
 
+#include <math.h>
 #include <memory.h>
 #include <ostream>
 #include <set>
@@ -543,6 +544,70 @@ inline void log_seg_e(shell &M, const std::vector<vec3> &x, //
   gg::geometry_logger::line(x0 + n_o * N0, x1 + n_o * N1, col);
 };
 
+std::vector<index_t> stitch_walk(shell &M, const std::vector<vec3> &x,
+                                 const std::vector<index_t> &walk_0) {
+  std::vector<index_t> walk;
+  std::vector<bool> has_walk(M.vert_count(), false);
+
+  for (int i = 0; i < walk_0.size() - 1; i++) {
+    index_t v0 = M.vert(walk_0[i + 0]);
+    has_walk[v0] = true;
+  }
+
+  for (int i = 0; i < walk_0.size() - 1; i++) {
+    index_t v0 = M.vert(walk_0[i + 0]);
+    index_t v1 = M.vert(walk_0[i + 1]);
+    log_seg_v(M, x, v0, v1, 0.0045, vec4(1.0, 1.0, 0.0, 1.0));
+
+    asawa::index_t cm = -1;
+
+    M.const_for_each_vertex(v0, [&](index_t c0, const shell &M) {
+      index_t vn = M.vert(M.next(c0));
+      if (vn == v1) {
+        cm = c0;
+      }
+    });
+
+    vec3 dv0 = (x[v1] - x[v0]).normalized();
+    std::cout << v0 << " " << v1 << std::endl;
+    int k = 0;
+
+    if (cm == -1) {
+      std::cout << " gah! " << std::endl;
+      log_seg_v(M, x, v0, v1, 0.0025, vec4(1.0, 0.0, 0.0, 1.0));
+    }
+
+    while (cm == -1 && k < 10) {
+      index_t co = -1;
+      index_t vo = -1;
+      real max = -1e12;
+      M.const_for_each_vertex(v0, [&](index_t c0, const shell &M) {
+        index_t vn = M.vert(M.next(c0));
+        vec3 dvn = (x[vn] - x[v0]).normalized();
+        real d = dvn.dot(dv0);
+        if (d > max) {
+          max = d;
+          co = c0;
+          vo = vn;
+          std::cout << " d: " << d << " " << co << " " << vn << std::endl;
+        }
+        if (vn == v1) {
+          cm = c0;
+          max = 2.0;
+        }
+      });
+      v0 = vo;
+      walk.push_back(co);
+      std::cout << co << " " << cm << " " << v0 << std::endl;
+      k++;
+    }
+    std::cout << " cm: " << cm << std::endl;
+    walk.push_back(cm);
+  }
+
+  return  walk;
+}
+
 inline bool stol(real s, real tol) { return s < tol || s > 1.0 - tol; };
 
 index_t get_seg_range(index_t t0, shell &M, const std::vector<vec3> &x,
@@ -574,8 +639,7 @@ index_t get_seg_range(index_t t0, shell &M, const std::vector<vec3> &x,
     S[i] = s;
 
     if (has(visited, c0 / 2) || stol(s, tol)) {
-      std::cout << " set_verts: " << sub_verts[i] << " " << c0 << std::endl;
-      std::cout << " visited: " << has(visited, c0 / 2) << " " << stol(s, tol)
+      std::cout << " set_verts: " << i << ": " << sub_verts[i] << " " << c0
                 << std::endl;
 
       if (s < 0.5)
@@ -636,8 +700,8 @@ std::vector<index_t> subdivide_seg(shell &M, const std::vector<vec3> &x, //
   return l_verts;
 }
 
-void crack_edges(shell &M, std::vector<index_t> &E, std::vector<real> &S,
-                 const real &tol = 1e-2) {
+std::vector<index_t> crack_edges(shell &M, std::vector<index_t> &E,
+                                 std::vector<real> &S, const real &tol = 1e-2) {
 
   using comp_great = shell_data_comp<vec3, std::greater<real>>;
   const std::vector<vec3> &x = get_vec_data(M, 0);
@@ -662,13 +726,18 @@ void crack_edges(shell &M, std::vector<index_t> &E, std::vector<real> &S,
     std::cout << "k: " << k << std::endl;
     k++;
 
-    // log_edge(M, x, E[t0], 0.0025, vec4(0.0, 0.0, 0.75, 1.0));
-    //  std::cout << " t0b: " << t0 << std::endl;
     while (stol(S[t0], tol) && t0 < E.size()) {
+      real s = S[t0];
+      index_t c0 = E[t0];
+      index_t c1 = M.other(c0);
+      s = round(s);
+      S[t0] = s;
+      if (s < 0.5)
+        sub_verts[t0] = c0;
+      else
+        sub_verts[t0] = c1;
       t0++;
     }
-    // std::cout << " t0a: " << t0 << std::endl;
-    // log_edge(M, x, E[t0], 0.0025, vec4(0.0, 0.0, 1.0, 1.0));
 
     index_t i = t0;
     t1 = get_seg_range(t0, M, x, X, E, S, sub_verts, tol);
@@ -682,20 +751,26 @@ void crack_edges(shell &M, std::vector<index_t> &E, std::vector<real> &S,
     std::vector<index_t> Ei(E.begin() + t0, E.begin() + t1);
 
     std::vector<index_t> l_verts = subdivide_seg(M, x, Ei, Si);
-
+    std::cout << "t: " << t0 << " " << l_verts.size() + t0 << " "
+              << sub_verts.size() << " " << l_verts.size() << std::endl;
     std::copy(l_verts.begin(), l_verts.end(), sub_verts.begin() + t0);
 
-    if (t1 < E.size() - 1)
-      log_edge(M, x, E[t1], 0.0025, vec4(0.0, 0.0, 1.0, 1.0));
+    // if (t1 < E.size() - 1)
+    //   log_edge(M, x, E[t1], 0.0025, vec4(0.0, 0.0, 1.0, 1.0));
 
     t0 = t1;
   }
 
   t0 = 0;
   t1 = t0;
+  for (int i = 0; i < sub_verts.size(); i++) {
+    std::cout << sub_verts[i] << " ";
+  }
+  std::cout << std::endl;
 
   for (int i = 0; i < sub_verts.size() - 1; i++) {
     index_t c0 = sub_verts[i];
+    std::cout << i << " " << c0 << std::endl;
     if ((X[i] - x[M.vert(c0)]).norm() > 1e-8)
       sub_verts[i] = find_point(M, x, c0, X[i]);
   }
@@ -722,6 +797,7 @@ void crack_edges(shell &M, std::vector<index_t> &E, std::vector<real> &S,
 
       std::copy(l_verts.begin(), l_verts.end(),
                 std::back_inserter(sub_verts_2));
+
       std::copy(Xi.begin(), Xi.end(), std::back_inserter(X2));
 
       t0 = t1 + 1;
@@ -737,10 +813,13 @@ void crack_edges(shell &M, std::vector<index_t> &E, std::vector<real> &S,
       sub_verts_2[i] = find_point(M, x, c0, X2[i]);
   }
 
+#if 1
   for (int i = 0; i < sub_verts_2.size() - 1; i++) {
     lam_log_seg_vv(i, 0.03, vec4(0.0, 1.0, 0.0, 1.0), sub_verts_2);
     // log_adj_edges(M, x, M.vert(sub_verts_2[i]));
   }
+#endif
+  return sub_verts_2; // stitch_walk(M, x, sub_verts_2);
 }
 
 } // namespace shell

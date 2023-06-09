@@ -36,6 +36,17 @@ template <class Tf, class Tv> inline Tv linear(Tf f, const Tv &x, const Tv &y) {
   return (y - x) * f + x;
 }
 
+template <class Tf> inline bool mix(Tf f, const bool &x0, const bool &x1) {
+  if (x0 && x1)
+    return true;
+  else if (!x0 && !x1)
+    return false;
+  if (f < 0.5)
+    return x0;
+  else
+    return x1;
+}
+
 template <class Tf, class Tv> inline Tv mix(Tf f, const Tv &x0, const Tv &x1) {
   return (1.0 - f) * x0 + f * x1;
 }

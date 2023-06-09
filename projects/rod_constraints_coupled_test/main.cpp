@@ -26,9 +26,9 @@
 #include "GaudiGraphics/geometry_logger.h"
 #include "GaudiGraphics/mesh_helper.hpp"
 #include "GaudiGraphics/viewer.hpp"
-//#include "gaudi/asawa/asawa.h"
+// #include "gaudi/asawa/asawa.h"
 
-#include "gaudi/duchamp/rod_constraint_test.hpp"
+#include "gaudi/duchamp/rod_constraints_coupled_test.hpp"
 
 #define TRACKBALLSIZE (0.8f)
 #define RENORMCOUNT 97
@@ -51,18 +51,28 @@ public:
 
   void initScene() {
     //_experiment = duchamp::mean_shift_experiment<growth>::create();
+    __surf = gaudi::duchamp::block_test::create();
 
-    _obj = gg::BufferObject::create();
-    _obj->init();
-    mSceneObjects.push_back(_obj);
-    __surf = gaudi::duchamp::rods_test::create();
+    _objs.resize(__surf->__R.size());
+    for (int i = 0; i < __surf->__R.size(); i++) {
+      _objs[i] = gg::BufferObject::create();
+      _objs[i]->init();
+      mSceneObjects.push_back(_objs[i]);
+    }
+
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }
 
   virtual void onAnimate(int frame) {
 
     __surf->step(frame);
-    gg::fillBuffer_ref(*__surf->__R, _obj);
+    vector<gg::colorRGB> colors = {
+        gg::colorRGB(1.0, 0.7, 0.0, 1.0),
+        gg::colorRGB(0.0, 0.7, 1.0, 1.0),
+    };
+    for (int i = 0; i < __surf->__R.size(); i++) {
+      gg::fillBuffer_ref(*__surf->__R[i], _objs[i], colors[i]);
+    }
     //   std::cout << "rendering debug" << std::endl;
     //   asawa::test();
 
@@ -82,10 +92,10 @@ public:
 
 private:
   // gaudi::duchamp::fast_summation_test::ptr __surf;
-  gaudi::duchamp::rods_test::ptr __surf;
+  gaudi::duchamp::block_test::ptr __surf;
 
   std::vector<gg::DrawablePtr> mSceneObjects;
-  gg::BufferObjectPtr _obj = NULL;
+  std::vector<gg::BufferObjectPtr> _objs;
 };
 
 std::string GetCurrentWorkingDir(void) {
