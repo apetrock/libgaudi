@@ -31,12 +31,14 @@ class block_constraint : public projection_constraint {
 public:
   typedef std::shared_ptr<block_constraint> ptr;
 
-  static ptr create(const std::vector<index_t> &ids, const real &w, std::vector<sim_block::ptr> blocks) {
+  static ptr create(const std::vector<index_t> &ids, const real &w,
+                    std::vector<sim_block::ptr> blocks) {
     return std::make_shared<block_constraint>(ids, w, blocks);
   }
 
-  block_constraint(const std::vector<index_t> &ids, const real &w, 
-                std::vector<sim_block::ptr> blocks): _blocks(blocks), projection_constraint(ids, w){}
+  block_constraint(const std::vector<index_t> &ids, const real &w,
+                   std::vector<sim_block::ptr> blocks)
+      : _blocks(blocks), projection_constraint(ids, w) {}
 
   std::vector<sim_block::ptr> _blocks;
 };

@@ -17,36 +17,35 @@
 #include <vector>
 #include <zlib.h>
 
+#include "gaudi/common.h"
 #include "shell_collision_constraint.hpp"
 #include "shell_constraints.hpp"
-#include "gaudi/common.h"
 
 namespace gaudi {
 namespace hepworth {
 namespace block {
 
-void init_pinned(const asawa::shell::shell &shell,
-                 std::vector<projection_constraint::ptr> &constraints,
-                 const std::vector<vec3> &x, const real &w, std::vector<sim_block::ptr> blocks) {
-  for (int iv = 0; iv < shell.vert_count(); iv++) {
-    constraints.push_back(pinned::create({iv}, x[iv], w, blocks));
-  }
-}
-
 void init_edge_growth(const asawa::shell::shell &shell,
                       std::vector<projection_constraint::ptr> &constraints,
                       const std::vector<vec3> &x, const std::vector<real> &l0,
-                      const real &g, const real &w, std::vector<sim_block::ptr> blocks) {
+                      const real &g, const real &w,
+                      std::vector<sim_block::ptr> blocks) {
 
   std::vector<real> ct = asawa::shell::edge_cotan_weights(shell, x);
 
   auto range = shell.get_edge_range();
-  int i = 0;
+  int k = 0;
   for (auto c0 : range) {
     int i = shell.vert(c0);
     int j = shell.vert(shell.other(c0));
-    if (std::isnan(l0[c0 / 2]))
+
+    if (std::isnan(l0[k]))
       continue;
+
+    real cti = ct[k];
+    if (std::isnan(cti))
+      continue;
+    cti = va::clamp(cti, 0.0, 10.0);
 
     real Ai = asawa::shell::face_area(shell, shell.face(c0), x);
     real Aj = asawa::shell::face_area(shell, shell.face(shell.other(c0)), x);
@@ -56,7 +55,9 @@ void init_edge_growth(const asawa::shell::shell &shell,
       continue;
 
     constraints.push_back(
-        edge_strain::create({i, j},  0.85 * l0[c0 / 2], g, w / (Ai + Aj), blocks));
+        edge_strain::create(std::vector<index_t>({i, j}), 0.85 * l0[c0 / 2], g,
+                            w * pow(cti, 0.5) / (Ai + Aj), blocks));
+    k++;
   }
 }
 
@@ -86,13 +87,15 @@ void init_edge_strain(const asawa::shell::shell &shell,
     if (Aj < 1e-8)
       continue;
 
-    constraints.push_back(edge_strain::create({i, j}, l0[c0 / 2], 1.0, w, blocks));
+    constraints.push_back(edge_strain::create(std::vector<index_t>({i, j}),
+                                              l0[c0 / 2], 1.0, w, blocks));
   }
 }
 
 void init_bending(const asawa::shell::shell &shell,
                   std::vector<projection_constraint::ptr> &constraints,
-                  const std::vector<vec3> &x, const real &w, std::vector<sim_block::ptr> blocks) {
+                  const std::vector<vec3> &x, const real &w,
+                  std::vector<sim_block::ptr> blocks) {
 
   for (int iv = 0; iv < shell.vert_count(); iv++) {
     real A = asawa::shell::vert_area(shell, iv, x);
@@ -105,9 +108,27 @@ void init_bending(const asawa::shell::shell &shell,
   }
 }
 
+void init_vec_align(const asawa::shell::shell &shell,
+                    std::vector<projection_constraint::ptr> &constraints,
+                    const std::vector<vec3> &x, const real &w,
+                    std::vector<sim_block::ptr> blocks) {
+
+  for (int iv = 0; iv < shell.vert_count(); iv++) {
+    real A = asawa::shell::vert_area(shell, iv, x);
+    if (A < 1e-8)
+      continue;
+    std::vector<index_t> idx = shell.get_one_ring(iv);
+    idx.insert(idx.begin(), iv);
+    std::vector<real> weights = asawa::shell::vert_cotan_weights(shell, iv, x);
+    real aw = A * w;
+    constraints.push_back(vec_align::create(idx, weights, x, A * w, blocks));
+  }
+}
+
 void init_area(const asawa::shell::shell &shell,
                std::vector<projection_constraint::ptr> &constraints,
-               const std::vector<vec3> &x, const real &w, std::vector<sim_block::ptr> blocks) {
+               const std::vector<vec3> &x, const real &w,
+               std::vector<sim_block::ptr> blocks) {
 
   auto range = shell.get_face_range();
   int i = 0;
@@ -117,20 +138,19 @@ void init_area(const asawa::shell::shell &shell,
     if (asawa::shell::face_area(shell, fi, x) < 1e-8)
       continue;
     auto tri = shell.get_tri(fi);
-    constraints.push_back(area::create(
-        {
-            tri[0],
-            tri[1],
-            tri[2],
-        },
-        x, 0.98, 1.02, w, blocks));
+    constraints.push_back(area::create(std::vector<index_t>({
+                                           tri[0],
+                                           tri[1],
+                                           tri[2],
+                                       }),
+                                       x, 0.98, 1.02, w, blocks));
   }
 }
 
 void init_laplacian(const asawa::shell::shell &shell,
                     std::vector<projection_constraint::ptr> &constraints,
                     const std::vector<vec3> &x, int weight_type, const real &w,
-                     std::vector<sim_block::ptr> blocks) {
+                    std::vector<sim_block::ptr> blocks) {
 
   for (int iv = 0; iv < shell.vert_count(); iv++) {
     real A = asawa::shell::vert_area(shell, iv, x);
@@ -141,21 +161,22 @@ void init_laplacian(const asawa::shell::shell &shell,
 
     std::vector<real> weights;
     switch (weight_type) {
-      case 0:
-        weights = asawa::shell::vert_unitary_weights(shell, iv, x);
-      case 1:
-        weights = asawa::shell::vert_cotan_weights(shell, iv, x);
-      case 2:
-        weights = asawa::shell::vert_angle_weights(shell, iv, x);
+    case 0:
+      weights = asawa::shell::vert_unitary_weights(shell, iv, x);
+    case 1:
+      weights = asawa::shell::vert_cotan_weights(shell, iv, x);
+    case 2:
+      weights = asawa::shell::vert_angle_weights(shell, iv, x);
     }
 
-    constraints.push_back(laplacian::create(idx, weights, x, w / A, blocks));
+    constraints.push_back(laplacian::create(idx, weights, x, w * A, blocks));
   }
 }
 
 void init_cross(const asawa::shell::shell &shell,
                 std::vector<projection_constraint::ptr> &constraints,
-                const real &lambda, const real &w, std::vector<sim_block::ptr> blocks) {
+                const real &lambda, const real &w,
+                std::vector<sim_block::ptr> blocks) {
 
   for (int c0 = 0; c0 < shell.corner_count(); c0++) {
     if (!shell.vnext(c0))
@@ -174,16 +195,16 @@ void init_cross(const asawa::shell::shell &shell,
 void init_edge_edge_collisions(
     asawa::shell::shell &M, asawa::shell::dynamic &dynamic,
     std::vector<projection_constraint::ptr> &constraints,
-    const std::vector<vec3> &x, const real &r, const real &eps, 
-    const real &w, std::vector<sim_block::ptr> blocks) {
+    const std::vector<vec3> &x, const real &r, const real &eps, const real &w,
+    std::vector<sim_block::ptr> blocks) {
 
   vector<std::array<index_t, 2>> collisions =
       dynamic.get_internal_edge_edge_collisions(r);
   for (auto &c : collisions) {
-    if (c[0] < 0)
+
+    if (c[0] < 0 || c[1] < 0)
       continue;
-    if (c[1] < 0)
-      continue;
+
     index_t c00 = c[0];
     index_t c01 = M.other(c[0]);
     index_t c10 = c[1];
@@ -221,7 +242,8 @@ void init_pnt_tri_collisions(
     const std::vector<vec3> &x, const real &r, const real &eps, const real &w,
     std::vector<sim_block::ptr> blocks) {
 
-  vector<std::array<index_t, 2>> collisions = dynamic.get_internal_pnt_tri_collisions(r);
+  vector<std::array<index_t, 2>> collisions =
+      dynamic.get_internal_pnt_tri_collisions(r);
   for (auto &c : collisions) {
     index_t iv = c[0];
     index_t it = c[1];
@@ -262,7 +284,7 @@ void init_pnt_tri_collisions(
         {iv, tri[0], tri[1], tri[2]}, Nv, eps, w, blocks));
   }
 }
-} // namespace shell
+} // namespace block
 } // namespace hepworth
 } // namespace gaudi
 

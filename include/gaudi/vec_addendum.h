@@ -22,6 +22,7 @@ using namespace std;
 namespace va {
 template <typename T> using VEC3 = Eigen::Matrix<T, 3, 1>;
 template <typename T> using VEC4 = Eigen::Matrix<T, 4, 1>;
+template <typename T> using QUAT = Eigen::Quaternion<T>;
 
 template <int N, typename T> using VEC = Eigen::Matrix<T, N, 1>;
 
@@ -987,6 +988,83 @@ template <typename T> bool greater_than(const VEC3<T> &A, const VEC3<T> &B) {
 template <typename T> bool less_than(const VEC3<T> &A, const VEC3<T> &B) {
   return (A.array() < B.array()).sum() > 0;
 };
+
+template <typename T> QUAT<T> slerp0(QUAT<T> a, QUAT<T> b, float t) {
+  T dotAB = a.dot(b);
+  dotAB = abs(dotAB);
+  T s0, s1;
+  if (dotAB < 0.9995f) {
+    T s = sqrt(1.0 - dotAB * dotAB); //   Sine of relative angle
+    T a = atan2(s, dotAB);
+    T c = std::cos(t * a);
+
+    s1 = sqrtf(1 - c * c) / s;
+    s0 = c - dotAB * s1;
+  } else {
+    s0 = 1.0f - t;
+    s1 = t;
+  }
+
+  return QUAT<T>(s0 * a.coeffs() + s1 * b.coeffs());
+}
+
+template <typename T> QUAT<T> slerp(QUAT<T> a, QUAT<T> b, float t) {
+  T dotAB = a.dot(b);
+  dotAB = abs(dotAB);
+
+  if (dotAB < 0.0) {
+    b.coeffs() *= -1.0;
+    dotAB *= 1.0;
+  }
+
+  // b.coeffs() *= sgn(dotAB);
+  // dotAB *= sgn(dotAB);
+  if (dotAB < 0.9995f) {
+    // T s_ab = sqrt(1.0 - dotAB * dotAB); //   Sine of relative angle
+    // T theta = atan2(s_ab, dotAB);
+
+    T theta = acosf(dotAB);
+
+    T sinTheta = sinf(theta);
+    T af = sinf((1.0f - t) * theta) / sinTheta;
+    T bf = sinf(t * theta) / sinTheta;
+    return QUAT<T>(af * a.coeffs() + bf * b.coeffs());
+  } else {
+    T af = 1.0f - t;
+    T bf = t;
+    return QUAT<T>(af * a.coeffs() + bf * b.coeffs());
+  }
+}
+
+template <typename T> QUAT<T> Reciprocal(QUAT<T> q) {
+  return QUAT<T>(q.conjugate().coeffs() * (1.0f / q.dot(q)));
+}
+
+template <typename T> QUAT<T> Exp(QUAT<T> q) {
+  double b = q.vec().norm();
+
+  if (fabs(b) <= 1.0e-14 * abs(q.w()))
+    return QUAT<T>(exp(q.w()), 0.0f, 0.0f, 0.0f);
+  else {
+    T e = exp(q.w());
+    T f = std::sin(b) / b;
+
+    return QUAT<T>(e * std::cos(b), //
+                   e * f * q.x(),   //
+                   e * f * q.y(),   //
+                   e * f * q.z());
+  }
+}
+
+template <typename T> QUAT<T> slerp_far(QUAT<T> q0, QUAT<T> q1, float t) {
+  QUAT<T> q01 = Reciprocal(q0) * q1;
+  QUAT<T> Vdash(0.0, q01.x(), q01.y(), q01.z());
+  QUAT<T> V = QUAT<T>(Vdash.coeffs() * (1.0f / Vdash.norm()));
+  T theta = 2.0f * atan2f(Vdash.norm(), q01.w());
+  T CompTheta = theta - 2.0f * M_PI;
+
+  return q1 * Exp(QUAT<T>(t * CompTheta * V.coeffs() * 0.5f));
+}
 
 } // namespace va
 #endif

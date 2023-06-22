@@ -21,23 +21,24 @@
 #include "gaudi/common.h"
 
 #include "../projection_constraint.hpp"
-#include "sim_block.hpp"
 #include "block_constraint.hpp"
-
+#include "sim_block.hpp"
 
 namespace gaudi {
 namespace hepworth {
 namespace block {
 
-class smooth : public block_constraint  {
+class smooth : public block_constraint {
 public:
   typedef std::shared_ptr<smooth> ptr;
 
-  static ptr create(const std::vector<index_t> &ids, const real &w, std::vector<sim_block::ptr> blocks) {
+  static ptr create(const std::vector<index_t> &ids, const real &w,
+                    std::vector<sim_block::ptr> blocks) {
     return std::make_shared<smooth>(ids, w, blocks);
   }
 
-  smooth(const std::vector<index_t> &ids, const real &w, std::vector<sim_block::ptr> blocks)
+  smooth(const std::vector<index_t> &ids, const real &w,
+         std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks) {}
 
   virtual void project(const vecX &q, vecX &p) {
@@ -80,7 +81,8 @@ public:
     return std::make_shared<stretch_shear>(ids, w, l0, blocks);
   }
 
-  stretch_shear(const std::vector<index_t> &ids, const real &w, const real &l0, std::vector<sim_block::ptr> blocks)
+  stretch_shear(const std::vector<index_t> &ids, const real &w, const real &l0,
+                std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _l0(l0) {}
 
   virtual void project(const vecX &q, vecX &p) {
@@ -90,13 +92,13 @@ public:
 
     vec3 q0 = _blocks[0]->get_vec3(i, q);
     vec3 q1 = _blocks[0]->get_vec3(j, q);
-    
+
     real l0 = _l0;
     real l = (q1 - q0).norm();
     vec3 dq = (q1 - q0).normalized();
 
     quat u = _blocks[1]->get_quat(k, q);
-    
+
     vec3 d2 = u * vec3(0, 0, 1);
     // d2.normalize();
 
@@ -104,6 +106,7 @@ public:
 
     u = du * u;
     // u.normalize();
+
     p.block(_id0, 0, 3, 1) = _w * d2;
     // p.block(k, 0, 4, 1) += _w * q.block(k, 0, 4, 1);
     p.block(_id0 + 3, 0, 4, 1) = _w * vec4(u.coeffs().data());
@@ -115,15 +118,15 @@ public:
     index_t j = _blocks[0]->get_offset_idx(this->_ids[1]);
     index_t ii = _blocks[1]->get_offset_idx(this->_ids[2]);
 
-    //index_t Nv = this->_ids[3];
-    //index_t k = 3 * Nv + 4 * this->_ids[2];
-    
-    //std::cout << ii << " " << k << std::endl;
-    //std::cout << "ii: " << ii << std::endl;
+    // index_t Nv = this->_ids[3];
+    // index_t k = 3 * Nv + 4 * this->_ids[2];
+
+    // std::cout << ii << " " << k << std::endl;
+    // std::cout << "ii: " << ii << std::endl;
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(_id0 + ax,  i + ax, -_w / _l0));
+      triplets.push_back(trip(_id0 + ax, i + ax, -_w / _l0));
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(_id0 + ax,  j + ax, _w / _l0));
+      triplets.push_back(trip(_id0 + ax, j + ax, _w / _l0));
 
     for (int ax = 0; ax < 4; ax++)
       triplets.push_back(trip(_id0 + 3 + ax, ii + ax, _w));
@@ -136,25 +139,33 @@ class bend_twist : public block_constraint {
 public:
   typedef std::shared_ptr<bend_twist> ptr;
 
-  static ptr create(const std::vector<index_t> &ids, const real &w, std::vector<sim_block::ptr> blocks) {
+  static ptr create(const std::vector<index_t> &ids, const real &w,
+                    std::vector<sim_block::ptr> blocks) {
     return std::make_shared<bend_twist>(ids, w, blocks);
   }
 
-  bend_twist(const std::vector<index_t> &ids, const real &w, std::vector<sim_block::ptr> blocks)
+  bend_twist(const std::vector<index_t> &ids, const real &w,
+             std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks) {}
 
   virtual void project(const vecX &q, vecX &p) {
-    
+
     index_t ii = this->_ids[0];
     index_t jj = this->_ids[1];
 
     quat ui = _blocks[0]->get_quat(ii, q);
     quat uj = _blocks[0]->get_quat(jj, q);
 
-    quat uij = ui.slerp(0.5, uj);
+    // vec3 ov = 0.5 * (ui.conjugate() * uj).vec().normalized();
+    // quat om = quat(0.0, ov.x(), ov.y(), ov.z());
+    // ui = ui * om;
+    // uj = uj * om.conjugate();
 
+    // quat uij = ui.slerp(0.5, uj);
+    quat uij = va::slerp(ui, uj, 0.5);
     ui = uij;
     uj = uij;
+    // std::cout << "u: " << uij.coeffs().transpose() << std::endl;
 
     p.block(_id0 + 0, 0, 4, 1) = _w * vec4(ui.coeffs().data());
     p.block(_id0 + 4, 0, 4, 1) = _w * vec4(uj.coeffs().data());
@@ -182,17 +193,18 @@ public:
     return std::make_shared<angle>(ids, z, phi, w, blocks);
   }
 
-  angle(const std::vector<index_t> &ids, vec3 z, real phi, const real &w, std::vector<sim_block::ptr> blocks)
+  angle(const std::vector<index_t> &ids, vec3 z, real phi, const real &w,
+        std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _z(z), _phi(phi) {}
 
   virtual void project(const vecX &q, vecX &p) {
-    
+
     index_t ii = this->_ids[0];
     index_t jj = this->_ids[1];
 
     quat ui = _blocks[0]->get_quat(ii, q).normalized();
     quat uj = _blocks[0]->get_quat(jj, q).normalized();
-    
+
     /*
     index_t ii = this->_ids[0];
     index_t jj = this->_ids[1];
@@ -244,11 +256,13 @@ class cylinder : public block_constraint {
 public:
   typedef std::shared_ptr<cylinder> ptr;
 
-  static ptr create(const std::vector<index_t> &ids, const real &w, std::vector<sim_block::ptr> blocks) {
+  static ptr create(const std::vector<index_t> &ids, const real &w,
+                    std::vector<sim_block::ptr> blocks) {
     return std::make_shared<cylinder>(ids, w, blocks);
   }
 
-  cylinder(const std::vector<index_t> &ids, const real &w, std::vector<sim_block::ptr> blocks)
+  cylinder(const std::vector<index_t> &ids, const real &w,
+           std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks) {}
 
   virtual void project(const vecX &q, vecX &p) {
@@ -312,7 +326,7 @@ public:
   }
 };
 #endif
-} // namespace rod
+} // namespace block
 } // namespace hepworth
 } // namespace gaudi
 #endif

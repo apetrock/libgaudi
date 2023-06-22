@@ -3,6 +3,7 @@
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 
+#include "Eigen/src/Geometry/AngleAxis.h"
 #include "gaudi/arp/arp.h"
 
 #include "gaudi/common.h"
@@ -10,7 +11,7 @@
 
 #include "GaudiGraphics/geometry_logger.h"
 
-//#include "subdivide.hpp"
+// #include "subdivide.hpp"
 
 #include <array>
 #include <cmath>
@@ -30,6 +31,7 @@ namespace gaudi {
 namespace asawa {
 namespace rod {
 
+typedef std::array<index_t, 3> consec_t;
 class rod {
 public:
   typedef std::shared_ptr<rod> ptr;
@@ -79,11 +81,11 @@ public:
   }
 
   void _init_params() {
-    __l0.resize(__corners_next.size());
-    __v.resize(__corners_next.size());
-    __M.resize(__corners_next.size());
-    __J.resize(__corners_next.size());
-    __o.resize(__corners_next.size());
+    __l0.resize(__corners_next.size(), 0.0);
+    __v.resize(__corners_next.size(), vec3::Zero());
+    __M.resize(__corners_next.size(), vec3::Zero());
+    __J.resize(__corners_next.size(), vec4::Zero());
+    __o.resize(__corners_next.size(), quat::Identity());
     _lmax = 0.0;
     for (int i = 0; i < __corners_next.size(); i++) {
       if (__corners_next[i] == -1)
@@ -136,21 +138,20 @@ public:
     return v;
   }
 
-  std::array<index_t, 3> consec(index_t i) {
-    int in = next(i);
-    int ip = prev(i);
-    if (next(i) == -1) {
-      ip = prev(prev(i));
-      i = prev(i);
-      in = i;
+  consec_t consec(index_t i) const {
+    index_t in = next(i);
+    index_t inn = next(in);
 
-    } else if (prev(i) == -1) {
-      ip = i;
-      i = next(i);
-      in = next(next(i));
+    index_t ip = prev(i);
+    index_t ipp = prev(ip);
+    if (ip == -1) {
+      return {i, in, inn};
+    } else if (in == -1) {
+      return {ipp, ip, i};
     }
+
     return {ip, i, in};
-  }
+  };
 
   quat get_rotation(int i) {
     auto idx = consec(i);
@@ -165,8 +166,9 @@ public:
     return quat::FromTwoVectors(t0, t1);
   }
 
-  quat get_frenet(index_t i) {
+  mat3 _get_frenet_mat(index_t i) {
     auto idx = consec(i);
+
     vec3 cp = __x[idx[0]];
     vec3 c0 = __x[idx[1]];
     vec3 cn = __x[idx[2]];
@@ -174,21 +176,22 @@ public:
     vec3 dn0 = cn - c0;
     vec3 d0p = c0 - cp;
     vec3 dd0 = dn0 - d0p;
-    vec3 d0 = dn0.cross(dd0).normalized(); // binorm
-    vec3 d1 = dn0.cross(d0).normalized();  // norm
-    vec3 d2 = dn0.normalized();            // tan
+
+    // vec3 T = (dn0 + d0p).normalized();          // tan
+    // vec3 B = dn0.cross(d0p).normalized();       // norm
+    // vec3 N = T.cross(B).normalized();           // binorm
+    vec3 T = (dn0 + d0p).normalized();          // tan
+    vec3 B = (dn0 - d0p).cross(T).normalized(); // norm
+    vec3 N = T.cross(B).normalized();           // binorm
 
     mat3 F;
-    F.col(0) = d0;
-    F.col(1) = d1;
-    F.col(2) = d2;
-
-    quat q(F);
-
-    q.normalize();
-
-    return q;
+    F.col(0) = B;
+    F.col(1) = N;
+    F.col(2) = T;
+    return F;
   }
+
+  quat _get_frenet(index_t i) { return quat(_get_frenet_mat(i)).normalized(); }
 
   quat _calc_frame(const index_t &i) {
     auto idx = consec(i);
@@ -205,19 +208,61 @@ public:
     return q;
   }
 
-  void _update_frames() {
-    __u.resize(__corners_next.size());
+  void _update_frames(const std::vector<vec3> &N_vec) {
     for (int i = 0; i < __corners_next.size(); i++) {
-      __u[i] = _calc_frame(i);
-      index_t j = __corners_next[i];
-      vec3 q0 = __x[i];
-      vec3 q1 = __x[j];
-      vec3 dq = q1 - q0;
-      dq.normalize();
-      //__o[i] = quat(0.0, dq[0], dq[1], dq[2]);
+
+      auto idx = consec(i);
+
+      vec3 cp = __x[idx[0]];
+      vec3 c0 = __x[idx[1]];
+      vec3 cn = __x[idx[2]];
+
+      vec3 dn0 = cn - c0;
+      vec3 d0p = c0 - cp;
+      vec3 dd0 = dn0 - d0p;
+
+      vec3 T = (dn0 + d0p).normalized();         // tan
+      vec3 B = (N_vec[i]).cross(T).normalized(); // norm
+      vec3 N = N_vec[i];
+      mat3 F;
+      F.col(0) = B;
+      F.col(1) = N;
+      F.col(2) = T;
+      __u[i] = quat(F).normalized();
+      std::cout << c0.transpose() << " - " << __u[i].coeffs().transpose()
+                << std::endl;
+    }
+
+    for (int i = 0; i < __corners_next.size(); i++) {
       __o[i] = quat(0.0, 0.0, 0.0, 0.0);
     }
+
+    // fix_frame();
   }
+
+  void _update_frames() {
+    __u.resize(__corners_next.size());
+    std::vector<vec3> N_vec(__corners_next.size());
+    vec3 N0 = _get_frenet_mat(0).col(1);
+    for (int i = 0; i < __corners_next.size(); i++) {
+
+      auto idx = consec(i);
+
+      vec3 cp = __x[idx[0]];
+      vec3 c0 = __x[idx[1]];
+      vec3 cn = __x[idx[2]];
+
+      vec3 dn0 = cn - c0;
+      vec3 d0p = c0 - cp;
+      vec3 dd0 = dn0 - d0p;
+      quat qi = Eigen::Quaterniond::FromTwoVectors(d0p, dn0);
+
+      N_vec[i] = N0;
+      N0 = qi * N0;
+    }
+    _update_frames(N_vec);
+  }
+
   real lavg() {
     real lbar = 0.0;
     for (int i = 0; i < corner_count(); i++) {
@@ -281,7 +326,7 @@ public:
   }
 
   std::vector<index_t> get_edge_map() {
-    return get_range_map(__corners_next, 2);
+    return get_range_map(__corners_next, 1);
   }
 
   std::vector<index_t> get_vert_range() const {
@@ -289,6 +334,8 @@ public:
     range.reserve(corner_count());
     // replace this with some c++isms
     for (int i = 0; i < corner_count(); i++) {
+      if (__corners_next[i] < 0)
+        continue;
       range.push_back(i);
     }
 

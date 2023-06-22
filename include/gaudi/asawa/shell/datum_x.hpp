@@ -87,11 +87,6 @@ real angle(const shell &M, index_t ci, const std::vector<vec3> &x) {
   ede = acos(ede);
 
   return ede;
-  }
-
-vec3 edge_tangent(const shell &M, index_t c0, const std::vector<vec3> &x) {
-  index_t c1 = M.other(c0);
-  return x[M.vert(c0)] - x[M.vert(M.next(c0))];
 }
 
 vec3 face_cross(const shell &M, index_t fi, const std::vector<vec3> &x) {
@@ -144,11 +139,13 @@ real vert_area(const shell &M, index_t vi, const std::vector<vec3> &x) {
   return A / 3.0;
 }
 
-
 real vert_cotan_weight(const shell &M, index_t vi, const std::vector<vec3> &x) {
   real w = 0.0;
-  M.const_for_each_vertex(
-      vi, [&w, &x](index_t ci, const shell &M) { w += cotan(M, ci, x); });
+  M.const_for_each_vertex(vi, [&w, &x](index_t ci, const shell &M) {
+    index_t c0p = M.prev(ci);
+    index_t c1p = M.prev(M.other(ci));
+    w += cotan(M, c0p, x) + cotan(M, c1p, x);
+  });
   return w;
 }
 
@@ -156,7 +153,9 @@ std::vector<real> vert_cotan_weights(const shell &M, index_t vi,
                                      const std::vector<vec3> &x) {
   std::vector<real> w;
   M.const_for_each_vertex(vi, [&w, &x](index_t ci, const shell &M) {
-    w.push_back(cotan(M, ci, x));
+    index_t c0p = M.prev(ci);
+    index_t c1p = M.prev(M.other(ci));
+    w.push_back(cotan(M, c0p, x) + cotan(M, c1p, x));
   });
   return w;
 }
@@ -178,6 +177,11 @@ std::vector<real> vert_unitary_weights(const shell &M, index_t vi,
   M.const_for_each_vertex(
       vi, [&w, &x](index_t ci, const shell &M) { w.push_back(1.0); });
   return w;
+}
+
+vec3 edge_tangent(const shell &M, index_t c0, const std::vector<vec3> &x) {
+  index_t c1 = M.other(c0);
+  return x[M.vert(c0)] - x[M.vert(M.next(c0))];
 }
 
 vec3 edge_normal(const shell &M, index_t c0, const std::vector<vec3> &x) {
@@ -243,7 +247,10 @@ std::vector<real> edge_cotan_weights(const shell &M,
   std::vector<real> ws(range.size());
   int i = 0;
   for (auto ci : range) {
-    ws[i++] = cotan(M, ci, x);
+    index_t c0p = M.prev(ci);
+    index_t c1p = M.prev(M.other(ci));
+    real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
+    ws[i++] = ct;
   }
   return ws;
 }
@@ -450,6 +457,8 @@ std::vector<real> divergence(shell &M, const std::vector<vec3> &g,
   for (int i = 0; i < edges.size(); i++) {
     index_t c0 = edges[i];
     index_t c1 = M.other(c0);
+    index_t c0p = M.prev(c0);
+    index_t c1p = M.prev(c1);
     vec3 v0 = x[M.vert(c0)];
     vec3 v1 = x[M.vert(c1)];
     vec3 g0 = g[M.face(c0)];
@@ -459,8 +468,8 @@ std::vector<real> divergence(shell &M, const std::vector<vec3> &g,
     vec3 dp0 = edge_tangent(M, c0, x);
     real s = va::sgn(dp0.dot(dp));
 
-    real cot0 = cotan(M, c0, x);
-    real cot1 = cotan(M, c1, x);
+    real cot0 = cotan(M, c0p, x);
+    real cot1 = cotan(M, c1p, x);
 
     real l = 0.5 * (cot0 * dp.dot(g0) + cot1 * dp.dot(g1));
     assert(!isnan(l));

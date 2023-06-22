@@ -14,7 +14,7 @@
 #include "datum_x.hpp"
 #include "operations.hpp"
 #include "shell.hpp"
-//#include "subdivide.hpp"
+// #include "subdivide.hpp"
 
 #include <array>
 #include <cmath>
@@ -304,13 +304,13 @@ op_edges(shell &M,                      //
     }
   }
 
-  //#pragma omp parallel for shared(post_edges)
-  // before parallelize, need to preallocate;
+  // #pragma omp parallel for shared(post_edges)
+  //  before parallelize, need to preallocate;
   std::vector<std::array<index_t, MSIZE>> collection(edges_to_op.size());
 
   for (index_t i = 0; i < edges_to_op.size(); i += STRIDE) {
     index_t ic0 = edges_to_op[i];
-    //#pragma omp critical
+    // #pragma omp critical
     if (M.next(ic0) < 0) {
       collection[i].fill(-1);
       continue;
@@ -604,10 +604,9 @@ public:
   }
 
   vector<std::array<index_t, 2>>
-  get_edge_edge_collisions(const std::vector<index_t> &  edge_verts_t, //
-                           const std::vector<index_t> &  edge_map_t,
-                           const std::vector<vec3> &x_t, 
-                            shell &M, real tol) {
+  get_edge_edge_collisions(const std::vector<index_t> &edge_verts_t, //
+                           const std::vector<index_t> &edge_map_t,
+                           const std::vector<vec3> &x_t, real tol) {
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x_m = x_datum->data();
@@ -618,14 +617,15 @@ public:
     edge_tree = arp::aabb_tree<2>::create(edge_verts_m, x_m, 16);
 
     std::vector<std::array<index_t, 2>> collected(edge_verts_t.size() / 2);
-    //#pragma omp parallel for
+    // #pragma omp parallel for
     for (int i = 0; i < edge_verts_t.size(); i += 2) {
       index_t e0 = i / 2;
       std::vector<index_t> collisions =
           arp::getNearest<2, 2>(e0, edge_verts_t, x_t, //
-                                *edge_tree,        //
+                                *edge_tree,            //
                                 tol, &line_line_min);
       for (index_t e1 : collisions) {
+
         index_t c0 = edge_map_t[e0];
         // debug_line(M, c0, x);
         index_t c1 = -1;
@@ -642,11 +642,9 @@ public:
   }
 
   vector<std::array<index_t, 2>>
-  get_pnt_tri_collisions(
-    std::vector<index_t> verts_t,
-    std::vector<index_t> verts_map_t,
-    std::vector<vec3> &x_t, 
-    shell &M, real tol) {
+  get_pnt_tri_collisions(std::vector<index_t> verts_t,
+                         std::vector<index_t> verts_map_t,
+                         std::vector<vec3> &x_t, shell &M, real tol) {
 
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
@@ -658,11 +656,11 @@ public:
         arp::aabb_tree<3>::create(face_verts_m, x_m, 16);
 
     std::vector<std::array<index_t, 2>> collected(verts_t.size());
-    //#pragma omp parallel for
+    // #pragma omp parallel for
     for (int i = 0; i < verts_t.size(); i++) {
       std::vector<index_t> collisions =
           arp::getNearest<1, 3>(i, verts_t, x_t, //
-                                *face_tree,  //
+                                *face_tree,      //
                                 tol, &pnt_tri_min);
 
       for (index_t iti : collisions) {
@@ -686,16 +684,15 @@ public:
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
 
-
     std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
     std::vector<index_t> edge_map = __M->get_edge_map();
 
     std::vector<std::array<index_t, 2>> collected =
-        get_edge_edge_collisions(edge_verts, edge_map, x, M, tol);
+        get_edge_edge_collisions(edge_verts, edge_map, x, tol);
 
-    for(auto &c : collected){
-      if(c[0] > -1 && c[1] > -1){
-          c[1] = align_edges(M, c[0], c[1], x);
+    for (auto &c : collected) {
+      if (c[0] > -1 && c[1] > -1) {
+        c[1] = align_edges(M, c[0], c[1], x);
       }
     }
 
@@ -710,7 +707,7 @@ public:
     std::vector<index_t> verts = __M->get_vert_range();
     std::vector<index_t> verts_map = __M->get_vert_map();
 
-    return get_pnt_tri_collisions(verts, verts_map,x, M, tol);
+    return get_pnt_tri_collisions(verts, verts_map, x, M, tol);
   }
 
   void merge_edges() {

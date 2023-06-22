@@ -60,9 +60,12 @@ void fillBuffer_ref(asawa::shell::shell &M, gg::BufferObjectPtr obj,
       continue;
     if (M.fsize(i) != 3)
       continue;
+    // std::cout << i << " " << M.fsize(i) << " ";
     M.for_each_face(i, [&face](int ci, asawa::shell::shell &M) {
+      // std::cout << ci << " " << M.vert(ci) << " ";
       face.push_back(M.vert(ci));
     });
+    // std::cout << std::endl;
 
     numIndices += face.size();
     faces.push_back(face);
@@ -117,10 +120,21 @@ void fillBuffer_ref(asawa::rod::rod &R, gg::BufferObjectPtr obj,
   for (int i = 0; i < R.corner_count(); i++) {
     // q0.normalize();
     // gaudi::quat qi = R.get_frenet(i);
+    gaudi::vec3 x0 = x[i];
+    auto idx = R.consec(i);
+
     gaudi::quat qi = R.__u[i];
     // gaudi::quat dq = qi * q0;
-    gaudi::vec3 x0 = x[i];
+
     Eigen::Matrix3d Q = qi.toRotationMatrix();
+    /*
+    gg::geometry_logger::line(x0, x0 + 0.025 * Q.col(0),
+                              vec4(1.0, 0.0, 0.0, 1.0));
+    gg::geometry_logger::line(x0, x0 + 0.025 * Q.col(1),
+                              vec4(0.0, 1.0, 0.0, 1.0));
+    gg::geometry_logger::line(x0, x0 + 0.025 * Q.col(2),
+                              vec4(0.0, 0.0, 1.0, 1.0));
+    */
     matX x_sect_r = Q * x_sect;
 
     for (int j0 = 0; j0 < x_sect_r.cols(); j0++) {
@@ -136,7 +150,7 @@ void fillBuffer_ref(asawa::rod::rod &R, gg::BufferObjectPtr obj,
 
   std::vector<std::vector<int>> faces;
   for (int i0 = 0; i0 < R.corner_count(); i0++) {
-    if (!R.next(i0))
+    if (R.next(i0) < 0)
       continue;
     int i1 = R.next(i0);
     for (int j0 = 0; j0 < Nc; j0++) {

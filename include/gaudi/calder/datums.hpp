@@ -126,6 +126,55 @@ public:
   const std::vector<vec3> &__leaf_data;
   std::vector<mat3> __tree_data;
 };
+
+std::vector<mat4> build_quat_pyramid(const arp::T2 &tree,
+                                     const std::vector<index_t> &indices,
+                                     const std::vector<quat> &x) {
+  std::vector<mat4> pyramid = arp::__build_pyramid<2, 1, quat, mat4>(
+      tree, indices, x,
+      mat4::Zero(), //
+      [](const quat &q, const mat4 &Q) {
+        return Q + q.coeffs() * q.coeffs().transpose();
+      },
+      [](const mat4 &Fc, const mat4 &Fp) { return Fp + Fc; });
+
+  return pyramid;
+}
+
+struct quat_datum : public datum {
+public:
+  typedef std::shared_ptr<quat_datum> ptr;
+  // avg a quat:http://www.acsu.buffalo.edu/~johnc/ave_quat07.pdf
+  static ptr create(const std::vector<index_t> &ind,
+                    const std::vector<quat> &data) {
+    return std::make_shared<quat_datum>(ind, data);
+  }
+  quat_datum(const std::vector<index_t> &ind, const std::vector<quat> &data)
+      : __leaf_indices(ind), __leaf_data(data){};
+  virtual ~quat_datum(){};
+
+  void __do_pyramid(const arp::T2 &tree) {
+    std::vector<mat4> tree_data =
+        build_quat_pyramid(tree, __leaf_indices, __leaf_data);
+    // do stuff to convert mat4 to quat
+  }
+
+  virtual void do_pyramid(const arp::T2 &tree) { __do_pyramid(tree); };
+  virtual void do_pyramid(const arp::T1 &tree){
+      // do_nothing
+  };
+  virtual void do_pyramid(const arp::T3 &tree){
+      // do_nothing
+  };
+
+  const std::vector<quat> &leaf_data() const { return __leaf_data; }
+  std::vector<quat> &node_data() { return __tree_data; }
+  const std::vector<quat> &node_data() const { return __tree_data; }
+
+  const std::vector<index_t> &__leaf_indices;
+  const std::vector<quat> &__leaf_data;
+  std::vector<quat> __tree_data;
+};
 } // namespace calder
 } // namespace gaudi
 

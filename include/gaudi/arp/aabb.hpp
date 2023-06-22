@@ -173,7 +173,7 @@ public:
     }
 
     c /= real(S * this->size);
-#if 1
+#if 0
     vec3 mx_p;
     index_t mx_d = 0;
     vec3 var = vec3::Zero();
@@ -494,7 +494,7 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
     }
 
     index_t itx = cnode.half.intersect(extT);
-    
+
     if (itx <= 0 && cnode.children[0] > 0) {
       cstack.push(cnode.children[0]);
     }
@@ -526,6 +526,7 @@ void for_each(
   for (int j = beg; j < end; j++) {
     const index_t &id = tree.permutation[j];
     for (int k = 0; k < NODE_S; k++) {
+
       func(indices[NODE_S * id + k], tree);
     }
   }

@@ -17,9 +17,9 @@
 #include <vector>
 #include <zlib.h>
 
+#include "gaudi/common.h"
 #include "rod_collision_constraint.hpp"
 #include "rod_constraints.hpp"
-#include "gaudi/common.h"
 
 namespace gaudi {
 namespace hepworth {
@@ -30,9 +30,8 @@ void init_smooth(const asawa::rod::rod &rod,
                  const real &w, std::vector<sim_block::ptr> blocks) {
 
   for (int i = 0; i < rod.corner_count(); i++) {
-    index_t in = rod.next(i);
-    index_t ip = rod.prev(i);
-    constraints.push_back(smooth::create({i, ip, in}, w, blocks));
+    asawa::rod::consec_t c = rod.consec(i);
+    constraints.push_back(smooth::create({c[1], c[0], c[2]}, w, blocks));
   }
 }
 #if 1
@@ -67,11 +66,15 @@ void init_cylinder(const asawa::rod::rod &rod,
 
 void init_stretch_shear(const asawa::rod::rod &rod,
                         std::vector<projection_constraint::ptr> &constraints,
-                        const std::vector<real> &l0, const real &w, std::vector<sim_block::ptr> blocks) {
+                        const std::vector<real> &l0, const real &w,
+                        std::vector<sim_block::ptr> blocks) {
   int Ni = rod.corner_count();
   for (int i = 0; i < rod.corner_count(); i++) {
-    index_t j = rod.next(i);
-    constraints.push_back(stretch_shear::create({i, j, i, Ni}, w, l0[i], blocks));
+    asawa::rod::consec_t c = rod.consec(i);
+    if (l0[i] < 1e-10)
+      continue;
+    constraints.push_back(
+        stretch_shear::create({c[1], c[2], c[1], Ni}, w, l0[i], blocks));
   }
 }
 
@@ -80,18 +83,19 @@ void init_bend_twist(const asawa::rod::rod &rod,
                      const real &w, std::vector<sim_block::ptr> blocks) {
   int Ni = rod.corner_count();
   for (int i = 0; i < rod.corner_count(); i++) {
-    index_t j = rod.next(i);
-    constraints.push_back(bend_twist::create({i, j, Ni}, w, blocks));
+    asawa::rod::consec_t c = rod.consec(i);
+    constraints.push_back(bend_twist::create({c[1], c[2], Ni}, w, blocks));
   }
 }
 
 void init_angle(const asawa::rod::rod &rod,
                 std::vector<projection_constraint::ptr> &constraints,
-                const vec3 &z, const real &phi, const real &w, std::vector<sim_block::ptr> blocks) {
+                const vec3 &z, const real &phi, const real &w,
+                std::vector<sim_block::ptr> blocks) {
   int Ni = rod.corner_count();
   for (int i = 0; i < rod.corner_count(); i++) {
-    index_t j = rod.next(i);
-    constraints.push_back(angle::create({i, j, Ni}, z, phi, w, blocks));
+    asawa::rod::consec_t c = rod.consec(i);
+    constraints.push_back(angle::create({c[1], c[2], Ni}, z, phi, w, blocks));
   }
 }
 
@@ -131,12 +135,12 @@ void init_collisions(asawa::rod::rod &rod, asawa::rod::dynamic &dynamic,
     if (dl < 0)
       continue;
 */
-      constraints.push_back(rod_collision::create(
-          {c[0], c[1], c[2], c[3]}, w, 1.0 * rod._r, blocks));
+      constraints.push_back(rod_collision::create({c[0], c[1], c[2], c[3]}, w,
+                                                  1.0 * rod._r, blocks));
     }
   }
 }
-} // namespace rod
+} // namespace block
 } // namespace hepworth
 } // namespace gaudi
 

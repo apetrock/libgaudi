@@ -63,7 +63,7 @@ public:
       x[ii] = get_elem<T>(ii, q, _offset);
   }
 
-  virtual index_t get_offset_idx(index_t ii) { return -1; };
+  virtual index_t get_offset_idx(index_t ii) const { return -1; };
   virtual void map_to_x(vecX &q){};
   virtual void map_mass(vecX &q){};
 
@@ -104,11 +104,12 @@ public:
 
   virtual void integrate_inertia(const real &h) {
     for (size_t i = 0; i < _v.size(); i++) {
+
       _x[i] += h * _v[i] + h * h * _f[i];
     }
   }
 
-  virtual index_t get_offset_idx(index_t ii) { return _offset + 3 * ii; };
+  virtual index_t get_offset_idx(index_t ii) const { return _offset + 3 * ii; };
 
   std::vector<vec3> &_x;
   std::vector<vec3> &_v;
@@ -155,13 +156,14 @@ public:
       // real J = J;
       quat sO = o; // torque terms + h / J
       quat su = u;
+
       su.coeffs() += 0.5 * h * (u * sO).coeffs();
       _u[i] = su;
       _u[i].normalize();
     }
   }
 
-  virtual index_t get_offset_idx(index_t ii) { return _offset + 4 * ii; };
+  virtual index_t get_offset_idx(index_t ii) const { return _offset + 4 * ii; };
   std::vector<quat> &_u;
   std::vector<quat> &_o;
   std::vector<vec4> &_J;

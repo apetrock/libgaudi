@@ -149,11 +149,15 @@ public:
   void interp(index_t c0, index_t c1, index_t cnew, std::vector<quat> &x) {
     quat x0 = x[c0];
     quat x1 = x[c1];
-    quat xnew = x0.slerp(0.5, x1);
+    quat xnew = va::slerp(x0, x1, 0.5);
     set<quat>(cnew, xnew, x);
   }
 
   void interp_l(index_t c0, index_t c1, index_t cnew, std::vector<real> &z) {
+
+    std::cout << c0 << " " << c1 << " " << cnew << std::endl;
+    std::cout << __R->__x.size() << " " << __R->__corners_next.size()
+              << std::endl;
     vec3 x0 = __R->__x[c0];
     vec3 x1 = __R->__x[c1];
     vec3 xn = __R->__x[cnew];
@@ -179,18 +183,51 @@ public:
     index_t c11 = __R->next(c10);
     index_t c01 = __R->prev(c00);
     index_t cnew = __R->insert_edge();
+    std::cout << c01 << " " << c00 << " " << c10 << " " << c11 << " " << cnew
+              << " " << std::endl;
     __R->link(c00, cnew);
     __R->link(cnew, c10);
+    std::cout << "interp0" << std::endl;
+    std::cout << __R->__x.size() << std::endl;
+    std::cout << __R->__v.size() << std::endl;
+    std::cout << __R->__u.size() << std::endl;
+    std::cout << __R->__o.size() << std::endl;
+    std::cout << __R->__M.size() << std::endl;
+    std::cout << __R->__J.size() << std::endl;
+    std::cout << __R->__l0.size() << std::endl;
 
     interp(c01, c00, c10, c11, cnew, __R->__x);
     // interp(c00, c10, cnew, __R->__x);
-
+    std::cout << "interp1" << std::endl;
     interp(c00, c10, cnew, __R->__v);
     interp(c00, c10, cnew, __R->__u);
     interp(c00, c10, cnew, __R->__o);
     interp(c00, c10, cnew, __R->__M);
     interp(c00, c10, cnew, __R->__J);
+    std::cout << "interp2" << std::endl;
     interp_l(c00, c10, cnew, __R->__l0);
+  }
+
+  void collapse_edge(index_t c00) {
+    index_t c10 = __R->next(c00);
+    index_t c11 = __R->next(c10);
+    index_t c01 = __R->prev(c00);
+    if (c10 < -1)
+      return;
+
+    __R->link(c01, c10);
+    __R->set_next(c00, -1);
+    __R->set_prev(c00, -1);
+
+    interp(c01, c10, c10, __R->__x);
+    // interp(c00, c10, cnew, __R->__x);
+
+    interp(c01, c10, c10, __R->__v);
+    interp(c01, c10, c10, __R->__u);
+    interp(c01, c10, c10, __R->__o);
+    interp(c01, c10, c10, __R->__M);
+    interp(c01, c10, c10, __R->__J);
+    interp_l(c01, c10, c10, __R->__l0);
   }
 
 #if 1
@@ -250,11 +287,22 @@ public:
 
     for (int i = 0; i < __R->corner_count(); i++) {
       index_t j = __R->next(i);
+      if (j < 0)
+        continue;
+
+      std::cout << i << " " << j << std::endl;
       vec3 q0 = __R->__x[i];
       vec3 q1 = __R->__x[j];
       real l = (q1 - q0).norm();
-      if (l > _Cs)
+      if (l > _Cs) {
+        std::cout << " split " << std::endl;
         split_edge(i);
+      }
+
+      if (l < _Cc) {
+        std::cout << " collapse " << std::endl;
+        collapse_edge(i);
+      }
     }
     __R->update_mass();
   }

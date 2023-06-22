@@ -396,6 +396,18 @@ public:
     return range;
   }
 
+  std::vector<index_t> get_edge_range_2() const {
+    std::vector<index_t> range;
+    range.reserve(corner_count() / 2);
+    // replace this with some c++isms
+    index_t ii = 0;
+    for (int i = 0; i < corner_count(); i += 2) {
+      if (__corners_next[i] > -1)
+        range.push_back(ii++);
+    }
+    return range;
+  }
+
   std::vector<index_t> get_vert_range() const {
     std::vector<index_t> range;
     range.reserve(vert_count());

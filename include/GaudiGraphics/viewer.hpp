@@ -4,7 +4,7 @@
 #include <GaudiMath/typedefs.hpp>
 #include <nanogui/glutil.h>
 
-//#include <nanogui/glutil.h>
+// #include <nanogui/glutil.h>
 #include <nanogui/nanogui.h>
 
 #include <iostream>
@@ -12,6 +12,11 @@
 #include <random>
 #include <string>
 #include <vector>
+
+#include <filesystem>
+#include <iomanip>
+#include <regex>
+#include <sstream>
 
 inline void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id,
                                        GLenum severity, GLsizei length,
@@ -125,7 +130,7 @@ public:
   }
 
   void rotate_ball() {
-    Vec3 rotation(0.0, 0.25 * M_PI / 360.0, 0.0);
+    Vec3 rotation(0.0, 1.0 * M_PI / 360.0, 0.0);
     double angle = rotation.norm();
     Vec3 axis = rotation.normalized();
     Eigen::Quaternionf q(Eigen::AngleAxisf(angle, axis));
@@ -201,20 +206,24 @@ using FrameGrabberPtr = std::shared_ptr<FrameGrabber>;
 
 class FrameGrabber {
 public:
-  static FrameGrabberPtr create(int width, int height) {
-    return std::make_shared<FrameGrabber>(width, height);
+  static FrameGrabberPtr create(int width, int height,
+                                std::string filename_pattern = "output") {
+    return std::make_shared<FrameGrabber>(width, height, filename_pattern);
   }
 
-  FrameGrabber(int width, int height) : _width(width), _height(height) {
+  FrameGrabber(int width, int height, std::string filename_pattern = "output")
+      : _width(width), _height(height), _filename_pattern(filename_pattern) {
 
     // start ffmpeg telling it to expect raw rgba 720p-60hz frames
     // -i - tells it to read frames from stdin
-    const char *cmd = "ffmpeg -r 60 -f rawvideo -pix_fmt rgba -s 1280x720 -i - "
+    std::string nextFileName = getNextFileName(_filename_pattern);
+    std::string cmd = "ffmpeg -r 60 -f rawvideo -pix_fmt rgba -s 1280x720 -i - "
                       "-threads 0 -preset fast -y -pix_fmt yuv420p -crf 21 -vf "
-                      "vflip output.mp4";
+                      "vflip " +
+                      nextFileName;
 
     // open pipe to ffmpeg's stdin in binary write mode
-    ffmpeg = popen(cmd, "w");
+    ffmpeg = popen(cmd.c_str(), "w");
     _buffer = new int[_width * _height];
   }
 
@@ -227,7 +236,34 @@ public:
     fwrite(_buffer, sizeof(int) * _width * _height, 1, this->ffmpeg);
   }
 
+  std::string getNextFileName(const std::string &pattern) {
+    // Define a regular expression to match the file name pattern
+    std::regex regex(pattern + "(\\d{2})\\.mp4");
+
+    // Find the highest numbered file in the sequence
+    int maxNum = 0;
+    for (const auto &entry : std::filesystem::directory_iterator(".")) {
+      if (entry.is_regular_file()) {
+        std::string fileName = entry.path().filename().string();
+        std::smatch match;
+        if (std::regex_match(fileName, match, regex)) {
+          int num = std::stoi(match[1]);
+          if (num > maxNum) {
+            maxNum = num;
+          }
+        }
+      }
+    }
+
+    // Generate the next file name in the sequence
+    std::stringstream ss;
+    ss << pattern << std::setfill('0') << std::setw(2) << (maxNum + 1)
+       << ".mp4";
+    return ss.str();
+  }
+
 private:
+  std::string _filename_pattern;
   int _width, _height;
   int *_buffer;
   FILE *ffmpeg;
@@ -830,9 +866,10 @@ public:
 
   typedef double Real;
 
-  SimpleApp(int w = 1280, int h = 720, double d = 4.0, bool grab = true)
-      : _width(w),
-        _height(h), nanogui::Screen(Eigen::Vector2i(w, h), "App Simple") {
+  SimpleApp(int w = 1280, int h = 720, double d = 4.0, bool grab = true,
+            std::string frame_grabber_pattern = "output")
+      : _width(w), _height(h),
+        nanogui::Screen(Eigen::Vector2i(w, h), "App Simple") {
     using namespace nanogui;
 
     // now for GUI
@@ -855,7 +892,8 @@ public:
     // Cull triangles which normal is not towards the camera
     glEnable(GL_CULL_FACE);
     if (grab)
-      _frameGrabber = FrameGrabber::create(_width, _height);
+      _frameGrabber =
+          FrameGrabber::create(_width, _height, frame_grabber_pattern);
 
     _renderingEffects.resize(4);
     //_renderingEffects[0] = SsaoShadingEffect::create(_width, _height);

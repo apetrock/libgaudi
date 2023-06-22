@@ -28,7 +28,7 @@
 #include "GaudiGraphics/viewer.hpp"
 // #include "gaudi/asawa/asawa.h"
 
-#include "gaudi/duchamp/rod_constraints_coupled_test.hpp"
+#include "gaudi/duchamp/shell_constraints_align_test.hpp"
 
 #define TRACKBALLSIZE (0.8f)
 #define RENORMCOUNT 97
@@ -51,28 +51,18 @@ public:
 
   void initScene() {
     //_experiment = duchamp::mean_shift_experiment<growth>::create();
-    __surf = gaudi::duchamp::block_test::create();
 
-    _objs.resize(__surf->__R.size());
-    for (int i = 0; i < __surf->__R.size(); i++) {
-      _objs[i] = gg::BufferObject::create();
-      _objs[i]->init();
-      mSceneObjects.push_back(_objs[i]);
-    }
-
+    _obj = gg::BufferObject::create();
+    _obj->init();
+    mSceneObjects.push_back(_obj);
+    __surf = gaudi::duchamp::shell_constraints_test::create();
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }
 
   virtual void onAnimate(int frame) {
 
     __surf->step(frame);
-    vector<gg::colorRGB> colors = {
-        gg::colorRGB(1.0, 0.0, 0.7, 1.0),
-        gg::colorRGB(0.4, 0.4, 1.0, 1.0),
-    };
-    for (int i = 0; i < __surf->__R.size(); i++) {
-      gg::fillBuffer_ref(*__surf->__R[i], _objs[i], colors[i]);
-    }
+    gg::fillBuffer_ref(*__surf->__M, _obj);
     //   std::cout << "rendering debug" << std::endl;
     //   asawa::test();
 
@@ -92,10 +82,10 @@ public:
 
 private:
   // gaudi::duchamp::fast_summation_test::ptr __surf;
-  gaudi::duchamp::block_test::ptr __surf;
+  gaudi::duchamp::shell_constraints_test::ptr __surf;
 
   std::vector<gg::DrawablePtr> mSceneObjects;
-  std::vector<gg::BufferObjectPtr> _objs;
+  gg::BufferObjectPtr _obj = NULL;
 };
 
 std::string GetCurrentWorkingDir(void) {
@@ -113,8 +103,7 @@ public:
   static AppPtr create(std::string file) { return std::make_shared<App>(file); }
 
   typedef double Real;
-
-  App(std::string file) : gg::SimpleApp(1280, 720, 4.0, true, "flump_") {
+  App(std::string file) : gg::SimpleApp(1280, 720, 4.0, true, "align_") {
     this->setScene(scene = Scene::create());
     this->initUI();
   }

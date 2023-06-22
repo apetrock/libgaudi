@@ -19,6 +19,7 @@
 #include <zlib.h>
 
 #include "gaudi/common.h"
+#include "gaudi/define_create_func.h"
 
 namespace gaudi {
 namespace hepworth {

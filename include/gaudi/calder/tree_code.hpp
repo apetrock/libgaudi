@@ -84,6 +84,13 @@ public:
     std::vector<ext::extents_t> extents =
         arp::build_extents(__tree, __tree.indices(), __tree.verts());
 
+    /*
+    for (auto ext : extents) {
+      vec4 c(0.5, 0.5, 0.1, 1.0);
+      gg::geometry_logger::ext(ext[0], ext[1], c);
+    }
+*/
+
     for (int i = 0; i < pov.size(); i++) {
       vec3 pi = pov[i];
 
@@ -98,12 +105,17 @@ public:
 
         real dc = va::dist(pi, pj);
         // T sc = va::norm(pNode.half);
-        real sc = pNode.mag();
+        // real sc = pNode.mag();
         ext::extents_t ext = extents[j];
+        // if (i == 6664) {
+        //   vec4 c(0.5, 0.5, 0.1, 1.0);
+        //   gg::geometry_logger::ext(ext[0], ext[1], c);
+        // }
         vec3 de = ext[1] - ext[0];
-        // real sc = min(de[0], min(de[1], de[2]));
-        //     std::cout << sc << " " << dc << std::endl;
-        //      int ii = octree.permutation[pNode.begin];
+        real sc = 0.75 * va::norm(de);
+        // real sc = max(de[0], max(de[1], de[2]));
+        //       std::cout << sc << " " << dc << std::endl;
+        //        int ii = octree.permutation[pNode.begin];
 
         if (sc / dc < __thresh || pNode.isLeaf()) {
 

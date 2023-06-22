@@ -26,7 +26,7 @@
 #include "GaudiGraphics/geometry_logger.h"
 #include "GaudiGraphics/mesh_helper.hpp"
 #include "GaudiGraphics/viewer.hpp"
-//#include "gaudi/asawa/asawa.h"
+// #include "gaudi/asawa/asawa.h"
 
 #include "gaudi/duchamp/shell_normal_constraints.hpp"
 
@@ -52,9 +52,16 @@ public:
   void initScene() {
     //_experiment = duchamp::mean_shift_experiment<growth>::create();
 
-    _obj = gg::BufferObject::create();
-    _obj->init();
-    mSceneObjects.push_back(_obj);
+    _objs.resize(2);
+
+    _objs[0] = gg::BufferObject::create();
+    _objs[0]->init();
+    mSceneObjects.push_back(_objs[0]);
+
+    _objs[1] = gg::BufferObject::create();
+    _objs[1]->init();
+    mSceneObjects.push_back(_objs[1]);
+
     __surf = gaudi::duchamp::shell_normal_constraints::create();
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }
@@ -62,7 +69,15 @@ public:
   virtual void onAnimate(int frame) {
 
     __surf->step(frame);
-    gg::fillBuffer_ref(*__surf->__M, _obj);
+
+    vector<gg::colorRGB> colors = {
+        gg::colorRGB(1.0, 0.1, 0.7, 0.6),
+        gg::colorRGB(0.5, 1.0, 0.0, 1.0),
+    };
+
+    gg::fillBuffer_ref(*__surf->__M, _objs[0], colors[0]);
+    gg::fillBuffer_ref(*__surf->__R, _objs[1], colors[1]);
+
     //   std::cout << "rendering debug" << std::endl;
     //   asawa::test();
 
@@ -85,7 +100,7 @@ private:
   gaudi::duchamp::shell_normal_constraints::ptr __surf;
 
   std::vector<gg::DrawablePtr> mSceneObjects;
-  gg::BufferObjectPtr _obj = NULL;
+  std::vector<gg::BufferObjectPtr> _objs;
 };
 
 std::string GetCurrentWorkingDir(void) {
@@ -104,7 +119,7 @@ public:
 
   typedef double Real;
 
-  App(std::string file) : gg::SimpleApp() {
+  App(std::string file) : gg::SimpleApp(1280, 720, 4.0, true, "florp_drive_") {
     this->setScene(scene = Scene::create());
     this->initUI();
   }

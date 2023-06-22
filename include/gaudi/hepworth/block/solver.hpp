@@ -111,8 +111,8 @@ public:
         std::cout << "k: " << k << " -pnorm: " << p.norm() << std::endl;
 
       vecX b = M * s + A.transpose() * p;
-      // std::cout << p << std::endl;
       q = S.solve(b);
+
       // q = qi + dq.min(bnd).max(-bnd);
     }
 

@@ -25,7 +25,8 @@
 #include "gaudi/hepworth/block/rod_constraints_init.hpp"
 
 #include "gaudi/hepworth/block/coupling_collisions_init.hpp"
-#include "gaudi/hepworth/block/weld_constraints.hpp"
+#include "gaudi/hepworth/block/generic_constraints.hpp"
+#include "gaudi/hepworth/block/generic_constraints_init.hpp"
 
 #include "gaudi/hepworth/block/sim_block.hpp"
 #include "gaudi/hepworth/block/solver.hpp"
@@ -65,18 +66,18 @@ public:
   block_test() {
     //__M = load_cube();
 
-    load_loop_rod();
-    load_loop_rod();
+    load_loop_rod(0.75);
+    load_loop_rod(1.0);
   };
 
-  void load_loop_rod() {
+  void load_loop_rod(real r = 1.0) {
     unsigned seed = chrono::system_clock::now().time_since_epoch().count();
     std::uniform_real_distribution<real> dist(-1.0, 1.0);
     std::mt19937_64 re(seed);
     vec3 p0(dist(re), dist(re), dist(re));
     vec3 p1(dist(re), dist(re), dist(re));
-    real r0 = p0.norm();
-    real r1 = p1.norm();
+    real r0 = r * p0.norm();
+    real r1 = r * p1.norm();
 
     p0.normalize();
     p1.normalize();
@@ -111,9 +112,9 @@ public:
     std::vector<hepworth::projection_constraint::ptr> constraints;
 
     real h = 0.1;
-    std::vector<real> bnd = {2.0, 1.5};
+    std::vector<real> bnd = {1.5, 1.25};
 
-    real tk = 0.1;
+    std::vector<real> tk = {0.04, 0.125};
     real t1 = 1.0;
     real t0 = 1.01;
 
@@ -127,20 +128,20 @@ public:
     for (int k = 0; k < __R.size(); k++) {
       asawa::rod::rod::ptr R = __R[k];
       std::vector<real> &l0 = R->__l0;
-      std::vector<real> lp(l0);
 
       real s_vol = 4.0 / 3.0 * M_PI * pow(bnd[k], 3.0);
       real r_vol = R->get_total_volume();
-      real att = t0 + (t1 - t0) / (1.0 + exp(-tk * (r_vol)));
+      real att = t0 + (t1 - t0) / (1.0 + exp(-tk[k] * (r_vol)));
       std::vector<vec3> f(R->__v.size(), vec3::Zero());
-
-      for (int i = 0; i < R->__x.size(); i++) {
-        vec3 dx = R->__x[i] - cens[k];
-        real xn = dx.norm();
-        if (xn > bnd[k]) {
-          f[i] = -0.02 * (xn - bnd[k]) / h / h * dx;
+      if (k != 0) {
+        for (int i = 0; i < R->__x.size(); i++) {
+          vec3 dx = R->__x[i] - cens[k];
+          real xn = dx.norm();
+          if (xn > bnd[k]) {
+            f[i] = -0.02 * (xn - bnd[k]) / h / h * dx;
+          }
+          // f[i] += 1e-1 * vec3::Random();
         }
-        // f[i] += 1e-1 * vec3::Random();
       }
 
       hepworth::vec3_block::ptr x =
@@ -157,8 +158,8 @@ public:
       for (auto &l : l0)
         l *= att;
 
-      real str = 0.03;
-      real twi = 0.01;
+      real str = 0.1;
+      real twi = 0.05;
       if (k == 0) {
         str = 0.25;
         twi = 0.1;
@@ -168,20 +169,23 @@ public:
       hepworth::block::init_bend_twist(*R, constraints, 0.1, {u});
 #if 1
       if (k == 0) {
-        hepworth::block::init_angle(*R, constraints, vec3(1.0, 0.0, 0.0),
-                                    0.35 * M_PI, 0.05, {u});
+        hepworth::block::init_angle(*R, constraints, vec3(1.0, 1.0, 0.0),
+                                    0.23 * M_PI, 0.05, {u});
         // hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
         //                           0.33 * M_PI, 0.1, {u});
         hepworth::block::init_angle(*R, constraints, vec3(0.0, 0.0, 1.0),
-                                    0.13 * M_PI, 0.1, {u});
+                                    0.39 * M_PI, 0.1, {u});
       } else {
         // hepworth::block::init_cylinder(*R, constraints, 0.01, {x});
       }
 #endif
-      hepworth::block::init_collisions(*R, *__Rd[k], constraints, 1.0, {x, x});
+      hepworth::block::init_collisions(*R, *__Rd[k], constraints, 2.0, {x, x});
     }
+
     constraints.push_back(hepworth::block::pnt_pnt_weld::create(
-        {0, 0}, 2.0, {blocks[0], blocks[2]}));
+        std::vector<index_t>({0, 0}), 2.0,
+        std::vector({blocks[0], blocks[2]})));
+
     hepworth::block::init_coupling_collisions(*__R[0], *__Rd[0], //
                                               *__R[1], *__Rd[1], constraints,
                                               1.0, {blocks[0], blocks[2]});
