@@ -120,6 +120,9 @@ void fillBuffer_ref(asawa::rod::rod &R, gg::BufferObjectPtr obj,
   for (int i = 0; i < R.corner_count(); i++) {
     // q0.normalize();
     // gaudi::quat qi = R.get_frenet(i);
+    // if (R.next(i) < 0)
+    //  continue;
+
     gaudi::vec3 x0 = x[i];
     auto idx = R.consec(i);
 

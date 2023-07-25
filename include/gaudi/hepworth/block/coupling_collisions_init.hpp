@@ -36,7 +36,7 @@ void init_coupling_collisions(
   std::vector<index_t> edge_verts_0 = rod0.get_edge_vert_ids();
 
   vector<std::array<index_t, 4>> collisions =
-      dynamic1.get_collisions(edge_verts_0, x0);
+      dynamic1.get_collisions(edge_verts_0, x0, 0.5 * rod0._r);
   for (auto &c : collisions) {
     if (c[0] > -1) {
       vec3 xA0 = x0[c[0]];

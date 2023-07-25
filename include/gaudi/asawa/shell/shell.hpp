@@ -85,6 +85,8 @@ public:
   }
   /*incomplete data, bummer*/
   datum_ptr &get_datum(index_t i) { return __data[i]; }
+  const datum_ptr &const_get_datum(index_t i) const { return __data[i]; }
+
   std::vector<datum_ptr> &get_data() { return __data; }
 
   size_t vert_count() const { return __vert_begin.size(); }
@@ -305,7 +307,8 @@ public:
     int j0 = this->fbegin(i);
     int j_end = this->fend(i);
     bool it = true;
-    while (it) {
+    int k = 0;
+    while (it && k++ < 100) {
       it = j0 != j_end;
       func(j0, *this);
       j0 = this->next(j0);
@@ -317,7 +320,8 @@ public:
     int j0 = this->fbegin(i);
     int j_end = this->fend(i);
     bool it = true;
-    while (it) {
+    int k = 0;
+    while (it && k++ < 100) {
       it = j0 != j_end;
       func(j0, *this);
       j0 = this->next(j0);
@@ -331,7 +335,8 @@ public:
     int j2 = this->next(j1);
     int j0 = this->fend(i);
     bool it = true;
-    while (it) {
+    int k = 0;
+    while (it && k++ < 100) {
       it = j2 != j0;
       func(j0, j1, j2, *this);
       index_t jn = this->next(j2);
@@ -348,7 +353,8 @@ public:
     int j2 = this->next(j1);
     int j0 = this->fend(i);
     bool it = true;
-    while (it) {
+    int k = 0;
+    while (it && k++ < 100) {
       it = j2 != j0;
       func(j0, j1, j2, *this);
       index_t jn = this->next(j2);
@@ -419,13 +425,16 @@ public:
     return range;
   }
 
-  std::vector<index_t> get_face_range() const {
+  std::vector<index_t> get_face_range(bool filter_tris = true) const {
     std::vector<index_t> range;
     range.reserve(face_count());
     // replace this with some c++isms
     for (int i = 0; i < face_count(); i++) {
-      if (__face_begin[i] > -1)
-        range.push_back(i);
+      if (fbegin(i) < 0)
+        continue;
+      if (filter_tris && fsize(i) != 3)
+        continue;
+      range.push_back(i);
     }
     return range;
   }
@@ -443,7 +452,7 @@ public:
     return range;
   }
 
-  std::vector<index_t> get_face_vert_ids(bool filter_tris = false) {
+  std::vector<index_t> get_face_vert_ids(bool filter_tris = true) {
     std::vector<int> faces;
     faces.reserve(3 * face_count());
 
@@ -478,7 +487,7 @@ public:
   }
 
   std::vector<index_t> get_range_map(const std::vector<index_t> indices,
-                                     int stride, bool filter_tris = false) {
+                                     int stride, bool filter_tris = true) {
     std::vector<index_t> map;
     map.reserve(indices.size() / stride);
     // replace this with some c++isms
@@ -495,10 +504,12 @@ public:
   }
 
   std::vector<index_t> get_edge_map() {
-    return get_range_map(__corners_next, 2);
+    return get_range_map(__corners_next, 2, false);
   }
-  std::vector<index_t> get_vert_map() { return get_range_map(__vert_begin, 1); }
-  std::vector<index_t> get_face_map(bool filter_tris = false) {
+  std::vector<index_t> get_vert_map() {
+    return get_range_map(__vert_begin, 1, false);
+  }
+  std::vector<index_t> get_face_map(bool filter_tris = true) {
     return get_range_map(__face_begin, 1, filter_tris);
   }
 

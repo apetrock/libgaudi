@@ -38,6 +38,17 @@ ext::extents_t calc_extents(index_t i, const std::vector<index_t> &indices,
   return {min, max};
 }
 
+template <int S> ext::extents_t calc_extents(std::array<vec3, S> &verts) {
+  vec3 min = verts[0];
+  vec3 max = min;
+  for (int k = 0; k < S; k++) {
+    vec3 p = verts[k];
+    min = va::min(p, min);
+    max = va::max(p, max);
+  }
+  return {min, max};
+}
+
 template <int S>
 vec3 calc_center(index_t i, const std::vector<index_t> &indices,
                  const std::vector<vec3> &vertices) {
@@ -171,9 +182,9 @@ public:
         c += p;
       }
     }
-
     c /= real(S * this->size);
-#if 0
+
+#if 1
     vec3 mx_p;
     index_t mx_d = 0;
     vec3 var = vec3::Zero();
@@ -190,13 +201,26 @@ public:
 
     vec3 N = vec3::Zero();
     N[mx] = 1.0 * sqrt(var[mx]);
+
+    vec3 Nn = N.normalized();
+    vec3 dc = vec3::Zero();
+    for (int i = this->begin; i < this->begin + this->size; i++) {
+      for (int k = 0; k < S; k++) {
+        vec3 p = vertices[indices[S * permutation[i] + k]];
+        vec3 dp = p - c;
+        dc += Nn.dot(dp) * Nn;
+      }
+    }
+    dc /= real(S * this->size);
+    c += dc;
+    // gg::geometry_logger::line(c, c + N, vec4(1.0, 0.0, 0.0, 0.0));
     half.set(c, N);
 #else
     mat3 U = mat3::Zero();
     for (int i = this->begin; i < this->begin + this->size; i++) {
       for (int k = 0; k < S; k++) {
         vec3 p = vertices[indices[S * permutation[i] + k]];
-        vec3 dp = p - c;
+        vec3 dp = (p - c).normalized();
         U += dp * dp.transpose();
       }
     }
@@ -204,7 +228,19 @@ public:
     U = svd.matrixU();
     vec3 s = svd.singularValues();
     vec3 N = U.col(0).transpose();
-    half.set(c, 0.5 * s[0] * N);
+    N.normalize();
+    real mx = 0.0;
+    for (int i = this->begin; i < this->begin + this->size; i++) {
+      for (int k = 0; k < S; k++) {
+
+        vec3 p = vertices[indices[S * permutation[i] + k]];
+        vec3 dp = (p - c).normalized();
+        real ndp = abs(N.dot(dp));
+        mx = std::max(mx, dp.norm());
+      }
+    }
+    gg::geometry_logger::line(c, c + mx * N, vec4(1.0, 0.0, 0.0, 0.0));
+    half.set(c, mx * N);
 #endif
   }
 
@@ -353,12 +389,10 @@ public:
         cNode.calcHalfCenter(indices, vertices, permutation);
         nodes.push_back(cNode);
 
-        if (cNode.size < 2)
+        if (cNode.size < 2 || cNode.level == maxLevel)
           leafNodes.push_back(cNodeId);
-        else if (cNode.size < pNode.size && cNode.level < maxLevel)
-          stack.push(cNodeId);
         else
-          leafNodes.push_back(cNodeId);
+          stack.push(cNodeId);
 
         // leafIds.push_back(cNodeId);
       }
@@ -423,6 +457,8 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
   typedef aabb_tree<SS> tree_type;
   typedef typename tree_type::node Node;
 
+  bool expanding_rad = tol > 999.9;
+
   index_t idMin = -1;
   real dmin = std::numeric_limits<real>::infinity();
 
@@ -439,6 +475,13 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
     cstack.pop();
     const Node &cnode = s_tree.nodes[cId];
 
+    if (expanding_rad) {
+      real d = ext::distance(extT, cnode.half.cen);
+      tol = std::min(tol, d);
+      extT = calc_extents<ST>(idT, t_inds, t_verts);
+      extT = ext::inflate(extT, tol);
+    }
+
     if (cnode.children[0] == -1 && cnode.children[1] == -1) {
 
       for (int k = cnode.begin; k < cnode.begin + cnode.size; k++) {
@@ -453,35 +496,16 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
           continue;
         }
 
-        if (idT == 0) {
+        if (idT == 1000 && 0) {
           vec3 cT = 0.5 * (extT[0] + extT[1]);
           vec3 cS = 0.5 * (extS[0] + extS[1]);
-
-          gg::geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
-        }
-        /*
-        vec3 cT = 0.5 * (extT[0] + extT[1]);
-        vec3 cS = 0.5 * (extS[0] + extS[1]);
-        gg::geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
-        gg::geometry_logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
-        gg::geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
-*/
-        real dist = testAB(idT, t_inds, t_verts, //
-                           idS, s_tree.indices(), s_tree.verts());
-#if 0
-        if (idT == t_inds[2 * 225]) {
-          std::cout << t_inds[2 * idT + 0] << " " << t_inds[2 * idT + 1]
-                    << " - " << s_tree.indices()[2 * idS + 0] << " "
-                    << s_tree.indices()[2 * idS + 1] << ": " << dist << " "
-                    << tol << std::endl;
-          vec3 cT = 0.5 * (extT[0] + extT[1]);
-          vec3 cS = 0.5 * (extS[0] + extS[1]);
-
-          // gg::geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
           gg::geometry_logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
           gg::geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
+          gg::geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
         }
-#endif
+
+        real dist = testAB(idT, t_inds, t_verts, //
+                           idS, s_tree.indices(), s_tree.verts());
 
         if (dist < dmin) {
           dmin = dist;
@@ -532,6 +556,14 @@ void for_each(
   }
 }
 
+bool l_isnan(vec3 v) { return v.hasNaN(); }
+bool l_isnan(mat3 v) { return v.hasNaN(); }
+bool l_isnan(mat4 v) { return v.hasNaN(); }
+
+bool l_isnan(std::array<vec3, 2> v) { return v[0].hasNaN() || v[1].hasNaN(); }
+
+bool l_isnan(real v) { return std::isnan(v); }
+
 template <int TREE_S, int NODE_S, typename Q0, typename Q1>
 std::vector<Q1>
 __build_pyramid(const aabb_tree<TREE_S> &tree,       //
@@ -547,20 +579,26 @@ __build_pyramid(const aabb_tree<TREE_S> &tree,       //
   for (int i = 0; i < tree.leafNodes.size(); i++) {
     Q1 q1 = q_init;
     for_each<TREE_S, NODE_S>(
-        i, tree, indices,
-        [&x, &q1, &lfunc](index_t j, const aabb_tree<TREE_S> &tree) {
+        i, tree, indices, [&](index_t j, const aabb_tree<TREE_S> &tree) {
           Q0 q0 = x[j];
           q1 = lfunc(q0, q1);
+          if (l_isnan(q1)) {
+            std::cout << "q0: " << q0 << std::endl;
+            std::cout << j << " " << x.size() << std::endl;
+            throw std::runtime_error(std::string(__PRETTY_FUNCTION__) +
+                                     std::string(": nan"));
+          }
         });
     charges[tree.leafNodes[i]] = q1;
   }
-
+  // return charges;
   std::deque<int> stack(tree.leafNodes.begin(), tree.leafNodes.end());
   std::vector<bool> in_queue(charges.size(), false);
   while (stack.size() > 0) {
     index_t cNodeId = stack.back();
-    stack.pop_back();
 
+    stack.pop_back();
+    in_queue[cNodeId] = false;
     const node &cnode = tree.nodes[cNodeId];
     index_t pNodeId = cnode.parent;
 

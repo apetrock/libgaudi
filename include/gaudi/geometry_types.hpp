@@ -502,6 +502,12 @@ extents_t expand(const extents_t &eA, const extents_t &eB) {
   eout = expand(eout, eB[1]);
   return eout;
 }
+
+real distance(const extents_t &e, const vec3 &x) {
+  extents_t eout;
+  vec3 c = 0.5 * (e[0] + e[1]);
+  return (x - c).norm();
+}
 } // namespace ext
 } // namespace gaudi
 #endif

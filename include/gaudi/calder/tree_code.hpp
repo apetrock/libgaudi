@@ -63,8 +63,6 @@ public:
     __data.push_back(datum_t<T>::create(indices, x));
   }
 
-  void set_threshold(real t) { __thresh = t; }
-
   template <typename Q>
   using ComputeFcn =
       std::function<Q(const index_t &, const index_t &, const vec3 &,
@@ -72,9 +70,9 @@ public:
                       const TREE &)>;
 
   template <typename Q>
-  std::vector<Q> calc(const std::vector<vec3> &pov,
-                      ComputeFcn<Q> leafComputeFcn,
-                      ComputeFcn<Q> nodeComputeFcn) {
+  std::vector<Q>
+  calc(const std::vector<vec3> &pov, ComputeFcn<Q> leafComputeFcn,
+       ComputeFcn<Q> nodeComputeFcn, real eps = 0.5, bool debug = false) {
     for (int i = 0; i < __data.size(); i++) {
       __data[i]->pyramid(__tree);
     }
@@ -83,74 +81,151 @@ public:
 
     std::vector<ext::extents_t> extents =
         arp::build_extents(__tree, __tree.indices(), __tree.verts());
-
-    /*
-    for (auto ext : extents) {
-      vec4 c(0.5, 0.5, 0.1, 1.0);
-      gg::geometry_logger::ext(ext[0], ext[1], c);
+#if 1
+    if (debug) {
+      for (auto ext : extents) {
+        vec4 c(0.5, 0.5, 0.1, 1.0);
+        // std::cout << ext[0].transpose() << " " << ext[1].transpose() <<
+        // std::endl;
+        gg::geometry_logger::ext(ext[0], ext[1], c);
+      }
     }
-*/
+#endif
+#if 0
+    // return u;
+    int test_id = 2378;
+    while (test_id > 0) {
+      NODE pNode = __tree.nodes[test_id];
+      std::cout << "pnode sz: " << pNode.size << " " << pNode.level << " "
+                << pNode.isLeaf() << std::endl;
+      ext::extents_t ext = extents[test_id];
+      gg::geometry_logger::ext(ext[0], ext[1], vec4(1.0, 0.0, 0.0, 1.0));
+      test_id = pNode.parent;
+    }
+#endif
+    int total_count = 0;
+    int leaf_count = 0;
+    int node_count = 0;
+    std::vector<int> counts(__tree.nodes.size(), 0);
+    std::vector<int> pov_counts(pov.size(), 0);
+#pragma omp parallel
+    {
+#pragma omp for
+      for (int i = 0; i < pov.size(); i++) {
+        vec3 pi = pov[i];
 
-    for (int i = 0; i < pov.size(); i++) {
-      vec3 pi = pov[i];
+        std::stack<int> stack1;
+        stack1.push(0);
+        vec4 c(0.5, 0.5, 0.1, 1.0);
 
-      std::stack<int> stack1;
-      stack1.push(0);
-      while (stack1.size() > 0) {
+        while (stack1.size() > 0) {
+          total_count++;
+          int j = stack1.top();
+          stack1.pop();
+          const NODE &pNode = __tree.nodes[j];
+          vec3 pj = pNode.center();
 
-        int j = stack1.top();
-        stack1.pop();
-        const NODE &pNode = __tree.nodes[j];
-        vec3 pj = pNode.center();
+          real dc = va::dist(pi, pj);
 
-        real dc = va::dist(pi, pj);
-        // T sc = va::norm(pNode.half);
-        // real sc = pNode.mag();
-        ext::extents_t ext = extents[j];
-        // if (i == 6664) {
-        //   vec4 c(0.5, 0.5, 0.1, 1.0);
-        //   gg::geometry_logger::ext(ext[0], ext[1], c);
-        // }
-        vec3 de = ext[1] - ext[0];
-        real sc = 0.75 * va::norm(de);
-        // real sc = max(de[0], max(de[1], de[2]));
-        //       std::cout << sc << " " << dc << std::endl;
-        //        int ii = octree.permutation[pNode.begin];
+          ext::extents_t ext = extents[j];
+          vec3 de = ext[1] - ext[0];
+          real V = de[0] * de[1] * de[2];
+          real sc = 1.5 * pow(0.75 * V / M_PI, 1.0 / 3.0);
+          // if (pNode.isLeaf()) {
+          //   real sc = pNode.mag();
+          // }
+          // T sc = va::norm(pNode.half);
+          //  real sc = 0.75 * pNode.mag();
 
-        if (sc / dc < __thresh || pNode.isLeaf()) {
+          if (sc < dc * eps || pNode.isLeaf()) {
+            pov_counts[i]++;
+            if (pNode.isLeaf()) {
+              c = vec4(0.8, 0.5, 1.0, 1.0);
 
-          vec4 c(0.0, 0.5, 0.8, 1.0);
+              for (int jn = pNode.begin; jn < pNode.begin + pNode.size; jn++) {
+                leaf_count++;
+                int jj = __tree.permutation[jn];
+                counts[j]++;
+                // gg::geometry_logger::line(pi, pj, c);
+                // gg::geometry_logger::ext(ext[0], ext[1], c);
+                Q ui = leafComputeFcn(i, jj, pi, __data, pNode, __tree);
+                u[i] += ui;
+              }
 
-          if (pNode.isLeaf()) {
-            c = vec4(0.8, 0.5, 0.0, 1.0);
-
-            for (int jn = pNode.begin; jn < pNode.begin + pNode.size; jn++) {
-              int jj = __tree.permutation[jn];
-              Q ui = leafComputeFcn(i, jj, pi, __data, pNode, __tree);
+            } else {
+              node_count++;
+              c = vec4(0.0, 0.5, 0.8, 1.0);
+              Q ui = nodeComputeFcn(i, j, pi, __data, pNode, __tree);
               u[i] += ui;
             }
 
-          } else {
-            Q ui = nodeComputeFcn(i, j, pi, __data, pNode, __tree);
-            u[i] += ui;
           }
-          /*
-          if (i == 0) {
-            gg::geometry_logger::ext(ext[0], ext[1], c);
-            gg::geometry_logger::line(pi, pj, vec4(0.1, 0.7, 0.2, 0.5));
-          }
-          */
-        }
 
-        else {
-          for (int j = 0; j < pNode.getNumChildren(); j++) {
-            if (pNode.children[j] > -1) {
-              stack1.push(pNode.children[j]);
+          else {
+            for (int j = 0; j < pNode.getNumChildren(); j++) {
+              if (pNode.children[j] > -1) {
+                stack1.push(pNode.children[j]);
+              }
             }
           }
+#if 1
+          if (i == 500 && false) {
+            gg::geometry_logger::line(pi, pj, c);
+            // gg::geometry_logger::ext(pj - vec3(sc, sc, sc), pj + vec3(sc, sc,
+            // sc),
+            //                          vec4(0.8, 0.0, 0.6, 0.5));
+            gg::geometry_logger::ext(ext[0], ext[1], c);
+            std::cout << " u[" << i << "]: " << u[i] << std::endl;
+          }
+#endif
         }
       }
     }
+#if 0
+    for (int i = 0; i < counts.size(); i++) {
+      if (counts[i] > 0)
+        std::cout << i << " " << counts[i] << std::endl;
+    
+    }
+#endif
+#if 1
+    double mean = std::accumulate(pov_counts.begin(), pov_counts.end(), 0.0) /
+                  pov_counts.size();
+
+    // Compute the variance
+    double variance = std::accumulate(pov_counts.begin(), pov_counts.end(), 0.0,
+                                      [mean](double acc, double x) {
+                                        return acc + std::pow(x - mean, 2);
+                                      }) /
+                      pov_counts.size();
+
+    // Compute the standard deviation
+    double stddev = std::sqrt(variance);
+    std::cout << "==== counts ==== " << std::endl;
+    std::cout << " -  pov count: " << pov.size() << std::endl;
+    std::cout << " -total count: " << total_count << std::endl;
+    std::cout << " - node count: " << node_count << std::endl;
+    std::cout << " - leaf count: " << leaf_count << std::endl;
+    std::cout << " - compute count: " << node_count + leaf_count << std::endl;
+    std::cout << " - tree leaf nodes:      " << __tree.leafNodes.size()
+              << std::endl;
+    std::cout << " - nlogn:           " << pov.size() * log(pov.size())
+              << std::endl;
+    std ::cout << " - pov / compute:  "
+               << float(pov.size()) / float(node_count + leaf_count)
+               << std::endl;
+    std ::cout << " - compute / pov:  "
+               << float(node_count + leaf_count) / float(pov.size())
+               << std::endl;
+    std::cout << " - node/total: " << float(node_count) / float(total_count)
+              << std::endl;
+    std::cout << " - leaf/total: " << float(leaf_count) / float(total_count)
+              << std::endl;
+    std::cout << " - log(tree leaf nodes): " << log(__tree.leafNodes.size())
+              << std::endl;
+    std::cout << "mean/std: " << mean << " " << sqrt(variance) << std::endl;
+    std::cout << "================ " << std::endl;
+#endif
 
     // for(int i = 0; i < 5; i++){
     //  std::cout << u[i].transpose() << std::endl;
@@ -158,7 +233,6 @@ public:
 
     return u;
   }
-  real __thresh = 0.5;
   std::vector<datum::ptr> __data;
   const TREE &__tree;
 };

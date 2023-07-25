@@ -488,16 +488,17 @@ public:
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, bleedTexture);
 
-    std::cout << "gs: " << gBuffer << " " << gPosition << " " << gNormal << " "
-              << gAlbedoSpec << std::endl;
-    // this->mShader.setUniform("hdrBuffer", 2);
+    // std::cout << "gs: " << gBuffer << " " << gPosition << " " << gNormal << "
+    // "
+    //           << gAlbedoSpec << std::endl;
+    //  this->mShader.setUniform("hdrBuffer", 2);
     this->mShader.setUniform("gPosition", 0);
     this->mShader.setUniform("gNormal", 1);
     this->mShader.setUniform("gAlbedoSpec", 2);
     this->mShader.setUniform("ssao", 3);
     this->mShader.setUniform("bleed", 4);
 
-    this->mShader.setUniform("viewPos", view->getPosition3());
+    // this->mShader.setUniform("viewPos", view->getPosition3());
     this->draw();
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
@@ -634,11 +635,10 @@ public:
           this->mShader.setUniform("samples[" + std::to_string(i) + "]",
                                    ssaoKernel[i]);
     */
-    std::cout << view->getProjection() << std::endl;
     this->mShader.setUniform("projection", view->getProjection());
     this->mShader.setUniform("gPosition", 0);
     this->mShader.setUniform("gNormal", 1);
-    this->mShader.setUniform("texNoise", 2);
+    // this->mShader.setUniform("texNoise", 2);
     this->mShader.setUniform("viewPos", view->getPosition3());
 
     this->draw();
@@ -756,12 +756,11 @@ public:
           this->mShader.setUniform("samples[" + std::to_string(i) + "]",
                                    ssaoKernel[i]);
     */
-    std::cout << view->getProjection() << std::endl;
     this->mShader.setUniform("projection", view->getProjection());
     this->mShader.setUniform("gPosition", 0);
     this->mShader.setUniform("gNormal", 1);
     this->mShader.setUniform("gAlbedoSpec", 2);
-    this->mShader.setUniform("texNoise", 3);
+    // this->mShader.setUniform("texNoise", 3);
     this->draw();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
@@ -841,7 +840,7 @@ public:
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, gTarget);
 
-    this->mShader.setUniform("projection", view->getProjection());
+    // this->mShader.setUniform("projection", view->getProjection());
     this->mShader.setUniform("targetInput", 0);
 
     this->draw();

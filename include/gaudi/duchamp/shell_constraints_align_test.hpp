@@ -137,7 +137,7 @@ public:
     // hepworth::block::init_area(*__M, constraints, x, 3.0e-2, {X});
 
     //  hepworth::shell::init_cross(*__M, constraints, 1.05, 0.1);
-    real eps = 3.0 * __surf->_Cm;
+    real eps = 1.0 * __surf->_Cm;
     // hepworth::shell::init_edge_edge_collisions(*__M, *__surf, constraints,
     // x,
     //                                            eps, 0.5 * eps, 1.0e0);

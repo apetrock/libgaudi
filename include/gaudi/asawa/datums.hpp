@@ -305,7 +305,9 @@ std::vector<real> &get_real_data(shell::shell &M, index_t h) {
 std::vector<vec3> &get_vec_data(shell::shell &M, index_t h) {
   return static_pointer_cast<vec3_datum>(M.get_datum(h))->data();
 }
-
+const std::vector<vec3> &const_get_vec_data(const shell::shell &M, index_t h) {
+  return static_pointer_cast<vec3_datum>(M.const_get_datum(h))->data();
+}
 } // namespace asawa
 } // namespace gaudi
 #endif

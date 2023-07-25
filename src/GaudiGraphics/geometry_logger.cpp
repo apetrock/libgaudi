@@ -7,7 +7,7 @@
  *
  */
 
-//#include <gl/glut.h>
+// #include <gl/glut.h>
 #include "GaudiGraphics/geometry_logger.h"
 #include "GaudiMath/typedefs.hpp"
 #include <numeric>

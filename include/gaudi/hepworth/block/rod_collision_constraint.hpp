@@ -33,10 +33,10 @@ public:
     return std::make_shared<rod_collision>(ids, w, l, blocks);
   }
 
-  rod_collision(const std::vector<index_t> &ids, const real &w,
-                      const real &l, std::vector<sim_block::ptr> blocks)
+  rod_collision(const std::vector<index_t> &ids, const real &w, const real &l,
+                std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _l(l) {}
-
+  virtual std::string name() { return typeid(*this).name(); }
   virtual void project(const vecX &q, vecX &p) {
     index_t iA0 = this->_ids[0];
     index_t iA1 = this->_ids[1];
@@ -62,12 +62,13 @@ public:
 
     real l = xAB.norm();
     real dl = (_l - l);
-    xAB /= l;
-
+    xAB /= l > 0 ? l : 1.0;
     real a0 = 1.0 - s;
     real a1 = s;
     real b0 = 1.0 - t;
     real b1 = t;
+// #define RR4
+#ifdef RR4
     if (dl > 0) {
       vec3 dX = 1.0 * dl * xAB;
       p.block(_id0 + 0, 0, 3, 1) = _w * (xA0 - a0 * dX);
@@ -80,26 +81,61 @@ public:
       p.block(_id0 + 6, 0, 3, 1) = _w * xB0;
       p.block(_id0 + 9, 0, 3, 1) = _w * xB1;
     }
+#else
+    if (dl > 0) {
+      vec3 dX = 1.0 * dl * xAB;
+      vec3 xA0p = xA0 - a0 * dX;
+      p.block(_id0 + 0, 0, 3, 1) = _w * (xA1 - a1 * dX - xA0p);
+      p.block(_id0 + 3, 0, 3, 1) = _w * (xB0 + b0 * dX - xA0p);
+      p.block(_id0 + 6, 0, 3, 1) = _w * (xB1 + b1 * dX - xA0p);
+    } else {
+      p.block(_id0 + 0, 0, 3, 1) = _w * (xA1 - xA0);
+      p.block(_id0 + 3, 0, 3, 1) = _w * (xB0 - xA0);
+      p.block(_id0 + 6, 0, 3, 1) = _w * (xB1 - xA0);
+    }
+#endif
     //    p.block(3 * j, 0, 3, 1) = -_w * dq / l;
   }
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
     _id0 = id0;
- 
+
     index_t iA0 = _blocks[0]->get_offset_idx(this->_ids[0]);
     index_t iA1 = _blocks[0]->get_offset_idx(this->_ids[1]);
     index_t iB0 = _blocks[1]->get_offset_idx(this->_ids[2]);
     index_t iB1 = _blocks[1]->get_offset_idx(this->_ids[3]);
 
+#ifdef RR4
     for (int ax = 0; ax < 3; ax++)
       triplets.push_back(trip(_id0 + 0 + ax, iA0 + ax, _w));
+
     for (int ax = 0; ax < 3; ax++)
       triplets.push_back(trip(_id0 + 3 + ax, iA1 + ax, _w));
 
     for (int ax = 0; ax < 3; ax++)
       triplets.push_back(trip(_id0 + 6 + ax, iB0 + ax, _w));
+
     for (int ax = 0; ax < 3; ax++)
       triplets.push_back(trip(_id0 + 9 + ax, iB1 + ax, _w));
     id0 += 12;
+#else
+
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 0 + ax, iA1 + ax, _w));
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 0 + ax, iA0 + ax, -_w));
+
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 3 + ax, iB0 + ax, _w));
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 3 + ax, iA0 + ax, -_w));
+
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 6 + ax, iB1 + ax, _w));
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 6 + ax, iA0 + ax, -_w));
+    id0 += 9;
+
+#endif
   }
 
   real _l = 1.0;

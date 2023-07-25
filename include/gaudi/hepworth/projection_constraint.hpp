@@ -41,6 +41,7 @@ public:
 
   projection_constraint(const std::vector<index_t> &ids, const real &w)
       : _ids(ids), _w(w) {}
+  virtual std::string name() { return typeid(*this).name(); }
   virtual void project(const vecX &q, vecX &p){};
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets){};
 

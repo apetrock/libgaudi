@@ -64,79 +64,84 @@ void init_cylinder(const asawa::rod::rod &rod,
 }
 #endif
 
-void init_stretch_shear(const asawa::rod::rod &rod,
+void init_stretch_shear(const asawa::rod::rod &R,
                         std::vector<projection_constraint::ptr> &constraints,
                         const std::vector<real> &l0, const real &w,
                         std::vector<sim_block::ptr> blocks) {
-  int Ni = rod.corner_count();
-  for (int i = 0; i < rod.corner_count(); i++) {
-    asawa::rod::consec_t c = rod.consec(i);
+  int Ni = R.corner_count();
+  std::vector<index_t> verts = R.get_vert_range();
+  for (auto i : verts) {
+    asawa::rod::consec_t c = R.consec(i);
     if (l0[i] < 1e-10)
       continue;
+
     constraints.push_back(
         stretch_shear::create({c[1], c[2], c[1], Ni}, w, l0[i], blocks));
   }
 }
 
-void init_bend_twist(const asawa::rod::rod &rod,
+void init_bend_twist(const asawa::rod::rod &R,
                      std::vector<projection_constraint::ptr> &constraints,
                      const real &w, std::vector<sim_block::ptr> blocks) {
-  int Ni = rod.corner_count();
-  for (int i = 0; i < rod.corner_count(); i++) {
-    asawa::rod::consec_t c = rod.consec(i);
+  int Ni = R.corner_count();
+  std::vector<index_t> verts = R.get_vert_range();
+  for (auto i : verts) {
+    if (R.length(i) < 1e-8)
+      continue;
+    asawa::rod::consec_t c = R.consec(i);
     constraints.push_back(bend_twist::create({c[1], c[2], Ni}, w, blocks));
   }
 }
 
-void init_angle(const asawa::rod::rod &rod,
+void init_angle(const asawa::rod::rod &R,
                 std::vector<projection_constraint::ptr> &constraints,
                 const vec3 &z, const real &phi, const real &w,
                 std::vector<sim_block::ptr> blocks) {
-  int Ni = rod.corner_count();
-  for (int i = 0; i < rod.corner_count(); i++) {
-    asawa::rod::consec_t c = rod.consec(i);
+  int Ni = R.corner_count();
+  const std::vector<vec3> &x = R.__x;
+  std::vector<index_t> verts = R.get_vert_range();
+  for (auto i : verts) {
+    if (R.length(i) < 1e-8)
+      continue;
+    asawa::rod::consec_t c = R.consec(i);
     constraints.push_back(angle::create({c[1], c[2], Ni}, z, phi, w, blocks));
   }
 }
 
-void init_collisions(asawa::rod::rod &rod, asawa::rod::dynamic &dynamic,
+void init_collisions(asawa::rod::rod &R, asawa::rod::dynamic &dynamic,
                      std::vector<projection_constraint::ptr> &constraints,
-                     const real &w, std::vector<sim_block::ptr> blocks) {
-  const std::vector<vec3> &x = rod.__x;
-  vector<std::array<index_t, 4>> collisions = dynamic.get_internal_collisions();
+                     const real &w, std::vector<sim_block::ptr> blocks,
+                     real K = 1.0) {
+  const std::vector<vec3> &x = R.__x;
+  vector<std::array<index_t, 4>> collisions =
+      dynamic.get_internal_collisions(K);
   for (auto &c : collisions) {
     if (c[0] > -1) {
       vec3 xA0 = x[c[0]];
       vec3 xA1 = x[c[1]];
       vec3 xB0 = x[c[2]];
       vec3 xB1 = x[c[3]];
-      if (rod.prev(c[0]) == c[2])
-        continue;
-      if (rod.next(c[1]) == c[3])
-        continue;
-      if (rod.prev(c[0]) == c[3])
-        continue;
-      if (rod.next(c[1]) == c[2])
-        continue;
-      // std::cout << c[0] << " " << c[1] << " - " << c[2] << " " << c[3]
-      //           << std::endl;
 
-      /*
-    std::array<real, 3> d = va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
-    real s = d[1];
-    real t = d[2];
+      if (R.length(c[0]) < 1e-8)
+        continue;
+      if (R.length(c[1]) < 1e-8)
+        continue;
+      if (R.length(c[2]) < 1e-8)
+        continue;
+      if (R.length(c[3]) < 1e-8)
+        continue;
 
-    vec3 xA = va::mix(s, xA0, xA1);
-    vec3 xB = va::mix(t, xB0, xB1);
-    vec3 xAB = xB - xA;
+      if (R.prev(c[0]) == c[2])
+        continue;
+      if (R.next(c[1]) == c[3])
+        continue;
+      if (R.prev(c[0]) == c[3])
+        continue;
+      if (R.next(c[1]) == c[2])
+        continue;
 
-    real l = xAB.norm();
-    real dl = rod._r - l;
-    if (dl < 0)
-      continue;
-*/
-      constraints.push_back(rod_collision::create({c[0], c[1], c[2], c[3]}, w,
-                                                  1.0 * rod._r, blocks));
+      constraints.push_back(
+          rod_collision::create({c[0], c[1], c[2], c[3]}, w, K * R._r, blocks));
     }
   }
 }

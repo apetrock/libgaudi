@@ -192,7 +192,7 @@ public:
 
     solver.set_constraints(constraints);
 
-    solver.step(blocks, h);
+    solver.step(blocks, h, 0.9);
   }
 
   void step(int frame) {

@@ -39,7 +39,7 @@ public:
   block_constraint(const std::vector<index_t> &ids, const real &w,
                    std::vector<sim_block::ptr> blocks)
       : _blocks(blocks), projection_constraint(ids, w) {}
-
+  virtual std::string name() { return typeid(*this).name(); }
   std::vector<sim_block::ptr> _blocks;
 };
 

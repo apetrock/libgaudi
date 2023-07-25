@@ -37,6 +37,7 @@ public:
   edge_strain(const std::vector<index_t> &ids, const real &l, const real &g,
               const real &w, std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _l(l), _g(g) {}
+  virtual std::string name() { return typeid(*this).name(); }
 
   virtual void project(const vecX &q, vecX &p) {
 
@@ -52,8 +53,7 @@ public:
     // std::cout << l << " " << _l << " " << l / _l << std::endl;
     //   gg::geometry_logger::line(q0, q0 + 0.01 * l / _l * dq,
     //                             vec4(1.0, 0.0, 0.0, 1.0));
-    l = std::clamp(l / _l, 0.01, 2.0);
-
+    l = std::clamp(l / _l, 0.1, 2.0);
     p.block(_id0, 0, 3, 1) = _w * _g * l * dq;
   }
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
@@ -74,7 +74,8 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-typedef std::function<void(const index_t &j, const real &k, const vec3 &dq)>
+typedef std::function<void(const index_t &j, const real &k, const vec3 &dq,
+                           const vec3 &N)>
     edge_fcn;
 
 void one_ring_iter(const std::vector<index_t> &ids,
@@ -84,11 +85,29 @@ void one_ring_iter(const std::vector<index_t> &ids,
   index_t i = ids[0];
   vec3 qi0 = x[i];
   for (int k = 1; k < ids.size(); k++) {
+    index_t kp = k + 1;
+    index_t km = k - 1;
+    if (kp == ids.size())
+      kp = 1;
+    if (km == 1)
+      km = ids.size() - 1;
     index_t j = ids[k];
+    index_t jp = ids[kp];
+    index_t jm = ids[km];
+
     real K = weights[k - 1];
     vec3 qi = x[j];
+    vec3 qip = x[jp];
+    vec3 qim = x[jm];
+
     vec3 dqi = qi - qi0;
-    fcn(j, K, dqi);
+    vec3 dqip = qip - qi0;
+    vec3 Np = dqi.cross(dqip);
+    vec3 dqim = qim - qi0;
+    vec3 Nm = dqim.cross(dqi);
+    vec3 N = Np + Nm;
+    N.normalize();
+    fcn(j, K, dqi, N);
   }
 }
 
@@ -100,11 +119,30 @@ void one_ring_iter(const std::vector<index_t> &ids,
   vec3 qi0 = block.get_vec3(i, q);
 
   for (int k = 1; k < ids.size(); k++) {
+
+    index_t kp = k + 1;
+    index_t km = k - 1;
+    if (kp == ids.size())
+      kp = 1;
+    if (km == 1)
+      km = ids.size() - 1;
     index_t j = ids[k];
+    index_t jp = ids[kp];
+    index_t jm = ids[km];
+
     real K = weights[k - 1];
     vec3 qi = block.get_vec3(j, q);
+    vec3 qip = block.get_vec3(jp, q);
+    vec3 qim = block.get_vec3(jm, q);
+
     vec3 dqi = qi - qi0;
-    fcn(j, K, dqi);
+    vec3 dqip = qip - qi0;
+    vec3 Np = dqi.cross(dqip);
+    vec3 dqim = qim - qi0;
+    vec3 Nm = dqim.cross(dqi);
+    vec3 N = Np + Nm;
+    N.normalize();
+    fcn(j, K, dqi, N);
   }
 }
 
@@ -147,21 +185,32 @@ public:
     _vg = vec3::Zero();
     // todo:: calculate area/cotans here.
     one_ring_iter(ids, edge_weights, x,
-                  [&](const index_t &j, const real &k, const vec3 &dq) {
-                    _vg += k * dq;
-                  });
+                  [&](const index_t &j, const real &k, const vec3 &dq,
+                      const vec3 &N) { _vg += k * dq; });
   }
+  virtual std::string name() { return typeid(*this).name(); }
 
   virtual void project(const vecX &q, vecX &p) {
 
     vec3 vf = vec3::Zero();
     one_ring_iter(
         _ids, _edge_weights, q, *_blocks[0],
-        [&](const index_t &j, const real &k, const vec3 &dq) { vf += k * dq; });
+        [&](const index_t &j, const real &k, const vec3 &dq, const vec3 &N) {
+          if (dq.hasNaN() || std::isnan(k)) {
+            std::cout << __PRETTY_FUNCTION__ << " d2 is nan" << std::endl;
+            exit(0);
+          }
+          vf += k * dq;
+        });
 
     vec3 qi0 = _blocks[0]->get_vec3(_ids[0], q);
     vec3 Rvg = vf * _vg.squaredNorm() / vf.squaredNorm();
-
+    /*
+    if (Rvg.hasNaN()) {
+      std::cout << __PRETTY_FUNCTION__ << " d2 is nan" << std::endl;
+      exit(0);
+    }
+*/
     if (vf.squaredNorm() > 1e-12)
       p.block(_id0, 0, 3, 1) = _w * Rvg;
     else
@@ -196,23 +245,10 @@ public:
             const std::vector<real> &edge_weights, const std::vector<vec3> &x,
             const real &w, std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {}
+  virtual std::string name() { return typeid(*this).name(); }
 
   virtual void project(const vecX &q, vecX &p) {
-    index_t i = this->_ids[0];
-    // to3(i, p, _w * _vg);
-    mat3 M = mat3::Zero();
-    one_ring_iter(_ids, _edge_weights, q, *_blocks[0],
-                  [&](const index_t &j, const real &k, const vec3 &dq) {
-                    M += k * dq * dq.transpose();
-                  });
-
-    Eigen::JacobiSVD<mat3> svd(M, Eigen::ComputeFullU);
-    mat3 U = svd.matrixU();
-    vec3 s = svd.singularValues();
-
-    // p.block(_id0, 0, 3, 1) = _w * s[0] * U.col(0);
     p.block(_id0, 0, 3, 1) = vec3::Zero();
-    // p.block(_id0, 0, 3, 1) += _w * _vg;
   }
 
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
@@ -226,19 +262,19 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-class vec_align : public block_constraint {
+class willmore : public block_constraint {
 public:
-  DEFINE_CREATE_FUNC(vec_align)
+  DEFINE_CREATE_FUNC(willmore)
 
-  vec_align(const std::vector<index_t> &ids,
-            const std::vector<real> &edge_weights, const std::vector<vec3> &x,
-            const real &w, std::vector<sim_block::ptr> blocks)
-      : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {
-    _dq0.clear();
-    one_ring_iter(ids, edge_weights, x,
-                  [&](const index_t &j, const real &k, const vec3 &dq) {
-                    _dq0.push_back(dq);
-                  });
+  willmore(const std::vector<index_t> &ids,
+           const std::vector<real> &edge_weights, const std::vector<vec3> &x,
+           const real &w, std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {}
+  virtual std::string name() { return typeid(*this).name(); }
+
+  void set_align_normal(vec3 N) {
+    _align = true;
+    _N_align = N;
   }
 
   virtual void project(const vecX &q, vecX &p) {
@@ -246,15 +282,14 @@ public:
 
     mat3 M = mat3::Zero();
     int i = 0;
-    vec3 dqi = vec3::Zero();
     real K = 0;
-    one_ring_iter(_ids, _edge_weights, q, *_blocks[0],
-                  [&](const index_t &j, const real &k, const vec3 &dq) {
-                    dqi += k * dq;
-                    M += k * _dq0[i++] * dq.transpose();
-                    // M += k * dq * dq.transpose();
-                    K += k;
-                  });
+    one_ring_iter(
+        _ids, _edge_weights, q, *_blocks[0],
+        [&](const index_t &j, const real &k, const vec3 &dq, const vec3 &N) {
+          M += k * N * N.transpose();
+          // M += k * dq * dq.transpose();
+          K += k;
+        });
     // M /= K;
     // dqi /= K;
 
@@ -262,19 +297,26 @@ public:
     mat3 U = svd.matrixU();
     mat3 V = svd.matrixV();
     vec3 s = svd.singularValues();
-    vec3 N = U.col(2);
+    vec3 N = U.col(0);
 
-    Eigen::AngleAxis<real> aa(0.5, N);
-    mat3 R = aa.toRotationMatrix();
+    mat3 R = va::rejection_matrix(N);
+
+    if (_align) {
+      quat Ra;
+      Ra.setFromTwoVectors(N, _N_align);
+      R = Ra.normalized().toRotationMatrix() * R;
+    }
+
     index_t id = 0;
-    one_ring_iter(_ids, _edge_weights, q, *_blocks[0],
-                  [&](const index_t &j, const real &k, const vec3 &dq) {
-                    vec3 rdq = R * dq;
-                    p.block(_id0 + id, 0, 3, 1) = _w * k * rdq;
-                    // gg::geometry_logger::line(qi, qi + 0.5 * rdq, vec4(1.0,
-                    // 0.0, 0.0, 1.0));
-                    id += 3;
-                  });
+    one_ring_iter(
+        _ids, _edge_weights, q, *_blocks[0],
+        [&](const index_t &j, const real &k, const vec3 &dq, const vec3 &N) {
+          vec3 rdq = R * dq;
+          p.block(_id0 + id, 0, 3, 1) = _w * k * rdq;
+          // gg::geometry_logger::line(qi, qi + 0.5 * rdq,
+          //                          vec4(1.0, 0.0, 0.0, 1.0));
+          id += 3;
+        });
 
     // gg::geometry_logger::line(qi, qi + 0.01 * v0, vec4(1.0, 0.0, 0.0, 1.0));
     // gg::geometry_logger::line(qi, qi + dqr, vec4(0.7, 0.0, 1.0, 1.0));
@@ -299,7 +341,8 @@ public:
     }
   }
 
-  std::vector<vec3> _dq0;
+  vec3 _N_align; // Goal N
+  bool _align = false;
   std::vector<real> _edge_weights;
 };
 
@@ -385,6 +428,7 @@ public:
   }
   real _rangeMax = 1.0;
   real _rangeMin = 0.0;
+
   mat2 _rest;
 };
 #endif
@@ -456,85 +500,120 @@ public:
 };
 #endif
 
-class cross : public block_constraint {
+class edge_willmore : public block_constraint {
 public:
-  typedef std::shared_ptr<cross> ptr;
+  DEFINE_CREATE_FUNC(edge_willmore)
 
-  static ptr create(const std::vector<index_t> &ids, const real &l,
-                    const real &w, std::vector<sim_block::ptr> blocks) {
-    return std::make_shared<cross>(ids, w, l, blocks);
+  edge_willmore(const std::vector<index_t> &ids, const real &w,
+                std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _align(false),
+        _N_align(vec3::Zero()) {}
+
+  void set_align_normal(vec3 N) {
+    _align = true;
+    _N_align = N;
   }
-
-  cross(const std::vector<index_t> &ids, const real &l, const real &w,
-        std::vector<sim_block::ptr> blocks)
-      : block_constraint(ids, w, blocks), _lambda(l) {}
 
   virtual void project(const vecX &q, vecX &p) {
-    //    i0 B jp
-    //  A /| /
-    //   / |/ C
-    // ip D j0
-    index_t i0 = this->_ids[0];
-    index_t ip = this->_ids[1];
-    index_t j0 = this->_ids[2];
-    index_t jp = this->_ids[3];
+    // d00   i0   j1 d11
+    //       /|1/
+    // d01  /0|/     d10
+    // i1    j0
 
-    vec3 qi0 = _blocks[0]->get_vec3(i0, q);
-    vec3 qi1 = _blocks[0]->get_vec3(ip, q);
-    vec3 qj0 = _blocks[0]->get_vec3(j0, q);
-    vec3 qj1 = _blocks[0]->get_vec3(jp, q);
+    vec3 qi0 = _blocks[0]->get_vec3(_ids[0], q);
+    vec3 qi1 = _blocks[0]->get_vec3(_ids[1], q);
+    vec3 qj0 = _blocks[0]->get_vec3(_ids[2], q);
+    vec3 qj1 = _blocks[0]->get_vec3(_ids[3], q);
 
-    vec3 qm = 0.5 * (qi0 + qj0);
-    vec3 A = qi1 - qi0;
-    vec3 B = qi0 - qj1;
-    vec3 C = qj1 - qj0;
-    vec3 D = qj0 - qi1;
-    mat3 AC = A * C.transpose();
-    mat3 DB = D * B.transpose();
-    mat3 ACDB = DB.inverse() * AC;
+    vec3 c0 = 0.333 * (qi0 + qi1 + qj0);
+    vec3 c1 = 0.333 * (qj0 + qj1 + qi0);
 
-    Eigen::JacobiSVD<mat3> svd(AC, Eigen::ComputeFullU);
-    mat3 U = svd.matrixU();
-    vec3 s = svd.singularValues();
-    vec3 Ts = U.col(0).transpose();
-    vec3 Ns = U.col(1).transpose();
-    vec3 Bs = U.col(2).transpose();
+    vec3 d0 = (qi0 - qj0).normalized();
 
-    real lA = A.norm();
-    real lB = B.norm();
-    real lC = C.norm();
-    real lD = D.norm();
+    vec3 d00 = qi1 - qi0;
+    vec3 d01 = qi1 - qj0;
 
-    real lp = sqrt(_lambda * lD * lB);
+    vec3 d10 = qj1 - qi0;
+    vec3 d11 = qj1 - qj0;
 
-    gg::geometry_logger::line(qm, qm + 0.1 * s[0] * Ts,
-                              vec4(1.0, 0.0, 0.0, 1.0));
-    gg::geometry_logger::line(qm, qm + 0.1 * s[1] * Ns,
-                              vec4(0.0, 1.0, 0.0, 1.0));
-    gg::geometry_logger::line(qm, qm + 0.1 * s[2] * Bs,
-                              vec4(0.0, 0.0, 1.0, 1.0));
-    std::cout << s.transpose() << std::endl;
-    // gg::geometry_logger::line(qj0, qj0 - 0.5 * lp * AC,
-    //                          vec4(1.0, 0.0, 0.0, 1.0));
-    // p.block(3 * i0, 0, 3, 1) += _w * s[0] * Ts;
-    // p.block(3 * j0, 0, 3, 1) -= _w * s[0] * Ts;
+    vec3 N0 = d00.cross(d01).normalized();
+    vec3 N1 = d11.cross(d10).normalized();
+    real cs = va::cos(N0, N1, d0);
+    real sn = va::sin(N0, N1, d0);
+    real thet = 0.5 * atan2(sn, cs);
+    // real thet = atan(va::tan(N0, N1, d0));
+    vec3 N = (N0 + N1).normalized();
+    // mat3 R = va::rejection_matrix(N);
+
+    Eigen::AngleAxis<real> R(thet, d0);
+    vec3 d00p = R * d00;
+    vec3 d01p = R * d01;
+    vec3 d10p = R.inverse() * d10;
+    vec3 d11p = R.inverse() * d11;
+    if (_align) {
+      vec3 Ni = (N0 + N1).normalized();
+      quat Ra;
+      Ra.setFromTwoVectors(Ni, _N_align);
+      d00p = Ra * d00p;
+      d01p = Ra * d01p;
+      d10p = Ra * d10p;
+      d11p = Ra * d11p;
+#if 0
+      if (!_debugged) {
+        _debugged = true;
+        gg::geometry_logger::line(c0, c0 + 0.01 * _N_align,
+                                  vec4(0.0, 1.0, 0.0, 1.0));
+        gg::geometry_logger::line(qi0, qi0 + d00p, vec4(1.0, 0.5, 0.0, 1.0));
+        gg::geometry_logger::line(qj0, qj0 + d01p, vec4(0.0, 1.0, 0.5, 1.0));
+        gg::geometry_logger::line(qi0, qi0 + d10p, vec4(0.0, 0.5, 1.0, 1.0));
+        gg::geometry_logger::line(qj0, qj0 + d11p, vec4(0.5, 1.0, 0.0, 1.0));
+      }
+#endif
+    }
+
+    if (d00p.hasNaN() || d01p.hasNaN() || d10p.hasNaN() || d11p.hasNaN()) {
+      std::cout << __PRETTY_FUNCTION__ << " d2 is nan" << std::endl;
+      exit(0);
+    }
+    p.block(_id0 + 0, 0, 3, 1) = _w * d00p;
+    // p.block(_id0 + 3, 0, 3, 1) = _w * d01p;
+    // p.block(_id0 + 6, 0, 3, 1) = _w * d10p;
+    p.block(_id0 + 3, 0, 3, 1) = _w * d11p;
   }
-  virtual void fill_A(std::vector<trip> &triplets) {
-    index_t i = _blocks[0]->get_offset_idx(this->_ids[0]);
-    index_t ip = _blocks[0]->get_offset_idx(this->_ids[1]);
-    index_t j = _blocks[0]->get_offset_idx(this->_ids[2]);
-    index_t jp = _blocks[0]->get_offset_idx(this->_ids[3]);
+
+  virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
+    _id0 = id0;
+
+    index_t i0 = _blocks[0]->get_offset_idx(this->_ids[0]);
+    index_t i1 = _blocks[0]->get_offset_idx(this->_ids[1]);
+    index_t j0 = _blocks[0]->get_offset_idx(this->_ids[2]);
+    index_t j1 = _blocks[0]->get_offset_idx(this->_ids[3]);
 
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(i + ax, i + ax, -_w));
+      triplets.push_back(trip(_id0 + 0 + ax, i1 + ax, _w));
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(i + ax, ip + ax, _w));
+      triplets.push_back(trip(_id0 + 0 + ax, i0 + ax, -_w));
+    /*
+        for (int ax = 0; ax < 3; ax++)
+          triplets.push_back(trip(_id0 + 3 + ax, i1 + ax, _w));
+        for (int ax = 0; ax < 3; ax++)
+          triplets.push_back(trip(_id0 + 3 + ax, j0 + ax, -_w));
+
+        for (int ax = 0; ax < 3; ax++)
+          triplets.push_back(trip(_id0 + 6 + ax, j1 + ax, _w));
+        for (int ax = 0; ax < 3; ax++)
+          triplets.push_back(trip(_id0 + 6 + ax, i0 + ax, -_w));
+    */
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(j + ax, j + ax, -_w));
+      triplets.push_back(trip(_id0 + 3 + ax, j1 + ax, _w));
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(j + ax, jp + ax, _w));
+      triplets.push_back(trip(_id0 + 3 + ax, j0 + ax, -_w));
+
+    id0 += 6;
   }
-  real _lambda = 1.0;
+  vec3 _N_align; // Goal N
+  bool _align = false;
+  bool _debugged = false;
 };
 
 } // namespace block

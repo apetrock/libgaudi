@@ -40,6 +40,7 @@ public:
   smooth(const std::vector<index_t> &ids, const real &w,
          std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks) {}
+  virtual std::string name() { return typeid(*this).name(); }
 
   virtual void project(const vecX &q, vecX &p) {
     index_t i0 = this->_ids[0];
@@ -84,6 +85,7 @@ public:
   stretch_shear(const std::vector<index_t> &ids, const real &w, const real &l0,
                 std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _l0(l0) {}
+  virtual std::string name() { return typeid(*this).name(); }
 
   virtual void project(const vecX &q, vecX &p) {
     index_t i = this->_ids[0];
@@ -106,8 +108,16 @@ public:
 
     u = du * u;
     // u.normalize();
-
-    p.block(_id0, 0, 3, 1) = _w * d2;
+    if (d2.hasNaN()) {
+      std::cout << __PRETTY_FUNCTION__ << " d2 is nan" << std::endl;
+      exit(0);
+    }
+    if (u.coeffs().hasNaN()) {
+      std::cout << __PRETTY_FUNCTION__ << " u is nan" << std::endl;
+      exit(0);
+    }
+    l = std::clamp(l / _l0, 0.1, 1.5);
+    p.block(_id0, 0, 3, 1) = _w * l * d2;
     // p.block(k, 0, 4, 1) += _w * q.block(k, 0, 4, 1);
     p.block(_id0 + 3, 0, 4, 1) = _w * vec4(u.coeffs().data());
   }
@@ -147,6 +157,7 @@ public:
   bend_twist(const std::vector<index_t> &ids, const real &w,
              std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks) {}
+  virtual std::string name() { return typeid(*this).name(); }
 
   virtual void project(const vecX &q, vecX &p) {
 
@@ -163,9 +174,19 @@ public:
 
     // quat uij = ui.slerp(0.5, uj);
     quat uij = va::slerp(ui, uj, 0.5);
+    // std::cout << "u: " << uij.coeffs().transpose() << std::endl;
+    if (uij.coeffs().hasNaN()) {
+      std::cout << __PRETTY_FUNCTION__ << " uij is nan" << std::endl;
+      std::cout << ui << " " << uj << std::endl;
+      std::cout << ii << " " << jj << std::endl;
+      exit(0);
+    }
+    if (uj.coeffs().hasNaN()) {
+      std::cout << __PRETTY_FUNCTION__ << " uj is nan" << std::endl;
+      exit(0);
+    }
     ui = uij;
     uj = uij;
-    // std::cout << "u: " << uij.coeffs().transpose() << std::endl;
 
     p.block(_id0 + 0, 0, 4, 1) = _w * vec4(ui.coeffs().data());
     p.block(_id0 + 4, 0, 4, 1) = _w * vec4(uj.coeffs().data());
@@ -196,6 +217,7 @@ public:
   angle(const std::vector<index_t> &ids, vec3 z, real phi, const real &w,
         std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _z(z), _phi(phi) {}
+  virtual std::string name() { return typeid(*this).name(); }
 
   virtual void project(const vecX &q, vecX &p) {
 
@@ -231,6 +253,14 @@ public:
     //  std::cout << thet << " " << thetp << std::endl;
     //  gg::geometry_logger::line(q0, q0 + 0.05 * zi, vec4(1.5, 0.0, 0.0, 1.0));
     //  gg::geometry_logger::line(q0, q0 + 0.05 * zj, vec4(0.0, 1.5, 0.0, 1.0));
+    if (ui.coeffs().hasNaN()) {
+      std::cout << __PRETTY_FUNCTION__ << " ui is nan" << std::endl;
+      exit(0);
+    }
+    if (uj.coeffs().hasNaN()) {
+      std::cout << __PRETTY_FUNCTION__ << " uj is nan" << std::endl;
+      exit(0);
+    }
 
     p.block(_id0 + 0, 0, 4, 1) = _w * vec4(ui.coeffs().data());
     p.block(_id0 + 4, 0, 4, 1) = _w * vec4(uj.coeffs().data());
@@ -264,6 +294,7 @@ public:
   cylinder(const std::vector<index_t> &ids, const real &w,
            std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks) {}
+  virtual std::string name() { return typeid(*this).name(); }
 
   virtual void project(const vecX &q, vecX &p) {
     index_t i0 = this->_ids[0];

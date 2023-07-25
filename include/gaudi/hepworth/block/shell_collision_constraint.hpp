@@ -23,7 +23,6 @@ namespace gaudi {
 namespace hepworth {
 namespace block {
 
-
 class edge_edge_normal_collision : public block_constraint {
 public:
   typedef std::shared_ptr<edge_edge_normal_collision> ptr;
@@ -132,12 +131,14 @@ public:
   typedef std::shared_ptr<pnt_tri_collision> ptr;
 
   static ptr create(const std::vector<index_t> &ids, const vec3 &Nv,
-                    const real &eps, const real &w, std::vector<sim_block::ptr> blocks) {
+                    const real &eps, const real &w,
+                    std::vector<sim_block::ptr> blocks) {
     return std::make_shared<pnt_tri_collision>(ids, Nv, eps, w, blocks);
   }
 
   pnt_tri_collision(const std::vector<index_t> &ids, const vec3 &Nv,
-                    const real &eps, const real &w, std::vector<sim_block::ptr> blocks)
+                    const real &eps, const real &w,
+                    std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _Nv(Nv), _eps(eps) {}
 
   virtual void project(const vecX &q, vecX &p) {
@@ -166,35 +167,38 @@ public:
     real d = dx.norm();
     real d_s = N.dot(dx);
     real hst = va::sgn(d_s);
-    real h =  abs(d_s);
+    real h = abs(d_s);
     real db = pow(h - _eps, 2.0) * log(h / _eps); // barrier potential...
     db = va::clamp(db, 0.0, 1.0);
     if (h < _eps) {
-      //db = d + _eps;
+      // db = d + _eps;
       real dh = 0.5 * hst * (_eps - h - db);
-      //real dh = 0.5 * hst * db;
-      
+      // real dh = 0.5 * hst * db;
 
-       gg::geometry_logger::line(xP, xP + dh * N, vec4(1.0, 0.0, 0.0, 1.0));
+      gg::geometry_logger::line(xP, xP + dh * N, vec4(1.0, 0.0, 0.0, 1.0));
       // gg::geometry_logger::line(xN, xN + dx, vec4(1.0, 0.0, 0.0, 1.0));
       // gg::geometry_logger::line(xN, xN + _eps * N, vec4(1.0, 1.0, 0.0, 1.0));
       // gg::geometry_logger::line(xT0, xT1, vec4(0.75, 0.0, 0.25, 1.0));
       // gg::geometry_logger::line(xT1, xT2, vec4(0.75, 0.0, 0.25, 1.0));
       // gg::geometry_logger::line(xT2, xT0, vec4(0.75, 0.0, 0.25, 1.0));
       vec3 Nt = dx.normalized();
+      /* //original formulation
       p.block(_id0 + 0, 0, 3, 1) = _w * (xP + dh * N);
       p.block(_id0 + 3, 0, 3, 1) = _w * (xT0 - u * dh * N);
       p.block(_id0 + 6, 0, 3, 1) = _w * (xT1 - v * dh * N);
       p.block(_id0 + 9, 0, 3, 1) = _w * (xT2 - w * dh * N);
-
+      */
+      vec3 xPp = xP + dh * N;
+      p.block(_id0 + 0, 0, 3, 1) = _w * (xT0 - u * dh * N - xPp);
+      p.block(_id0 + 3, 0, 3, 1) = _w * (xT1 - v * dh * N - xPp);
+      p.block(_id0 + 6, 0, 3, 1) = _w * (xT2 - w * dh * N - xPp);
     } else {
       // gg::geometry_logger::line(xN, xN + dx, vec4(0.0, 1.0, 0.0, 1.0));
       // gg::geometry_logger::line(xN, xN + _eps * N, vec4(1.0, 1.0, 0.0, 1.0));
 
-      p.block(_id0 + 0, 0, 3, 1) = _w * xP;
-      p.block(_id0 + 3, 0, 3, 1) = _w * xT0;
-      p.block(_id0 + 6, 0, 3, 1) = _w * xT1;
-      p.block(_id0 + 9, 0, 3, 1) = _w * xT2;
+      p.block(_id0 + 0, 0, 3, 1) = _w * (xT0 - xP);
+      p.block(_id0 + 3, 0, 3, 1) = _w * (xT1 - xP);
+      p.block(_id0 + 6, 0, 3, 1) = _w * (xT2 - xP);
     }
   }
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
@@ -205,20 +209,27 @@ public:
     index_t iT1 = this->_ids[2];
     index_t iT2 = this->_ids[3];
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(_id0 + 0 + ax, 3 * iP + ax, _w));
+      triplets.push_back(trip(_id0 + 0 + ax, 3 * iT0 + ax, _w));
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(_id0 + 3 + ax, 3 * iT0 + ax, _w));
+      triplets.push_back(trip(_id0 + 0 + ax, 3 * iP + ax, -_w));
+
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(_id0 + 6 + ax, 3 * iT1 + ax, _w));
+      triplets.push_back(trip(_id0 + 3 + ax, 3 * iT1 + ax, _w));
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(_id0 + 9 + ax, 3 * iT2 + ax, _w));
-    id0 += 12;
+      triplets.push_back(trip(_id0 + 3 + ax, 3 * iP + ax, -_w));
+
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 6 + ax, 3 * iT2 + ax, _w));
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 6 + ax, 3 * iP + ax, -_w));
+
+    id0 += 9;
   }
   vec3 _Nv;
   real _eps;
 };
 
-} // namespace blocks
+} // namespace block
 } // namespace hepworth
 } // namespace gaudi
 #endif

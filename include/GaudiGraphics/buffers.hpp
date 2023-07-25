@@ -287,8 +287,8 @@ public:
     this->displayShader().setUniform("P", mProject);
     this->displayShader().setUniform("V", mModelView);
     this->displayShader().setUniform("M", this->matrix());
-    this->displayShader().setUniform("LightPosition_worldspace",
-                                     Vec3(3, 3., 5.));
+    // this->displayShader().setUniform("LightPosition_worldspace",
+    //                                  Vec3(3, 3., 5.));
     updateShaderAttributes();
     /* Draw 2 triangles starting at index 0 */
     //

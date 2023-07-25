@@ -26,7 +26,7 @@
 #include "GaudiGraphics/geometry_logger.h"
 #include "GaudiGraphics/mesh_helper.hpp"
 #include "GaudiGraphics/viewer.hpp"
-//#include "gaudi/asawa/asawa.h"
+// #include "gaudi/asawa/asawa.h"
 
 #include "gaudi/duchamp/fast_summation_test.hpp"
 
@@ -55,8 +55,8 @@ public:
     _obj = gg::BufferObject::create();
     _obj->init();
     mSceneObjects.push_back(_obj);
-    //__surf = gaudi::duchamp::fast_summation_test::create();
-    __surf = gaudi::duchamp::transport_mesh_test::create();
+    __surf = gaudi::duchamp::fast_summation_test::create();
+    //__surf = gaudi::duchamp::transport_mesh_test::create();
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }
 
@@ -82,8 +82,8 @@ public:
   }
 
 private:
-  // gaudi::duchamp::fast_summation_test::ptr __surf;
-  gaudi::duchamp::transport_mesh_test::ptr __surf;
+  gaudi::duchamp::fast_summation_test::ptr __surf;
+  // gaudi::duchamp::transport_mesh_test::ptr __surf;
 
   std::vector<gg::DrawablePtr> mSceneObjects;
   gg::BufferObjectPtr _obj = NULL;

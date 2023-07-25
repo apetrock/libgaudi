@@ -617,7 +617,7 @@ public:
     edge_tree = arp::aabb_tree<2>::create(edge_verts_m, x_m, 16);
 
     std::vector<std::array<index_t, 2>> collected(edge_verts_t.size() / 2);
-    // #pragma omp parallel for
+#pragma omp parallel for
     for (int i = 0; i < edge_verts_t.size(); i += 2) {
       index_t e0 = i / 2;
       std::vector<index_t> collisions =
@@ -642,9 +642,9 @@ public:
   }
 
   vector<std::array<index_t, 2>>
-  get_pnt_tri_collisions(std::vector<index_t> verts_t,
-                         std::vector<index_t> verts_map_t,
-                         std::vector<vec3> &x_t, shell &M, real tol) {
+  get_pnt_tri_collisions(const std::vector<index_t> &verts_t,
+                         const std::vector<index_t> &verts_map_t,
+                         const std::vector<vec3> &x_t, shell &M, real tol) {
 
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
@@ -656,7 +656,7 @@ public:
         arp::aabb_tree<3>::create(face_verts_m, x_m, 16);
 
     std::vector<std::array<index_t, 2>> collected(verts_t.size());
-    // #pragma omp parallel for
+#pragma omp parallel for
     for (int i = 0; i < verts_t.size(); i++) {
       std::vector<index_t> collisions =
           arp::getNearest<1, 3>(i, verts_t, x_t, //
@@ -722,6 +722,10 @@ public:
     auto collected = get_internal_edge_edge_collisions(tol);
     trim_edge_edge_collected(M, x, collected);
 
+    if (_merge_pred)
+      std::remove_if(collected.begin(), collected.end(),
+                     [this](auto c) { return _merge_pred(*__M, c[0], c[1]); });
+
     std::vector<index_t> f_collect(2 * collected.size());
     for (int i = 0; i < collected.size(); i++) {
       f_collect[2 * i + 0] = collected[i][0];
@@ -742,7 +746,7 @@ public:
                  return {-1, -1, -1, -1};
                }
 
-               // debug_line_line(M, c0A, c0B, x);
+               debug_line_line(M, c0A, c0B, x);
                // debug_edge_normal(M, c0A, x);
                // debug_edge_normal(M, c0B, x);
 
@@ -778,6 +782,10 @@ public:
       });
       collected.push_back(pair);
     }
+
+    if (_merge_pred)
+      std::remove_if(collected.begin(), collected.end(),
+                     [this](auto c) { return _merge_pred(*__M, c[0], c[1]); });
 
     std::vector<index_t> f_collect(2 * collected.size());
     for (int i = 0; i < collected.size(); i++) {
@@ -894,14 +902,14 @@ public:
       real tFlip = atan2(sinN1, cosN1);
       real dt = tFlip - tSame;
       // std::cout << tFlip << " " << tSame << " " << dt << std::endl;
-      real eFlip = cFlip * cFlip + 150.0 * dt * dt;
+      real eFlip = cFlip * cFlip + 10.0 * dt * dt;
       real eSame = cSame * cSame;
       // real eFlip = cFlip * cFlip + tFlip * tFlip;
       // real eSame = cSame * cSame + tSame * tSame;
 
       // std::cout << eFlip << " " << eSame << std::endl;
       //  if (false) {
-      if (eFlip < 0.75 * eSame) {
+      if (eFlip < 1.0 * eSame) {
         flip_edge(*__M, c0);
       }
     }

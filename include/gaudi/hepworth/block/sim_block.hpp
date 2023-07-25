@@ -53,9 +53,11 @@ public:
 
   template <int N, typename T> void map_to_x(std::vector<T> &x_, vecX &q) {
     _offset = q.size();
-    std::cout << __PRETTY_FUNCTION__ << ", offset: " << _offset << std::endl;
     vecX x = to<N, T>(x_);
     q = concat(q, x);
+    if (q.hasNaN()) {
+      std::cout << "NAN:" << __PRETTY_FUNCTION__ << std::endl;
+    }
   }
 
   template <class T> void map_from_x(const vecX &q, std::vector<T> &x) {

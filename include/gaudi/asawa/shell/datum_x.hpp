@@ -109,7 +109,7 @@ vec3 face_normal(const shell &M, index_t fi, const std::vector<vec3> &x) {
 real face_area(const shell &M, index_t fi, const std::vector<vec3> &x) {
   real a = 0.0;
   vec3 N = face_cross(M, fi, x);
-  return 0.5 * N.norm();
+  return N.norm();
 }
 
 vec3 face_center(const shell &M, index_t fi, const std::vector<vec3> &x) {
@@ -120,6 +120,26 @@ vec3 face_center(const shell &M, index_t fi, const std::vector<vec3> &x) {
     N++;
   });
   return c / real(N);
+}
+vec3 face_interp(std::array<real, 3> s, const shell &M, index_t fi,
+                 const std::vector<vec3> &x) {
+  index_t c0 = M.fbegin(fi);
+  index_t c1 = M.next(c0);
+  index_t c2 = M.next(c1);
+  vec3 x0 = x[M.vert(c0)];
+  vec3 x1 = x[M.vert(c1)];
+  vec3 x2 = x[M.vert(c2)];
+  return s[0] * x0 + s[1] * x1 + s[2] * x2;
+}
+vec3 face_pnt(vec3 pt, const shell &M, index_t fi, const std::vector<vec3> &x) {
+  index_t c0 = M.fbegin(fi);
+  index_t c1 = M.next(c0);
+  index_t c2 = M.next(c1);
+  vec3 x0 = x[M.vert(c0)];
+  vec3 x1 = x[M.vert(c1)];
+  vec3 x2 = x[M.vert(c2)];
+  std::array<real, 4> dist = va::closest_point({x0, x1, x2}, pt);
+  return face_interp({dist[1], dist[2], dist[3]}, M, fi, x);
 }
 
 vec3 vert_normal(const shell &M, index_t vi, const std::vector<vec3> &x) {
@@ -205,6 +225,8 @@ vec3 edge_center(const shell &M, index_t c0, const std::vector<vec3> &x) {
 
 real edge_length(const shell &M, index_t c0, const std::vector<vec3> &x) {
   index_t c1 = M.other(c0);
+  std::cout << c0 << " " << c1 << " " << M.vert(c0) << " " << M.vert(c1) << " "
+            << x.size() << std::endl;
   vec3 x0 = x[M.vert(c0)];
   vec3 x1 = x[M.vert(c1)];
   return (x1 - x0).norm();
@@ -212,31 +234,31 @@ real edge_length(const shell &M, index_t c0, const std::vector<vec3> &x) {
 
 std::vector<vec3> face_normals(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_face_range();
-  std::vector<vec3> Ns(range.size());
+  std::vector<vec3> Ns(M.face_count(), vec3::Zero());
   int i = 0;
   for (auto vi : range) {
-    Ns[i++] = face_normal(M, vi, x);
+    Ns[vi] = face_normal(M, vi, x);
   }
   return Ns;
 }
 
 std::vector<vec3> vertex_normals(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_vert_range();
-  std::vector<vec3> Ns(range.size());
+  std::vector<vec3> Ns(M.vert_count(), vec3::Zero());
   int i = 0;
   for (auto vi : range) {
-    Ns[i++] = vert_normal(M, vi, x);
+    Ns[vi] = vert_normal(M, vi, x);
   }
   return Ns;
 }
 
 std::vector<vec3> vertex_areas(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_vert_range();
-  std::vector<vec3> Ns(range.size());
+  std::vector<vec3> Ns(M.vert_count(), vec3::Zero());
   int i = 0;
   for (auto vi : range) {
     real area = vert_area(M, vi, x);
-    Ns[i++] = vec3(area, area, area);
+    Ns[vi] = vec3(area, area, area);
   }
   return Ns;
 }
@@ -244,13 +266,13 @@ std::vector<vec3> vertex_areas(const shell &M, const std::vector<vec3> &x) {
 std::vector<real> edge_cotan_weights(const shell &M,
                                      const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
-  std::vector<real> ws(range.size());
+  std::vector<real> ws(M.corner_count() / 2, 0.0);
   int i = 0;
   for (auto ci : range) {
     index_t c0p = M.prev(ci);
     index_t c1p = M.prev(M.other(ci));
     real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
-    ws[i++] = ct;
+    ws[ci / 2] = ct;
   }
   return ws;
 }
@@ -281,6 +303,26 @@ std::vector<real> edge_lengths(const shell &M, const std::vector<vec3> &x) {
   return l;
 }
 
+std::vector<vec3> edge_centers(const shell &M, const std::vector<vec3> &x) {
+  auto range = M.get_edge_range();
+  std::vector<vec3> cens(range.size());
+  int i = 0;
+  for (auto ci : range) {
+    cens[i++] = edge_center(M, ci, x);
+  }
+  return cens;
+}
+
+std::vector<vec3> edge_normals(const shell &M, const std::vector<vec3> &x) {
+  auto range = M.get_edge_range();
+  std::vector<vec3> Ns(range.size());
+  int i = 0;
+  for (auto ci : range) {
+    Ns[i++] = edge_normal(M, ci, x);
+  }
+  return Ns;
+}
+
 std::vector<real> edge_areas(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
   std::vector<real> ws(range.size());
@@ -307,17 +349,17 @@ std::vector<vec3> edge_tangents(const shell &M, const std::vector<vec3> &x) {
 
 std::vector<vec3> face_centers(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_face_range();
-  std::vector<vec3> xc(range.size());
+  std::vector<vec3> xc(M.face_count(), vec3::Zero());
   int i = 0;
   for (auto fi : range) {
-    xc[i++] = face_center(M, fi, x);
+    xc[fi] = face_center(M, fi, x);
   }
   return xc;
 }
 
 std::vector<real> face_areas(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_face_range();
-  std::vector<real> A(range.size());
+  std::vector<real> A(M.face_count(), 0.0);
   int i = 0;
   for (auto fi : range) {
     A[i++] = face_area(M, fi, x);

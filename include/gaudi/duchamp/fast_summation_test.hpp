@@ -76,7 +76,7 @@ public:
 
   fast_summation_test() {
     //__M = load_cube();
-    __M = shell::load_bunny();
+    __M = shell::load_messer();
 
     shell::triangulate(*__M);
     for (int i = 0; i < __M->face_count(); i++) {
@@ -109,7 +109,7 @@ public:
     std::generate_n(std::back_inserter(points), N, randNormalVec(0, 0.5));
     return points;
   }
-  
+
   std::vector<vec3> get_random_points(const int &N, const ext::extents_t &ext_t,
                                       shell::shell &M,
                                       const std::vector<vec3> &x) {
@@ -149,7 +149,10 @@ public:
     std::vector<real> u = calder::fast_winding(M, x, pov, l0);
 
     for (int i = 0; i < pov.size(); i++) {
-      gg::geometry_logger::point(pov[i], vec4(u[i], 0.4, 0.95, 0.5));
+      // gg::geometry_logger::point(pov[i], vec4(u[i], 0.4, 0.95, 0.5));
+      // gg::geometry_logger::point(pov[i], vec4(u[i], 0.4, 0.95, 0.5));
+      gg::geometry_logger::line(pov[i], pov[i] + 1e-4 * vec3(1.0, 0.0, 0.0),
+                                gg::sdf4(5.0 * u[i]));
     }
   }
 
@@ -216,7 +219,7 @@ public:
     // test_pyramids(*__M);
     // test_edge_pyramids(*__M);
     test_fast_winding(*__M, x, l0);
-    test_parallel_transport(*__M, x, Nx, 16.0 * l0);
+    // test_parallel_transport(*__M, x, Nx, 16.0 * l0);
   }
   int _frame;
   shell::shell::ptr __M;

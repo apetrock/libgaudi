@@ -35,6 +35,22 @@ namespace asawa {
 namespace rod {
 // this is ugly, but we have to do it this way, with two lists because
 // the callback on the data
+real vert_line(const index_t &idT, //
+               const std::vector<index_t> &t_inds,
+               const vector<vec3> &t_x, //
+               const index_t &idS,      //
+               const std::vector<index_t> &s_inds, const vector<vec3> &s_x) {
+
+  const vec3 &xA = t_x[t_inds[idT]];
+
+  const vec3 &xB0 = s_x[s_inds[2 * idS + 0]];
+  const vec3 &xB1 = s_x[s_inds[2 * idS + 1]];
+  real d = va::distance_from_line(xB0, xB1, xA);
+  return d;
+};
+
+// this is ugly, but we have to do it this way, with two lists because
+// the callback on the data
 real line_line(const index_t &idT, //
                const std::vector<index_t> &t_inds,
                const vector<vec3> &t_x, //
@@ -150,14 +166,15 @@ public:
     quat x0 = x[c0];
     quat x1 = x[c1];
     quat xnew = va::slerp(x0, x1, 0.5);
+    if (xnew.coeffs().hasNaN()) {
+      std::cout << c0 << " " << c1 << ": " << x0 << " " << x1 << std::endl;
+      exit(0);
+    }
     set<quat>(cnew, xnew, x);
   }
 
   void interp_l(index_t c0, index_t c1, index_t cnew, std::vector<real> &z) {
 
-    std::cout << c0 << " " << c1 << " " << cnew << std::endl;
-    std::cout << __R->__x.size() << " " << __R->__corners_next.size()
-              << std::endl;
     vec3 x0 = __R->__x[c0];
     vec3 x1 = __R->__x[c1];
     vec3 xn = __R->__x[cnew];
@@ -183,28 +200,16 @@ public:
     index_t c11 = __R->next(c10);
     index_t c01 = __R->prev(c00);
     index_t cnew = __R->insert_edge();
-    std::cout << c01 << " " << c00 << " " << c10 << " " << c11 << " " << cnew
-              << " " << std::endl;
     __R->link(c00, cnew);
     __R->link(cnew, c10);
-    std::cout << "interp0" << std::endl;
-    std::cout << __R->__x.size() << std::endl;
-    std::cout << __R->__v.size() << std::endl;
-    std::cout << __R->__u.size() << std::endl;
-    std::cout << __R->__o.size() << std::endl;
-    std::cout << __R->__M.size() << std::endl;
-    std::cout << __R->__J.size() << std::endl;
-    std::cout << __R->__l0.size() << std::endl;
 
     interp(c01, c00, c10, c11, cnew, __R->__x);
     // interp(c00, c10, cnew, __R->__x);
-    std::cout << "interp1" << std::endl;
     interp(c00, c10, cnew, __R->__v);
     interp(c00, c10, cnew, __R->__u);
     interp(c00, c10, cnew, __R->__o);
     interp(c00, c10, cnew, __R->__M);
     interp(c00, c10, cnew, __R->__J);
-    std::cout << "interp2" << std::endl;
     interp_l(c00, c10, cnew, __R->__l0);
   }
 
@@ -214,7 +219,7 @@ public:
     index_t c01 = __R->prev(c00);
     if (c10 < -1)
       return;
-
+    std::cout << " collapse edge " << c00 << " " << c10 << " " << std::endl;
     __R->link(c01, c10);
     __R->set_next(c00, -1);
     __R->set_prev(c00, -1);
@@ -233,7 +238,7 @@ public:
 #if 1
   vector<std::array<index_t, 4>>
   get_collisions(const std::vector<index_t> &edge_verts_B, //
-                 const std::vector<vec3> &x_B) {
+                 const std::vector<vec3> &x_B, real tol) {
     rod &R = *__R;
 
     std::vector<vec3> &x_A = R.__x;
@@ -244,9 +249,6 @@ public:
     edge_tree = arp::aabb_tree<2>::create(edge_verts_A, x_A, 16);
     // calder::test_extents(*edge_tree, edge_verts, x);
     // edge_tree->debug();
-    real tol = 1.0 * R._r;
-
-    std::cout << " 0 " << std::endl;
 
     std::vector<std::array<index_t, 4>> collected(edge_verts_B.size() / 2);
     for (int k = 0; k < edge_verts_B.size(); k += 2) {
@@ -272,38 +274,73 @@ public:
 #endif
 
 #if 1
-  vector<std::array<index_t, 4>> get_internal_collisions() {
+  vector<std::array<index_t, 3>>
+  get_vert_collisions(const std::vector<index_t> &verts_B, //
+                      const std::vector<vec3> &x_B, real tol) {
+
+    rod &R = *__R;
+
+    std::vector<vec3> &x_A = R.__x;
+    std::vector<index_t> verts_A = R.get_vert_range();
+    std::vector<index_t> edge_verts_A = R.get_edge_vert_ids();
+    std::vector<index_t> edge_map_A = R.get_edge_map();
+
+    edge_tree = arp::aabb_tree<2>::create(edge_verts_A, x_A, 16);
+
+    std::vector<std::array<index_t, 3>> collected(verts_B.size());
+    for (int k = 0; k < verts_B.size(); k++) {
+
+      std::vector<index_t> collisions =
+          arp::getNearest<1, 2>(k, verts_B, x_B, //
+                                *edge_tree,      //
+                                tol, &vert_line);
+      for (index_t j : collisions) {
+        if (j > -1) {
+          collected[k] = {verts_B[k], edge_verts_A[2 * j + 0],
+                          edge_verts_A[2 * j + 1]};
+        } else {
+          collected[k] = {-1, -1, -1};
+        }
+      }
+    }
+
+    return collected;
+  }
+#endif
+
+#if 1
+  vector<std::array<index_t, 4>>
+  get_internal_collisions(const real &offset = 1.0) {
     rod &R = *__R;
     std::vector<vec3> &x = R.__x;
 
     std::vector<index_t> verts = R.get_vert_range();
     std::vector<index_t> edge_verts = R.get_edge_vert_ids();
 
-    return get_collisions(edge_verts, x);
+    return get_collisions(edge_verts, x, 0.5 * offset * R._r);
   }
 
 #endif
   void step() {
 
     for (int i = 0; i < __R->corner_count(); i++) {
-      index_t j = __R->next(i);
-      if (j < 0)
+      index_t jn = __R->next(i);
+      index_t jp = __R->prev(i);
+      if (jn < 0 || jp < 0)
         continue;
-
-      std::cout << i << " " << j << std::endl;
       vec3 q0 = __R->__x[i];
-      vec3 q1 = __R->__x[j];
+      vec3 q1 = __R->__x[jn];
       real l = (q1 - q0).norm();
       if (l > _Cs) {
-        std::cout << " split " << std::endl;
+        // std::cout << " split " << std::endl;
         split_edge(i);
       }
 
-      if (l < _Cc) {
-        std::cout << " collapse " << std::endl;
+      if (l < _Cc && jp > -1) {
         collapse_edge(i);
       }
     }
+    __R->pack();
     __R->update_mass();
   }
   rod::ptr __R;

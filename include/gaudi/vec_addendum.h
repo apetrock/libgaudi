@@ -8,12 +8,13 @@
  */
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
+#include <Eigen/QR>
 #include <array>
+#include <cmath>
 #include <complex>
 #include <iostream>
 #include <math.h>
 #include <vector>
-
 #ifndef __VECADD__
 #define __VECADD__
 
@@ -32,6 +33,9 @@ using MAT = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 template <typename T> using MAT3 = Eigen::Matrix<T, 3, 3>;
 
 template <typename T> T sgn(T val) { return T(T(0) < val) - (val < T(0)); }
+template <typename T> T sgn(const VEC3<T> &v0, const VEC3<T> &v1) {
+  return sgn(v0.dot(v1));
+}
 
 template <class Tf, class Tv> inline Tv linear(Tf f, const Tv &x, const Tv &y) {
   return (y - x) * f + x;
@@ -174,6 +178,8 @@ inline T dot(const VEC<N, T> &A, const VEC<N, T> &B) {
 template <typename T> inline T dot(const VEC3<T> &A, const VEC3<T> &B) {
   return A.dot(B);
 }
+
+inline double norm(double a) { return a; };
 
 template <typename T> T norm(VEC3<T> a) { return a.norm(); };
 
@@ -473,14 +479,16 @@ inline T angle_from_vectors(const VEC3<T> &angA, const VEC3<T> angB) {
 
 template <typename T>
 inline VEC3<T> project_on_line(const VEC3<T> &v0, const VEC3<T> &v1,
-                               const VEC3<T> &pt) {
+                               const VEC3<T> &pt, bool clamp = true) {
   VEC3<T> dx = v1 - v0;
   T s = (pt - v0).dot(dx) / dx.dot(dx);
-  if (s > 1) {
-    s = 1;
-  }
-  if (s < 0) {
-    s = 0;
+  if (clamp) {
+    if (s > 1) {
+      s = 1;
+    }
+    if (s < 0) {
+      s = 0;
+    }
   }
   VEC3<T> ptl = v0 + s * dx;
   return ptl;
@@ -544,7 +552,8 @@ inline T distance_from_plane(const VEC3<T> &v0, const VEC3<T> &v1,
 template <typename T>
 inline std::array<T, 3>
 distance_Segment_Segment(const VEC3<T> &s00, const VEC3<T> &s01,
-                         const VEC3<T> &s10, const VEC3<T> &s11) {
+                         const VEC3<T> &s10, const VEC3<T> &s11,
+                         bool clamp_s = true, bool clamp_t = true) {
   // http://geomalgorithms.com/a07-_distance.html#dist3D_Segment_to_Segment()
   //    Input:  two 3D line segments S1 and S2
   //    Return: the shortest distance between S1 and S2
@@ -569,34 +578,34 @@ distance_Segment_Segment(const VEC3<T> &s00, const VEC3<T> &s01,
   } else { // get the closest points on the infinite lines
     sN = (b * e - c * d);
     tN = (a * e - b * d);
-    if (sN < 0.0) { // sc < 0 => the s=0 edge is visible
+    if (sN < 0.0 && clamp_s) { // sc < 0 => the s=0 edge is visible
       sN = 0.0;
       tN = e;
       tD = c;
-    } else if (sN > sD) { // sc > 1  => the s=1 edge is visible
+    } else if (sN > sD && clamp_s) { // sc > 1  => the s=1 edge is visible
       sN = sD;
       tN = e + b;
       tD = c;
     }
   }
 
-  if (tN < 0.0) { // tc < 0 => the t=0 edge is visible
+  if (tN < 0.0 && clamp_t) { // tc < 0 => the t=0 edge is visible
     tN = 0.0;
     // recompute sc for this edge
-    if (-d < 0.0)
+    if (-d < 0.0 && clamp_s)
       sN = 0.0;
-    else if (-d > a)
+    else if (-d > a && clamp_s)
       sN = sD;
     else {
       sN = -d;
       sD = a;
     }
-  } else if (tN > tD) { // tc > 1  => the t=1 edge is visible
+  } else if (tN > tD && clamp_t) { // tc > 1  => the t=1 edge is visible
     tN = tD;
     // recompute sc for this edge
-    if ((-d + b) < 0.0)
+    if ((-d + b) < 0.0 && clamp_s)
       sN = 0;
-    else if ((-d + b) > a)
+    else if ((-d + b) > a && clamp_s)
       sN = sD;
     else {
       sN = (-d + b);
@@ -707,8 +716,16 @@ inline std::array<T, 4> closest_point(const std::array<VEC3<T>, 3> tri,
   return {(p - (a + ab * v + ac * w)).norm(), va * denom, v, w};
 }
 
+template <typename T>
+VEC3<T> project_to_nullspace(const VEC3<T> &v, const VEC3<T> &n) {
+  VEC3<T> u = n.normalized();
+  VEC3<T> w = v - v.dot(u) * u;
+
+  return v - w;
+}
+
 template <typename T> MAT3<T> rejection_matrix(const VEC3<T> &N) {
-  return N * N.transpose() - MAT3<T>::Identity();
+  return MAT3<T>::Identity() - N * N.transpose();
 }
 
 template <typename T> MAT3<T> projection_matrix(const VEC3<T> &N) {

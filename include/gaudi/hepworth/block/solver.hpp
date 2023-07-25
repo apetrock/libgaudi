@@ -32,26 +32,6 @@ namespace block {
 class projection_solver {
 public:
   projection_solver() {}
-  vecX solve(matS &A, vecX &b) {
-
-    // Eigen::ConjugateGradient<matS, Eigen::Upper> solver;
-    Eigen::SimplicialLDLT<matS> solver;
-    solver;
-
-    solver.compute(A);
-
-    if (solver.info() != Eigen::Success) {
-      // decomposition failed
-      std::cout << ".....decomposition error! " << std::endl;
-    }
-    vecX x = solver.solve(b);
-    if (solver.info() != Eigen::Success) {
-      // solving failed
-      std::cout << ".....solve error! " << std::endl;
-    }
-
-    return x;
-  }
 
   void set_mass(std::vector<sim_block::ptr> &blocks) {
 
@@ -68,7 +48,7 @@ public:
   }
 
   void step(std::vector<sim_block::ptr> &blocks, const real &h = 0.01,
-            const int &ITS = 50) {
+            const real &damping = 0.5, const int &ITS = 50) {
 
     vecX q;
     vecX s;
@@ -83,7 +63,9 @@ public:
 
     std::vector<trip> triplets;
     index_t id0 = 0;
-    for (auto &constraint : _constraints) {
+
+    for (int i = 0; i < _constraints.size(); i++) {
+      auto &constraint = _constraints[i];
       constraint->fill_A(id0, triplets);
     }
 
@@ -94,6 +76,9 @@ public:
     A.setFromTriplets(triplets.begin(), triplets.end());
     matS AtA = A.transpose() * A;
     matS MAtA = M + AtA;
+    // avoid singularity
+    // Eigen::SparseMatrix<double> I(MAtA.rows(), MAtA.cols());
+    // MAtA += 1e-6 * I;
     m_solver S(MAtA);
     std::cout << "A   sum: " << A.sum() << std::endl;
     std::cout << "AtA sum: " << AtA.sum() << std::endl;
@@ -103,21 +88,46 @@ public:
 
     for (int k = 0; k < ITS; k++) {
       p.setZero();
-      for (auto &constraint : _constraints) {
-        constraint->project(q, p);
+      int ii = 0;
+#pragma omp parallel
+      {
+#pragma omp for
+        for (int i = 0; i < _constraints.size(); i++) {
+          auto &constraint = _constraints[i];
+          constraint->project(q, p);
+#if 0
+        if (q.hasNaN() || p.hasNaN()) {
+          std::cout << "q has NaN: "
+                    << "ii - " << constraint->name() << std::endl;
+          exit(0);
+        }
+#endif
+          ii++;
+        }
+      }
+      if (q.hasNaN()) {
+        std::cout << "q has NaN" << std::endl;
+      }
+
+      if (p.hasNaN()) {
+        std::cout << "p has NaN" << std::endl;
       }
 
       if (k % 10 == 0)
         std::cout << "k: " << k << " -pnorm: " << p.norm() << std::endl;
 
       vecX b = M * s + A.transpose() * p;
-      q = S.solve(b);
 
+      q = S.solve(b);
+      if (q.hasNaN()) {
+        std::cout << "q has NaN" << std::endl;
+        exit(0);
+      }
       // q = qi + dq.min(bnd).max(-bnd);
     }
 
     for (auto &block : blocks) {
-      block->map_from_x(q, h, 0.5);
+      block->map_from_x(q, h, damping);
     }
   }
 
@@ -128,7 +138,7 @@ public:
 
   matS __M;
   std::vector<projection_constraint::ptr> _constraints;
-};
+}; // namespace block
 } // namespace block
 } // namespace hepworth
 } // namespace gaudi

@@ -195,9 +195,9 @@ std::vector<vec2> project_dihedral(const shell &M, const std::vector<vec3> &x,
   vec3 Nf1 = (x1p - x1).cross(T).normalized();
   vec3 Dn = dir.normalized().cross(T).normalized();
   vec3 N = Nf1;
-  real cs = Nf0.dot(Nf1);
-  real sn = (Nf0.cross(Nf1)).dot(T);
-  real theta = atan2(sn, cs);
+  real cs = va::cos(Nf0, Nf1, T);
+  real sn = va::sin(Nf0, Nf1, T);
+  real theta = 2.0 * atan2(sn, cs);
 
   if ((x0p - p0).dot(dir) > (x1p - p0).dot(dir)) {
     N = Nf0;
@@ -214,7 +214,7 @@ std::vector<vec2> project_dihedral(const shell &M, const std::vector<vec3> &x,
   vec3 p1 = p0 + Rdir;
   // p1 = R2 * (p1 - xc) + xc;
 
-  // gg::geometry_logger::line(p0, p0 + 0.02 * Rdir, vec4(1.0, 1.0, 0.0, 1.0));
+  gg::geometry_logger::line(p0, p0 + 0.02 * Rdir, vec4(1.0, 1.0, 0.0, 1.0));
   vec3 B = (T.cross(N)).normalized();
 
   return project2({x0p, x0, x1p, x1, p0, p1}, xc, T, B, N);
@@ -605,7 +605,7 @@ std::vector<index_t> stitch_walk(shell &M, const std::vector<vec3> &x,
     walk.push_back(cm);
   }
 
-  return  walk;
+  return walk;
 }
 
 inline bool stol(real s, real tol) { return s < tol || s > 1.0 - tol; };

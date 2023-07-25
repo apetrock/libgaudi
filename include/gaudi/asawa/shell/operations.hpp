@@ -2,7 +2,7 @@
 #ifndef __ASAWA_PRIM_OPS__
 #define __ASAWA_PRIM_OPS__
 
-//#include "datums.hpp"
+// #include "datums.hpp"
 #include "shell.hpp"
 
 #include <array>
@@ -95,9 +95,6 @@ index_t merge_edge(shell &M, //
   index_t v1 = M.vert(c1);
   index_t f0 = M.face(c0);
   index_t f1 = M.face(c1);
-  std::cout << "c: " << c0 << " " << c1 << " " << c0n << " " << c0p << " "
-            << c1n << " " << c1p << std::endl;
-  std::cout << "v: " << v0 << " " << v1 << " " << f0 << " " << f1 << std::endl;
 
   if (v0 != v1)
     M.remove_vertex(v0);

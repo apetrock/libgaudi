@@ -24,6 +24,22 @@ enum PresetColor {
   rainbow,
 };
 
+inline Vec4d rainbow4(double d) {
+  double r = 0.5 + 0.5 * cos(2.0 * M_PI * (d + 0.000));
+  double g = 0.5 + 0.5 * cos(2.0 * M_PI * (d + 0.333));
+  double b = 0.5 + 0.5 * cos(2.0 * M_PI * (d + 0.666));
+  return Vec4d(r, g, b, 1.0);
+}
+
+inline Vec4d sdf4(double d) {
+  Vec4d inside(0.0, 1.0, 0.0, 1.0);
+  Vec4d outside(1.0, 0.0, 0.0, 1.0);
+  if (d < 0)
+    return abs(d) * inside;
+  else
+    return abs(d) * outside;
+}
+
 class geometry_logger {
 
 public:

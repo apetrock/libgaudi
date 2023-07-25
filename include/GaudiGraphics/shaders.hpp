@@ -350,7 +350,7 @@ in vec2 TexCoords;
 
 uniform sampler2D gPosition;
 uniform sampler2D gNormal;
-uniform sampler2D texNoise;
+//uniform sampler2D texNoise;
 
 uniform vec3 samples[256];
 
@@ -491,7 +491,7 @@ uniform mat4 projection;
 uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedoSpec;
-uniform sampler2D texNoise;
+//uniform sampler2D texNoise;
 uniform vec3 samples[256];
 uniform vec3 viewPos;
 
@@ -820,7 +820,7 @@ void main() {
     for(int k = 0; k < Nk; k++){
       float z0 = float(k) * r / Nkf;
       float z1 = float(k+1) * r / Nkf;
-      for (int i0 = 0; i0 < Nv + 1; i0++) {
+      for (int i0 = Nv-1; i0 > -1; i0--) {
             int i1 = i0 % Nv;
             float r0 = sqrt(r*r -  z0*z0);
             float r1 = sqrt(r*r -  z1*z1);

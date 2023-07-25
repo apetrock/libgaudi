@@ -80,7 +80,25 @@ public:
     _init_params();
   }
 
-  void _init_params() {
+  real length(index_t i) const {
+    if (__corners_next[i] == -1)
+      return 0.0;
+    index_t j = __corners_next[i];
+    vec3 q0 = __x[i];
+    vec3 q1 = __x[j];
+    real l = (q1 - q0).norm();
+    return l;
+  }
+
+  vec3 dir(index_t i) const {
+    auto idx = consec(i);
+    vec3 cp = __x[idx[0]];
+    vec3 c0 = __x[idx[1]];
+    vec3 cn = __x[idx[2]];
+    return cn - cp;
+  }
+
+  void update_lengths() {
     __l0.resize(__corners_next.size(), 0.0);
     __v.resize(__corners_next.size(), vec3::Zero());
     __M.resize(__corners_next.size(), vec3::Zero());
@@ -94,9 +112,18 @@ public:
       vec3 q0 = __x[i];
       vec3 q1 = __x[j];
       real l = (q1 - q0).norm();
-
       __l0[i] = l;
     }
+  }
+
+  void _init_params() {
+    __l0.resize(__corners_next.size(), 0.0);
+    __v.resize(__corners_next.size(), vec3::Zero());
+    __M.resize(__corners_next.size(), vec3::Zero());
+    __J.resize(__corners_next.size(), vec4::Zero());
+    __o.resize(__corners_next.size(), quat::Identity());
+    _lmax = 0.0;
+    update_lengths();
     update_mass();
     _update_frames();
   }
@@ -145,9 +172,9 @@ public:
     index_t ip = prev(i);
     index_t ipp = prev(ip);
     if (ip == -1) {
-      return {i, in, inn};
+      return {i, i, in};
     } else if (in == -1) {
-      return {ipp, ip, i};
+      return {ip, i, i};
     }
 
     return {ip, i, in};
@@ -209,8 +236,11 @@ public:
   }
 
   void _update_frames(const std::vector<vec3> &N_vec) {
+    __u.clear();
+    __u.resize(__corners_next.size(), quat::Identity());
     for (int i = 0; i < __corners_next.size(); i++) {
-
+      if (__corners_next[i] == -1)
+        continue;
       auto idx = consec(i);
 
       vec3 cp = __x[idx[0]];
@@ -228,9 +258,15 @@ public:
       F.col(0) = B;
       F.col(1) = N;
       F.col(2) = T;
+
       __u[i] = quat(F).normalized();
-      std::cout << c0.transpose() << " - " << __u[i].coeffs().transpose()
-                << std::endl;
+      std::cout << i << " :" << __u[i] << std::endl;
+      if (__u[i].coeffs().hasNaN()) {
+        std::cout << __PRETTY_FUNCTION__ << i << std::endl;
+        std::cout << dn0 << " " << d0p << " " << dd0 << std::endl;
+        std::cout << "F: " << F << std::endl;
+        exit(0);
+      }
     }
 
     for (int i = 0; i < __corners_next.size(); i++) {
@@ -245,7 +281,8 @@ public:
     std::vector<vec3> N_vec(__corners_next.size());
     vec3 N0 = _get_frenet_mat(0).col(1);
     for (int i = 0; i < __corners_next.size(); i++) {
-
+      if (__corners_next[i] == -1)
+        continue;
       auto idx = consec(i);
 
       vec3 cp = __x[idx[0]];
@@ -256,7 +293,12 @@ public:
       vec3 d0p = c0 - cp;
       vec3 dd0 = dn0 - d0p;
       quat qi = Eigen::Quaterniond::FromTwoVectors(d0p, dn0);
-
+      if (qi.coeffs().hasNaN()) {
+        std::cout << __PRETTY_FUNCTION__ << i << std::endl;
+        std::cout << dn0 << " " << d0p << " " << dd0 << std::endl;
+        std::cout << qi << std::endl;
+        exit(0);
+      }
       N_vec[i] = N0;
       N0 = qi * N0;
     }
@@ -304,7 +346,7 @@ public:
     range.reserve(corner_count());
     // replace this with some c++isms
     for (int i = 0; i < corner_count(); i++) {
-      if (__corners_next[i] < 0)
+      if (next(i) < 0)
         continue;
       range.push_back(i);
       range.push_back(__corners_next[i]);
@@ -329,6 +371,10 @@ public:
     return get_range_map(__corners_next, 1);
   }
 
+  std::vector<index_t> get_vert_map() {
+    return get_range_map(__corners_next, 1);
+  }
+
   std::vector<index_t> get_vert_range() const {
     std::vector<index_t> range;
     range.reserve(corner_count());
@@ -340,6 +386,58 @@ public:
     }
 
     return range;
+  }
+
+  void pack() {
+    std::vector<index_t> cmap(__corners_next.size(), -1);
+
+    std::vector<vec3> M;
+    std::vector<vec4> J;
+
+    std::vector<vec3> x;
+    std::vector<vec3> v; // velocity;
+    std::vector<quat> u;
+    std::vector<quat> o; // omega
+
+    std::vector<real> l0;
+    int ii = 0;
+    for (int i = 0; i < __corners_next.size(); i++) {
+      if (__corners_next[i] < 0 && __corners_prev[i] == -1)
+        continue;
+      cmap[i] = ii++;
+      M.push_back(__M[i]);
+      J.push_back(__J[i]);
+      x.push_back(__x[i]);
+      v.push_back(__v[i]);
+      u.push_back(__u[i]);
+      o.push_back(__o[i]);
+      l0.push_back(__l0[i]);
+    }
+    std::vector<index_t> new_next;
+    std::vector<index_t> new_prev;
+
+    for (int i = 0; i < __corners_next.size(); i++) {
+      if (__corners_next[i] < 0 && __corners_prev[i] < 0)
+        continue;
+      if (__corners_next[i] > -1)
+        new_next.push_back(cmap[__corners_next[i]]);
+      else
+        new_next.push_back(-1);
+
+      if (__corners_prev[i] > -1)
+        new_prev.push_back(cmap[__corners_prev[i]]);
+      else
+        new_prev.push_back(-1);
+    }
+    __corners_next = new_next;
+    __corners_prev = new_prev;
+    __M = M;
+    __J = J;
+    __x = x;
+    __v = v;
+    __u = u;
+    __o = o;
+    __l0 = l0;
   }
 
   void debug() {
