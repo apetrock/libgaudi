@@ -412,7 +412,7 @@ public:
 
         dist[i0] = 0.25 * dist[im] + 0.5 * dist[i0] + 0.25 * dist[ip];
       }
-#if 1
+#if 0
     std::vector<vec3> Nr = get_rod_normals(*__R, *__M, 4.0 * eps);
 
     for (int i : rverts) {
@@ -465,7 +465,7 @@ public:
 
     std::vector<index_t> edge_verts_R = R.get_edge_vert_ids();
     std::vector<index_t> edge_map_R = R.get_edge_map();
-    real eps = 4.0 * shell_d._Cm;
+    real eps = 6.0 * shell_d._Cm;
 
     std::vector<vec3> Nr = get_rod_normals(R, M, eps);
     std::vector<vec3> Nr0 = R.N1();
@@ -524,10 +524,11 @@ public:
       vec3 Ns = va::mix(d[2], Ns0, Ns1);
 
       real is_perp = pow(Ns.dot(dx.normalized()), 2.0);
-      // if (is_perp < 0.75)
-      //   continue;
 
-      gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
+      if (is_perp < 0.75 || d[0] > 1.0e-1 * eps)
+        continue;
+
+      // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
 
       real lr = (xr1 - xr0).norm();
       vec3 Nri0 = Nr[vr0].normalized();
