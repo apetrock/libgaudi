@@ -41,7 +41,7 @@ bool LineLineIntersect(vec2 p0, vec2 p1, vec2 q0, vec2 q1, real &intersection,
   intersection = -1.0;
 
   auto cross = [](vec2 x, vec2 y) { return x[0] * y[1] - x[1] * y[0]; };
-  auto eps = [](real x) { return std::abs(x) < 1e-8; };
+  auto eps = [](real x) { return std::abs(x) < 1e-13; };
   vec2 r = p1 - p0;
   vec2 s = q1 - q0;
   vec2 qp = q0 - p0;
@@ -67,11 +67,11 @@ bool LineLineIntersect(vec2 p0, vec2 p1, vec2 q0, vec2 q1, real &intersection,
   // 3. If r x s = 0 and (q - p) x r != 0, then the two lines are parallel and
   // non-intersecting.
   // td::cout << "rxs: " << rxs << std::endl;
+  // t = (q - p) x s / (r x s)
 
   if (eps(rxs) && !eps(qpxr))
     return false;
 
-  // t = (q - p) x s / (r x s)
   real t = cross(qp, s) / rxs;
 
   // u = (q - p) x r / (r x s)
@@ -81,7 +81,7 @@ bool LineLineIntersect(vec2 p0, vec2 p1, vec2 q0, vec2 q1, real &intersection,
   // 4. If r x s != 0 and 0 <= t <= 1 and 0 <= u <= 1
   // the two line segments meet at the point p + t r = q + u s.
 
-  if (!rxs < 1e-12 && (0 <= t && t <= 1) && (0 <= u && u <= 1)) {
+  if (abs(rxs) > 1e-12 && (0 <= t && t <= 1) && (0 <= u && u <= 1)) {
     // We can calculate the intersection point using either t or u.
     intersection = u;
     // An intersection was found.

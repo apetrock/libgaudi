@@ -116,8 +116,11 @@ public:
       std::cout << __PRETTY_FUNCTION__ << " u is nan" << std::endl;
       exit(0);
     }
-    l = std::clamp(l / _l0, 0.1, 1.5);
-    p.block(_id0, 0, 3, 1) = _w * l * d2;
+
+    // l = std::clamp(l / _l0, 0.1, 1.5);
+    // p.block(_id0, 0, 3, 1) = _w * l * d2;
+    p.block(_id0, 0, 3, 1) = _w * d2;
+
     // p.block(k, 0, 4, 1) += _w * q.block(k, 0, 4, 1);
     p.block(_id0 + 3, 0, 4, 1) = _w * vec4(u.coeffs().data());
   }

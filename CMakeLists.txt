@@ -156,7 +156,7 @@ add_subdirectory(src)
 
 
 #add_subdirectory(projects/dynamic_shell_test)
-#add_subdirectory(projects/rod_constraints_test)
+add_subdirectory(projects/rod_constraints_test)
 #add_subdirectory(projects/shell_constraints_test)
 #add_subdirectory(projects/shell_constraints_align_test)
 add_subdirectory(projects/shell_normal_constraints)
@@ -165,7 +165,7 @@ add_subdirectory(projects/rod_constraints_coupled_test)
 #add_subdirectory(projects/shell_walk_test)
 
 #add_subdirectory(projects/heat_geodesics_test)
-add_subdirectory(projects/fast_summation_test)
+#add_subdirectory(projects/fast_summation_test)
 #add_subdirectory(projects/wav2fft)
 
 

@@ -8,26 +8,34 @@
 #include <Eigen/Eigenvalues>
 #include <Eigen/Sparse>
 
+#define TYPEDEF_VEC(N) typedef Eigen::Matrix<real, N, 1> vec##N;
+#define TYPEDEF_MAT(N) typedef Eigen::Matrix<real, N, N> mat##N;
+#define TYPEDEF_MAT_NM(N, M) typedef Eigen::Matrix<real, N, M> mat##N##M;
+
 namespace gaudi {
 typedef int index_t;
 typedef double real;
-typedef Eigen::Matrix<real, 2, 1> vec2;
-typedef Eigen::Matrix<real, 3, 1> vec3;
-typedef Eigen::Matrix<real, 4, 1> vec4;
-typedef Eigen::Matrix<real, 6, 1> vec6;
-typedef Eigen::Matrix<real, 8, 1> vec8;
-typedef Eigen::Matrix<real, 12, 1> vec12;
+TYPEDEF_VEC(2)
+TYPEDEF_VEC(3)
+TYPEDEF_VEC(4)
+TYPEDEF_VEC(6)
+TYPEDEF_VEC(8)
+TYPEDEF_VEC(10)
+TYPEDEF_VEC(12)
 
 typedef Eigen::Matrix<real, Eigen::Dynamic, 1> vecX;
 
-typedef Eigen::Matrix<real, 2, 2> mat2;
-typedef Eigen::Matrix<real, 3, 3> mat3;
-typedef Eigen::Matrix<real, 4, 4> mat4;
-typedef Eigen::Matrix<real, 6, 6> mat6;
-typedef Eigen::Matrix<real, 8, 8> mat8;
-typedef Eigen::Matrix<real, 12, 12> mat12;
+TYPEDEF_MAT(2)
+TYPEDEF_MAT(3)
+TYPEDEF_MAT(4)
+TYPEDEF_MAT(6)
+TYPEDEF_MAT(8)
+TYPEDEF_MAT(10)
+TYPEDEF_MAT(12)
 
-typedef Eigen::Matrix<real, 3, 2> mat32;
+TYPEDEF_MAT_NM(3, 2)
+TYPEDEF_MAT_NM(3, 9)
+TYPEDEF_MAT_NM(4, 10)
 
 typedef Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> matX;
 

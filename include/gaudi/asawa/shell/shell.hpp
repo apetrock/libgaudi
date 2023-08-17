@@ -126,6 +126,16 @@ public:
     set_fbegin(f, cid);
   }
 
+  index_t find_edge_from_verts(index_t v0, index_t v1) const {
+    index_t c = -1;
+    const_for_each_vertex(v0, [&](int ci, const shell &M) {
+      index_t cn = M.other(ci);
+      if (M.vert(cn) == v1)
+        c = ci;
+    });
+    return c;
+  }
+
   void link(index_t c0, index_t c1) {
     // std::cout << __PRETTY_FUNCTION__ << c0 << " " << c1 << std::endl;
     /*

@@ -13,6 +13,7 @@
 
 // #include "subdivide.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -341,17 +342,22 @@ public:
   std::vector<vec3> &corner_verts() { return __x; }
   const std::vector<vec3> &corner_verts() const { return __x; }
 
-  std::vector<index_t> get_edge_vert_ids() {
-    std::vector<index_t> range;
-    range.reserve(corner_count());
-    // replace this with some c++isms
+  std::vector<index_t> get_ordered_verts() {
+    std::vector<index_t> verts;
+    verts.reserve(corner_count());
+    std::vector<bool> visited(corner_count(), false);
+
     for (int i = 0; i < corner_count(); i++) {
-      if (next(i) < 0)
+      if (next(i) < 0 || visited[i])
         continue;
-      range.push_back(i);
-      range.push_back(__corners_next[i]);
+      index_t j = i;
+      while (j > -1 && !visited[j]) {
+        verts.push_back(j);
+        visited[j] = true;
+        j = next(j);
+      }
     }
-    return range;
+    return verts;
   }
 
   std::vector<index_t> get_range_map(const std::vector<index_t> indices,
@@ -387,6 +393,121 @@ public:
 
     return range;
   }
+
+  template <typename T>
+  std::vector<T> spread(index_t N, const std::vector<T> &v0) const {
+    std::vector<index_t> v1(v0.size() * N);
+    for (int i = 0; i < v0.size(); ++i) {
+      for (int k = 0; k < N; ++k) {
+        v1[i * N + k] = v0[i];
+      }
+    }
+    return v1;
+  }
+
+  std::vector<index_t> get_edge_vert_ids() {
+    std::vector<index_t> range;
+    range.reserve(corner_count());
+    // replace this with some c++isms
+    for (int i = 0; i < corner_count(); i++) {
+      if (next(i) < 0)
+        continue;
+      range.push_back(i);
+      range.push_back(__corners_next[i]);
+    }
+    return range;
+  }
+  // Const-safe accessors
+  const std::vector<vec3> &x() const { return __x; }
+  const std::vector<vec3> &v() const { return __v; }
+  const std::vector<quat> &u() const { return __u; }
+  const std::vector<quat> &o() const { return __o; }
+  const std::vector<vec3> &M() const { return __M; }
+  const std::vector<vec4> &J() const { return __J; }
+  const std::vector<real> &l0() const { return __l0; }
+
+  // Mutable accessors
+  std::vector<vec3> &x() { return __x; }
+  std::vector<vec3> &v() { return __v; }
+  std::vector<quat> &u() { return __u; }
+  std::vector<quat> &o() { return __o; }
+  std::vector<vec3> &M() { return __M; }
+  std::vector<vec4> &J() { return __J; }
+  std::vector<real> &l0() { return __l0; }
+
+  std::vector<vec3> xc() {
+    std::vector<vec3> xc(__x);
+    std::vector<index_t> rverts = get_vert_range();
+    for (int i : rverts) {
+      auto cons = this->consec(i);
+      if (cons[2] < 0)
+        continue;
+      xc[i] = 0.5 * (__x[cons[1]] + __x[cons[2]]);
+    }
+    return xc;
+  }
+
+  std::vector<vec3> vert_infill(const std::vector<vec3> &x, index_t n_interp,
+                                bool normalize = true) const {
+    std::vector<index_t> rverts = get_vert_range();
+    std::vector<vec3> xc(n_interp * x.size());
+    for (int i : rverts) {
+      auto cons = this->consec(i);
+      index_t ii = cons[1];
+      for (int k = 0; k < n_interp; k++) {
+        if (cons[2] < 0)
+          xc[n_interp * ii + k] = x[cons[1]];
+
+        real t = real(k) / real(n_interp);
+        xc[n_interp * ii + k] = va::mix(t, x[cons[1]], x[cons[2]]);
+      }
+    }
+    return xc;
+  }
+
+  std::vector<vec3> x_infill(index_t n_interp) const {
+    return vert_infill(__x, n_interp, false);
+  }
+
+  std::vector<vec3> vert_val(const std::vector<vec3> &x,
+                             bool normalize = true) {
+    std::vector<vec3> xp(x);
+    std::vector<index_t> rverts = get_vert_range();
+    for (int i : rverts) {
+      auto cons = this->consec(i);
+      if (cons[0] < 0)
+        continue;
+      if (cons[2] < 0)
+        continue;
+      xp[i] = 0.5 * (x[cons[0]] + x[cons[2]]);
+      xp[i] = normalize ? xp[i].normalized() : xp[i];
+    }
+    return xp;
+  }
+
+  std::vector<vec3> dirs() {
+    std::vector<vec3> d(__x.size());
+    int i = 0;
+    for (auto &v : d) {
+      v = this->dir(i++);
+    }
+    return d;
+  }
+
+  std::vector<vec3> Ni(const vec3 &N0) {
+    std::vector<vec3> N(__x);
+    for (int i = 0; i < N.size(); i++) {
+      N[i] = __u[i] * N0;
+    }
+    return N;
+  }
+
+  std::vector<vec3> N0c() { return Ni(vec3(1.0, 0.0, 0.0)); }
+  std::vector<vec3> N1c() { return Ni(vec3(0.0, 1.0, 0.0)); }
+  std::vector<vec3> N2c() { return Ni(vec3(0.0, 0.0, 1.0)); }
+  std::vector<vec3> N0() { return vert_val(N0c()); }
+  std::vector<vec3> N1() { return vert_val(N1c()); }
+  std::vector<vec3> N2() { return vert_val(N2c()); }
 
   void pack() {
     std::vector<index_t> cmap(__corners_next.size(), -1);

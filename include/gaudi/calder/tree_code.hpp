@@ -52,7 +52,13 @@ void test_pyramid(const TREE &tree,                      //
 
 template <typename TREE> class fast_summation {
 public:
-  typedef typename TREE::node NODE;
+  typedef TREE Tree;
+  typedef typename TREE::node Node;
+
+  enum Node_Type {
+    LEAF,
+    BRANCH,
+  };
 
   fast_summation(const TREE &tree) : __tree(tree) {}
 
@@ -66,8 +72,8 @@ public:
   template <typename Q>
   using ComputeFcn =
       std::function<Q(const index_t &, const index_t &, const vec3 &,
-                      const std::vector<datum::ptr> &, const NODE &,
-                      const TREE &)>;
+                      const std::vector<datum::ptr> &, Node_Type, const Node &,
+                      const Tree &)>;
 
   template <typename Q>
   std::vector<Q>
@@ -108,79 +114,78 @@ public:
     int node_count = 0;
     std::vector<int> counts(__tree.nodes.size(), 0);
     std::vector<int> pov_counts(pov.size(), 0);
-#pragma omp parallel
-    {
-#pragma omp for
-      for (int i = 0; i < pov.size(); i++) {
-        vec3 pi = pov[i];
+#pragma omp parallel for
 
-        std::stack<int> stack1;
-        stack1.push(0);
-        vec4 c(0.5, 0.5, 0.1, 1.0);
+    for (int i = 0; i < pov.size(); i++) {
+      vec3 pi = pov[i];
 
-        while (stack1.size() > 0) {
-          total_count++;
-          int j = stack1.top();
-          stack1.pop();
-          const NODE &pNode = __tree.nodes[j];
-          vec3 pj = pNode.center();
+      std::stack<int> stack1;
+      stack1.push(0);
+      vec4 c(0.5, 0.5, 0.1, 1.0);
 
-          real dc = va::dist(pi, pj);
+      while (stack1.size() > 0) {
+        total_count++;
+        int j = stack1.top();
+        stack1.pop();
+        const Node &pNode = __tree.nodes[j];
+        vec3 pj = pNode.center();
 
-          ext::extents_t ext = extents[j];
-          vec3 de = ext[1] - ext[0];
-          real V = de[0] * de[1] * de[2];
-          real sc = 1.5 * pow(0.75 * V / M_PI, 1.0 / 3.0);
-          // if (pNode.isLeaf()) {
-          //   real sc = pNode.mag();
-          // }
-          // T sc = va::norm(pNode.half);
-          //  real sc = 0.75 * pNode.mag();
+        real dc = va::dist(pi, pj);
 
-          if (sc < dc * eps || pNode.isLeaf()) {
-            pov_counts[i]++;
-            if (pNode.isLeaf()) {
-              c = vec4(0.8, 0.5, 1.0, 1.0);
+        ext::extents_t ext = extents[j];
+        vec3 de = ext[1] - ext[0];
+        real V = de[0] * de[1] * de[2];
+        real sc = 1.5 * pow(0.75 * V / M_PI, 1.0 / 3.0);
+        // if (pNode.isLeaf()) {
+        //   real sc = pNode.mag();
+        // }
+        // T sc = va::norm(pNode.half);
+        //  real sc = 0.75 * pNode.mag();
 
-              for (int jn = pNode.begin; jn < pNode.begin + pNode.size; jn++) {
-                leaf_count++;
-                int jj = __tree.permutation[jn];
-                counts[j]++;
-                // gg::geometry_logger::line(pi, pj, c);
-                // gg::geometry_logger::ext(ext[0], ext[1], c);
-                Q ui = leafComputeFcn(i, jj, pi, __data, pNode, __tree);
-                u[i] += ui;
-              }
+        if (sc < dc * eps || pNode.isLeaf()) {
+          pov_counts[i]++;
+          if (pNode.isLeaf()) {
+            c = vec4(0.8, 0.5, 1.0, 1.0);
 
-            } else {
-              node_count++;
-              c = vec4(0.0, 0.5, 0.8, 1.0);
-              Q ui = nodeComputeFcn(i, j, pi, __data, pNode, __tree);
+            for (int jn = pNode.begin; jn < pNode.begin + pNode.size; jn++) {
+              leaf_count++;
+              int jj = __tree.permutation[jn];
+              counts[j]++;
+              // gg::geometry_logger::line(pi, pj, c);
+              // gg::geometry_logger::ext(ext[0], ext[1], c);
+              Q ui = leafComputeFcn(i, jj, pi, __data, LEAF, pNode, __tree);
               u[i] += ui;
             }
 
+          } else {
+            node_count++;
+            c = vec4(0.0, 0.5, 0.8, 1.0);
+            Q ui = nodeComputeFcn(i, j, pi, __data, BRANCH, pNode, __tree);
+            u[i] += ui;
           }
 
-          else {
-            for (int j = 0; j < pNode.getNumChildren(); j++) {
-              if (pNode.children[j] > -1) {
-                stack1.push(pNode.children[j]);
-              }
+        }
+
+        else {
+          for (int j = 0; j < pNode.getNumChildren(); j++) {
+            if (pNode.children[j] > -1) {
+              stack1.push(pNode.children[j]);
             }
           }
-#if 1
-          if (i == 500 && false) {
-            gg::geometry_logger::line(pi, pj, c);
-            // gg::geometry_logger::ext(pj - vec3(sc, sc, sc), pj + vec3(sc, sc,
-            // sc),
-            //                          vec4(0.8, 0.0, 0.6, 0.5));
-            gg::geometry_logger::ext(ext[0], ext[1], c);
-            std::cout << " u[" << i << "]: " << u[i] << std::endl;
-          }
-#endif
         }
+#if 1
+        if (i == 500 && false) {
+          gg::geometry_logger::line(pi, pj, c);
+          // gg::geometry_logger::ext(pj - vec3(sc, sc, sc), pj + vec3(sc, sc,
+          // sc),
+          //                          vec4(0.8, 0.0, 0.6, 0.5));
+          gg::geometry_logger::ext(ext[0], ext[1], c);
+          std::cout << " u[" << i << "]: " << u[i] << std::endl;
+        }
+#endif
       }
     }
+
 #if 0
     for (int i = 0; i < counts.size(); i++) {
       if (counts[i] > 0)

@@ -23,8 +23,8 @@
 
 #include "gaudi/hepworth/block/rod_constraints.hpp"
 #include "gaudi/hepworth/block/rod_constraints_init.hpp"
-#include "gaudi/hepworth/block/solver.hpp"
 #include "gaudi/hepworth/block/sim_block.hpp"
+#include "gaudi/hepworth/block/solver.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
 
@@ -149,7 +149,7 @@ public:
     real t1 = 1.0;
     real t0 = 1.01;
     real att = t0 + (t1 - t0) / (1.0 + exp(-k * (r_vol)));
-    
+
     std::vector<vec3> f(__R->__v.size(), vec3::Zero());
     for (int i = 0; i < __R->__x.size(); i++) {
       vec3 x = __R->__x[i];
@@ -159,9 +159,11 @@ public:
       }
       // f[i] += 1e-1 * vec3::Random();
     }
-    
-    hepworth::vec3_block::ptr x = hepworth::vec3_block::create(__R->__M, __R->__x, __R->__v, f);
-    hepworth::quat_block::ptr u = hepworth::quat_block::create(__R->__J, __R->__u, __R->__o);
+
+    hepworth::vec3_block::ptr x =
+        hepworth::vec3_block::create(__R->__M, __R->__x, __R->__v, f);
+    hepworth::quat_block::ptr u =
+        hepworth::quat_block::create(__R->__J, __R->__u, __R->__o);
 
     std::cout << "vol:" << r_vol << "/" << s_vol << " attenuation: " << att
               << std::endl;
@@ -174,12 +176,12 @@ public:
     hepworth::block::init_bend_twist(*__R, constraints, 0.1, {u});
     //  hepworth::rod::init_smooth_bend(*__R, constraints, 0.01);
 #if 1
-     hepworth::block::init_angle(*__R, constraints, vec3(1.0, 0.0, 0.0),
-                             0.25 * M_PI, 0.05, {u});
-    //hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
-    //                          0.33 * M_PI, 0.1, {u});
+    hepworth::block::init_angle(*__R, constraints, vec3(1.0, 0.0, 0.0),
+                                0.25 * M_PI, 0.05, {u});
+    // hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
+    //                           0.33 * M_PI, 0.1, {u});
     hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.5, 1.0),
-                              0.33 * M_PI, 0.1, {u});
+                                0.33 * M_PI, 0.1, {u});
 #endif
     hepworth::block::init_collisions(*__R, *__Rd, constraints, 1.0, {x, x});
     solver.set_constraints(constraints);

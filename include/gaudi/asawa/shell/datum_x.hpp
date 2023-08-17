@@ -26,7 +26,7 @@
 namespace gaudi {
 namespace asawa {
 
-void center(std::vector<vec3> &coords) {
+void center(std::vector<vec3> &coords, real scale = 2.0) {
   real accum = 0.0;
   vec3 min = coords[0];
   vec3 max = coords[0];
@@ -36,19 +36,21 @@ void center(std::vector<vec3> &coords) {
     max = va::max(c, max);
   }
 
+  vec3 cen = 0.5 * (max + min);
+  for (auto &c : coords) {
+    c -= cen;
+  }
+
   vec3 dl = (max - min);
   real maxl = dl[0];
   maxl = maxl > dl[1] ? maxl : dl[1];
   maxl = maxl > dl[2] ? maxl : dl[2];
-  real s = 2.0 / maxl;
-  vec3 cen = (0.5 * (max + min) - min) * s;
-  std::cout << " scale: " << s << std::endl;
-  cen -= min;
+
   for (auto &c : coords) {
-    c -= min;
-    c = s * c;
-    c -= cen;
+    c = scale * c / maxl;
   }
+
+  std::cout << " scale: " << scale / maxl << std::endl;
 }
 
 std::array<vec3, 2> extents(std::vector<vec3> &coords) {
@@ -225,8 +227,6 @@ vec3 edge_center(const shell &M, index_t c0, const std::vector<vec3> &x) {
 
 real edge_length(const shell &M, index_t c0, const std::vector<vec3> &x) {
   index_t c1 = M.other(c0);
-  std::cout << c0 << " " << c1 << " " << M.vert(c0) << " " << M.vert(c1) << " "
-            << x.size() << std::endl;
   vec3 x0 = x[M.vert(c0)];
   vec3 x1 = x[M.vert(c1)];
   return (x1 - x0).norm();

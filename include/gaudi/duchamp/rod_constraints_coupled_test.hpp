@@ -188,7 +188,7 @@ public:
 
     hepworth::block::init_coupling_collisions(*__R[0], *__Rd[0], //
                                               *__R[1], *__Rd[1], constraints,
-                                              1.0, {blocks[0], blocks[2]});
+                                              2.0, {blocks[0], blocks[2]});
 
     solver.set_constraints(constraints);
 

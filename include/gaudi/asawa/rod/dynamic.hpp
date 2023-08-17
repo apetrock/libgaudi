@@ -94,12 +94,16 @@ real line_line(const index_t &idT, //
 
     vec3 dAB = (xA - xB).normalized();
   */
-
+  /*
   if (abs(dA.dot(xAB)) > 0.95)
     return std::numeric_limits<real>::infinity();
   if (abs(dB.dot(xAB)) > 0.95)
     return std::numeric_limits<real>::infinity();
-
+   */
+  if (abs(dA.dot(xAB)) > 0.35)
+    return std::numeric_limits<real>::infinity();
+  if (abs(dB.dot(xAB)) > 0.35)
+    return std::numeric_limits<real>::infinity();
   return d[0];
 };
 
@@ -219,7 +223,6 @@ public:
     index_t c01 = __R->prev(c00);
     if (c10 < -1)
       return;
-    std::cout << " collapse edge " << c00 << " " << c10 << " " << std::endl;
     __R->link(c01, c10);
     __R->set_next(c00, -1);
     __R->set_prev(c00, -1);
@@ -251,6 +254,7 @@ public:
     // edge_tree->debug();
 
     std::vector<std::array<index_t, 4>> collected(edge_verts_B.size() / 2);
+#pragma omp parallel for
     for (int k = 0; k < edge_verts_B.size(); k += 2) {
       index_t i = k / 2;
 
@@ -288,6 +292,7 @@ public:
     edge_tree = arp::aabb_tree<2>::create(edge_verts_A, x_A, 16);
 
     std::vector<std::array<index_t, 3>> collected(verts_B.size());
+#pragma omp parallel for
     for (int k = 0; k < verts_B.size(); k++) {
 
       std::vector<index_t> collisions =

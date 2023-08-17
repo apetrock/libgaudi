@@ -24,6 +24,10 @@ using Mat4 = Mat4f;
 using Vec2i = Eigen::Vector2i;
 using Vec3i = Eigen::Vector3i;
 
+using Vec2f = Eigen::Vector2f;
+using Vec2d = Eigen::Vector2d;
+using Vec2 = Vec2f;
+
 using Vec3f = Eigen::Vector3f;
 using Vec3d = Eigen::Vector3d;
 using Vec3 = Vec3f;

@@ -130,7 +130,8 @@ public:
   }
 
   void rotate_ball() {
-    Vec3 rotation(0.0, 1.0 * M_PI / 360.0, 0.0);
+    double y = M_PI / 300.0;
+    Vec3 rotation(0.0, y, 0.0);
     double angle = rotation.norm();
     Vec3 axis = rotation.normalized();
     Eigen::Quaternionf q(Eigen::AngleAxisf(angle, axis));

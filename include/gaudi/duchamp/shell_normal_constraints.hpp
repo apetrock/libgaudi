@@ -1,6 +1,7 @@
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 
+#include "Eigen/src/Geometry/AngleAxis.h"
 #include "gaudi/vec_addendum.h"
 
 #include "GaudiGraphics/geometry_logger.h"
@@ -29,7 +30,8 @@
 #include "gaudi/hepworth/block/sim_block.hpp"
 #include "gaudi/hepworth/block/solver.hpp"
 
-#include "gaudi/calder/integrators.hpp"
+#include "gaudi/calder/rod_integrators.hpp"
+#include "gaudi/calder/shell_integrators.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
 #include "gaudi/common.h"
@@ -38,6 +40,7 @@
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <set>
 #include <vector>
@@ -107,20 +110,19 @@ public:
     }
 
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-    asawa::center(x);
+    asawa::center(x, 2.0);
 
     /////////
     // dynamic surface
     /////////
     real l0 = asawa::shell::avg_length(*__M, x);
-    // real C = 0.65;
-    real C = 0.6;
+    real C = 0.85;
+    // real C = 1.75;
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, C * l0);
     __surf->set_flip_pred([&](asawa::shell::shell &M, const index_t &c0) {
       index_t c1 = M.other(c0);
-      bool flip = _adjacent.find(c0) == _adjacent.end();
-      flip &= _adjacent.find(c1) == _adjacent.end();
-      return flip;
+      return _adjacent.find(c0) == _adjacent.end() &&
+             _adjacent.find(c1) == _adjacent.end();
     });
     /////////
     // constraints setup
@@ -130,9 +132,6 @@ public:
     datum_t<real>::ptr ldata = datum_t<real>::create(prim_type::EDGE, lr);
     _il0 = __M->insert_datum(ldata);
 
-    for (int i = 0; i < 3; i++)
-      __surf->step();
-
     /////////////////////
     // Rod
     /////////////////////
@@ -141,11 +140,12 @@ public:
     __R = rod::rod::create(x_w, false);
     //__R->_update_frames(normals);
 
-    real lavg = 1.5 * __R->lavg();
+    real lavg = 1.25 * l0;
     __R->_r = 0.015;
     __Rd = rod::dynamic::create(__R, 0.35 * lavg, 2.0 * lavg, 0.25 * lavg);
 
     for (int i = 0; i < 5; i++) {
+      __surf->step();
       __Rd->step();
     }
   };
@@ -183,7 +183,7 @@ public:
     __Rd = rod::dynamic::create(__R, C * lavg, 3.0 * C * lavg, 1.5 * C * lavg);
   }
 
-  vec3 align_walk(const vec3 x0, const vec3 &d0, const vec3 &N0,
+  vec3 align_walk(const vec3 x0, const vec3 &d0, const vec3 &N0, real li,
                   const std::vector<vec3> walk,
                   const std::vector<vec3> &normals, real eps = 1e-2) {
     // dumb little test to see if I can align the walk to neighboring lines...
@@ -231,8 +231,8 @@ public:
     real l1 = es.eigenvalues()[1] / ssum;
     vec3 f1 = es.eigenvectors().col(1);
     // vec3 dir = va::sgn(d0, vec3(l0 * f0)) * l0 * f0;
-    vec3 dir = d0 + 6.3e-1 * va::sgn(d0, vec3(f0)) * l0 * f0;
-    dir += 3.77e1 * va::sgn(d0, vec3(f1)) * l1 * f1;
+    vec3 dir = d0 + 1.6e-3 * va::sgn(d0, vec3(f0)) * l0 * f0;
+    dir += 1.5e0 * va::sgn(d0, vec3(f1)) * l1 * f1;
 
     dir = R * dir;
     // dir += 1e-10 * va::sgn(d0, vec3(l0 * f1)) * l1 * f1;
@@ -244,24 +244,34 @@ public:
     return dir;
   }
 
+  vec3 rotate_walk(const index_t &ci, const vec3 &d0, const vec3 &N0, real li) {
+    // dumb little test to see if I can align the walk to neighboring lines...
+    // we'll do this N^2 for fun
+
+    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
+    real a = asawa::shell::angle(*__M, ci, x);
+    return Eigen::AngleAxis<real>(1.1e-2 * cos(a) * li * M_PI, N0) * d0;
+  }
+
   std::vector<vec3> walk(real eps) {
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     std::vector<vec3> &v = asawa::get_vec_data(*__M, 1);
-    index_t test = 1000;
+    index_t test = 907;
 
     vec3 N = asawa::shell::edge_normal(*__M, test, x);
     vec3 T = asawa::shell::edge_tangent(*__M, test, x).normalized();
     vec3 B = N.cross(T).normalized();
 
-    real thet = 1.05 * M_PI;
+    real thet = 0.0 * M_PI;
 
     vec3 dir = std::cos(thet) * T + std::sin(thet) * B;
     std::vector<index_t> corners;
     std::vector<real> S;
     std::vector<vec3> points;
     std::vector<vec3> normals;
+    real l = 0.0;
 
-    asawa::shell::walk(*__M, x, test, dir, 0.5, 4000, 1e-2,
+    asawa::shell::walk(*__M, x, test, dir, 0.5, 10000, 1e-8,
                        [&](const asawa::shell::shell &M,
                            const std::vector<vec3> &x, const index_t &corner,
                            const real &s, const real &accumulated_length,
@@ -271,51 +281,33 @@ public:
                          corners.push_back(corner);
                          vec3 pt = asawa::shell::edge_vert(M, ci, s, x);
                          vec3 Ni = asawa::shell::edge_normal(*__M, corner, x);
-
-                         dir = align_walk(pt, dir, Ni, points, normals);
+                         real li = 0.0;
+                         if (points.size() > 0)
+                           li = (pt - points.back()).norm();
+                         // dir = align_walk(pt, dir, Ni, li, points, normals);
+                         dir = rotate_walk(corner, dir, Ni, li);
 
                          points.push_back(pt);
                          normals.push_back(Ni);
                          return true;
                        });
-
+    std::cout << "walk resulted in: " << points.size() << " points"
+              << std::endl;
     return points;
   }
-  std::vector<real> calc_dist(asawa::rod::rod &R, asawa::shell::shell &M,
-                              real eps, const std::vector<vec3> &xr) {
-    std::vector<vec3> x_s = asawa::get_vec_data(M, 0);
-    std::vector<index_t> rverts = R.get_vert_range();
-    std::vector<index_t> rverts_map = R.get_vert_map();
-#if 0
-    vector<std::array<index_t, 2>> nearest =
-        __surf->get_pnt_tri_collisions(rverts, rverts_map, xr, M, 2.0 * eps);
-#else
-    vector<std::array<index_t, 2>> nearest =
-        __surf->get_pnt_tri_collisions(rverts, rverts_map, xr, M, 9999.9);
-#endif
-    std::vector<real> dist(xr.size(), 2.0 * eps);
 
-    /// std::vector<vec3> Nr = get_rod_normals(*__R, *__M, 4.0 * eps);
-    for (auto &c : nearest) {
-      if (c[0] < 0)
-        continue;
-      if (c[1] < 0)
-        continue;
-
-      index_t ivr = c[0];
-      index_t ifs = c[1];
-      vec3 xri = xr[ivr];
-      // vec3 xf = asawa::shell::face_center(M, ifs, x_s);
-      vec3 xf = asawa::shell::face_pnt(xri, M, ifs, x_s);
-      real d = (xri - xf).norm();
-      // vec3 Nri = Nr[ivr].normalized();
-
-      // gg::geometry_logger::line(xri, xf, vec4(1.0, 0.0, 1.0, 1.0));
-      //  gg::geometry_logger::line(xr, xr + d * Nri, vec4(1.0, 1.0,
-      //  0.0, 1.0));
-      dist[ivr] = d;
+  std::vector<vec3> get_rod_normals(asawa::rod::rod &R, asawa::shell::shell &M,
+                                    real eps) {
+    std::vector<vec3> &xr = __R->__x;
+    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
+    std::vector<vec3> Nf = asawa::shell::face_normals(M, x);
+    std::vector<vec3> Nr = calder::mls_avg<vec3>(M, Nf, xr, eps, 3.0);
+    for (int i = 0; i < Nr.size(); i++) {
+      vec3 T = R.dir(i);
+      vec3 B = Nr[i].cross(T);
+      Nr[i] = T.cross(B);
     }
-    return dist;
+    return Nr;
   }
 
   void update_rod_normals() {
@@ -324,50 +316,140 @@ public:
     __R->_update_frames(Nr);
   }
 
-  std::vector<real> calc_rod_dist_grad(asawa::rod::rod &R,
-                                       asawa::shell::shell &M, real eps) {
-    const std::vector<vec3> &x_r = R.__x;
+  std::vector<real> calc_conservative_collisions(asawa::rod::rod &R,
+                                                 asawa::shell::shell &M,
+                                                 real eps, int N_spread = 4) {
     std::vector<vec3> x_s = asawa::get_vec_data(M, 0);
 
-    std::vector<index_t> rverts = R.get_vert_range();
-    std::vector<index_t> rverts_map = R.get_vert_map();
+    // TODO:, these assume that everything is tightly packed, this is wrong
+    // assumption if knots get more complicated
+    std::vector<vec3> xr = R.x_infill(N_spread);
+    std::vector<index_t> rverts(xr.size());
+    for (int i = 0; i < rverts.size(); i++) {
+      rverts[i] = i;
+    }
+    vector<std::array<index_t, 2>> nearest =
+        __surf->get_pnt_tri_collisions(rverts, rverts, xr, M, eps);
 
-    std::vector<vec3> x_rc(x_r);
-    for (int i : rverts) {
-      auto consec = R.consec(i);
+    std::vector<real> dist0(xr.size(), 0.0);
+
+    std::cout << "x.size() " << R.x().size() << std::endl;
+
+    std::cout << "xr.size() " << xr.size() << std::endl;
+    std::cout << "rverts.size() " << rverts.size() << std::endl;
+    real lavg = R.lavg();
+    for (auto &c : nearest) {
+      auto consec = R.consec(c[0] / N_spread);
       if (consec[2] < 0)
         continue;
-      x_rc[i] = 0.5 * (x_r[consec[1]] + x_r[consec[2]]);
+
+      if (c[1] < 0) {
+        dist0[c[0]] = 4.0 * lavg;
+        continue;
+      }
+#if 0
+      index_t ivr = c[0];
+      index_t ifs = c[1];
+
+      vec3 xri = xr[ivr];
+      vec3 xf = asawa::shell::face_pnt(xri, M, ifs, x_s);
+      gg::geometry_logger::line(xri, xf, vec4(1.0, 0.0, 1.0, 1.0));
+#endif
     }
 
-    // std::vector<vec3> x_s = asawa::get_vec_data(M, 0);
-    // std::vector<real> dist0 = calder::mls_dist(M, x_rc, 0.1 * eps, 3.0);
+    std::vector<real> dist(R.x().size(), 0.0);
+    for (int i = 0; i < dist.size(); i++) {
+      for (int k = 0; k < N_spread; k++) {
+        dist[i] = std::max(dist0[i * N_spread + k], dist[i]);
+      }
+    }
 
-    std::vector<real> dist0 = calc_dist(R, M, eps, x_r);
-    std::vector<real> dist1 = calc_dist(R, M, eps, x_rc);
+    return dist;
+  }
 
-    std::vector<real> g_d(dist0.size());
+  std::vector<real> calc_dist_1(asawa::rod::rod &R, asawa::shell::shell &M,
+                                real eps, int N_spread = 4) {
 
-    // std::transform(dist.begin(), dist.end(), dist.begin(),
-    //                [eps](double x) { return max(x - 1.0 * eps, 0.0); });
-    for (int i = 0; i < dist0.size(); i++) {
+    const std::vector<vec3> &xr = R.x();
+    std::vector<real> dist = calc_conservative_collisions(R, M, eps, N_spread);
+
+    auto assign = [](index_t ip, index_t im, const std::vector<vec3> &x,
+                     std::vector<real> &dist) {
+      dist[ip] = std::min(dist[ip], dist[im] + (x[ip] - x[im]).norm());
+    };
+    // sweep forward
+
+    std::vector<index_t> rverts = R.get_ordered_verts();
+
+    for (int k = 0; k < 2; k++) {
+      // this should only need one it, why not working?
+
+      for (int i = 0; i < rverts.size(); i++) {
+        index_t ip = R.next(rverts[i]);
+        index_t im = i;
+        if (ip < 0)
+          continue;
+        assign(ip, im, xr, dist);
+      }
+
+      for (int i = rverts.size() - 1; i > -1; i--) {
+        index_t ip = R.next(rverts[i]);
+        index_t im = i;
+        if (ip < 0)
+          continue;
+        assign(im, ip, xr, dist);
+      }
+    }
+
+    for (int k = 0; k < 8; k++)
+      for (int i = 0; i < rverts.size(); i++) {
+        auto cons = R.consec(rverts[i]);
+        if (cons[2] < 0)
+          continue;
+        index_t ip = cons[2];
+        index_t i0 = cons[1];
+        index_t im = cons[0];
+
+        dist[i0] = 0.25 * dist[im] + 0.5 * dist[i0] + 0.25 * dist[ip];
+      }
+#if 1
+    std::vector<vec3> Nr = get_rod_normals(*__R, *__M, 4.0 * eps);
+
+    for (int i : rverts) {
+      auto cons = R.consec(i);
+      index_t i0 = cons[1];
+      if (cons[2] < 0)
+        continue;
+
+      gg::geometry_logger::line(xr[i0],
+                                xr[i0] + 1.0 * dist[i0] * Nr[i0].normalized(),
+                                vec4(0.0, 1.0, 1.0, 1.0));
+    }
+#endif
+    return dist;
+  }
+
+  std::vector<real> calc_rod_dist_grad_1(asawa::rod::rod &R,
+                                         asawa::shell::shell &M, real eps,
+                                         int N_spread = 4) {
+    std::vector<real> dist = calc_dist_1(R, M, eps, N_spread);
+    std::vector<real> g_d(dist.size(), 0.0);
+    real lavg = R.lavg();
+    std::vector<vec3> xr = R.x();
+    for (int i = 0; i < dist.size(); i++) {
       auto idx = R.consec(i);
-      vec3 T = R.dir(i);
-      real dT = T.norm();
-      // vec3 Nri = Nr[idx[1]].normalized();
-      //  gg::geometry_logger::line(x_r[idx[1]], x_r[idx[1]] + d0 * Nri,
-      //                            vec4(1.0, 1.0, 0.0, 1.0));
-      real d0 = dist0[idx[1]];
-      real d1 = dist1[idx[1]];
-      // d0 = std::min(d0, 16.0 * eps);
-      // d1 = std::min(d1, 16.0 * eps);
-      real ddi = d1 - d0;
-      // dT = std::max(dT, eps / 16.0);
-      g_d[i] = ddi / 2.0 / dT;
-      // gg::geometry_logger::line(x_r[idx[1]], x_r[idx[1]] + g_d[i] * T,
-      //                           vec4(1.0, 0.0, 1.0, 1.0));
+      index_t im = idx[1];
+      index_t ip = idx[2];
+      vec3 xr1 = xr[ip];
+      vec3 xr0 = xr[im];
+      real di = (xr1 - xr0).norm();
+      di = std::max(di, lavg);
+      real ddi = dist[ip] - dist[im];
+      ddi = va::sgn(ddi) * std::min(abs(ddi), lavg);
+      g_d[i] = 4.0 * ddi / di;
+      g_d[i] = va::sgn(g_d[i]) * std::min(abs(g_d[i]), 2.0);
     }
-
+    // g_d = __R->vert_avg(g_d);
     return g_d;
   }
 
@@ -378,19 +460,25 @@ public:
       const real &wr, const real &ws,
       std::vector<hepworth::sim_block::ptr> blocks) {
     _adjacent.clear();
-    const std::vector<vec3> &x0 = R.__x;
+    const std::vector<vec3> &x0 = R.x();
     std::vector<vec3> x1 = asawa::get_vec_data(M, 0);
 
     std::vector<index_t> edge_verts_R = R.get_edge_vert_ids();
     std::vector<index_t> edge_map_R = R.get_edge_map();
-    real eps = 2.0 * shell_d._Cm;
+    real eps = 4.0 * shell_d._Cm;
+
+    std::vector<vec3> Nr = get_rod_normals(R, M, eps);
+    std::vector<vec3> Nr0 = R.N1();
 
 #if 1
     std::vector<index_t> edges = M.get_edge_range();
     std::vector<index_t> edge_verts_M = M.get_edge_vert_ids();
     std::vector<index_t> edge_map_M = M.get_edge_map();
 
-    auto g_d = calc_rod_dist_grad(R, M, 2.0 * eps);
+    // auto g_d = calc_rod_dist_grad(R, M, 2.0 * eps);
+
+    auto g_d = calc_rod_dist_grad_1(R, M, 0.25 * eps, 4);
+
     vector<std::array<index_t, 4>> sr_collisions =
         rod_d.get_collisions(edge_verts_M, x1, eps);
 
@@ -426,12 +514,29 @@ public:
       if (d[0] > 5.0e-3 * eps)
         continue;
 
-      // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
       real g_di = va::mix(d[1], g_d[vr0], g_d[vr1]);
       vec3 xr = va::mix(d[1], xr0, xr1);
+      vec3 xs = va::mix(d[2], xs0, xs1);
       vec3 dr = xr1 - xr0;
-      real lr = (xr1 - xr0).norm();
+      vec3 dx = xr - xs;
+      vec3 Ns0 = asawa::shell::vert_normal(M, vs0, x1);
+      vec3 Ns1 = asawa::shell::vert_normal(M, vs1, x1);
+      vec3 Ns = va::mix(d[2], Ns0, Ns1);
 
+      real is_perp = pow(Ns.dot(dx.normalized()), 2.0);
+      // if (is_perp < 0.75)
+      //   continue;
+
+      gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
+
+      real lr = (xr1 - xr0).norm();
+      vec3 Nri0 = Nr[vr0].normalized();
+      vec3 Nri1 = Nr[vr1].normalized();
+      vec3 Nri = va::mix(d[1], Nri0, Nri1);
+
+      vec3 Nr0i0 = Nr0[vr0].normalized();
+      vec3 Nr0i1 = Nr0[vr1].normalized();
+      vec3 Nr0i = va::mix(d[1], Nr0i0, Nr0i1);
       /*
       real lbound = 1e-8;
       real ubound = 1.0 - lbound;
@@ -440,13 +545,17 @@ public:
       if (d[2] > ubound)
         continue;
   */
-      gg::geometry_logger::line(xr, xr + 0.1 * g_di * dr,
-                                vec4(0.5, 0.5, 1.0, 1.0));
-      _adjacent.insert(vs0);
+      // gg::geometry_logger::line(xs, xs + 1.0 * g_di * dr,
+      //                           vec4(0.5, 0.5, 1.0, 1.0));
+      _adjacent.insert(M.find_edge_from_verts(vs0, vs1));
+      // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
+
       hepworth::block::edge_edge_weld::ptr constraint =
           hepworth::block::edge_edge_weld::create(
               std::vector<index_t>({vr0, vr1, vs0, vs1}), wr, ws, blocks);
-      constraint->set_slide(d[1] + 1.0 * g_di);
+      constraint->set_slide(d[1] + g_di);
+
+      // constraint->set_rotate_to(0.001, Nri, Nr0i);
       constraints.push_back(constraint);
     }
 #endif
@@ -462,12 +571,12 @@ public:
     std::vector<vec3> xv = asawa::get_vec_data(M, 0);
 
     std::vector<vec3> Nv = asawa::shell::vertex_normals(*__M, xv);
-    std::vector<vec3> Nf = asawa::shell::face_normals(*__M, xv);
 
     real eps = 1.0 * __surf->_Cc;
-    real r = 5.0 * eps;
-    std::vector<vec3> Nr = calder::mls_avg<vec3>(*__M, Nf, xr, 2.0 * eps, 3.0);
-    auto g_d = calc_rod_dist_grad(R, M, 2.0 * eps);
+    real r = 1.0 * eps;
+    std::vector<vec3> Nr = get_rod_normals(R, M, eps);
+    std::vector<vec3> Nr0 = R.N1();
+    auto g_d = calc_rod_dist_grad_1(R, M, 2.0 * eps);
     // for (int i = 0; i < x1.size(); i++)
     //   x1[i] += _h * fm[i];
 
@@ -481,7 +590,8 @@ public:
     std::vector<index_t> edge_map_M = M.get_edge_map();
 
     vector<std::array<index_t, 3>> sr_collisions =
-        rod_d.get_vert_collisions(verts_M, xv, 6.0 * eps);
+        rod_d.get_vert_collisions(verts_M, xv, 999.9);
+
     for (auto &c : sr_collisions) {
 
       index_t vs = c[0];
@@ -506,26 +616,33 @@ public:
       real t0 = (xs - xr0).dot(dr) / dr.dot(dr);
       vec3 Nri0 = Nr[vr0].normalized();
       vec3 Nri1 = Nr[vr1].normalized();
-      vec3 Nri = va::mix(t0, Nri0, Nri1).normalized();
+      vec3 Nri = va::mix(t0, Nri0, Nri1);
+
+      vec3 Nr0i0 = Nr0[vr0].normalized();
+      vec3 Nr0i1 = Nr0[vr1].normalized();
+      vec3 Nr0i = va::mix(t0, Nr0i0, Nr0i1);
+
       real g_di = va::mix(t0, g_d[vr0], g_d[vr1]);
+
       vec3 Nsi = Nv[vs].normalized();
       vec3 Tr = dr.normalized();
       vec3 Bri = Nri.cross(Tr).normalized();
       Nri = Tr.cross(Bri).normalized();
-      vec3 xr = xr0 + t0 * dr;
+
+      vec3 xr = va::mix(t0, xr0, xr1);
 
       vec3 dX = xs - xr;
-      real Nsdx = Nri.dot(dX);
 
       real d = dX.norm();
 
       real w_dx = exp(-1.5 * d * d / r / r);
       if (w_dx < 1e-4)
         continue;
-
-        // std::cout << Nri << std::endl;
-        // gg::geometry_logger::line(xr, xr + 0.01 * Nri, vec4(1.0, 0.0,
-        // 0.0, 1.0));
+        // gg::geometry_logger::line(xs, xs + g_di * dr, vec4(1.0, 0.0,
+        // 0.5, 1.0));
+        //  std::cout << Nri << std::endl;
+        //  gg::geometry_logger::line(xr, xr + 0.01 *
+        //  Nri, vec4(1.0, 0.0, 0.0, 1.0));
 
 #if 0
       gg::geometry_logger::line(xs, xr, vec4(1.0, 0.0, 0.0, 1.0));
@@ -540,91 +657,188 @@ public:
 #endif
       hepworth::block::point_edge_creep::ptr constraint =
           hepworth::block::point_edge_creep::create(
-              std::vector<index_t>({vs, vr0, vr1}), r, xr0, xr1, Nri0, Nri1,
-              Nsi, w_dx * w, blocks);
+              std::vector<index_t>({vs, vr0, vr1}), r, Nri0, Nri1, Nsi,
+              w_dx * w, blocks);
+      // constraint->set_rotate_to(0.001, Nri, Nr0i);
+      if (std::isnan(t0 + w_dx * g_di))
+        continue;
+      constraint->set_slide(t0 + w_dx * g_di);
+
       constraints.push_back(constraint);
-      constraint->set_slide(w_dx * (t0 + 1.0 * g_di));
     }
 #endif
   }
 
-  std::vector<vec3> get_rod_normals(asawa::rod::rod &R, asawa::shell::shell &M,
-                                    real eps) {
-    std::vector<vec3> &xr = __R->__x;
-    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-    std::vector<vec3> Nf = asawa::shell::face_normals(M, x);
-    std::vector<vec3> Nr = calder::mls_avg<vec3>(M, Nf, xr, eps, 3.0);
-    for (int i = 0; i < Nr.size(); i++) {
-      vec3 T = R.dir(i);
-      vec3 B = Nr[i].cross(T);
-      Nr[i] = T.cross(B);
+  std::vector<vec3> calc_bend_grad() {
+    asawa::shell::shell &M = *__M;
+    asawa::rod::rod &R = *__R;
+    asawa::shell::dynamic &Md = *__surf;
+    asawa::rod::dynamic &Rd = *__Rd;
+
+    std::vector<vec3> x_s = asawa::get_vec_data(M, 0);
+    const std::vector<vec3> &x_r = R.x();
+
+    real eps = 0.5 * Md._Cc;
+    std::vector<index_t> rverts = R.get_edge_vert_ids();
+    std::vector<index_t> rverts_map = R.get_edge_map();
+
+    std::vector<vec3> Nr0 = R.N0();
+    std::vector<vec3> Nr2 = R.N2();
+
+    vector<std::array<index_t, 2>> nearest =
+        Md.get_edge_edge_collisions(rverts, rverts_map, x_r, eps);
+    std::vector<real> phi(x_r.size(), 0.0);
+
+    // std::vector<vec3> Nr = get_rod_normals(*__R, *__M, 4.0 * eps);
+    for (auto &c : nearest) {
+      if (c[0] < 0)
+        continue;
+      if (c[1] < 0)
+        continue;
+
+      index_t ivr0 = c[0];
+      index_t ivr1 = R.next(c[0]);
+      index_t icm0 = M.vert(c[1]);
+      index_t icm1 = M.vert(M.other(c[1]));
+      vec3 xri0 = x_r[ivr0];
+      vec3 xri1 = x_r[ivr1];
+      vec3 xr = va::mix(0.5, xri0, xri1);
+
+      vec3 Nr = Nr0[ivr0];
+      vec3 Tr = Nr2[ivr0];
+      vec3 Ns = asawa::shell::edge_normal(M, c[1], x_s);
+
+      vec3 Nrs = (Nr + Ns).normalized();
+
+      vec3 rotationAxis = Nr.cross(Ns);
+      real cosAngle = Nr.dot(Ns);
+      if (std::isnan(cosAngle))
+        continue;
+      real angleRad = std::atan2(rotationAxis.dot(Tr), cosAngle);
+      /*
+      gg::geometry_logger::line(xr, xr + 0.025 * Nr, vec4(1.0, 0.0,
+      0.0, 1.0)); gg::geometry_logger::line(xr, xr + 0.025 * angleRad * Nrs,
+                                vec4(1.0, 0.0, 1.0, 1.0));
+      gg::geometry_logger::line(xr, xr + 0.025 * Ns, vec4(0.0,
+      0.0, 1.0, 1.0));
+      */
+      phi[ivr0] = angleRad;
     }
-    return Nr;
-  }
-
-  void test_ribbon_sdf() {
-    std::vector<vec3> &xm = asawa::get_vec_data(*__M, 0);
-    std::vector<vec3> x = createPoints(200000, 0.5);
-    real eps = __surf->_Cc;
-    real r = 3.0 * eps;
-    std::vector<vec3> Nr = get_rod_normals(*__R, *__M, 4.0 * eps);
-    std::vector<real> sd = calder::ribbon_sdf(*__R, Nr, x, r, eps, 3.0, true);
-    for (int i = 0; i < x.size(); i++) {
-      gg::geometry_logger::line(x[i], x[i] + 1e-4 * vec3(1.0, 1.0, 1.0),
-                                1000.0 * gg::sdf4(sd[i]));
-    }
-  }
-
-  std::vector<vec3> compute_ribbon_sdf() {
-    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-    std::vector<vec3> Nv = asawa::shell::vertex_normals(*__M, x);
-
-    real eps = 1.0 * __surf->_Cc;
-    real r = 3.0 * eps;
-
-    std::vector<vec3> Nr = get_rod_normals(*__R, *__M, 4.0 * __surf->_Cm);
-
-    // std::vector<real> g =
-    //     calder::compute_cos2(*__R, Nv, x, eps, 6.0, 4.0, true);
-    std::vector<real> sd =
-        calder::ribbon_sdf(*__R, Nr, x, r, 2.0 * eps, 2.0, true);
-    std::vector<real> df = calder::mls_dist(*__R, x, 2.0 * eps, 2.0);
-    std::transform(df.begin(), df.end(), df.begin(),
-                   [r](double x) { return (exp(-1.0 * x * x / r / r)); });
-
-    std::vector<vec3> f(x.size(), vec3::Zero());
+    std::vector<vec3> f = calder::vortex_force(R, x_s, phi, eps, 3.0);
     for (int i = 0; i < f.size(); i++) {
-      vec3 fi = 1.0 * sd[i] * df[i] * Nv[i];
-      gg::geometry_logger::line(x[i], x[i] + 0.1 * fi,
-                                vec4(0.0, 0.5, 1.0, 1.0));
-
-      f[i] += fi;
+      f[i] *= -1e-2;
+      /*
+      gg::geometry_logger::line(x_s[i], x_s[i] + f[i],
+                                vec4(1.0, 1.0, 0.0, 0.0));
+*/
     }
+
     return f;
   }
 
-  std::vector<vec3> compute_tangent_point_gradient(
-      std::vector<hepworth::projection_constraint::ptr> &constraints,
-      std::vector<hepworth::sim_block::ptr> blocks) {
-    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-    std::vector<vec3> xf = asawa::shell::face_centers(*__M, x);
-    std::vector<vec3> Nv = asawa::shell::vertex_normals(*__M, x);
-    std::vector<vec3> Nf = asawa::shell::face_normals(*__M, x);
+  void test_quadric_sdf() {
+    const std::vector<vec3> &x_s = asawa::get_vec_data(*__M, 0);
+    const std::vector<vec3> &x_r = __R->x();
 
-    const std::vector<vec3> &xr = __R->__x;
-    real eps = 1.0 * __surf->_Cc;
-    real r = 1.0 * eps;
-    std::cout << "mls normals" << std::endl;
-    std::vector<vec3> Nr = calder::mls_avg<vec3>(*__M, Nf, xr, 4.0 * eps, 3.0);
-    for (int i = 0; i < Nr.size(); i++) {
-      vec3 T = __R->dir(i);
-      vec3 B = Nr[i].cross(T);
-      Nr[i] = T.cross(B);
+    std::vector<vec3> x = createPoints(200000, 0.5);
+    real eps = 0.5 * __surf->_Cc;
+
+    std::vector<vec3> Nr = get_rod_normals(*__R, *__M, eps);
+
+    std::vector<real> sdf = calder::quadric_sdf(*__R, Nr, x, eps);
+
+    for (int i = 0; i < x.size(); i++) {
+      gg::geometry_logger::line(x[i], x[i] + 1e-4 * vec3(1.0, 1.0, 1.0),
+                                1000.0 * gg::sdf4(sdf[i]));
     }
+  }
 
-    std::cout << "tp grad" << std::endl;
-    std::vector<vec3> gf =
-        calder::tangent_point_grad(*__R, Nr, xf, Nv, 4.0 * eps, 6.0);
+  std::vector<vec3> calc_quadric_grad() {
+    asawa::shell::shell &M = *__M;
+    asawa::rod::rod &R = *__R;
+    asawa::shell::dynamic &Md = *__surf;
+    asawa::rod::dynamic &Rd = *__Rd;
+
+    std::vector<vec3> x_s = asawa::get_vec_data(M, 0);
+    const std::vector<vec3> &x_r = R.x();
+
+    real eps = Md._Cc;
+
+    std::vector<vec3> Nr = get_rod_normals(R, M, eps);
+
+    std::vector<real> Q = calder::quadric_sdf(R, Nr, x_s, eps);
+    std::vector<vec3> Ns = asawa::shell::vertex_normals(*__M, x_s);
+    int i = 0;
+    for (vec3 &N : Ns) {
+      N *= -1.0 / _h * Q[i];
+      // gg::geometry_logger::line(x_s[i], x_s[i] + 1.0 * N,
+      //                           vec4(1.0, 1.0, 0.0, 1.0));
+      i++;
+    }
+    return Ns;
+    /*
+    std::vector<vec3> Q = calder::quadric_sdf(R, Nr, x_s, eps);
+
+    // std::vector<vec3> Ns = asawa::shell::vertex_normals(*__M, x_s);
+    int i = 0;
+
+    for (vec3 &q : Q) {
+      gg::geometry_logger::line(x_s[i], x_s[i] + 2.0 * q,
+                                vec4(1.0, 1.0, 0.0, 1.0));
+      q *= -1.0;
+      i++;
+    }
+    return Q;
+  */
+  }
+
+  std::vector<vec3> compute_tangent_point_gradient() {
+    real eps = __Rd->_Cc;
+    std::vector<vec3> &x = __R->x();
+    std::vector<vec3> xc = __R->xc();
+
+    std::vector<vec3> g0 = calder::tangent_point_grad(*__R, 0.01 * eps, 6.0);
+
+    std::cout << "mls gf" << std::endl;
+    std::vector<vec3> g0v = __R->vert_val(g0);
+    std::vector<vec3> g1 =
+        calder::mls_avg<vec3>(*__R, g0v, xc, 0.01 * __surf->_Cc, 4.0);
+    std::vector<vec3> g1v = __R->vert_val(g1);
+
+    for (int i = 0; i < g1v.size(); i++) {
+
+      g1v[i] *= 1.0e1;
+    }
+    return g1v;
+  }
+
+  std::vector<vec3> compute_tangent_coulomb_gradient() {
+    real eps = __Rd->_Cc;
+    std::vector<vec3> &x = __R->x();
+    std::vector<vec3> xc = __R->xc();
+
+    std::vector<vec3> g0 = calder::tangent_coulomb(*__R, 1.0 * eps, 3.0);
+
+    std::cout << "mls gf" << std::endl;
+    std::vector<vec3> g0v = __R->vert_val(g0);
+    std::vector<vec3> g1 =
+        calder::mls_avg<vec3>(*__R, g0v, xc, 1.0 * __surf->_Cc, 3.0);
+    std::vector<vec3> g1v = __R->vert_val(g1);
+
+    for (int i = 0; i < g1v.size(); i++) {
+      gg::geometry_logger::line(x[i], x[i] - 0.02 * g1v[i],
+                                vec4(0.6, 0.0, 0.8, 1.0));
+      g1v[i] *= -125.0e1;
+    }
+    return g1v;
+  }
+
+  std::vector<vec3> compute_coulomb_gradient() {
+    real eps = __Rd->_Cc;
+    std::vector<vec3> &x = __R->x();
+    std::vector<vec3> xc = __R->xc();
+
+    std::vector<vec3> g0 = calder::coulomb_force(*__R, 1.0 * eps, 3.0);
 #if 0
     for (int i = 0; i < gf.size(); i++) {
       gg::geometry_logger::line(xf[i], xf[i] + 1e-9 * gf[i],
@@ -632,62 +846,61 @@ public:
     }
 #endif
     std::cout << "mls gf" << std::endl;
-    std::vector<vec3> g =
-        calder::mls_avg<vec3>(*__M, gf, x, 4.0 * __surf->_Cc, 3.0);
-    std::vector<vec3> xc(x);
-    for (int i = 0; i < g.size(); i++) {
+    std::vector<vec3> g0v = __R->vert_val(g0);
+    std::vector<vec3> g1 =
+        calder::mls_avg<vec3>(*__R, g0v, xc, 1.0 * __surf->_Cc, 3.0);
+    std::vector<vec3> g1v = __R->vert_val(g1);
+
+    for (int i = 0; i < g1v.size(); i++) {
       // std::cout << g[i] << std::endl;
       // g[i] = compute_grad(dp[i], Nr[i], 2.0);
-      g[i] *= 8e-1;
-      xc[i] += g[i];
-      gg::geometry_logger::line(x[i], x[i] + 0.1 * g[i],
-                                vec4(0.6, 0.0, 0.8, 1.0));
+      // g1v[i] *= 8e-1;
+
+      // gg::geometry_logger::line(x[i], x[i] + 0.1 *
+      // g1v[i],
+      //                           vec4(0.6, 0.0,
+      //                           0.8, 1.0));
+      g1v[i] *= -1.0e1;
     }
-    hepworth::block::init_pinned(*__M, constraints, xc, 5.0e-2, blocks);
-    return g;
+    return g1v;
   }
 
-  void init_weighted_willmore(
-      const asawa::shell::shell &M,
-      std::vector<hepworth::projection_constraint::ptr> &constraints,
-      const real &w, std::vector<hepworth::sim_block::ptr> blocks) {
-    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-    std::vector<vec3> xf = asawa::shell::face_centers(*__M, x);
+  std::vector<real> get_dist_rod(const std::vector<index_t> &vert_ids,
+                                 const std::vector<vec3> &x,
+                                 const asawa::rod::rod &R,
+                                 const asawa::rod::dynamic &Rd) {
+    std::vector<vec3> &xr = __R->x();
+    std::vector<real> df(x.size(), 0.0);
+    vector<std::array<index_t, 3>> sr_collisions =
+        __Rd->get_vert_collisions(vert_ids, x, 999.9);
+    for (auto &c : sr_collisions) {
+      index_t vs = c[0];
+      index_t vr0 = c[1];
+      index_t vr1 = c[2];
 
-    real l = 2.0 * __surf->_Cc;
-    std::vector<real> df = calder::mls_dist(*__R, x, 2.0 * l, 3.0);
-    std::transform(df.begin(), df.end(), df.begin(),
-                   [l, w](double x) { return w * (exp(-x * x / l / l)); });
-    hepworth::block::init_willmore(M, constraints, x, df, blocks);
-    // return g;
-  }
-
-  void init_weighted_edge_willmore(
-      const asawa::shell::shell &M,
-      std::vector<hepworth::projection_constraint::ptr> &constraints,
-      const real &w, std::vector<hepworth::sim_block::ptr> blocks) {
-    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-    std::vector<vec3> xe = asawa::shell::edge_centers(*__M, x);
-
-    real l = 2.0 * __surf->_Cc;
-    std::vector<real> df = calder::mls_dist(*__R, xe, l, 3.0);
-    std::transform(df.begin(), df.end(), df.begin(),
-                   [l, w](double x) { return w * (exp(-x * x / l / l)); });
-    hepworth::block::init_edge_willmore(M, constraints, df, blocks);
-    // return g;
+      if (vr1 < 0 || vr1 < 0 || vs < 0)
+        continue;
+      vec3 xr0 = xr[vr0];
+      vec3 xr1 = xr[vr1];
+      vec3 xs = x[vs];
+      df[vs] = va::distance_from_line(xr0, xr1, xs);
+    }
+    return df;
   }
 
   void init_weighted_area(
       const asawa::shell::shell &M,
       std::vector<hepworth::projection_constraint::ptr> &constraints,
       const real &w, std::vector<hepworth::sim_block::ptr> blocks) {
-    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-    std::vector<vec3> xf = asawa::shell::face_centers(*__M, x);
-    std::vector<vec3> Nf = asawa::shell::face_normals(*__M, x);
+
+    std::vector<vec3> &xv = asawa::get_vec_data(*__M, 0);
+    std::vector<vec3> xf = asawa::shell::face_centers(*__M, xv);
+    std::vector<vec3> Nf = asawa::shell::face_normals(*__M, xv);
+    std::vector<vec3> &xr = __R->x();
+    std::vector<index_t> verts_F = M.get_face_range();
 
     real eps = 2.0 * __surf->_Cc;
-    std::vector<real> df = calder::mls_dist(*__R, xf, eps, 3.0);
-
+    std::vector<real> df = get_dist_rod(verts_F, xf, *__R, *__Rd);
     std::transform(df.begin(), df.end(), df.begin(),
                    [w, eps](double x) { return max(x - 2.5 * eps, 0.0); });
     auto [min_it, max_it] = std::minmax_element(df.begin(), df.end());
@@ -696,25 +909,14 @@ public:
     std::transform(df.begin(), df.end(), df.begin(), [w, vmin, vmax](real x) {
       return w * (x - vmin) / (vmax - vmin);
     });
-    /*
-        real mean = std::accumulate(df.begin(), df.end(), 0.0f) / std::size(df);
-        real variance = std::transform_reduce(
-                            df.begin(), df.end(), 0.0f, std::plus<>(),
-                            [mean](real x) { return (x - mean) * (x - mean); })
-       / std::size(df); real stddev = std::sqrt(variance);
 
-
-
-        // normalize each element of the vector
-
-    */
     /*
     for (int i = 0; i < df.size(); i++) {
       gg::geometry_logger::line(xf[i], xf[i] + 0.1 * df[i] * Nf[i],
                                 vec4(0.0, 0.5, 1.0, 1.0));
     }
-    */
-    hepworth::block::init_area(M, constraints, x, df, blocks);
+*/
+    hepworth::block::init_area(M, constraints, xv, df, blocks);
     // return g;
   }
 
@@ -733,38 +935,49 @@ public:
     hepworth::block::projection_solver solver;
 
     std::vector<real> &l0 = asawa::get_real_data(*__M, _il0);
-    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
+    std::vector<vec3> &xs = asawa::get_vec_data(*__M, 0);
     std::vector<vec3> &v = asawa::get_vec_data(*__M, 1);
 
-    std::vector<vec3> M = asawa::shell::vertex_areas(*__M, x);
-    std::vector<real> li = asawa::shell::edge_lengths(*__M, x);
-    std::vector<real> &lr = __R->__l0;
+    std::vector<vec3> M = asawa::shell::vertex_areas(*__M, xs);
+    std::vector<real> li = asawa::shell::edge_lengths(*__M, xs);
+
+    std::vector<real> &lr = __R->l0();
+    std::vector<vec3> &xr = __R->x();
+
     __R->update_lengths();
+
+#if 0
     for (auto &l : lr)
-      l *= 1.02;
+      l *= 1.01;
+#endif
 
     int i = 0;
     auto range = __M->get_edge_range();
     for (auto c0 : range) {
       if (std::isnan(l0[c0 / 2]))
         continue;
-      l0[c0 / 2] = asawa::shell::edge_length(*__M, c0, x);
+      l0[c0 / 2] = asawa::shell::edge_length(*__M, c0, xs);
     }
 
-    std::vector<vec3> Ns = asawa::shell::vertex_normals(*__M, x);
-    std::vector<vec3> f(x.size(), vec3::Zero());
+    std::vector<vec3> fs(xs.size(), vec3::Zero());
+    std::vector<vec3> fr(xr.size(), vec3::Zero());
 
     std::vector<hepworth::projection_constraint::ptr> constraints;
     //      std::vector<vec3> f = compute_ribbon_charge();
+
+    // fr = compute_tangent_point_gradient();
+    // fr = compute_coulomb_gradient();
+    // fr = compute_tangent_coulomb_gradient();
+
+    // fs = calc_bend_grad();
     // test_ribbon_sdf();
-    // f = compute_tangent_point_gradient(constraints, {Xs});
-    // f = compute_ribbon_sdf();
-    // f = compute_covariance(constraints, {Xs});
-    // f = compute_curve_grad();
-    hepworth::vec3_block::ptr Xs = hepworth::vec3_block::create(M, x, v, f);
+    fs = calc_quadric_grad();
+    // fs = calc_ribbon_sdf();
+
+    hepworth::vec3_block::ptr Xs = hepworth::vec3_block::create(M, xs, v, fs);
 
     hepworth::vec3_block::ptr Xr =
-        hepworth::vec3_block::create(__R->__M, __R->__x, __R->__v, f);
+        hepworth::vec3_block::create(__R->__M, __R->__x, __R->__v, fr);
     hepworth::quat_block::ptr Ur =
         hepworth::quat_block::create(__R->__J, __R->__u, __R->__o);
 
@@ -774,76 +987,82 @@ public:
     blocks.push_back(Ur);
 
     std::cout << "l[0]: " << l0[0] << std::endl;
+    std::cout << "init weld" << std::endl;
 #if 1
     init_rod_shell_weld(*__R, *__Rd, //
                         *__M, *__surf,
-                        f, //
-                        constraints, 1.0, 1.0, {Xr, Xs});
+                        fs, //
+                        constraints, 1.0, 1.5, {Xr, Xs});
 #endif
-#if 1
+
+#if 0
+    std::cout << "init creep" << std::endl;
     init_rod_shell_creep(*__R, *__Rd, //
                          *__M, *__surf,
-                         f, //
-                         constraints, 1.25, {Xs, Xr});
+                         fs, //
+                         constraints, 0.05, {Xs, Xr});
 #endif
+    std::cout << "main constraints" << std::endl;
     hepworth::block::init_stretch_shear(*__R, constraints, lr, 1.0e-1,
                                         {Xr, Ur});
     hepworth::block::init_bend_twist(*__R, constraints, 1.0e-1, {Ur});
+// hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
+//                             1e-1 * M_PI, 1e-3, {Ur});
+#if 0
+    hepworth::block::init_angle(*__R, constraints, vec3(1.0, 0.0, 0.0),
+                                0.075 * M_PI, 0.3, {Ur});
+    //hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
+    //                            0.05 * M_PI, 0.1, {Ur});
     hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
-                                1e-1 * M_PI, 1e-3, {Ur});
-    hepworth::block::init_pinned(*__R, constraints, __R->__x, 15.0e0, {Xr});
-    real offset = min(1.0 + 0.025 * real(frame), 30.0);
-    offset = 8.0;
+                                0.1 * M_PI, 0.1, {Ur});
+#endif
+    hepworth::block::init_pinned(*__R, constraints, xr, 1.0e0, {Xr});
+    std::cout << "main collisions" << std::endl;
+
+    real offset = 1.0;
+    offset = min(1.0 + 0.025 * real(frame), 8.0);
+    std::cout << "offset: " << offset << std::endl;
+    // offset = 12.0;
     hepworth::block::init_collisions(*__R, *__Rd, constraints, 0.5, {Xr, Xr},
                                      offset);
 
-    hepworth::block::init_edge_strain(*__M, constraints, x, l0, 1e-1, {Xs});
-    hepworth::block::init_bending(*__M, constraints, x, 1.0e-1, {Xs});
-    // hepworth::block::init_edge_growth(*__M, constraints, x, l0, 0.999, 1e-3,
-    //                                   {Xs});
+    hepworth::block::init_edge_strain(*__M, constraints, xs, l0, 1.0e-2, {Xs});
+    hepworth::block::init_bending(*__M, constraints, xs, 1.0e-2, {Xs});
     // hepworth::block::init_laplacian(*__M, constraints, x, 1, 1.0e-1, {Xs});
-    //        hepworth::block::init_willmore(*__M, constraints, x, 5.0e0, {Xs});
-    //     hepworth::block::init_edge_willmore(*__M, constraints, 1.0e0, {Xs});
-    //   hepworth::block::init_area(*__M, constraints, x, 1.0e-1, {Xs});
-    hepworth::block::init_edge_willmore(*__M, constraints, 6e-1, blocks);
 
-    //     init_willmore_from_normals(*__M, constraints, 1e-1, blocks);
-    //     hepworth::block::init_edge_willmore(*__M, constraints, 5e-1, blocks);
-
-    // init_weighted_edge_growth(*__M, constraints, 1e-1, blocks);
-    init_weighted_area(*__M, constraints, 1e-0, blocks);
-    // init_weighted_edge_willmore(*__M, constraints, 1e-1, blocks);
+    hepworth::block::init_edge_willmore(*__M, constraints, 2e-1, blocks);
+    std::cout << "init area" << std::endl;
+    init_weighted_area(*__M, constraints, 1e-3, blocks);
 
     real eps = 1.0 * __surf->_Cc;
 
     hepworth::block::init_pnt_tri_collisions(
-        *__M, *__surf, constraints, x, 0.5 * eps, 0.5 * eps, 1.0, {Xs, Xs});
+        *__M, *__surf, constraints, xs, 0.5 * eps, 0.5 * eps, 1.0, {Xs, Xs});
 
     solver.set_constraints(constraints);
 
     solver.step(blocks, _h, 0.9, 30);
   }
 
-  void step_sdf(int frame) {
-    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-
-    for (int k = 0; k < 5; k++) {
-      std::vector<vec3> f = compute_ribbon_sdf();
-      for (int i = 0; i < x.size(); i++) {
-        x[i] += _h * f[i];
-      }
-      __surf->step(true);
-    }
-  }
-
   void step(int frame) {
     std::cout << "frame: " << frame << std::endl;
+    std::cout << "  -surface" << std::endl;
+    std::cout << "    -corners: " << __M->corner_count() << std::endl;
+    std::cout << "    -verts: " << __M->vert_count() << std::endl;
+    std::cout << "    -faces: " << __M->face_count() << std::endl;
+    std::cout << "  -curve" << std::endl;
+    std::cout << "    -verts: " << __R->x().size() << std::endl;
+
     // walk(__surf->_Cc);
-    step_dynamics(frame);
-    for (int k = 0; k < 3; k++) {
-      __surf->step(true);
-      __Rd->step();
+    if (frame < 600) {
+      step_dynamics(frame);
+      for (int k = 0; k < 3; k++) {
+        __surf->step(true);
+        __Rd->step();
+      }
     }
+    if (frame > 1000)
+      exit(0);
     // step_sdf(frame);
   }
   // std::map<index_t, index_t> _rod_adjacent_edges;

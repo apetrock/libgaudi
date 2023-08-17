@@ -89,12 +89,10 @@ public:
     for (int k = 0; k < ITS; k++) {
       p.setZero();
       int ii = 0;
-#pragma omp parallel
-      {
-#pragma omp for
-        for (int i = 0; i < _constraints.size(); i++) {
-          auto &constraint = _constraints[i];
-          constraint->project(q, p);
+#pragma omp parallel for
+      for (int i = 0; i < _constraints.size(); i++) {
+        auto &constraint = _constraints[i];
+        constraint->project(q, p);
 #if 0
         if (q.hasNaN() || p.hasNaN()) {
           std::cout << "q has NaN: "
@@ -102,8 +100,7 @@ public:
           exit(0);
         }
 #endif
-          ii++;
-        }
+        ii++;
       }
       if (q.hasNaN()) {
         std::cout << "q has NaN" << std::endl;
@@ -119,6 +116,13 @@ public:
       vecX b = M * s + A.transpose() * p;
 
       q = S.solve(b);
+
+      if (k % 10 == 0)
+        std::cout << "k: " << k << " -norms: "
+                  << " p-" << p.norm() //
+                  << " q-" << q.norm() //
+                  << " s-" << s.norm() << std::endl;
+
       if (q.hasNaN()) {
         std::cout << "q has NaN" << std::endl;
         exit(0);

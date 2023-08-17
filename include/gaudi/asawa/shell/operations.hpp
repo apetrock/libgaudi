@@ -657,6 +657,7 @@ std::array<index_t, 4> merge_edge(shell &M,               //
   return out;
 }
 
+template <int S>
 std::vector<index_t> get_pack_permutation(std::vector<index_t> &indices) {
   std::vector<index_t> perm(indices.size());
   std::iota(perm.begin(), perm.end(), 0);
@@ -665,13 +666,16 @@ std::vector<index_t> get_pack_permutation(std::vector<index_t> &indices) {
   //-----------xxxxxxx----x------
   //           |      |
 
-  for (int r = 1; r < indices.size(); r++) {
-    if (indices[perm[r - 1]] < 0 && indices[perm[r]] > -1 &&
+  for (int r = S; r < indices.size(); r += S) {
+    if (indices[perm[r - S]] < 0 && indices[perm[r]] > -1 &&
         indices[perm[w]] < 0) {
-      std::swap(perm[r], perm[w]);
-      w++;
+      for (int i = 0; i < S; i++) {
+        std::swap(perm[r + i], perm[w + i]);
+      }
+      // std::swap(perm[r], perm[w]);
+      w += S;
     } else if (indices[perm[w]] > -1) {
-      w++;
+      w += S;
     }
   }
   return perm;
@@ -728,7 +732,7 @@ void pack(shell &M) {
     std::cout << std::endl;
   };
 
-  std::vector<index_t> vperm = get_pack_permutation(M.vert_begin());
+  std::vector<index_t> vperm = get_pack_permutation<1>(M.vert_begin());
   std::vector<index_t> viperm = inverse_permutation(vperm);
 
   apply_permutation(vperm, M.vert_begin());
@@ -746,7 +750,7 @@ void pack(shell &M) {
   // debug(M.vert_begin(), std::string(" after v"));
   // debug(M.corners_vert(), std::string(" after c"));
 
-  std::vector<index_t> fperm = get_pack_permutation(M.face_begin());
+  std::vector<index_t> fperm = get_pack_permutation<1>(M.face_begin());
   std::vector<index_t> fiperm = inverse_permutation(fperm);
 
   apply_permutation(fperm, M.face_begin());
@@ -761,6 +765,32 @@ void pack(shell &M) {
     }
   }
 
+#if 0
+  std::vector<index_t> cperm = get_pack_permutation<2>(M.corners_next());
+  std::vector<index_t> ciperm = inverse_permutation(cperm);
+
+  apply_permutation(cperm, M.corners_next());
+  apply_permutation(cperm, M.corners_prev());
+  apply_permutation(cperm, M.corners_face());
+  apply_permutation(cperm, M.corners_vert());
+
+  apply_inverse_permutation(ciperm, M.face_begin());
+  apply_inverse_permutation(ciperm, M.vert_begin());
+  size_t Nc = calc_new_size(M.corners_next());
+  M.corners_next().resize(Nc);
+  M.corners_prev().resize(Nc);
+  M.corners_face().resize(Nc);
+  M.corners_vert().resize(Nc);
+
+  for (auto d : M.get_data()) {
+    if (d->type() == CORNER) {
+      d->permute(cperm);
+      d->resize(Nc);
+    }
+  }
+#endif
+
+  std::cout << "*--- done ---*" << std::endl;
   // std::cout << std::flush;
 }
 
