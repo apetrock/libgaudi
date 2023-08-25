@@ -716,12 +716,10 @@ void apply_inverse_permutation(const std::vector<index_t> &iperm,
 
 void pack(shell &M) {
 
-  index_t s = 0;
-  index_t e = s + 16;
-
   std::cout << "*--- packing ---*" << std::endl;
 
-  auto debug = [s, e](const std::vector<index_t> indices, std::string txt) {
+  auto debug = [](const std::vector<index_t> indices, index_t s = 732,
+                  index_t e = 764, std ::string txt = "") {
     std::cout << txt << ": ";
     for (int i = s; i < e /*__corners_next.size()*/; i++) {
       if (indices[i] < 0)
@@ -765,14 +763,24 @@ void pack(shell &M) {
     }
   }
 
-#if 0
+#if 1
+
   std::vector<index_t> cperm = get_pack_permutation<2>(M.corners_next());
   std::vector<index_t> ciperm = inverse_permutation(cperm);
+  index_t s = 732;
+  index_t e = 764;
+  debug(cperm, s, e, "cperm: ");
+  debug(ciperm, s, e, "ciperm: ");
 
+  debug(M.corners_face(), s, e, "corners_f, before: ");
   apply_permutation(cperm, M.corners_next());
   apply_permutation(cperm, M.corners_prev());
   apply_permutation(cperm, M.corners_face());
   apply_permutation(cperm, M.corners_vert());
+  debug(M.corners_face(), s, e, "corners_f, after: ");
+
+  apply_inverse_permutation(ciperm, M.corners_next());
+  apply_inverse_permutation(ciperm, M.corners_prev());
 
   apply_inverse_permutation(ciperm, M.face_begin());
   apply_inverse_permutation(ciperm, M.vert_begin());

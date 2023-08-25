@@ -49,11 +49,19 @@ public:
     vec3 dq = q1 - q0;
 
     real l = dq.norm();
+    l = std::max(l, 1e-4);
     dq /= l;
     // std::cout << l << " " << _l << " " << l / _l << std::endl;
     //   gg::geometry_logger::line(q0, q0 + 0.01 * l / _l * dq,
     //                             vec4(1.0, 0.0, 0.0, 1.0));
+
     l = std::clamp(l / _l, 0.1, 2.0);
+    if ((_w * _g * l * dq).hasNaN()) {
+      std::cout << "--" << std::endl;
+      std::cout << q0.transpose() << " " << q1.transpose() << std::endl;
+      std::cout << _w << " g: " << _g << " l:" << l << " _l: " << _l
+                << std::endl;
+    }
     p.block(_id0, 0, 3, 1) = _w * _g * l * dq;
   }
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {

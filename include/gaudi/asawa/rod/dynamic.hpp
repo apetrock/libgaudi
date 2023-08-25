@@ -170,10 +170,7 @@ public:
     quat x0 = x[c0];
     quat x1 = x[c1];
     quat xnew = va::slerp(x0, x1, 0.5);
-    if (xnew.coeffs().hasNaN()) {
-      std::cout << c0 << " " << c1 << ": " << x0 << " " << x1 << std::endl;
-      exit(0);
-    }
+    // quat xnew = va::exp_slerp(x0, x1, 0.5);
     set<quat>(cnew, xnew, x);
   }
 

@@ -475,11 +475,21 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
     cstack.pop();
     const Node &cnode = s_tree.nodes[cId];
 
-    if (expanding_rad) {
+    if (expanding_rad && cnode.size > 0) {
       real d = ext::distance(extT, cnode.half.cen);
       tol = std::min(tol, d);
+      tol = std::max(tol, cnode.half.mag);
       extT = calc_extents<ST>(idT, t_inds, t_verts);
       extT = ext::inflate(extT, tol);
+#if 0
+      if (idT == 17260) {
+
+        std::cout << "d/tol: " << d << " " << tol << std::endl;
+        vec3 cT = 0.5 * (extT[0] + extT[1]);
+        gg::geometry_logger::line(cT, cnode.half.cen, vec4(0.0, 1.0, 0.0, 1.0));
+        gg::geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
+      }
+#endif
     }
 
     if (cnode.children[0] == -1 && cnode.children[1] == -1) {
@@ -495,15 +505,16 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
 
           continue;
         }
-
-        if (idT == 1000 && 0) {
+#if 0
+        if (idT == 15978 && 0) {
+          std::cout << "idS: " << idS << std::endl;
           vec3 cT = 0.5 * (extT[0] + extT[1]);
           vec3 cS = 0.5 * (extS[0] + extS[1]);
           gg::geometry_logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
           gg::geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
           gg::geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
         }
-
+#endif
         real dist = testAB(idT, t_inds, t_verts, //
                            idS, s_tree.indices(), s_tree.verts());
 
@@ -530,8 +541,15 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
 
   if (dmin < tol) {
     collisions.push_back(idMin);
-  } else
+  } else {
     collisions.push_back(-1);
+#if 0
+    if (expanding_rad) {
+      std::cout << "no collisions:" << idT << std::endl;
+      // exit(0);
+    }
+#endif
+  }
 
   return collisions;
 };

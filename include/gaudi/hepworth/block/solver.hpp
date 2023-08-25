@@ -76,10 +76,26 @@ public:
     A.setFromTriplets(triplets.begin(), triplets.end());
     matS AtA = A.transpose() * A;
     matS MAtA = M + AtA;
-    // avoid singularity
-    // Eigen::SparseMatrix<double> I(MAtA.rows(), MAtA.cols());
-    // MAtA += 1e-6 * I;
+
+#if 1
+    vecX z = vecX::Zero(MAtA.rows());
+    if ((MAtA * z).hasNaN()) {
+      std::cout << "MAtA has NaN" << std::endl;
+      exit(0);
+    }
+#endif
+
     m_solver S(MAtA);
+    if (!S.success()) {
+      Eigen::SparseMatrix<double> I(MAtA.rows(), MAtA.cols());
+      MAtA += 1e-6 * I;
+      S.compute(MAtA);
+    }
+    if (!S.success()) {
+      std::cout << "Solve failed" << std::endl;
+      return;
+    }
+
     std::cout << "A   sum: " << A.sum() << std::endl;
     std::cout << "AtA sum: " << AtA.sum() << std::endl;
     std::cout << "M sum: " << M.sum() << std::endl;
@@ -89,15 +105,22 @@ public:
     for (int k = 0; k < ITS; k++) {
       p.setZero();
       int ii = 0;
-#pragma omp parallel for
+      // #pragma omp parallel for
       for (int i = 0; i < _constraints.size(); i++) {
         auto &constraint = _constraints[i];
         constraint->project(q, p);
-#if 0
-        if (q.hasNaN() || p.hasNaN()) {
-          std::cout << "q has NaN: "
-                    << "ii - " << constraint->name() << std::endl;
-          exit(0);
+#if 1
+        if (i < _constraints.size() - 1) {
+          index_t id0 = _constraints[i]->_id0;
+          index_t id1 = _constraints[i + 1]->_id0;
+          vecX pi = p.segment(id0, id1 - id0);
+          if (pi.hasNaN()) {
+            std::cout << i << " " << _constraints.size() << std::endl;
+            std::cout << "q has NaN: "
+                      << "ii - " << id0 << " " << id1 - id0 << " " << p.size()
+                      << " " << constraint->name() << std::endl;
+            exit(0);
+          }
         }
 #endif
         ii++;

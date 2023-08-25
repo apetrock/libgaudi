@@ -30,7 +30,7 @@
 
 #include "gaudi/asawa/shell/asset_loader.hpp"
 
-#include "gaudi/calder/tree_code.hpp"
+#include "gaudi/calder/rod_integrators.hpp"
 
 #include <array>
 
@@ -133,6 +133,56 @@ public:
     __Rd = rod::dynamic::create(__R, 0.25 * lavg, 2.5 * lavg, 0.25 * lavg);
   }
 
+#if 1
+  std::vector<vec3> compute_coulomb_gradient() {
+    real eps = __Rd->_Cc;
+    std::vector<vec3> &x = __R->x();
+    std::vector<vec3> xc = __R->xc();
+
+    std::vector<vec3> g0 = calder::coulomb_force(*__R, x, 1.0 * eps, 4.0);
+    for (int i = 0; i < g0.size(); i++) {
+      gg::geometry_logger::line(x[i], x[i] + 1.0e-5 * g0[i],
+                                vec4(0.6, 0.0, 0.8, 1.0));
+      g0[i] *= -1.0e-3;
+    }
+    return g0;
+  }
+#endif
+
+#if 1
+  std::vector<vec3> compute_null_coulomb_gradient() {
+    real eps = __Rd->_Cc;
+    std::vector<vec3> &x = __R->x();
+    std::vector<vec3> xc = __R->xc();
+
+    std::vector<vec3> g0 = calder::null_coulomb_force(*__R, x, 1.0 * eps, 6.0);
+    for (int i = 0; i < g0.size(); i++) {
+      gg::geometry_logger::line(x[i], x[i] + 1.0e-9 * g0[i],
+                                vec4(0.6, 0.0, 0.8, 1.0));
+      g0[i] *= -5.0e-8;
+    }
+    return g0;
+  }
+#endif
+
+#if 1
+  std::vector<vec3> compute_tangent_point_gradient() {
+    real eps = __Rd->_Cc;
+    std::vector<vec3> &x = __R->x();
+    std::vector<real> l = __R->l0();
+    std::vector<vec3> T = __R->N2c();
+    std::vector<vec3> xc = __R->xc();
+
+    std::vector<vec3> g0 =
+        calder::tangent_point_force(*__R, x, l, T, 1.0 * eps, 6.0);
+    for (int i = 0; i < g0.size(); i++) {
+      // gg::geometry_logger::line(x[i], x[i] + 1.0e-7 * g0[i],
+      //                           vec4(0.6, 0.0, 0.8, 1.0));
+      g0[i] *= -1.0e-6;
+    }
+    return g0;
+  }
+#endif
   void step_dynamics(int frame) {
 
     hepworth::block::projection_solver solver;
@@ -142,7 +192,7 @@ public:
     std::vector<real> &l0 = __R->__l0;
     std::vector<real> lp(l0);
     real h = 0.1;
-    real bnd = 2.0;
+    real bnd = 1.0;
     real s_vol = 4.0 / 3.0 * M_PI * pow(bnd, 3.0);
     real r_vol = __R->get_total_volume();
     real k = 0.1;
@@ -151,12 +201,17 @@ public:
     real att = t0 + (t1 - t0) / (1.0 + exp(-k * (r_vol)));
 
     std::vector<vec3> f(__R->__v.size(), vec3::Zero());
+    // std::vector<vec3> fr = compute_coulomb_gradient();
+    // std::vector<vec3> fr = compute_null_coulomb_gradient();
+    std::vector<vec3> fr = compute_tangent_point_gradient();
+
     for (int i = 0; i < __R->__x.size(); i++) {
       vec3 x = __R->__x[i];
       real xn = x.norm();
       if (xn > bnd) {
         f[i] = -0.01 * (xn - bnd) / h / h * x;
       }
+      f[i] += fr[i];
       // f[i] += 1e-1 * vec3::Random();
     }
 
@@ -172,16 +227,16 @@ public:
       l *= att;
     // hepworth::rod::init_smooth(*__R, constraints, 0.2);
     // hepworth::rod::init_cylinder(*__R, constraints, 0.1);
-    hepworth::block::init_stretch_shear(*__R, constraints, l0, 0.25, {x, u});
-    hepworth::block::init_bend_twist(*__R, constraints, 0.1, {u});
+    hepworth::block::init_stretch_shear(*__R, constraints, l0, 0.2, {x, u});
+    hepworth::block::init_bend_twist(*__R, constraints, 0.05, {u});
     //  hepworth::rod::init_smooth_bend(*__R, constraints, 0.01);
-#if 1
+#if 0
     hepworth::block::init_angle(*__R, constraints, vec3(1.0, 0.0, 0.0),
-                                0.25 * M_PI, 0.05, {u});
+                                0.20 * M_PI, 0.05, {u});
     // hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
     //                           0.33 * M_PI, 0.1, {u});
-    hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.5, 1.0),
-                                0.33 * M_PI, 0.1, {u});
+    hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
+                                0.30 * M_PI, 0.1, {u});
 #endif
     hepworth::block::init_collisions(*__R, *__Rd, constraints, 1.0, {x, x});
     solver.set_constraints(constraints);

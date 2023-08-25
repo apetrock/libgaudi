@@ -13,7 +13,9 @@
 #include <cmath>
 #include <complex>
 #include <iostream>
+#include <iterator>
 #include <math.h>
+#include <unsupported/Eigen/MatrixFunctions>
 #include <vector>
 #ifndef __VECADD__
 #define __VECADD__
@@ -1027,60 +1029,127 @@ template <typename T> QUAT<T> slerp0(QUAT<T> a, QUAT<T> b, float t) {
 
 template <typename T> QUAT<T> slerp(QUAT<T> a, QUAT<T> b, float t) {
   T dotAB = a.dot(b);
-  dotAB = abs(dotAB);
+  // dotAB = abs(dotAB);
 
   if (dotAB < 0.0) {
     b.coeffs() *= -1.0;
-    dotAB *= 1.0;
+    dotAB *= -1.0;
   }
 
   // b.coeffs() *= sgn(dotAB);
   // dotAB *= sgn(dotAB);
-  if (dotAB < 0.9995f) {
+  if (abs(dotAB) < 1.0 - 1.0e-6) {
     // T s_ab = sqrt(1.0 - dotAB * dotAB); //   Sine of relative angle
     // T theta = atan2(s_ab, dotAB);
 
-    T theta = acosf(dotAB);
+    T theta = acos(dotAB);
 
-    T sinTheta = sinf(theta);
-    T af = sinf((1.0f - t) * theta) / sinTheta;
-    T bf = sinf(t * theta) / sinTheta;
+    T sinTheta = std::sin(theta);
+    T af = std::sin((1.0 - t) * theta) / sinTheta;
+    T bf = std::sin(t * theta) / sinTheta;
     return QUAT<T>(af * a.coeffs() + bf * b.coeffs());
   } else {
-    T af = 1.0f - t;
+    T af = 1.0 - t;
     T bf = t;
     return QUAT<T>(af * a.coeffs() + bf * b.coeffs());
   }
 }
 
-template <typename T> QUAT<T> Reciprocal(QUAT<T> q) {
-  return QUAT<T>(q.conjugate().coeffs() * (1.0f / q.dot(q)));
+template <typename T> MAT3<T> exp_slerp(MAT3<T> Ma, MAT3<T> Mb, T t) {
+
+  // Interpolate rotation matrices using exponential map
+  MAT3<T> MaMb = Mb * Ma.transpose();
+  MAT3<T> Mt = (t * MaMb.log()).exp() * Ma;
+
+  // Convert the interpolated rotation matrix back to quaternion
+  return Mt;
 }
 
-template <typename T> QUAT<T> Exp(QUAT<T> q) {
-  double b = q.vec().norm();
+/*
+template <typename T> QUAT<T> qexp(QUAT<T> q) {
+  T w = q.w();
+  VEC3<T> v = q.vec();
+  T vnorm = v.norm();
+  T expw = exp(w);
+  v = expw * v / vnorm * std::sin(vnorm);
+  w = expw * std::cos(vnorm);
+  return QUAT<T>(w, v[0], v[1], v[2]);
+}
 
-  if (fabs(b) <= 1.0e-14 * abs(q.w()))
-    return QUAT<T>(exp(q.w()), 0.0f, 0.0f, 0.0f);
-  else {
-    T e = exp(q.w());
-    T f = std::sin(b) / b;
+template <typename T> QUAT<T> qlog(QUAT<T> q) {
+  T w = q.w();
+  VEC3<T> v = q.vec();
+  T qnorm = q.norm();
+  T vnorm = v.norm();
+  T expw = exp(w);
+  w = log(qnorm);
+  v = v / vnorm * std::acos(w / qnorm);
 
-    return QUAT<T>(e * std::cos(b), //
-                   e * f * q.x(),   //
-                   e * f * q.y(),   //
-                   e * f * q.z());
+  return QUAT<T>(w, v[0], v[1], v[2]);
+}
+*/
+
+/// Return logarithm of a rotor.
+template <typename T> QUAT<T> qlog(QUAT<T> q) {
+  /// This function is just like the standard log function, except
+  /// that a negative scalar does not raise an exception; instead, the
+  /// scalar pi is returned.
+
+  QUAT<T> Result;
+  VEC3<T> vec = q.vec();
+  T w = q.w();
+  const T b = vec.norm();
+  if (std::abs(b) <= 1e-8 * std::abs(w)) {
+    if (w < 0.0) {
+      Result.x() = M_PI;
+      if (std::abs(w + 1) > 1e-8) {
+        Result.w() = std::log(-w);
+      }
+    } else {
+      Result.w() = std::log(w);
+    }
+  } else {
+    T v = std::atan2(b, w);
+    T f = v / b;
+    Result.w() = std::log(w * w + b * b) / 2.0;
+    // Result.w = std::log(w/std::cos(v)); // Not nice for unit vectors
+    // [w=cos(v)=0]
+    Result.x() = f * q.x();
+    Result.y() = f * q.y();
+    Result.z() = f * q.z();
   }
+  return Result;
 }
 
-template <typename T> QUAT<T> slerp_far(QUAT<T> q0, QUAT<T> q1, float t) {
-  QUAT<T> q01 = Reciprocal(q0) * q1;
-  QUAT<T> Vdash(0.0, q01.x(), q01.y(), q01.z());
-  QUAT<T> V = QUAT<T>(Vdash.coeffs() * (1.0f / Vdash.norm()));
-  T theta = 2.0f * atan2f(Vdash.norm(), q01.w());
-  T CompTheta = theta - 2.0f * M_PI;
+/// Return exponent of Quaternion.
+template <typename T> QUAT<T> qexp(QUAT<T> q) {
+  QUAT<T> Result;
+  VEC3<T> vec = q.vec();
+  T w = q.w();
+  const T b = vec.norm();
+  if (std::abs(b) <= 1e-8 * std::abs(w)) {
+    Result.w() = std::exp(w);
+  } else {
+    const T e = std::exp(w);
+    const T f = std::sin(b) / b; // Note: b is never 0.0 at this point
+    Result.w() = e * std::cos(b);
+    Result.x() = e * f * q.x();
+    Result.y() = e * f * q.y();
+    Result.z() = e * f * q.z();
+  }
+  return Result;
+}
 
-  return q1 * Exp(QUAT<T>(t * CompTheta * V.coeffs() * 0.5f));
+template <typename T> QUAT<T> exp_slerp(QUAT<T> qa, QUAT<T> qb, T t) {
+  qa.normalize();
+  qb.normalize();
+  QUAT<T> qla = qlog(qa);
+  QUAT<T> qlb = qlog(qb);
+  QUAT<T> qo = qexp(qla.slerp(t, qlb));
+  if (qo.coeffs().hasNaN())
+    qo = slerp(qa, qb, t);
+  return qo;
+  // return qexp(mix(t, qla, qlb));
 }
 
 } // namespace va

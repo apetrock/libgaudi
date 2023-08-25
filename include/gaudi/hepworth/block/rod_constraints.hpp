@@ -169,14 +169,17 @@ public:
 
     quat ui = _blocks[0]->get_quat(ii, q);
     quat uj = _blocks[0]->get_quat(jj, q);
-
     // vec3 ov = 0.5 * (ui.conjugate() * uj).vec().normalized();
     // quat om = quat(0.0, ov.x(), ov.y(), ov.z());
     // ui = ui * om;
     // uj = uj * om.conjugate();
 
     // quat uij = ui.slerp(0.5, uj);
+    // quat uij = va::exp_slerp(ui, uj, 0.5);
     quat uij = va::slerp(ui, uj, 0.5);
+
+    uij.normalize();
+
     // std::cout << "u: " << uij.coeffs().transpose() << std::endl;
     if (uij.coeffs().hasNaN()) {
       std::cout << __PRETTY_FUNCTION__ << " uij is nan" << std::endl;

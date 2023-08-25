@@ -325,6 +325,7 @@ public:
     index_t iB0 = _blocks[1]->get_offset_idx(this->_ids[1]);
     index_t iB1 = _blocks[1]->get_offset_idx(this->_ids[2]);
     // return;
+
     for (int ax = 0; ax < 3; ax++)
       triplets.push_back(trip(_id0 + ax, iA + ax, _w));
     id0 += 3;

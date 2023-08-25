@@ -117,10 +117,14 @@ std::vector<real> from(vecX U) {
 
 class m_solver {
 public:
-  m_solver(matS &A) {
+  m_solver(matS &A) { this->compute(A); }
+
+  void compute(matS &A) {
+    _decomposed = false;
     __solver.compute(A);
-    if (__solver.info() != Eigen::Success) {
-      // decomposition failed
+    if (__solver.info() == Eigen::Success) {
+      _decomposed = true;
+    } else {
       std::cout << ".....decomposition error! " << std::endl;
     }
   }
@@ -132,7 +136,10 @@ public:
     }
     return x;
   }
+
+  bool success() { return _decomposed; }
   Eigen::SimplicialLDLT<matS> __solver;
+  bool _decomposed = false;
 };
 
 vecX solve(matS &A, vecX &b) {

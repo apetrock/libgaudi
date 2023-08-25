@@ -185,7 +185,7 @@ public:
 
   vec3 align_walk(const vec3 x0, const vec3 &d0, const vec3 &N0, real li,
                   const std::vector<vec3> walk,
-                  const std::vector<vec3> &normals, real eps = 1e-2) {
+                  const std::vector<vec3> &normals, real eps = 1e-1) {
     // dumb little test to see if I can align the walk to neighboring lines...
     // we'll do this N^2 for fun
     if (walk.size() < 16)
@@ -230,13 +230,13 @@ public:
     vec3 f0 = es.eigenvectors().col(2);
     real l1 = es.eigenvalues()[1] / ssum;
     vec3 f1 = es.eigenvectors().col(1);
-    // vec3 dir = va::sgn(d0, vec3(l0 * f0)) * l0 * f0;
-    vec3 dir = d0 + 1.6e-3 * va::sgn(d0, vec3(f0)) * l0 * f0;
-    dir += 1.5e0 * va::sgn(d0, vec3(f1)) * l1 * f1;
+    vec3 dir = va::sgn(d0, vec3(l0 * f0)) * l0 * f0;
+    // vec3 dir = d0 + 1.0e-5 * va::sgn(d0, vec3(f0)) * l0 * f0;
+    dir += 2.78e-0 * va::sgn(d0, vec3(f1)) * l1 * f1;
 
-    dir = R * dir;
-    // dir += 1e-10 * va::sgn(d0, vec3(l0 * f1)) * l1 * f1;
-    //     dir -= 1.0e-2 * va::sgn(d0, f1) * l1 * f1;
+    // dir = R * dir;
+    //  dir += 1e-10 * va::sgn(d0, vec3(l0 * f1)) * l1 * f1;
+    //      dir -= 1.0e-2 * va::sgn(d0, f1) * l1 * f1;
 
     // dir = va::sgn(dir.dot(d0)) * dir;
     dir.normalize();
@@ -250,19 +250,19 @@ public:
 
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     real a = asawa::shell::angle(*__M, ci, x);
-    return Eigen::AngleAxis<real>(1.1e-2 * cos(a) * li * M_PI, N0) * d0;
+    return Eigen::AngleAxis<real>(1.1e-1 * cos(-2.0 * a) * li * M_PI, N0) * d0;
   }
 
   std::vector<vec3> walk(real eps) {
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     std::vector<vec3> &v = asawa::get_vec_data(*__M, 1);
-    index_t test = 907;
+    index_t test = 50;
 
     vec3 N = asawa::shell::edge_normal(*__M, test, x);
     vec3 T = asawa::shell::edge_tangent(*__M, test, x).normalized();
     vec3 B = N.cross(T).normalized();
 
-    real thet = 0.0 * M_PI;
+    real thet = 0.85 * M_PI;
 
     vec3 dir = std::cos(thet) * T + std::sin(thet) * B;
     std::vector<index_t> corners;
@@ -271,7 +271,7 @@ public:
     std::vector<vec3> normals;
     real l = 0.0;
 
-    asawa::shell::walk(*__M, x, test, dir, 0.5, 10000, 1e-8,
+    asawa::shell::walk(*__M, x, test, dir, 0.5, 5000, 1e-8,
                        [&](const asawa::shell::shell &M,
                            const std::vector<vec3> &x, const index_t &corner,
                            const real &s, const real &accumulated_length,
@@ -284,8 +284,8 @@ public:
                          real li = 0.0;
                          if (points.size() > 0)
                            li = (pt - points.back()).norm();
-                         // dir = align_walk(pt, dir, Ni, li, points, normals);
-                         dir = rotate_walk(corner, dir, Ni, li);
+                         dir = align_walk(pt, dir, Ni, li, points, normals);
+                         // dir = rotate_walk(corner, dir, Ni, li);
 
                          points.push_back(pt);
                          normals.push_back(Ni);
@@ -465,7 +465,7 @@ public:
 
     std::vector<index_t> edge_verts_R = R.get_edge_vert_ids();
     std::vector<index_t> edge_map_R = R.get_edge_map();
-    real eps = 6.0 * shell_d._Cm;
+    real eps = 2.0 * shell_d._Cm;
 
     std::vector<vec3> Nr = get_rod_normals(R, M, eps);
     std::vector<vec3> Nr0 = R.N1();
@@ -477,7 +477,7 @@ public:
 
     // auto g_d = calc_rod_dist_grad(R, M, 2.0 * eps);
 
-    auto g_d = calc_rod_dist_grad_1(R, M, 0.25 * eps, 4);
+    auto g_d = calc_rod_dist_grad_1(R, M, 0.5 * eps, 4);
 
     vector<std::array<index_t, 4>> sr_collisions =
         rod_d.get_collisions(edge_verts_M, x1, eps);
@@ -511,9 +511,6 @@ public:
 
       std::array<real, 3> d = va::distance_Segment_Segment(xr0, xr1, xs0, xs1);
 
-      if (d[0] > 5.0e-3 * eps)
-        continue;
-
       real g_di = va::mix(d[1], g_d[vr0], g_d[vr1]);
       vec3 xr = va::mix(d[1], xr0, xr1);
       vec3 xs = va::mix(d[2], xs0, xs1);
@@ -525,39 +522,39 @@ public:
 
       real is_perp = pow(Ns.dot(dx.normalized()), 2.0);
 
-      if (is_perp < 0.75 || d[0] > 1.0e-1 * eps)
-        continue;
+      if ((is_perp > 0.75 && d[0] < 1.5 * eps)) {
 
-      // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
+        // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
 
-      real lr = (xr1 - xr0).norm();
-      vec3 Nri0 = Nr[vr0].normalized();
-      vec3 Nri1 = Nr[vr1].normalized();
-      vec3 Nri = va::mix(d[1], Nri0, Nri1);
+        real lr = (xr1 - xr0).norm();
+        vec3 Nri0 = Nr[vr0].normalized();
+        vec3 Nri1 = Nr[vr1].normalized();
+        vec3 Nri = va::mix(d[1], Nri0, Nri1);
 
-      vec3 Nr0i0 = Nr0[vr0].normalized();
-      vec3 Nr0i1 = Nr0[vr1].normalized();
-      vec3 Nr0i = va::mix(d[1], Nr0i0, Nr0i1);
-      /*
-      real lbound = 1e-8;
-      real ubound = 1.0 - lbound;
-      if (d[2] < lbound)
-        continue;
-      if (d[2] > ubound)
-        continue;
-  */
-      // gg::geometry_logger::line(xs, xs + 1.0 * g_di * dr,
-      //                           vec4(0.5, 0.5, 1.0, 1.0));
-      _adjacent.insert(M.find_edge_from_verts(vs0, vs1));
-      // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
+        vec3 Nr0i0 = Nr0[vr0].normalized();
+        vec3 Nr0i1 = Nr0[vr1].normalized();
+        vec3 Nr0i = va::mix(d[1], Nr0i0, Nr0i1);
+        /*
+        real lbound = 1e-8;
+        real ubound = 1.0 - lbound;
+        if (d[2] < lbound)
+          continue;
+        if (d[2] > ubound)
+          continue;
+    */
+        // gg::geometry_logger::line(xs, xs + 1.0 * g_di * dr,
+        //                           vec4(0.5, 0.5, 1.0, 1.0));
+        _adjacent.insert(M.find_edge_from_verts(vs0, vs1));
+        // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
 
-      hepworth::block::edge_edge_weld::ptr constraint =
-          hepworth::block::edge_edge_weld::create(
-              std::vector<index_t>({vr0, vr1, vs0, vs1}), wr, ws, blocks);
-      constraint->set_slide(d[1] + g_di);
+        hepworth::block::edge_edge_weld::ptr constraint =
+            hepworth::block::edge_edge_weld::create(
+                std::vector<index_t>({vr0, vr1, vs0, vs1}), wr, ws, blocks);
+        constraint->set_slide(d[1] + g_di);
 
-      // constraint->set_rotate_to(0.001, Nri, Nr0i);
-      constraints.push_back(constraint);
+        // constraint->set_rotate_to(0.001, Nri, Nr0i);
+        constraints.push_back(constraint);
+      }
     }
 #endif
   }
@@ -591,7 +588,7 @@ public:
     std::vector<index_t> edge_map_M = M.get_edge_map();
 
     vector<std::array<index_t, 3>> sr_collisions =
-        rod_d.get_vert_collisions(verts_M, xv, 999.9);
+        rod_d.get_vert_collisions(verts_M, xv, 999999.9);
 
     for (auto &c : sr_collisions) {
 
@@ -761,110 +758,57 @@ public:
     asawa::rod::dynamic &Rd = *__Rd;
 
     std::vector<vec3> x_s = asawa::get_vec_data(M, 0);
+    std::vector<vec3> x_s_f = asawa::shell::face_centers(M, x_s);
     const std::vector<vec3> &x_r = R.x();
 
     real eps = Md._Cc;
 
     std::vector<vec3> Nr = get_rod_normals(R, M, eps);
 
-    std::vector<real> Q = calder::quadric_sdf(R, Nr, x_s, eps);
-    std::vector<vec3> Ns = asawa::shell::vertex_normals(*__M, x_s);
+    std::vector<real> Q = calder::quadric_sdf(R, Nr, x_s_f, eps);
+    // std::vector<vec3> N_s = asawa::shell::vertex_normals(*__M, x_s);
+    std::vector<vec3> N_s_f = asawa::shell::face_normals(*__M, x_s);
+
+#if 1
     int i = 0;
-    for (vec3 &N : Ns) {
-      N *= -1.0 / _h * Q[i];
-      // gg::geometry_logger::line(x_s[i], x_s[i] + 1.0 * N,
+    for (vec3 &N : N_s_f) {
+      N *= -1.0 * Q[i];
+      // gg::geometry_logger::line(x_s_f[i], x_s_f[i] + 1.0 * N,
       //                           vec4(1.0, 1.0, 0.0, 1.0));
       i++;
     }
-    return Ns;
-    /*
-    std::vector<vec3> Q = calder::quadric_sdf(R, Nr, x_s, eps);
-
-    // std::vector<vec3> Ns = asawa::shell::vertex_normals(*__M, x_s);
-    int i = 0;
-
-    for (vec3 &q : Q) {
-      gg::geometry_logger::line(x_s[i], x_s[i] + 2.0 * q,
+#endif
+    std::vector<vec3> Nss =
+        calder::mls_avg<vec3>(*__M, N_s_f, x_s, 2.0 * __surf->_Cc, 3.0);
+#if 0
+    i = 0;
+    for (vec3 &N : Nss) {
+      gg::geometry_logger::line(x_s[i], x_s[i] + 1.0 * N,
                                 vec4(1.0, 1.0, 0.0, 1.0));
-      q *= -1.0;
       i++;
     }
-    return Q;
-  */
+#endif
+    return Nss;
   }
 
+#if 1
   std::vector<vec3> compute_tangent_point_gradient() {
     real eps = __Rd->_Cc;
     std::vector<vec3> &x = __R->x();
+    std::vector<real> l = __R->l0();
+    std::vector<vec3> T = __R->N2c();
     std::vector<vec3> xc = __R->xc();
 
-    std::vector<vec3> g0 = calder::tangent_point_grad(*__R, 0.01 * eps, 6.0);
-
-    std::cout << "mls gf" << std::endl;
-    std::vector<vec3> g0v = __R->vert_val(g0);
-    std::vector<vec3> g1 =
-        calder::mls_avg<vec3>(*__R, g0v, xc, 0.01 * __surf->_Cc, 4.0);
-    std::vector<vec3> g1v = __R->vert_val(g1);
-
-    for (int i = 0; i < g1v.size(); i++) {
-
-      g1v[i] *= 1.0e1;
+    std::vector<vec3> g0 =
+        calder::tangent_point_force(*__R, x, l, T, 1.0 * eps, 6.0);
+    for (int i = 0; i < g0.size(); i++) {
+      // gg::geometry_logger::line(x[i], x[i] + 1.0e-7 * g0[i],
+      //                           vec4(0.6, 0.0, 0.8, 1.0));
+      g0[i] *= -2.0e-5;
     }
-    return g1v;
+    return g0;
   }
-
-  std::vector<vec3> compute_tangent_coulomb_gradient() {
-    real eps = __Rd->_Cc;
-    std::vector<vec3> &x = __R->x();
-    std::vector<vec3> xc = __R->xc();
-
-    std::vector<vec3> g0 = calder::tangent_coulomb(*__R, 1.0 * eps, 3.0);
-
-    std::cout << "mls gf" << std::endl;
-    std::vector<vec3> g0v = __R->vert_val(g0);
-    std::vector<vec3> g1 =
-        calder::mls_avg<vec3>(*__R, g0v, xc, 1.0 * __surf->_Cc, 3.0);
-    std::vector<vec3> g1v = __R->vert_val(g1);
-
-    for (int i = 0; i < g1v.size(); i++) {
-      gg::geometry_logger::line(x[i], x[i] - 0.02 * g1v[i],
-                                vec4(0.6, 0.0, 0.8, 1.0));
-      g1v[i] *= -125.0e1;
-    }
-    return g1v;
-  }
-
-  std::vector<vec3> compute_coulomb_gradient() {
-    real eps = __Rd->_Cc;
-    std::vector<vec3> &x = __R->x();
-    std::vector<vec3> xc = __R->xc();
-
-    std::vector<vec3> g0 = calder::coulomb_force(*__R, 1.0 * eps, 3.0);
-#if 0
-    for (int i = 0; i < gf.size(); i++) {
-      gg::geometry_logger::line(xf[i], xf[i] + 1e-9 * gf[i],
-                                vec4(0.5, 0.5, 0.0, 1.0));
-    }
 #endif
-    std::cout << "mls gf" << std::endl;
-    std::vector<vec3> g0v = __R->vert_val(g0);
-    std::vector<vec3> g1 =
-        calder::mls_avg<vec3>(*__R, g0v, xc, 1.0 * __surf->_Cc, 3.0);
-    std::vector<vec3> g1v = __R->vert_val(g1);
-
-    for (int i = 0; i < g1v.size(); i++) {
-      // std::cout << g[i] << std::endl;
-      // g[i] = compute_grad(dp[i], Nr[i], 2.0);
-      // g1v[i] *= 8e-1;
-
-      // gg::geometry_logger::line(x[i], x[i] + 0.1 *
-      // g1v[i],
-      //                           vec4(0.6, 0.0,
-      //                           0.8, 1.0));
-      g1v[i] *= -1.0e1;
-    }
-    return g1v;
-  }
 
   std::vector<real> get_dist_rod(const std::vector<index_t> &vert_ids,
                                  const std::vector<vec3> &x,
@@ -873,7 +817,7 @@ public:
     std::vector<vec3> &xr = __R->x();
     std::vector<real> df(x.size(), 0.0);
     vector<std::array<index_t, 3>> sr_collisions =
-        __Rd->get_vert_collisions(vert_ids, x, 999.9);
+        __Rd->get_vert_collisions(vert_ids, x, 99999.9);
     for (auto &c : sr_collisions) {
       index_t vs = c[0];
       index_t vr0 = c[1];
@@ -902,6 +846,14 @@ public:
 
     real eps = 2.0 * __surf->_Cc;
     std::vector<real> df = get_dist_rod(verts_F, xf, *__R, *__Rd);
+
+#if 0
+    for (int i = 0; i < df.size(); i++) {
+      gg::geometry_logger::line(xf[verts_F[i]],
+                                xf[verts_F[i]] + 0.1 * df[verts_F[i]] * Nf[i],
+                                vec4(0.0, 0.5, 1.0, 1.0));
+    }
+#endif
     std::transform(df.begin(), df.end(), df.begin(),
                    [w, eps](double x) { return max(x - 2.5 * eps, 0.0); });
     auto [min_it, max_it] = std::minmax_element(df.begin(), df.end());
@@ -911,12 +863,6 @@ public:
       return w * (x - vmin) / (vmax - vmin);
     });
 
-    /*
-    for (int i = 0; i < df.size(); i++) {
-      gg::geometry_logger::line(xf[i], xf[i] + 0.1 * df[i] * Nf[i],
-                                vec4(0.0, 0.5, 1.0, 1.0));
-    }
-*/
     hepworth::block::init_area(M, constraints, xv, df, blocks);
     // return g;
   }
@@ -928,6 +874,13 @@ public:
         std::cout << "nan at " << i << std::endl;
         exit(0);
       }
+    }
+  }
+  void step_quadric(int frame) {
+    std::vector<vec3> &xs = asawa::get_vec_data(*__M, 0);
+    std::vector<vec3> fs = calc_quadric_grad();
+    for (int i = 0; i < fs.size(); i++) {
+      xs[i] += _h * fs[i];
     }
   }
 
@@ -966,12 +919,12 @@ public:
     std::vector<hepworth::projection_constraint::ptr> constraints;
     //      std::vector<vec3> f = compute_ribbon_charge();
 
-    // fr = compute_tangent_point_gradient();
+    fr = compute_tangent_point_gradient();
     // fr = compute_coulomb_gradient();
     // fr = compute_tangent_coulomb_gradient();
 
     // fs = calc_bend_grad();
-    // test_ribbon_sdf();
+    // test_quadric_sdf();
     fs = calc_quadric_grad();
     // fs = calc_ribbon_sdf();
 
@@ -993,7 +946,7 @@ public:
     init_rod_shell_weld(*__R, *__Rd, //
                         *__M, *__surf,
                         fs, //
-                        constraints, 1.0, 1.5, {Xr, Xs});
+                        constraints, 1.0, 1.0, {Xr, Xs});
 #endif
 
 #if 0
@@ -1011,32 +964,32 @@ public:
 //                             1e-1 * M_PI, 1e-3, {Ur});
 #if 0
     hepworth::block::init_angle(*__R, constraints, vec3(1.0, 0.0, 0.0),
-                                0.075 * M_PI, 0.3, {Ur});
-    //hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
-    //                            0.05 * M_PI, 0.1, {Ur});
+                                0.25 * M_PI, 0.05, {Ur});
+    // hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
+    //                             0.05 * M_PI, 0.1, {Ur});
     hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
-                                0.1 * M_PI, 0.1, {Ur});
+                                0.22 * M_PI, 0.05, {Ur});
 #endif
-    hepworth::block::init_pinned(*__R, constraints, xr, 1.0e0, {Xr});
+    hepworth::block::init_pinned(*__R, constraints, xr, 1.0e-1, {Xr});
     std::cout << "main collisions" << std::endl;
 
     real offset = 1.0;
     offset = min(1.0 + 0.025 * real(frame), 8.0);
-    std::cout << "offset: " << offset << std::endl;
+    // std::cout << "offset: " << offset << std::endl;
     // offset = 12.0;
-    hepworth::block::init_collisions(*__R, *__Rd, constraints, 0.5, {Xr, Xr},
+    hepworth::block::init_collisions(*__R, *__Rd, constraints, 1.0, {Xr, Xr},
                                      offset);
 
-    hepworth::block::init_edge_strain(*__M, constraints, xs, l0, 1.0e-2, {Xs});
-    hepworth::block::init_bending(*__M, constraints, xs, 1.0e-2, {Xs});
+    hepworth::block::init_edge_strain(*__M, constraints, xs, l0, 5.0e-2, {Xs});
+    hepworth::block::init_bending(*__M, constraints, xs, 5.0e-2, {Xs});
     // hepworth::block::init_laplacian(*__M, constraints, x, 1, 1.0e-1, {Xs});
 
-    hepworth::block::init_edge_willmore(*__M, constraints, 2e-1, blocks);
+    hepworth::block::init_edge_willmore(*__M, constraints, 5e-1, blocks);
     std::cout << "init area" << std::endl;
     init_weighted_area(*__M, constraints, 1e-3, blocks);
 
+    std::cout << "init pnt trie collisions" << std::endl;
     real eps = 1.0 * __surf->_Cc;
-
     hepworth::block::init_pnt_tri_collisions(
         *__M, *__surf, constraints, xs, 0.5 * eps, 0.5 * eps, 1.0, {Xs, Xs});
 
@@ -1056,14 +1009,17 @@ public:
 
     // walk(__surf->_Cc);
     if (frame < 600) {
+      // step_quadric(frame);
       step_dynamics(frame);
-      for (int k = 0; k < 3; k++) {
-        __surf->step(true);
-        __Rd->step();
-      }
     }
-    if (frame > 1000)
+
+    if (frame > 1200)
       exit(0);
+
+    for (int k = 0; k < 3; k++) {
+      __surf->step(true);
+      __Rd->step();
+    }
     // step_sdf(frame);
   }
   // std::map<index_t, index_t> _rod_adjacent_edges;

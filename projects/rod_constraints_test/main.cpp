@@ -26,7 +26,7 @@
 #include "GaudiGraphics/geometry_logger.h"
 #include "GaudiGraphics/mesh_helper.hpp"
 #include "GaudiGraphics/viewer.hpp"
-//#include "gaudi/asawa/asawa.h"
+// #include "gaudi/asawa/asawa.h"
 
 #include "gaudi/duchamp/rod_constraints_test.hpp"
 
@@ -103,8 +103,9 @@ public:
   static AppPtr create(std::string file) { return std::make_shared<App>(file); }
 
   typedef double Real;
+  App(std::string file)
+      : gg::SimpleApp(1280, 720, 4.0, true, "rod_test_single_") {
 
-  App(std::string file) : gg::SimpleApp() {
     this->setScene(scene = Scene::create());
     this->initUI();
   }

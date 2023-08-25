@@ -524,6 +524,7 @@ public:
   }
 
   void fupdate(index_t f) {
+
     for_each_face(f, [f](index_t cid, shell &m) { m.set_face(cid, f); });
   }
 
