@@ -206,6 +206,13 @@ vec3 edge_tangent(const shell &M, index_t c0, const std::vector<vec3> &x) {
   return x[M.vert(c0)] - x[M.vert(M.next(c0))];
 }
 
+vec3 g_edge_tangent(const shell &M, index_t c0, const std::vector<vec3> &x) {
+  index_t c1 = M.other(c0);
+  real s = c0 % 2 == 0 ? 1.0 : -1.0;
+  vec3 tan = x[M.vert(c0)] - x[M.vert(M.next(c0))];
+  return s * tan;
+}
+
 vec3 edge_normal(const shell &M, index_t c0, const std::vector<vec3> &x) {
   index_t c1 = M.other(c0);
   vec3 N = face_normal(M, M.face(c0), x);
@@ -368,13 +375,41 @@ std::vector<real> face_areas(const shell &M, const std::vector<vec3> &x) {
 }
 
 template <typename TYPE>
+std::vector<TYPE> expand_from_vert_range(const shell &M,
+                                         const std::vector<TYPE> &x) {
+  auto v_range = M.get_vert_range();
+  std::vector<TYPE> x_exp(M.vert_count());
+  int i = 0;
+  for (auto vi : v_range) {
+    x_exp[vi] = x[i++];
+  }
+  return x_exp;
+}
+
+template <typename TYPE>
+std::vector<TYPE> compress_to_vert_range(const shell &M,
+                                         const std::vector<TYPE> &x) {
+  auto v_range = M.get_vert_range();
+  std::vector<TYPE> x_comp(v_range.size());
+  int i = 0;
+  for (auto vi : v_range) {
+    x_comp[i++] = x[vi];
+  }
+  return x_comp;
+}
+
+template <typename TYPE>
 std::vector<TYPE> vert_to_face(const shell &M, const std::vector<TYPE> &x) {
+  std::vector<TYPE> x_exp = expand_from_vert_range(M, x);
   auto range = M.get_face_range();
-  std::vector<TYPE> vals(range.size());
+  std::vector<TYPE> vals(M.face_count());
+  int i = 0;
   for (auto fi : range) {
     TYPE c = z::zero<TYPE>();
-    M.const_for_each_face(fi, [&c, &x](index_t c0, const shell &M) {
-      c += 0.33333 * x[M.vert(c0)];
+    M.const_for_each_face(fi, [&c, &x_exp](index_t c0, const shell &M) {
+      // std::cout << M.vert(c0) << " " << x_exp.size() << " " << M.vert_count()
+      //           << std::endl;
+      c += 0.33333 * x_exp[M.vert(c0)];
     });
     vals[fi] = c;
   }
@@ -429,6 +464,47 @@ ext::extents_t ext(const shell &M, const std::vector<vec3> &x) {
     ext = ext::expand(ext, x[vi]);
   }
   return ext;
+}
+
+std::vector<vec3> circulation(shell &M, const std::vector<real> &u,
+                              const std::vector<vec3> &x) {
+
+  ///////////////
+  // circulation
+  ///////////////
+
+  std::vector<index_t> edges = M.get_edge_range();
+
+  std::vector<vec3> circU(M.face_count(), vec3::Zero());
+
+  for (int i = 0; i < edges.size(); i++) {
+    index_t c0 = edges[i];
+    index_t c1 = M.other(c0);
+    vec3 x0 = x[M.vert(c0)];
+    vec3 x1 = x[M.vert(c1)];
+
+    real A0 = face_area(M, M.face(c0), x);
+    real A1 = face_area(M, M.face(c1), x);
+    real iA0 = A0 < 1e-6 ? 0.0 : 1.0 / A0;
+    real iA1 = A1 < 1e-6 ? 0.0 : 1.0 / A1;
+    vec3 e0 = edge_tangent(M, c0, x);
+    vec3 e1 = edge_tangent(M, c1, x);
+
+#if 0
+    real u0 = u[M.vert(c0)];
+    real u1 = u[M.vert(c1)];
+    real ui = 0.5 * (u0 + u1);
+    circU[M.face(c0)] += 0.5 * e0 * ui * iA0;
+    circU[M.face(c1)] += 0.5 * e1 * ui * iA1;
+#else
+    real u0 = u[M.vert(M.prev(c0))];
+    real u1 = u[M.vert(M.prev(c1))];
+    circU[M.face(c0)] += 0.5 * e0 * u0 * iA0;
+    circU[M.face(c1)] += 0.5 * e1 * u1 * iA1;
+#endif
+  }
+
+  return circU;
 }
 
 std::vector<vec3> gradient(shell &M, const std::vector<real> &u,

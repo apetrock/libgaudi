@@ -3,7 +3,7 @@ set(SOURCES
     main.cpp
 )
 
-set(PROJECT_NAME shell_normal_constraints)
+set(PROJECT_NAME rod_guided_deformation)
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 #add_executable(bending main.cpp GuadiGraphics/geometry_logger.cpp)
@@ -15,4 +15,4 @@ target_link_libraries(${PROJECT_NAME} PRIVATE -g -ltbb)
 #    target_link_libraries(stretch PUBLIC OpenMP::OpenMP_CXX)
 #endif()
 
-target_link_libraries(shell_normal_constraints PRIVATE libGaudi nanogui ${NANOGUI_EXTRA_LIBS})
+target_link_libraries(rod_guided_deformation PRIVATE libGaudi nanogui ${NANOGUI_EXTRA_LIBS})

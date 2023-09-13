@@ -95,6 +95,59 @@ void fillBuffer_ref(asawa::shell::shell &M, gg::BufferObjectPtr obj,
   });
 };
 
+void fillBuffer_ref(asawa::shell::shell &M, gg::BufferObjectPtr obj,
+                    const std::vector<colorRGB> &col) {
+  using namespace nanogui;
+
+  asawa::vec3_datum::ptr x_datum =
+      static_pointer_cast<asawa::vec3_datum>(M.get_datum(0));
+  const std::vector<gaudi::vec3> &x = x_datum->data();
+
+  int numVerts = 0;
+  int numIndices = 0;
+
+  std::vector<std::vector<int>> faces;
+  for (int i = 0; i < M.face_count(); i++) {
+    std::vector<int> face;
+    if (M.fbegin(i) < 0)
+      continue;
+    if (M.fsize(i) != 3)
+      continue;
+    // std::cout << i << " " << M.fsize(i) << " ";
+    M.for_each_face(i, [&face](int ci, asawa::shell::shell &M) {
+      // std::cout << ci << " " << M.vert(ci) << " ";
+      face.push_back(M.vert(ci));
+    });
+    // std::cout << std::endl;
+
+    numIndices += face.size();
+    faces.push_back(face);
+  }
+  numVerts = x.size();
+
+  obj->fillBuffer([&](gg::BufferObject &o) -> void {
+    o.allocateVerts(faces.size(), numVerts);
+    auto &indices = o.indices();
+    auto &positions = o.positions();
+    auto &colors = o.colors();
+    for (int i = 0; i < faces.size(); i++) {
+      for (int j = 0; j < faces[i].size(); j++) {
+        indices.col(i)[j] = faces[i][j];
+      }
+    }
+
+    for (int i = 0; i < x.size(); i++) {
+      for (int j = 0; j < 3; j++) {
+        positions.col(i)[j] = x[i][j];
+      }
+      colors.col(i)[0] = col[i].r;
+      colors.col(i)[1] = col[i].g;
+      colors.col(i)[2] = col[i].b;
+    }
+    // std::cout << indices << std::endl;
+  });
+};
+
 void fillBuffer_ref(asawa::rod::rod &R, gg::BufferObjectPtr obj,
                     colorRGB col = colorRGB(1.0, 0.5, 0.5, 0.5)) {
   using namespace nanogui;

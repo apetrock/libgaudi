@@ -201,7 +201,7 @@ void init_edge_willmore(const asawa::shell::shell &shell,
   auto range = shell.get_edge_range();
   const std::vector<vec3> &x = asawa::const_get_vec_data(shell, 0);
 
-  int i = 0;
+  int k = 0;
   for (auto c0 : range) {
     index_t c1 = shell.other(c0);
     int i = shell.vert(c0);
@@ -212,11 +212,18 @@ void init_edge_willmore(const asawa::shell::shell &shell,
     int j0 = shell.vert(c1);
     int jp = shell.vert(shell.prev(c1));
     vec3 N = asawa::shell::edge_normal(shell, c0, x);
+#if 0
+    vec3 xi = asawa::shell::edge_center(shell, c0, x);
+    gg::geometry_logger::line(xi, xi + 0.05 * w[k] * N,
+                              vec4(0.0, 0.5, 1.0, 1.0));
+
+#endif
 
     auto constraint = edge_willmore::create(
-        std::vector<index_t>({i0, ip, j0, jp}), w[i++], blocks);
+        std::vector<index_t>({i0, ip, j0, jp}), w[k], blocks);
     constraint->set_align_normal(N);
     constraints.push_back(constraint);
+    k++;
   }
 }
 

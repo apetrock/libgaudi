@@ -29,7 +29,7 @@
 #include "GaudiGraphics/viewer.hpp"
 // #include "gaudi/asawa/asawa.h"
 
-#include "gaudi/duchamp/shell_normal_constraints.hpp"
+#include "gaudi/duchamp/rod_guided_deformation.hpp"
 
 #define TRACKBALLSIZE (0.8f)
 #define RENORMCOUNT 97
@@ -95,7 +95,7 @@ public:
     _objs[1]->init();
     mSceneObjects.push_back(_objs[1]);
 
-    __surf = gaudi::duchamp::shell_normal_constraints::create();
+    __surf = gaudi::duchamp::rod_guided_deformation::create();
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
 
     double gd = (3.0 - sqrt(5.0)) * M_PI;
@@ -147,7 +147,7 @@ public:
 
 private:
   // gaudi::duchamp::fast_summation_test::ptr __surf;
-  gaudi::duchamp::shell_normal_constraints::ptr __surf;
+  gaudi::duchamp::rod_guided_deformation::ptr __surf;
 
   std::vector<gg::DrawablePtr> mSceneObjects;
   std::vector<gg::BufferObjectPtr> _objs;

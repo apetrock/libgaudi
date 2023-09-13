@@ -63,9 +63,7 @@ public:
                      const index_t vA0, const index_t vA1, //
                      const index_t vB0, const index_t vB1) {}
 
-  virtual void flip(const shell::shell &M, const index_t &i,
-                    const index_t &prim_id, const real &C,
-                    const std::vector<index_t> &vals){};
+  virtual void flip(const shell::shell &M, const index_t &i){};
 
   virtual void calc(const rod::rod &R, const index_t &i, const index_t &prim_id,
                     const real &C, const std::vector<index_t> &vals) = 0;
@@ -238,65 +236,6 @@ public:
 
 using scalar_datum = datum_t<real>;
 using vec3_datum = datum_t<vec3>;
-
-struct rod_datum : public datum_t<int> {
-public:
-  typedef std::shared_ptr<rod_datum> ptr;
-
-  static ptr create(prim_type type, const std::vector<int> &data) {
-    return std::make_shared<rod_datum>(type, data);
-  }
-
-  rod_datum(prim_type type, const std::vector<int> &data)
-      : datum_t<int>(type, data){};
-  virtual ~rod_datum(){};
-
-  virtual void calc(const shell::shell &M, const index_t &i,
-                    const index_t &prim_id, const real &C,
-                    const std::vector<index_t> &vals) {
-    real w = 0.0;
-    bool val = this->__data[i];
-    if (val && (prim_id == 0 || prim_id == 1))
-      this->__data[i] = 1;
-    else
-      this->__data[i] = 0;
-  }
-
-  virtual void subdivide(const shell::shell &M, //
-                         const index_t &i0, const index_t &i1,
-                         const index_t &i2, const index_t &i3, //
-                         const real &s, const index_t &source_corner) {
-    index_t c0 = source_corner;
-    index_t c1 = M.other(c0);
-    if (__type == EDGE) {
-      bool val = this->__data[source_corner / 2];
-      if (val) {
-        this->__data[i0] = 1;
-        this->__data[i1] = 1;
-        this->__data[i2] = 0;
-        this->__data[i3] = 0;
-      } else {
-        this->__data[i0] = 0;
-        this->__data[i1] = 0;
-        this->__data[i2] = 0;
-        this->__data[i3] = 0;
-      }
-      /*not implemented*/
-    }
-  };
-
-  virtual void flip(const shell::shell &M, const index_t &i,
-                    const index_t &prim_id, const real &C,
-                    const std::vector<index_t> &vals) {}
-
-  virtual void calc(const rod::rod &R, const index_t &i, const index_t &prim_id,
-                    const real &C, const std::vector<index_t> &vals) {}
-
-}; // namespace asawa
-
-std::vector<int> &get_rod_data(shell::shell &M, index_t h) {
-  return static_pointer_cast<rod_datum>(M.get_datum(h))->data();
-}
 
 std::vector<real> &get_real_data(shell::shell &M, index_t h) {
   return static_pointer_cast<scalar_datum>(M.get_datum(h))->data();

@@ -79,6 +79,7 @@ integrate_over_shell(asawa::shell::shell &M, const std::vector<vec3> &p_pov,
         vec3 x2 = tree.vert(3 * j + 2);
         vec3 pj;
         real dist = va::distance_from_triangle({x0, x1, x2}, pi, pj);
+        pj = 0.333 * (x0 + x1 + x2);
         return compute_fcn(i, j, pi, pj, data, node_type, node, tree);
       },
       [&compute_fcn](const index_t &i, const index_t &j, const vec3 &pi,
@@ -94,14 +95,14 @@ integrate_over_shell(asawa::shell::shell &M, const std::vector<vec3> &p_pov,
 }
 
 template <typename T>
-std::vector<T> mls_avg(asawa::shell::shell &R, const std::vector<T> &v,
+std::vector<T> mls_avg(asawa::shell::shell &M, const std::vector<T> &v,
                        const std::vector<vec3> &p_pov, real l0, real p = 3.0) {
 
   std::vector<real> sums(p_pov.size(), 0.0);
   std::vector<T> us = integrate_over_shell<T>(
-      R, p_pov,
+      M, p_pov,
       [&v](const std::vector<index_t> &face_ids, Shell_Sum_Type &sum) {
-        sum.bind(calder::vec3_datum::create(face_ids, v));
+        sum.bind(calder::datum_t<T>::create(face_ids, v));
       },
       [l0, &sums, p](const index_t i, const index_t j, //
                      const vec3 &pi, const vec3 &pj,
@@ -111,6 +112,7 @@ std::vector<T> mls_avg(asawa::shell::shell &R, const std::vector<T> &v,
                      const Shell_Sum_Type::Tree &tree) -> T {
         T e = get_data<T>(node_type, j, 0, data);
         real dist = (pj - pi).norm();
+
         real kappa = computeK(dist, l0, p);
         sums[i] += kappa;
         return kappa * e;
@@ -118,10 +120,40 @@ std::vector<T> mls_avg(asawa::shell::shell &R, const std::vector<T> &v,
 #if 1
   int max_count = 0;
   int max_count_i = 0;
+
   for (int i = 0; i < p_pov.size(); i++) {
+    if (sums[i] < 1e-6)
+      continue;
     us[i] /= sums[i];
   }
 #endif
+  return us;
+}
+
+std::vector<vec3> vortex_force(asawa::shell::shell &M,
+                               const std::vector<vec3> &p_pov,
+                               const std::vector<vec3> &omega, real l0,
+                               real p = 3.0) {
+
+  std::vector<vec3> us = integrate_over_shell<vec3>(
+      M, p_pov,
+      [&omega](const std::vector<index_t> &edge_ids, Shell_Sum_Type &sum) {
+        sum.bind(calder::vec3_datum::create(edge_ids, omega));
+      },
+      [l0, p](const index_t i, const index_t j, //
+              const vec3 &pi, const vec3 &pj,
+              const std::vector<calder::datum::ptr> &data,
+              Shell_Sum_Type::Node_Type node_type, //
+              const Shell_Sum_Type::Node &node,    //
+              const Shell_Sum_Type::Tree &tree) -> vec3 {
+        vec3 w = get_data<vec3>(node_type, j, 0, data);
+        vec3 dp = pj - pi;
+        real dist = dp.norm();
+        // dist = std::max(dist, l0);
+        real kappa = computeKm(dist, l0, p);
+
+        return -kappa * dp.cross(w);
+      });
   return us;
 }
 

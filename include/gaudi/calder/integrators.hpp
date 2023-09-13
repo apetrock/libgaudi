@@ -27,11 +27,19 @@ namespace gaudi {
 namespace calder {
 
 real computeK(real dist, real C, real p) {
+  // std laplace kernel
   real distp = pow(dist, p);
   real lp = pow(C, p);
-  // T kappa = (1.0 - exp(-dist3 / l3)) / dist3;
   real kappa = 1.0 / (distp + lp);
-  // real kappa = exp(-dist * dist / C / C);
+  return kappa;
+};
+
+real computeKm(real dist, real C, real p) {
+  // mollified kernel
+  real distp = pow(dist, p);
+  real lp = pow(C, p);
+
+  real kappa = (1.0 - exp(-distp / lp)) / distp;
   return kappa;
 };
 

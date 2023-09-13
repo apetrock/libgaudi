@@ -432,6 +432,7 @@ public:
       if (__vert_begin[i] > -1)
         range.push_back(i);
     }
+
     return range;
   }
 

@@ -737,7 +737,7 @@ void pack(shell &M) {
   apply_inverse_permutation(viperm, M.corners_vert());
   size_t Nv = calc_new_size(M.vert_begin());
   M.vert_begin().resize(Nv);
-
+  std::cout << "permute verts: " << Nv << std::endl;
   for (auto d : M.get_data()) {
     if (d->type() == asawa::VERTEX) {
       d->permute(vperm);
@@ -755,7 +755,7 @@ void pack(shell &M) {
   apply_inverse_permutation(fiperm, M.corners_face());
   size_t Nf = calc_new_size(M.face_begin());
   M.face_begin().resize(Nf);
-
+  std::cout << "permute faces: " << Nf << std::endl;
   for (auto d : M.get_data()) {
     if (d->type() == FACE) {
       d->permute(fperm);
@@ -790,7 +790,12 @@ void pack(shell &M) {
   M.corners_face().resize(Nc);
   M.corners_vert().resize(Nc);
 
+  std::cout << "permute corners: " << Nc << std::endl;
   for (auto d : M.get_data()) {
+    if (d->type() == EDGE) {
+      d->permute(cperm);
+      d->resize(Nc / 2);
+    }
     if (d->type() == CORNER) {
       d->permute(cperm);
       d->resize(Nc);

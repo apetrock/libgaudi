@@ -910,6 +910,12 @@ public:
       // std::cout << eFlip << " " << eSame << std::endl;
       //  if (false) {
       if (eFlip < 1.0 * eSame) {
+        for (auto d : __M->get_data()) {
+          if (d->type() == EDGE) {
+            d->flip(*__M, c0);
+          }
+        }
+
         flip_edge(*__M, c0);
       }
     }

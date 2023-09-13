@@ -10,7 +10,7 @@
 #ifndef __ASAWA_LAPLACE_REF_MAT__
 #define __ASAWA_LAPLACE_REF_MAT__
 
-//#include "Eigen/src/SparseCore/SparseMatrix.h"
+// #include "Eigen/src/SparseCore/SparseMatrix.h"
 #include <algorithm>
 #include <cassert>
 #include <iomanip>
@@ -63,20 +63,27 @@ build_lap(asawa::shell::shell &M,     //
   std::vector<triplet> tripletList;
   tripletList.reserve(S * verts.size() + S * edges.size());
 
-  int i = 0;
   real Kmin = 9999;
   real Kmax = -9999;
+  auto v_range = M.get_vert_range();
+  auto i_range = std::vector<index_t>(x.size(), -1);
+  int i = 0;
+  for (auto vi : v_range) {
+    i_range[vi] = i++;
+  }
+
   for (auto v : M.get_vert_range()) {
     real Km = 0.0;
+    index_t i = i_range[v];
     if (M.vsize(v) < 4) {
       for (int k = 0; k < S; k++)
         tripletList.push_back(triplet(S * i + k, S * i + k, 1.0));
       continue;
     }
 
-    M.for_each_vertex(v, [&Km, &x, &set_ij, i, &tripletList,
-                          func_ij](index_t c, asawa::shell::shell &M) {
-      index_t j = M.vert(M.next(c));
+    M.for_each_vertex(v, [&](index_t c, asawa::shell::shell &M) {
+      index_t jv = M.vert(M.next(c));
+      index_t j = i_range[jv];
       real K = func_ij(M, c, x);
       Km += K;
       if (!set_ij)
@@ -87,7 +94,7 @@ build_lap(asawa::shell::shell &M,     //
 
     Kmin = std::min(Kmin, Km);
     Kmax = std::max(Kmax, Km);
-
+    // Km = -1.0;
     for (int k = 0; k < S; k++)
       tripletList.push_back(triplet(S * i + k, S * i + k, -Km));
     i++;
@@ -164,6 +171,7 @@ public:
           index_t c1p = M.prev(M.other(c));
           real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
           ct = ct < 1e-6 ? 1e-6 : ct;
+          ct = max(ct, 1e-6);
           return ct;
         });
   }
@@ -173,8 +181,8 @@ public:
         *__M, __x,
         [](asawa::shell::shell &M, index_t c, const std::vector<vec3> &x) {
           real aj = asawa::shell::face_area(M, M.face(c), x);
-          aj = aj < 1e-8 ? 1e-8 : aj;
-          return -aj / 3.0;
+          aj = -max(aj, 1e-6);
+          return aj;
         },
         false);
   }
@@ -269,11 +277,35 @@ public:
 
     sparmat M = _matM;
     sparmat L = _matC;
+    Eigen::SparseMatrix<real> I(_matC.rows(), _matC.cols());
+    I.setIdentity();
+#if 1
     sparmat A = M - dt * L;
-    // vecX fe = _matM * to(f);
+    vecX fe = M * to(f);
+#else
+    sparmat A = I - dt * L;
     vecX fe = to(f);
-
+#endif
     return from(solve(A, fe));
+  }
+
+  std::vector<real> diffuse2(const std::vector<real> &u0, const real &h) {
+
+    using namespace asawa;
+
+    sparmat M = _matM;
+    sparmat L = _matC;
+    Eigen::SparseMatrix<real> I(_matC.rows(), _matC.cols());
+    I.setIdentity();
+#if 1
+    sparmat A = 2.0 * M - h * L;
+    vecX u0v = to(u0);
+    vecX b = 2.0 * M * u0v + h * L * u0v;
+#else
+    sparmat A = I - dt * L;
+    vecX fe = to(f);
+#endif
+    return from(solve(A, b));
   }
 
   std::vector<real> heatDist(const std::vector<real> &f, real dt) {
@@ -392,6 +424,83 @@ private:
   asawa::shell::shell::ptr __M;
   const std::vector<vec3> &__x;
 };
+
+std::array<real, 2> grey_scott(std::array<real, 2> uv0a, const real &f,
+                               const real &k, const real &h, const int N = 40) {
+  vec2 uv0 = vec2(uv0a[0], uv0a[1]);
+  vec2 uvi = uv0;
+  for (int j = 0; j < N; j++) {
+    real u = uvi[0];
+    real v = uvi[1];
+    real uv2 = u * v * v;
+    real v2 = v * v;
+    real uv = u * v;
+    vec2 G;
+    G(0) = (-uv2 + f * (1.0 - u));
+    G(1) = (uv2 - (f + k) * v);
+
+    vec2 F = uvi - uv0 - h * G;
+    mat2 dG;
+    dG(0, 0) = -(v2 + f);
+    dG(0, 1) = -2.0 * uv;
+    dG(1, 0) = v2;
+    dG(1, 1) = 2.0 * uv - (f + k);
+
+    mat2 dF = mat2::Identity() - h * dG;
+    // Compute LU decomposition of dF
+    Eigen::PartialPivLU<mat2> lu = dF.partialPivLu();
+    // Solve the linear system using LU decomposition
+    uvi += lu.solve(-F);
+
+    if (F.norm() < 1.0e-12)
+      break;
+  }
+  return {uvi[0], uvi[1]};
+}
+
+std::array<real, 2> grey_scott_2(std::array<real, 2> uv0a, const real &f,
+                                 const real &k, const real &h,
+                                 const int N = 40) {
+  vec2 uv0 = vec2(uv0a[0], uv0a[1]);
+  real u0 = uv0[0];
+  real v0 = uv0[1];
+  real uv20 = u0 * v0 * v0;
+  vec2 G0;
+  G0(0) = (-uv20 + f * (1.0 - u0));
+  G0(1) = (uv20 - (f + k) * v0);
+
+  vec2 uvi = uv0;
+
+  for (int j = 0; j < N; j++) {
+    real u = uvi[0];
+    real v = uvi[1];
+    real uv2 = u * v * v;
+
+    real v2 = v * v;
+    real uv = u * v;
+    vec2 G;
+    G(0) = (-uv2 + f * (1.0 - u));
+    G(1) = (uv2 - (f + k) * v);
+
+    vec2 F = uvi - uv0 - 0.5 * h * (G + G0);
+    mat2 dG;
+    dG(0, 0) = -(v2 + f);
+    dG(0, 1) = -2.0 * uv;
+    dG(1, 0) = v2;
+    dG(1, 1) = 2.0 * uv - (f + k);
+
+    mat2 dF = mat2::Identity() - 0.5 * h * dG;
+    // Compute LU decomposition of dF
+    Eigen::PartialPivLU<mat2> lu = dF.partialPivLu();
+    // Solve the linear system using LU decomposition
+    uvi += lu.solve(-F);
+
+    if (F.norm() < 1.0e-12)
+      break;
+  }
+  return {uvi[0], uvi[1]};
+}
+
 } // namespace bontecou
 } // namespace gaudi
 #endif
