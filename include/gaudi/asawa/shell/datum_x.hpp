@@ -111,7 +111,7 @@ vec3 face_normal(const shell &M, index_t fi, const std::vector<vec3> &x) {
 real face_area(const shell &M, index_t fi, const std::vector<vec3> &x) {
   real a = 0.0;
   vec3 N = face_cross(M, fi, x);
-  return N.norm();
+  return 0.5 * N.norm();
 }
 
 vec3 face_center(const shell &M, index_t fi, const std::vector<vec3> &x) {
@@ -259,7 +259,18 @@ std::vector<vec3> vertex_normals(const shell &M, const std::vector<vec3> &x) {
   return Ns;
 }
 
-std::vector<vec3> vertex_areas(const shell &M, const std::vector<vec3> &x) {
+std::vector<real> vertex_areas(const shell &M, const std::vector<vec3> &x) {
+  auto range = M.get_vert_range();
+  std::vector<real> Ns(M.vert_count(), 0.0);
+  int i = 0;
+  for (auto vi : range) {
+    real area = vert_area(M, vi, x);
+    Ns[vi] = area;
+  }
+  return Ns;
+}
+
+std::vector<vec3> vertex_areas_3(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_vert_range();
   std::vector<vec3> Ns(M.vert_count(), vec3::Zero());
   int i = 0;
@@ -331,6 +342,7 @@ std::vector<vec3> edge_normals(const shell &M, const std::vector<vec3> &x) {
 }
 
 std::vector<real> edge_areas(const shell &M, const std::vector<vec3> &x) {
+  // well this is wrong...
   auto range = M.get_edge_range();
   std::vector<real> ws(range.size());
   int i = 0;
@@ -399,17 +411,17 @@ std::vector<TYPE> compress_to_vert_range(const shell &M,
 }
 
 template <typename TYPE>
-std::vector<TYPE> vert_to_face(const shell &M, const std::vector<TYPE> &x) {
-  std::vector<TYPE> x_exp = expand_from_vert_range(M, x);
+std::vector<TYPE> vert_to_face(const shell &M, const std::vector<vec3> &x,
+                               const std::vector<TYPE> &v) {
   auto range = M.get_face_range();
   std::vector<TYPE> vals(M.face_count());
   int i = 0;
   for (auto fi : range) {
     TYPE c = z::zero<TYPE>();
-    M.const_for_each_face(fi, [&c, &x_exp](index_t c0, const shell &M) {
+    M.const_for_each_face(fi, [&c, &v](index_t c0, const shell &M) {
       // std::cout << M.vert(c0) << " " << x_exp.size() << " " << M.vert_count()
       //           << std::endl;
-      c += 0.33333 * x_exp[M.vert(c0)];
+      c += 0.33333 * v[M.vert(c0)];
     });
     vals[fi] = c;
   }
@@ -427,6 +439,33 @@ std::vector<TYPE> face_to_vert(const shell &M, const std::vector<TYPE> &x) {
       c += 0.33333 * x[M.face(c0)];
     });
     vals[vi] = c;
+  }
+  return vals;
+}
+
+template <typename TYPE>
+std::vector<TYPE> edge_to_face(const shell &M, const std::vector<vec3> &x,
+                               const std::vector<TYPE> &v) {
+  auto range = M.get_face_range();
+  std::vector<TYPE> vals(M.face_count());
+  int i = 0;
+  for (auto fi : range) {
+    TYPE c = z::zero<TYPE>();
+    real A = 0.0;
+    vec3 cen = face_center(M, fi, x);
+    M.const_for_each_face(fi, [&](index_t c0, const shell &M) {
+      index_t c1 = M.other(c0);
+      vec3 x0 = x[M.vert(c0)];
+      vec3 x1 = x[M.vert(c1)];
+      vec3 d0c = x0 - cen;
+      vec3 d1c = x1 - cen;
+      real Ai = 0.5 * d0c.cross(d1c).norm();
+      A += Ai;
+      c += Ai * v[c0 / 2];
+      // c += 0.33333 * x[c0 / 2];
+    });
+    // vals[fi] = c;
+    vals[fi] = c / A;
   }
   return vals;
 }

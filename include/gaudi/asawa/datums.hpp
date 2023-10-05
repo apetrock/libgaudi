@@ -204,9 +204,24 @@ public:
 
   virtual void do_permute(const std::vector<index_t> &permute) {
     std::vector<TYPE> n_data(__data);
-    for (int i = 0; i < n_data.size(); i++) {
+    // std::cout << "permute.size(): " << permute.size() << std::endl;
+    // std::cout << "__data.size(): " << __data.size() << std::endl;
+    size_t n = std::min(__data.size(), permute.size());
+    for (int i = 0; i < n; i++) {
+      // std::cout << i << " " << permute[i] << " " << __data.size() << " "
+      //           << n_data.size() << std::endl;
+      // std::cout << i << " " << __data[permute[i]] << std::endl;
+
+      // std::cout << "permute.size(): " << permute.size() << std::endl;
+      if (permute[i] >= __data.size()) {
+        std::cout << "permute[i]: " << permute[i] << std::endl;
+        std::cout << "__data.size(): " << __data.size() << std::endl;
+        std::cout << "n_data.size(): " << n_data.size() << std::endl;
+      }
+
       n_data[i] = __data[permute[i]];
     }
+    // std::cout << "permute.size(): " << permute.size() << std::endl;
     __data = n_data;
   };
 
@@ -247,6 +262,13 @@ std::vector<vec3> &get_vec_data(shell::shell &M, index_t h) {
 const std::vector<vec3> &const_get_vec_data(const shell::shell &M, index_t h) {
   return static_pointer_cast<vec3_datum>(M.const_get_datum(h))->data();
 }
+
+template <typename T> index_t init_vert_datum(shell::shell &M, T v0) {
+  std::vector<T> rx(M.vert_count(), v0);
+  typename datum_t<T>::ptr adata = datum_t<T>::create(prim_type::VERTEX, rx);
+  return M.insert_datum(adata);
+}
+
 } // namespace asawa
 } // namespace gaudi
 #endif

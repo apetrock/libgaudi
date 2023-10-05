@@ -23,6 +23,7 @@
 using namespace std;
 
 namespace va {
+template <typename T> using VEC2 = Eigen::Matrix<T, 2, 1>;
 template <typename T> using VEC3 = Eigen::Matrix<T, 3, 1>;
 template <typename T> using VEC4 = Eigen::Matrix<T, 4, 1>;
 template <typename T> using QUAT = Eigen::Quaternion<T>;
@@ -420,28 +421,58 @@ inline T determinant(const VEC3<T> &A, const VEC3<T> &B, const VEC3<T> &C) {
   return out;
 };
 
+#if 0
 template <typename T>
 T solidAngle(const VEC3<T> &pi, const VEC3<T> &p0, const VEC3<T> &p1,
              const VEC3<T> &p2) {
-  VEC3<T> A = p0 - pi;
-  VEC3<T> B = p1 - pi;
-  VEC3<T> C = p2 - pi;
-  T a = norm(A);
-  T b = norm(B);
-  T c = norm(C);
+  VEC3<T> qa = p0 - pi;
+  VEC3<T> qb = p1 - pi;
+  VEC3<T> qc = p2 - pi;
+  T la = norm(qa);
+  T lb = norm(qb);
+  T lc = norm(qc);
 
-  A /= a;
-  B /= b;
-  C /= c;
+  if (la == 0 || lb == 0 || lc == 0)
+    return 0.0;
 
-  T divisor = dot(A, B) + dot(B, C) + dot(C, A) + T(1);
+  qa /= la;
+  qb /= lb;
+  qc /= lc;
 
-  T det = determinant(A, B, C);
+  T denom = dot(qa, qb) + dot(qa, qc) + dot(qb, qc) + T(1);
 
-  if (det == 0)
+  T numer = ((qb - qa).cross(qc - qa)).dot(qa);
+
+  if (numer == 0)
     return T(0);
-  return T(2) * atan2(det, divisor);
+  return T(2) * atan2(numer, denom);
 }
+#else
+
+template <typename T>
+T solidAngle(const VEC3<T> &pi, const VEC3<T> &p0, const VEC3<T> &p1,
+             const VEC3<T> &p2) {
+  VEC3<T> u0 = p0 - pi;
+  VEC3<T> u1 = p1 - pi;
+  VEC3<T> u2 = p2 - pi;
+  T n0 = norm(u0);
+  T n1 = norm(u1);
+  T n2 = norm(u2);
+
+  T y = u1.cross(u2).dot(u0);
+  T x = n2 * dot(u0, u1) + //
+        n1 * dot(u0, u2) + //
+        n0 * dot(u1, u2) + //
+        n0 * n1 * n2;
+
+  // T det = determinant(A, B, C);
+  if (y == 0)
+    return 0.0;
+  // return 2.0 * atan2(numer, denom);
+  return 2.0 * atan2(y, x);
+  // return y / x;
+}
+#endif
 
 template <typename T>
 T sgn(const VEC3<T> &N0, //

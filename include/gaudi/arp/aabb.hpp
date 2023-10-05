@@ -3,11 +3,15 @@
 
 #include "GaudiGraphics/geometry_logger.h"
 #include "gaudi/geometry_types.hpp"
+#include "gaudi/logger.hpp"
 #include "gaudi/vec_addendum.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <functional>
+#include <iostream>
+#include <queue>
 #include <stack>
 #include <vector>
 #include <zlib.h>
@@ -23,6 +27,85 @@ using vec4 = Eigen::Matrix<real, 4, 1>;
 using mat3 = Eigen::Matrix<real, 3, 3>;
 
 using index_t = int;
+
+// this is ugly, but we have to do it this way, with two lists because
+// the callback on the data
+real pnt_tri_min(const index_t &idT, //
+                 const std::vector<index_t> &t_inds,
+                 const vector<vec3> &t_x, //
+                 const index_t &idS,      //
+                 const std::vector<index_t> &s_inds, const vector<vec3> &s_x) {
+  index_t vT0 = t_inds[idT];
+  index_t vS0 = s_inds[3 * idS + 0];
+  index_t vS1 = s_inds[3 * idS + 1];
+  index_t vS2 = s_inds[3 * idS + 2];
+  if (vT0 == vS0)
+    return std::numeric_limits<real>::infinity();
+  if (vT0 == vS1)
+    return std::numeric_limits<real>::infinity();
+  if (vT0 == vS2)
+    return std::numeric_limits<real>::infinity();
+
+  const vec3 &x0 = t_x[vT0];
+  const vec3 &xt0 = s_x[vS0];
+  const vec3 &xt1 = s_x[vS1];
+  const vec3 &xt2 = s_x[vS2];
+
+#if 0
+  real d0 = 1.0 / 2.0 * ((xB0 - xA0).norm() + (xB1 - xA1).norm());
+  real d1 = 1.0 / 2.0 * ((xB0 - xA1).norm() + (xB1 - xA0).norm());
+  return min(d0, d1);
+#else
+  // vec3 xN;
+  // real d0 = va::distance_from_triangle({xt0, xt1, xt2}, x0, xN);
+
+  std::array<real, 4> cp = va::closest_point({xt0, xt1, xt2}, x0);
+  vec3 xT = cp[1] * xt0 + cp[2] * xt1 + cp[3] * xt2;
+  // if (idT == 0)
+  //   logger::line(x0, xT, vec4(1.0, 0.5, 0.0, 1.0));
+
+  return cp[0];
+#endif
+};
+
+// this is ugly, but we have to do it this way, with two lists because
+// the callback on the data
+real line_line_min(const index_t &idT, //
+                   const std::vector<index_t> &t_inds,
+                   const vector<vec3> &t_x, //
+                   const index_t &idS,      //
+                   const std::vector<index_t> &s_inds,
+                   const vector<vec3> &s_x) {
+  index_t vT0 = t_inds[2 * idT + 0];
+  index_t vT1 = t_inds[2 * idT + 1];
+  index_t vS0 = s_inds[2 * idS + 0];
+  index_t vS1 = s_inds[2 * idS + 1];
+  if (idT >= idS)
+    return std::numeric_limits<real>::infinity();
+
+  if (vT0 == vS0)
+    return std::numeric_limits<real>::infinity();
+  if (vT1 == vS1)
+    return std::numeric_limits<real>::infinity();
+  if (vT0 == vS1)
+    return std::numeric_limits<real>::infinity();
+  if (vT1 == vS0)
+    return std::numeric_limits<real>::infinity();
+
+  const vec3 &xA0 = t_x[t_inds[2 * idT + 0]];
+  const vec3 &xA1 = t_x[t_inds[2 * idT + 1]];
+  const vec3 &xB0 = s_x[s_inds[2 * idS + 0]];
+  const vec3 &xB1 = s_x[s_inds[2 * idS + 1]];
+#if 0
+  real d0 = 1.0 / 2.0 * ((xB0 - xA0).norm() + (xB1 - xA1).norm());
+  real d1 = 1.0 / 2.0 * ((xB0 - xA1).norm() + (xB1 - xA0).norm());
+  return min(d0, d1);
+#else
+  // real d0 = (0.5 * (xA1 + xA0) - 0.5 * (xB1 + xA0)).norm();
+  std::array<real, 3> d = va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
+  return d[0];
+#endif
+};
 
 template <int S>
 ext::extents_t calc_extents(index_t i, const std::vector<index_t> &indices,
@@ -522,7 +605,7 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
           dmin = dist;
           idMin = idS;
         }
-        if (dist < tol) {
+        if (dist < tol && !expanding_rad) {
           collisions.push_back(idS);
         }
       }
@@ -577,10 +660,14 @@ void for_each(
 bool l_isnan(vec3 v) { return v.hasNaN(); }
 bool l_isnan(mat3 v) { return v.hasNaN(); }
 bool l_isnan(mat4 v) { return v.hasNaN(); }
-
 bool l_isnan(std::array<vec3, 2> v) { return v[0].hasNaN() || v[1].hasNaN(); }
-
 bool l_isnan(real v) { return std::isnan(v); }
+
+vec3 print(std::array<vec3, 2> v) { return v[0].transpose(); }
+vec3 print(vec3 v) { return v.transpose(); }
+mat3 print(mat3 v) { return v; }
+mat4 print(mat4 v) { return v; }
+real print(real v) { return v; }
 
 template <int TREE_S, int NODE_S, typename Q0, typename Q1>
 std::vector<Q1>
@@ -610,12 +697,30 @@ __build_pyramid(const aabb_tree<TREE_S> &tree,       //
     charges[tree.leafNodes[i]] = q1;
   }
   // return charges;
-  std::deque<int> stack(tree.leafNodes.begin(), tree.leafNodes.end());
-  std::vector<bool> in_queue(charges.size(), false);
-  while (stack.size() > 0) {
-    index_t cNodeId = stack.back();
+  // std::deque<int> stack(tree.leafNodes.begin(), tree.leafNodes.end());
 
-    stack.pop_back();
+  std::priority_queue<index_t, std::vector<index_t>, std::less<index_t>> queue;
+
+  for (int node : tree.leafNodes) {
+    queue.push(node);
+  }
+
+  /*
+  while (queue.size() > 0) {
+    std::cout << queue.top() << " ";
+    queue.pop();
+  }
+  std::cout << std::endl;
+
+  for (int node : tree.leafNodes) {
+    queue.push(node);
+  }
+*/
+  std::vector<bool> in_queue(charges.size(), false);
+  while (queue.size() > 0) {
+    index_t cNodeId = queue.top();
+
+    queue.pop();
     in_queue[cNodeId] = false;
     const node &cnode = tree.nodes[cNodeId];
     index_t pNodeId = cnode.parent;
@@ -628,8 +733,13 @@ __build_pyramid(const aabb_tree<TREE_S> &tree,       //
     const Q1 &extP = charges[pNodeId];
 
     charges[pNodeId] = nfunc(extC, extP);
+    //    if (pNodeId == 0 || pNodeId == 1 || pNodeId == 2)
+    //      std::cout << pNodeId << " " << cNodeId << " " <<
+    //      print(charges[pNodeId])
+    //                << " " << print(charges[cNodeId]) << std::endl;
+
     if (!in_queue[pNodeId]) {
-      stack.push_front(pNodeId);
+      queue.push(pNodeId);
       in_queue[pNodeId] = true;
     }
   }

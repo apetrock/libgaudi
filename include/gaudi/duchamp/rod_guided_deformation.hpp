@@ -30,8 +30,10 @@
 #include "gaudi/hepworth/block/sim_block.hpp"
 #include "gaudi/hepworth/block/solver.hpp"
 
+#include "gaudi/calder/quadric_integrators.hpp"
 #include "gaudi/calder/rod_integrators.hpp"
 #include "gaudi/calder/shell_integrators.hpp"
+#include "gaudi/calder/tangent_point_integrators.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
 #include "gaudi/common.h"
@@ -297,7 +299,7 @@ public:
     std::vector<vec3> &xr = __R->__x;
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     std::vector<vec3> Nf = asawa::shell::face_normals(M, x);
-    std::vector<vec3> Nr = calder::mls_avg<vec3>(M, Nf, xr, eps, 3.0);
+    std::vector<vec3> Nr = calder::mls_avg<vec3>(M, Nf, xr, eps, 2.0);
     for (int i = 0; i < Nr.size(); i++) {
       vec3 T = R.dir(i);
       vec3 B = Nr[i].cross(T);
@@ -780,7 +782,7 @@ public:
     }
 #endif
     std::vector<vec3> Nss =
-        calder::mls_avg<vec3>(*__M, N_s_f, x_s, 1.0 * __surf->_Cc, 3.0);
+        calder::mls_avg<vec3>(*__M, N_s_f, x_s, 1.0 * __surf->_Cc, 2.0);
 #if 0
     i = 0;
     for (vec3 &N : Nss) {
@@ -801,7 +803,7 @@ public:
     std::vector<vec3> xc = __R->xc();
 
     std::vector<vec3> g0 =
-        calder::tangent_point_force(*__R, x, l, T, 1.0 * eps, 6.0);
+        calder::tangent_point_gradient(*__R, x, l, T, 1.0 * eps, 6.0);
     for (int i = 0; i < g0.size(); i++) {
       // gg::geometry_logger::line(x[i], x[i] + 1.0e-7 * g0[i],
       //                           vec4(0.6, 0.0, 0.8, 1.0));
@@ -845,9 +847,13 @@ public:
 
     std::vector<vec3> Ne = asawa::shell::edge_normals(*__M, xv);
     real eps = 0.5 * __surf->_Cc;
+
+    std::vector<real> mask_exp =
+        asawa::shell::expand_from_vert_range(M, _willmore_mask);
     std::vector<real> mask =
-        asawa::shell::vert_to_face<real>(*__M, _willmore_mask);
-    std::vector<real> df = calder::mls_avg<real>(M, mask, xe, eps, 3.0);
+        asawa::shell::vert_to_face<real>(*__M, xv, mask_exp);
+    std::vector<real> df = calder::mls_avg<real>(M, mask, xe, eps, 2.0);
+
     std::transform(df.begin(), df.end(), df.begin(),
                    [w](real x) { return w * (1.0 - 0.5 * x); });
 #if 0
@@ -919,7 +925,7 @@ public:
     std::vector<vec3> &xs = asawa::get_vec_data(*__M, 0);
     std::vector<vec3> &v = asawa::get_vec_data(*__M, 1);
 
-    std::vector<vec3> M = asawa::shell::vertex_areas(*__M, xs);
+    std::vector<vec3> M = asawa::shell::vertex_areas_3(*__M, xs);
     std::vector<real> li = asawa::shell::edge_lengths(*__M, xs);
 
     std::vector<real> &lr = __R->l0();

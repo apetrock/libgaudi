@@ -19,6 +19,8 @@
 
 #include "gaudi/bontecou/laplacian.hpp"
 
+#include "modules/module_base.hpp"
+#include "modules/reaction_diffusion.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -61,41 +63,31 @@ public:
     real C = 0.85;
     // real C = 2.0;
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, C * l0);
-    init_rx();
+    real da = 5.00e-4, db = 0.4 * da;
+    reaction_diffusion::ptr rx =
+        reaction_diffusion::create(__M, 0.025, 0.0535, da, db);
+    _rx = std::dynamic_pointer_cast<module_base>(rx);
+    init_normals();
   }
 
-  index_t _init_rx() {
-    std::vector<real> rx(__M->vert_count(), 0.0);
-    datum_t<real>::ptr adata = datum_t<real>::create(prim_type::VERTEX, rx);
-    return __M->insert_datum(adata);
-  }
+  void init_normals() {
+    _iN = gaudi::asawa::init_vert_datum<vec3>(*__M, vec3::Zero());
+    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
+    std::vector<vec3> &N = asawa::get_vec_data(*__M, _iN);
+    std::vector<vec3> Nv = asawa::shell::vertex_normals(*__M, x);
 
-  void init_rx() {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<double> dis(0.0f, 1.0f);
-
-    _irxa = _init_rx();
-    _irxb = _init_rx();
-    std::vector<real> &rxa = asawa::get_real_data(*__M, _irxa);
-    std::vector<real> &rxb = asawa::get_real_data(*__M, _irxb);
-    for (int i = 0; i < rxa.size(); i++) {
-      real ta = dis(gen);
-      real tb = dis(gen);
-      // rxb[i] = 1.0;
-      rxa[i] = 1.0;
-      rxb[i] = 0.0;
-
-      if (tb > 0.95) {
-        rxb[i] = 1.0;
-      }
+    for (int i = 0; i < N.size(); i++) {
+      N[i] = Nv[i];
     }
   }
 
   std::vector<vec4> get_mesh_colors() {
     std::vector<vec4> colors(__M->vert_count(), vec4(1.0, 0.0, 0.0, 1.0));
-    std::vector<real> &rxa = asawa::get_real_data(*__M, _irxa);
-    std::vector<real> &rxb = asawa::get_real_data(*__M, _irxb);
+    std::vector<real> &rxa =
+        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxa();
+    std::vector<real> &rxb =
+        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxb();
+
     vec4 col_a(0.75, 0.35, 0.0, 1.0);
     vec4 col_b(0.0, 2.0, 1.5, 1.0);
 
@@ -107,25 +99,12 @@ public:
     return colors;
   }
 
-  void _diffuse(const std::vector<vec3> &x, std::vector<real> &f, real dt) {
-
-    std::cout << x.size() << std::endl;
-    bontecou::laplacian L(__M, x);
-    std::vector<real> f_comp =
-        asawa::shell::compress_to_vert_range<real>(*__M, f);
-
-    std::vector<real> d = L.diffuse2(f_comp, dt);
-    std::vector<real> d_exp =
-        asawa::shell::expand_from_vert_range<real>(*__M, d);
-
-    for (int k = 0; k < f.size(); k++) {
-      f[k] = d_exp[k];
-    }
-  }
-
   void test_circulation() {
-    std::vector<real> &rxa = asawa::get_real_data(*__M, _irxa);
-    std::vector<real> &rxb = asawa::get_real_data(*__M, _irxb);
+    std::vector<real> &rxa =
+        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxa();
+    std::vector<real> &rxb =
+        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxb();
+
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     std::vector<real> u = rxa;
     for (int i = 0; i < u.size(); i++) {
@@ -142,55 +121,58 @@ public:
     }
   }
 
+  vec3 alerp(const vec3 &a, const vec3 &b, double t) {
+    // Ensure the input vectors are normalized
+    vec3 aN = a.normalized();
+    vec3 bN = b.normalized();
+    real adb = aN.dot(bN);
+    real angle = std::acos(adb);
+    // std::cout << "adb: " << adb << std::endl;
+    // std::cout << "angle: " << angle << std::endl;
+    // std::cout << aN.transpose() << " " << bN.transpose() << std::endl;
+    if (adb < 1e-8) {
+      return va::mix(t, a, b).normalized();
+    }
+
+    vec3 axis = aN.cross(bN).normalized();
+    // std::cout << "axis: " << axis.transpose() << std::endl;
+
+    real interpolatedAngle = angle * t;
+    Eigen::AngleAxisd R(interpolatedAngle, axis);
+    return R * a;
+  }
+
   void translate_normal(int frame) {
-    std::vector<real> &rxa = asawa::get_real_data(*__M, _irxa);
-    std::vector<real> &rxb = asawa::get_real_data(*__M, _irxb);
+    std::vector<real> &rxa =
+        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxa();
+    std::vector<real> &rxb =
+        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxb();
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     std::vector<real> u = rxa;
+
+    std::vector<vec3> &N = asawa::get_vec_data(*__M, _iN);
+    std::vector<vec3> Nv = asawa::shell::vertex_normals(*__M, x);
+    index_t i = 0;
+
+    for (auto &n : N) {
+      // n = alerp(n, Nv[i++], 0.05);
+      n = va::mix(0.01, n, Nv[i++]);
+      n.normalize();
+    }
+
     for (int i = 0; i < u.size(); i++) {
       u[i] = -0.90 * rxa[i] + 2.5 * rxb[i];
     }
 
-    std::vector<vec3> Nv = asawa::shell::vertex_normals(*__M, x);
     for (int i = 0; i < x.size(); i++) {
       // real C = 2.0e-3 * pow(sin(M_PI * real(frame) / 400.0), 5.0);
       real C = 5.0e-4 * u[i];
-      x[i] += C * Nv[i];
+      x[i] += C * N[i];
     }
-  }
-
-  void rx(real h) {
-    std::vector<real> &rxa = asawa::get_real_data(*__M, _irxa);
-    std::vector<real> &rxb = asawa::get_real_data(*__M, _irxb);
-    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-    // real f = 0.0438;
-    // real k = 0.0598;
-    real f = 0.025;
-    real k = 0.0535;
-    // real f = 0.0141;
-    // real k = 0.0462;
-    //   real f = 0.0485;
-    //   real k = 0.0612;
-    //    real f = 0.0475;
-    //    real k = 0.0605;
-
-    real da = 5.00e-4;
-    real db = 0.4 * da;
-
-    for (int i = 0; i < rxa.size(); i++) {
-      real u0 = rxa[i];
-      real v0 = rxb[i];
-      vec2 un0 = vec2(u0, v0);
-      auto [rxai, rxbi] = bontecou::grey_scott_2({rxa[i], rxb[i]}, f, k, h);
-      rxa[i] = rxai, rxb[i] = rxbi;
-    }
-
-    _diffuse(x, rxa, h * da);
-    _diffuse(x, rxb, h * db);
   }
 
   void step_dynamics(int frame) {
-    rx(_h);
+    _rx->step(_h);
     translate_normal(frame);
     //  test_circulation();
   }
@@ -214,8 +196,11 @@ public:
   }
   // std::map<index_t, index_t> _rod_adjacent_edges;
   real _h = 8.0e-1;
-  index_t _il0;
-  index_t _irxa, _irxb;
+
+  index_t _iN;
+
+  module_base::ptr _rx;
+
   shell::shell::ptr __M;
   shell::dynamic::ptr __surf;
 };

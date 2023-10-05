@@ -218,7 +218,9 @@ public:
     // start ffmpeg telling it to expect raw rgba 720p-60hz frames
     // -i - tells it to read frames from stdin
     std::string nextFileName = getNextFileName(_filename_pattern);
-    std::string cmd = "ffmpeg -r 60 -f rawvideo -pix_fmt rgba -s 1280x720 -i - "
+    std::string sz = std::to_string(_width) + "x" + std::to_string(_height);
+    std::string cmd = "ffmpeg -r 60 -f rawvideo -pix_fmt rgba -s " + sz +
+                      " -i - "
                       "-threads 0 -preset fast -y -pix_fmt yuv420p -crf 21 -vf "
                       "vflip " +
                       nextFileName;
@@ -877,11 +879,12 @@ public:
     // window->setPosition(Vector2i(15, 15));
     // window->setLayout(new GroupLayout());
 
-    performLayout(mNVGContext);
+    std::cout << "screen size: " << _width << " " << _height << std::endl;
+    std::cout << "size: " << mSize.transpose() << std::endl;
 
+    performLayout(mNVGContext);
     _viewer = gg::Viewer::create(mSize, d);
 
-    std::cout << "size: " << mSize << std::endl;
     // During init, enable debug output
     glEnable(GL_DEBUG_OUTPUT);
     glDebugMessageCallback(MessageCallback, 0);

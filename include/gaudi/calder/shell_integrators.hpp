@@ -94,15 +94,117 @@ integrate_over_shell(asawa::shell::shell &M, const std::vector<vec3> &p_pov,
   return us;
 }
 
+real calc_w(vec3 dx, real eps, real p) {
+  // std laplace kernel
+  real dist = dx.norm();
+  real distp = pow(dist, p);
+  real kappa = 1.0 / (distp + eps);
+  return kappa;
+};
+
+vec3 calc_dw(vec3 dx, real eps, real p) {
+  real dist = dx.norm();
+  real distpm1 = pow(dist, p - 1);
+  real distp = pow(dist, p);
+  real distp_eps_2 = pow(distp + eps, 2.0);
+  return -p * distpm1 / distp_eps_2 * dx / dist;
+};
+
+// calc w/dw but using gaussian kernel instead of std laplace
+real calc_kg(vec3 dx, real l) {
+  real dist = dx.norm();
+  real distp = pow(dist, 2.0);
+  real lp = pow(l, 2.0);
+  real C = 1.0 / std::sqrt(2.0 * M_PI);
+  real expx2 = exp(-distp / lp);
+  real kappa = C / l * expx2;
+  // real kappa = exp(-distp / eps);
+  return kappa;
+};
+
+vec3 calc_dkg(vec3 dx, real l) {
+  real dist = dx.norm();
+  real distp = pow(dist, 2.0);
+  real lp = pow(l, 2.0);
+  real C = 1.0 / std::sqrt(2.0 * M_PI);
+  real expx2 = exp(-distp / lp);
+
+  return -2.0 * dx * C / l / lp * expx2;
+};
+
+std::vector<vec3> smoothed_gradient(asawa::shell::shell &M,
+                                    const std::vector<vec3> &p_pov,
+                                    const std::vector<vec3> &omega, real l0,
+                                    real p = 3.0) {
+  std::vector<vec3> x = asawa::get_vec_data(M, 0);
+  std::vector<real> weights = asawa::shell::face_areas(M, x);
+  std::vector<vec3> us = integrate_over_shell<vec3>(
+      M, p_pov,
+      [&omega, &weights](const std::vector<index_t> &face_ids,
+                         Shell_Sum_Type &sum) {
+        sum.bind(calder::scalar_datum::create(face_ids, weights));
+        sum.bind(calder::vec3_datum::create(face_ids, omega));
+      },
+      [l0, p](const index_t i, const index_t j, //
+              const vec3 &pi, const vec3 &pj,
+              const std::vector<calder::datum::ptr> &data,
+              Shell_Sum_Type::Node_Type node_type, //
+              const Shell_Sum_Type::Node &node,    //
+              const Shell_Sum_Type::Tree &tree) -> vec3 {
+        real wj = get_data<real>(node_type, j, 0, data);
+        vec3 w = get_data<vec3>(node_type, j, 1, data);
+        vec3 dp = pj - pi;
+        // real kappa = calc_w(dp, l0, p);
+        real kappa = calc_kg(dp, l0);
+
+        return kappa * w;
+      });
+  return us;
+}
+
+std::vector<vec3> gradient_scalar(asawa::shell::shell &M,
+                                  const std::vector<vec3> &p_pov,
+                                  const std::vector<real> &omega, real l0,
+                                  real p = 3.0) {
+
+  std::vector<vec3> us = integrate_over_shell<vec3>(
+      M, p_pov,
+      [&omega](const std::vector<index_t> &face_ids, Shell_Sum_Type &sum) {
+        sum.bind(calder::scalar_datum::create(face_ids, omega));
+      },
+      [l0, p](const index_t i, const index_t j, //
+              const vec3 &pi, const vec3 &pj,
+              const std::vector<calder::datum::ptr> &data,
+              Shell_Sum_Type::Node_Type node_type, //
+              const Shell_Sum_Type::Node &node,    //
+              const Shell_Sum_Type::Tree &tree) -> vec3 {
+        real w = get_data<real>(node_type, j, 0, data);
+        vec3 dp = pj - pi;
+        // vec3 dkappa = calc_dw(dp, l0, p);
+        vec3 dkappa = calc_dkg(dp, l0);
+        return -dkappa * w;
+      });
+  return us;
+}
+
 template <typename T>
 std::vector<T> mls_avg(asawa::shell::shell &M, const std::vector<T> &v,
                        const std::vector<vec3> &p_pov, real l0, real p = 3.0) {
+  const std::vector<vec3> &x = asawa::get_vec_data(M, 0);
 
   std::vector<real> sums(p_pov.size(), 0.0);
+  std::vector<real> weights = asawa::shell::face_areas(M, x);
+  std::vector<T> wV(v);
+  for (int i = 0; i < v.size(); i++) {
+    wV[i] *= weights[i];
+  }
+
   std::vector<T> us = integrate_over_shell<T>(
       M, p_pov,
-      [&v](const std::vector<index_t> &face_ids, Shell_Sum_Type &sum) {
-        sum.bind(calder::datum_t<T>::create(face_ids, v));
+      [&wV, &weights](const std::vector<index_t> &face_ids,
+                      Shell_Sum_Type &sum) {
+        sum.bind(calder::datum_t<T>::create(face_ids, wV));
+        sum.bind(calder::datum_t<real>::create(face_ids, weights));
       },
       [l0, &sums, p](const index_t i, const index_t j, //
                      const vec3 &pi, const vec3 &pj,
@@ -111,10 +213,14 @@ std::vector<T> mls_avg(asawa::shell::shell &M, const std::vector<T> &v,
                      const Shell_Sum_Type::Node &node,    //
                      const Shell_Sum_Type::Tree &tree) -> T {
         T e = get_data<T>(node_type, j, 0, data);
+        real w = get_data<real>(node_type, j, 1, data);
+
         real dist = (pj - pi).norm();
 
-        real kappa = computeK(dist, l0, p);
-        sums[i] += kappa;
+        real kappa = computeKg(dist, l0, p);
+        // real kappa = computeK(dist, l0, p);
+
+        sums[i] += w * kappa;
         return kappa * e;
       });
 #if 1
@@ -122,7 +228,7 @@ std::vector<T> mls_avg(asawa::shell::shell &M, const std::vector<T> &v,
   int max_count_i = 0;
 
   for (int i = 0; i < p_pov.size(); i++) {
-    if (sums[i] < 1e-6)
+    if (sums[i] < 1e-1)
       continue;
     us[i] /= sums[i];
   }

@@ -20,7 +20,8 @@
 #include "gaudi/define_create_func.h"
 
 #include "gaudi/bontecou/laplacian.hpp"
-#include "gaudi/duchamp/modules/vortex.hpp"
+
+#include "modules/cross.hpp"
 #include "modules/module_base.hpp"
 
 #include <algorithm>
@@ -41,13 +42,13 @@ namespace gaudi {
 namespace duchamp {
 using namespace asawa;
 
-class vortex_test {
+class cross_test {
 public:
-  typedef std::shared_ptr<vortex_test> ptr;
+  typedef std::shared_ptr<cross_test> ptr;
 
-  static ptr create() { return std::make_shared<vortex_test>(); }
+  static ptr create() { return std::make_shared<cross_test>(); }
 
-  vortex_test() { load_shell(); };
+  cross_test() { load_shell(); };
 
   void load_shell() {
     //__M = load_cube();
@@ -64,15 +65,11 @@ public:
     /////////
     // dynamic surface
     /////////
-    real C = 0.75;
-    // real C = 1.5;
-    __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, 0.5 * C * l0);
+    // real C = 0.5;
+    real C = 1.5;
+    __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, 0.1 * C * l0);
 
-    _vortex_edge = std::dynamic_pointer_cast<module_base>( //
-        vortex_edge::create(__M, 1e-5));
-
-    _vortex_vert = std::dynamic_pointer_cast<module_base>( //
-        vortex_vert::create(__M, 1e-5, 5e-2, 1e-4));
+    _cross = std::dynamic_pointer_cast<module_base>(cross::create(__M));
 
     for (int i = 0; i < 5; i++) {
       __surf->step();
@@ -85,30 +82,15 @@ public:
 
     asawa::shell::shell &M = *__M;
     std::vector<vec3> &x = asawa::get_vec_data(M, 0);
-#if 0
-    real mollifier0 = 8.0 * _eps;
-    std::dynamic_pointer_cast<vortex_edge>(_vortex_edge)->step(_h);
-    std::vector<vec3> w0 =
-        std::dynamic_pointer_cast<vortex_edge>(_vortex_edge)->get_vorticity();
-    std::cout << "calder" << std::endl;
-    std::vector<vec3> f0 = calder::vortex_force(M, x, w0, mollifier0, 3.0);
-#endif
-#if 1
-    real mollifier1 = 18.0 * _eps;
-    std::dynamic_pointer_cast<vortex_vert>(_vortex_vert)->step(_h);
-    std::vector<vec3> w1 =
-        std::dynamic_pointer_cast<vortex_vert>(_vortex_vert)->get_vorticity();
-    std::vector<vec3> f1 = calder::vortex_force(M, x, w1, mollifier1, 3.0);
-#endif
-    // std::vector<vec3> w = calc_edge_vorticity(M, 1e-4 * _h);
 
 #if 1
-    // std::vector<vec3> fc = asawa::shell::vert_to_face<vec3>(M, f);
-    //  std::vector<vec3> fs = calder::mls_avg<vec3>(M, fc, x, 4.0 * _eps, 3.0);
+    real mollifier = 8.0 * _eps;
+    std::dynamic_pointer_cast<cross>(_cross)->step(_h);
+    std::vector<vec3> X =
+        std::dynamic_pointer_cast<cross>(_cross)->get_smoothd_cross_grad();
 
-    for (int i = 0; i < f1.size(); i++) {
-      // x[i] += _h * (f0[i] + f1[i]);
-      x[i] += _h * f1[i];
+    for (int i = 0; i < X.size(); i++) {
+      x[i] += 1e-7 * _h * X[i];
     }
 #endif
     // asawa::center(x, 2.0);
@@ -132,9 +114,7 @@ public:
   real _eps;
   index_t _ig0, _ig1;
 
-  module_base::ptr _vortex_vert;
-  module_base::ptr _vortex_edge;
-
+  module_base::ptr _cross;
   shell::shell::ptr __M;
   shell::dynamic::ptr __surf;
 };

@@ -43,31 +43,6 @@ namespace duchamp {
 
 using namespace asawa;
 
-void center(std::vector<vec3> &coords) {
-  real accum = 0.0;
-  vec3 min = coords[0];
-  vec3 max = coords[0];
-
-  for (auto &c : coords) {
-    min = va::min(c, min);
-    max = va::max(c, max);
-  }
-
-  vec3 dl = (max - min);
-  real maxl = dl[0];
-  maxl = maxl > dl[1] ? maxl : dl[1];
-  maxl = maxl > dl[2] ? maxl : dl[2];
-  real s = 2.0 / maxl;
-  vec3 cen = (0.5 * (max + min) - min) * s;
-  std::cout << " scale: " << s << std::endl;
-  cen -= min;
-  for (auto &c : coords) {
-    c -= min;
-    c = s * c;
-    c -= cen;
-  }
-}
-
 class fast_summation_test {
 public:
   typedef std::shared_ptr<fast_summation_test> ptr;
@@ -76,7 +51,8 @@ public:
 
   fast_summation_test() {
     //__M = load_cube();
-    __M = shell::load_messer();
+    //__M = shell::load_messer();
+    __M = shell::load_bunny();
 
     shell::triangulate(*__M);
     for (int i = 0; i < __M->face_count(); i++) {
@@ -85,11 +61,8 @@ public:
       }
     }
 
-    vec3_datum::ptr x_datum =
-        static_pointer_cast<vec3_datum>(__M->get_datum(0));
-
-    std::vector<vec3> &x = x_datum->data();
-    center(x);
+    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
+    asawa::center(x, 2.0);
   };
 
   std::vector<vec3> createPoints(int N) {
@@ -149,10 +122,8 @@ public:
     std::vector<real> u = calder::fast_winding(M, x, pov, l0);
 
     for (int i = 0; i < pov.size(); i++) {
-      // gg::geometry_logger::point(pov[i], vec4(u[i], 0.4, 0.95, 0.5));
-      // gg::geometry_logger::point(pov[i], vec4(u[i], 0.4, 0.95, 0.5));
       gg::geometry_logger::line(pov[i], pov[i] + 1e-4 * vec3(1.0, 0.0, 0.0),
-                                gg::sdf4(5.0 * u[i]));
+                                gg::sdf4(1.0 * u[i]));
     }
   }
 
@@ -171,8 +142,8 @@ public:
       vec3 pf = vec3(cx, cy, 0.0);
       pf = U * pf;
 
-      gg::geometry_logger::line(x[i] - 0.5 * pf, //
-                                x[i] + pf,       //
+      gg::geometry_logger::line(x[i] - 30.0 * pf,  //
+                                x[i] + 150.0 * pf, //
                                 vec4(0.0, 0.7, 1.0, 1.0));
     }
   }
@@ -186,7 +157,7 @@ public:
     std::vector<index_t> edge_map = __M->get_edge_map();
     arp::T2::ptr edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 16);
 
-    calder::test_extents(*edge_tree, edge_verts, x);
+    calder::test_extents(*edge_tree);
   }
 
   void test_pyramids(shell::shell &M) {
@@ -218,8 +189,8 @@ public:
 
     // test_pyramids(*__M);
     // test_edge_pyramids(*__M);
-    test_fast_winding(*__M, x, l0);
-    // test_parallel_transport(*__M, x, Nx, 16.0 * l0);
+    // test_fast_winding(*__M, x, l0);
+    test_parallel_transport(*__M, x, Nx, 8.0 * l0);
   }
   int _frame;
   shell::shell::ptr __M;

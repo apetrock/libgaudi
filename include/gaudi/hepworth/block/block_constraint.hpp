@@ -18,9 +18,9 @@
 #include <vector>
 #include <zlib.h>
 
-#include "gaudi/common.h"
-
 #include "../projection_constraint.hpp"
+#include "gaudi/common.h"
+#include "gaudi/define_create_func.h"
 #include "sim_block.hpp"
 
 namespace gaudi {
@@ -29,13 +29,15 @@ namespace block {
 
 class block_constraint : public projection_constraint {
 public:
+  DEFINE_CREATE_FUNC(block_constraint)
+  /*
   typedef std::shared_ptr<block_constraint> ptr;
 
   static ptr create(const std::vector<index_t> &ids, const real &w,
                     std::vector<sim_block::ptr> blocks) {
     return std::make_shared<block_constraint>(ids, w, blocks);
   }
-
+*/
   block_constraint(const std::vector<index_t> &ids, const real &w,
                    std::vector<sim_block::ptr> blocks)
       : _blocks(blocks), projection_constraint(ids, w) {}

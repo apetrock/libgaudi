@@ -31,6 +31,7 @@
 #include "gaudi/asawa/shell/asset_loader.hpp"
 
 #include "gaudi/calder/rod_integrators.hpp"
+#include "gaudi/calder/tangent_point_integrators.hpp"
 
 #include <array>
 
@@ -174,10 +175,10 @@ public:
     std::vector<vec3> xc = __R->xc();
 
     std::vector<vec3> g0 =
-        calder::tangent_point_force(*__R, x, l, T, 1.0 * eps, 6.0);
+        calder::tangent_point_gradient(*__R, x, l, T, 1.0 * eps, 6.0);
     for (int i = 0; i < g0.size(); i++) {
-      // gg::geometry_logger::line(x[i], x[i] + 1.0e-7 * g0[i],
-      //                           vec4(0.6, 0.0, 0.8, 1.0));
+      gg::geometry_logger::line(x[i], x[i] + 1.0e-5 * g0[i],
+                                vec4(0.6, 0.0, 0.8, 1.0));
       g0[i] *= -1.0e-6;
     }
     return g0;

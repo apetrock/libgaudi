@@ -108,7 +108,7 @@ public:
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     std::vector<vec3> &v = asawa::get_vec_data(*__M, 1);
     std::vector<vec3> Nx = asawa::shell::vertex_normals(*__M, x);
-    std::vector<vec3> M = asawa::shell::vertex_areas(*__M, x);
+    std::vector<vec3> M = asawa::shell::vertex_areas_3(*__M, x);
     std::vector<real> li = asawa::shell::edge_lengths(*__M, x);
 
     real al0 = 1.0 * asawa::shell::avg_length(*__M, x);

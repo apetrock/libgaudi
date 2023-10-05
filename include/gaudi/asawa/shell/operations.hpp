@@ -791,12 +791,22 @@ void pack(shell &M) {
   M.corners_vert().resize(Nc);
 
   std::cout << "permute corners: " << Nc << std::endl;
+  std::cout << cperm.size() << " " << ciperm.size() << std::endl;
+  // cperm.resize(Nc);
+  std::vector<index_t> cperm_half(cperm.size() / 2);
+
+  for (int i = 0; i < cperm.size(); i += 2) {
+    cperm_half[i / 2] = cperm[i] / 2;
+  }
+
   for (auto d : M.get_data()) {
     if (d->type() == EDGE) {
-      d->permute(cperm);
+      std::cout << "edge" << std::endl;
+      d->permute(cperm_half);
       d->resize(Nc / 2);
     }
     if (d->type() == CORNER) {
+      std::cout << "corner" << std::endl;
       d->permute(cperm);
       d->resize(Nc);
     }

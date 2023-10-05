@@ -18,12 +18,10 @@
 namespace gaudi {
 namespace calder {
 
-template <typename TREE>
-void test_extents(const TREE &tree,                    //
-                  const std::vector<index_t> &indices, //
-                  const std::vector<vec3> &x) {
+template <typename TREE> void test_extents(const TREE &tree) {
 
-  std::vector<ext::extents_t> extents = arp::build_extents(tree, indices, x);
+  std::vector<ext::extents_t> extents =
+      arp::build_extents(tree, tree.indices(), tree.verts());
   for (const auto &ext : extents) {
     vec4 c(0.5, 0.5, 0.1, 1.0);
     gg::geometry_logger::ext(ext[0], ext[1], c);
@@ -47,6 +45,45 @@ void test_pyramid(const TREE &tree,                      //
     vec3 N = x_datum->__tree_data[i];
     vec4 c(0.0, 0.5, 0.8, 1.0);
     gg::geometry_logger::line(cen, cen + N, c);
+  }
+}
+
+template <typename TREE>
+void test_pyramid_scalar(const TREE &tree,                      //
+                         const std::vector<index_t> &q_indices, //
+                         const std::vector<real> &q) {
+
+  datum_t<real>::ptr x_datum = datum_t<real>::create(q_indices, q);
+  x_datum->pyramid(tree);
+  for (int i = 0; i < tree.nodes.size(); i++) {
+    typename TREE::node pNode = tree.nodes[i];
+    real w = x_datum->__tree_data[i];
+    if (pNode.isLeaf()) {
+      real wc = 0.0;
+      for (int jn = pNode.begin; jn < pNode.begin + pNode.size; jn++) {
+        int jj = tree.permutation[jn];
+        // wc += x_datum->leaf_data()[jj];
+        wc += x_datum->leaf_data()[jj];
+      }
+      if (w - wc > 1e-6) {
+        std::cout << "leaf check: " << pNode.level << " " << pNode.size << " "
+                  << w << " " << wc << std::endl;
+      }
+    } else {
+      real wc = 0.0;
+      for (int j = 0; j < pNode.getNumChildren(); j++) {
+        if (pNode.children[j] > -1) {
+          wc += x_datum->node_data()[pNode.children[j]];
+        }
+      }
+      if (w - wc > 1e-6) {
+        std::cout << "node check: " << pNode.level << " "
+                  << pNode.getNumChildren() << " " << w << " " << wc << " "
+                  << w - wc << " " << x_datum->node_data()[pNode.children[0]]
+                  << " " << x_datum->node_data()[pNode.children[1]]
+                  << std::endl;
+      }
+    }
   }
 }
 
@@ -97,18 +134,7 @@ public:
       }
     }
 #endif
-#if 0
-    // return u;
-    int test_id = 2378;
-    while (test_id > 0) {
-      NODE pNode = __tree.nodes[test_id];
-      std::cout << "pnode sz: " << pNode.size << " " << pNode.level << " "
-                << pNode.isLeaf() << std::endl;
-      ext::extents_t ext = extents[test_id];
-      gg::geometry_logger::ext(ext[0], ext[1], vec4(1.0, 0.0, 0.0, 1.0));
-      test_id = pNode.parent;
-    }
-#endif
+
     int total_count = 0;
     int leaf_count = 0;
     int node_count = 0;
@@ -135,7 +161,7 @@ public:
         ext::extents_t ext = extents[j];
         vec3 de = ext[1] - ext[0];
         real V = de[0] * de[1] * de[2];
-        real sc = 1.5 * pow(0.75 * V / M_PI, 1.0 / 3.0);
+        real sc = 1.0 * pow(0.75 * V / M_PI, 1.0 / 3.0);
         // if (pNode.isLeaf()) {
         //   real sc = pNode.mag();
         // }
@@ -151,17 +177,14 @@ public:
               leaf_count++;
               int jj = __tree.permutation[jn];
               counts[j]++;
-              // gg::geometry_logger::line(pi, pj, c);
-              // gg::geometry_logger::ext(ext[0], ext[1], c);
-              Q ui = leafComputeFcn(i, jj, pi, __data, LEAF, pNode, __tree);
-              u[i] += ui;
+              u[i] += leafComputeFcn(i, jj, pi, __data, LEAF, pNode, __tree);
             }
 
           } else {
             node_count++;
             c = vec4(0.0, 0.5, 0.8, 1.0);
-            Q ui = nodeComputeFcn(i, j, pi, __data, BRANCH, pNode, __tree);
-            u[i] += ui;
+            u[i] += nodeComputeFcn(i, j, pi, __data, BRANCH, pNode, __tree);
+            ;
           }
 
         }
@@ -173,8 +196,8 @@ public:
             }
           }
         }
-#if 1
-        if (i == 500 && false) {
+#if 0
+        if (i == 500 && true) {
           gg::geometry_logger::line(pi, pj, c);
           // gg::geometry_logger::ext(pj - vec3(sc, sc, sc), pj + vec3(sc, sc,
           // sc),
@@ -193,7 +216,7 @@ public:
     
     }
 #endif
-#if 1
+#if 0
     double mean = std::accumulate(pov_counts.begin(), pov_counts.end(), 0.0) /
                   pov_counts.size();
 

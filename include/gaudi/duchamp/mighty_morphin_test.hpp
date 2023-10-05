@@ -20,7 +20,8 @@
 #include "gaudi/define_create_func.h"
 
 #include "gaudi/bontecou/laplacian.hpp"
-#include "gaudi/duchamp/modules/vortex.hpp"
+#include "gaudi/duchamp/modules/mighty_morphin.hpp"
+#include "modules/mighty_morphin.hpp"
 #include "modules/module_base.hpp"
 
 #include <algorithm>
@@ -41,13 +42,13 @@ namespace gaudi {
 namespace duchamp {
 using namespace asawa;
 
-class vortex_test {
+class mighty_morphin_test {
 public:
-  typedef std::shared_ptr<vortex_test> ptr;
+  typedef std::shared_ptr<mighty_morphin_test> ptr;
 
-  static ptr create() { return std::make_shared<vortex_test>(); }
+  static ptr create() { return std::make_shared<mighty_morphin_test>(); }
 
-  vortex_test() { load_shell(); };
+  mighty_morphin_test() { load_shell(); };
 
   void load_shell() {
     //__M = load_cube();
@@ -68,11 +69,11 @@ public:
     // real C = 1.5;
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, 0.5 * C * l0);
 
-    _vortex_edge = std::dynamic_pointer_cast<module_base>( //
-        vortex_edge::create(__M, 1e-5));
+    std::vector<index_t> face_vert_ids = __M->get_face_vert_ids();
 
-    _vortex_vert = std::dynamic_pointer_cast<module_base>( //
-        vortex_vert::create(__M, 1e-5, 5e-2, 1e-4));
+    _mighty_morphin = std::dynamic_pointer_cast<module_base>( //
+        mighty_morphin::create(__M, x, face_vert_ids, 1.1,
+                               vec3(0.5, 0.0, 0.0)));
 
     for (int i = 0; i < 5; i++) {
       __surf->step();
@@ -85,33 +86,15 @@ public:
 
     asawa::shell::shell &M = *__M;
     std::vector<vec3> &x = asawa::get_vec_data(M, 0);
-#if 0
-    real mollifier0 = 8.0 * _eps;
-    std::dynamic_pointer_cast<vortex_edge>(_vortex_edge)->step(_h);
-    std::vector<vec3> w0 =
-        std::dynamic_pointer_cast<vortex_edge>(_vortex_edge)->get_vorticity();
-    std::cout << "calder" << std::endl;
-    std::vector<vec3> f0 = calder::vortex_force(M, x, w0, mollifier0, 3.0);
-#endif
-#if 1
-    real mollifier1 = 18.0 * _eps;
-    std::dynamic_pointer_cast<vortex_vert>(_vortex_vert)->step(_h);
-    std::vector<vec3> w1 =
-        std::dynamic_pointer_cast<vortex_vert>(_vortex_vert)->get_vorticity();
-    std::vector<vec3> f1 = calder::vortex_force(M, x, w1, mollifier1, 3.0);
-#endif
-    // std::vector<vec3> w = calc_edge_vorticity(M, 1e-4 * _h);
+    mighty_morphin::ptr mm =
+        std::dynamic_pointer_cast<mighty_morphin>(_mighty_morphin);
 
-#if 1
-    // std::vector<vec3> fc = asawa::shell::vert_to_face<vec3>(M, f);
-    //  std::vector<vec3> fs = calder::mls_avg<vec3>(M, fc, x, 4.0 * _eps, 3.0);
-
-    for (int i = 0; i < f1.size(); i++) {
-      // x[i] += _h * (f0[i] + f1[i]);
-      x[i] += _h * f1[i];
+    const std::vector<vec3> &f = mm->forces();
+    for (int i = 0; i < f.size(); i++) {
+      vec3 xi = x[i];
+      vec3 fi = f[i];
+      x[i] += 0.5 * _h * f[i];
     }
-#endif
-    // asawa::center(x, 2.0);
   }
 
   void step(int frame) {
@@ -120,20 +103,20 @@ public:
     std::cout << "    -corners: " << __M->corner_count() << std::endl;
     std::cout << "    -verts: " << __M->vert_count() << std::endl;
     std::cout << "    -faces: " << __M->face_count() << std::endl;
-
-    for (int k = 0; k < 2; k++) {
+    for (int k = 0; k < 1; k++) {
       __surf->step(true);
     }
+
+    _mighty_morphin->step(_h);
     step_dynamics(frame);
-    // step_sdf(frame);
+    //  step_sdf(frame);
   }
   // std::map<index_t, index_t> _rod_adjacent_edges;
   real _h = 0.05;
   real _eps;
   index_t _ig0, _ig1;
 
-  module_base::ptr _vortex_vert;
-  module_base::ptr _vortex_edge;
+  module_base::ptr _mighty_morphin;
 
   shell::shell::ptr __M;
   shell::dynamic::ptr __surf;

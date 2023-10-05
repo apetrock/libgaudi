@@ -76,81 +76,6 @@ real dist_line_line_cen(shell &M, index_t cA0, index_t cB0,
   return d0;
 };
 
-// this is ugly, but we have to do it this way, with two lists because
-// the callback on the data
-real line_line_min(const index_t &idT, //
-                   const std::vector<index_t> &t_inds,
-                   const vector<vec3> &t_x, //
-                   const index_t &idS,      //
-                   const std::vector<index_t> &s_inds,
-                   const vector<vec3> &s_x) {
-  index_t vT0 = t_inds[2 * idT + 0];
-  index_t vT1 = t_inds[2 * idT + 1];
-  index_t vS0 = s_inds[2 * idS + 0];
-  index_t vS1 = s_inds[2 * idS + 1];
-  if (idT >= idS)
-    return std::numeric_limits<real>::infinity();
-
-  if (vT0 == vS0)
-    return std::numeric_limits<real>::infinity();
-  if (vT1 == vS1)
-    return std::numeric_limits<real>::infinity();
-  if (vT0 == vS1)
-    return std::numeric_limits<real>::infinity();
-  if (vT1 == vS0)
-    return std::numeric_limits<real>::infinity();
-
-  const vec3 &xA0 = t_x[t_inds[2 * idT + 0]];
-  const vec3 &xA1 = t_x[t_inds[2 * idT + 1]];
-  const vec3 &xB0 = s_x[s_inds[2 * idS + 0]];
-  const vec3 &xB1 = s_x[s_inds[2 * idS + 1]];
-#if 0
-  real d0 = 1.0 / 2.0 * ((xB0 - xA0).norm() + (xB1 - xA1).norm());
-  real d1 = 1.0 / 2.0 * ((xB0 - xA1).norm() + (xB1 - xA0).norm());
-  return min(d0, d1);
-#else
-  // real d0 = (0.5 * (xA1 + xA0) - 0.5 * (xB1 + xA0)).norm();
-  std::array<real, 3> d = va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
-  return d[0];
-#endif
-};
-
-// this is ugly, but we have to do it this way, with two lists because
-// the callback on the data
-real pnt_tri_min(const index_t &idT, //
-                 const std::vector<index_t> &t_inds,
-                 const vector<vec3> &t_x, //
-                 const index_t &idS,      //
-                 const std::vector<index_t> &s_inds, const vector<vec3> &s_x) {
-  index_t vT0 = t_inds[idT];
-  index_t vS0 = s_inds[3 * idS + 0];
-  index_t vS1 = s_inds[3 * idS + 1];
-  index_t vS2 = s_inds[3 * idS + 2];
-  if (vT0 == vS0)
-    return std::numeric_limits<real>::infinity();
-  if (vT0 == vS1)
-    return std::numeric_limits<real>::infinity();
-  if (vT0 == vS2)
-    return std::numeric_limits<real>::infinity();
-
-  const vec3 &x0 = t_x[vT0];
-  const vec3 &xt0 = s_x[vS0];
-  const vec3 &xt1 = s_x[vS1];
-  const vec3 &xt2 = s_x[vS2];
-#if 0
-  real d0 = 1.0 / 2.0 * ((xB0 - xA0).norm() + (xB1 - xA1).norm());
-  real d1 = 1.0 / 2.0 * ((xB0 - xA1).norm() + (xB1 - xA0).norm());
-  return min(d0, d1);
-#else
-  // vec3 xN;
-  // real d0 = va::distance_from_triangle({xt0, xt1, xt2}, x0, xN);
-  std::array<real, 4> cp = va::closest_point({xt0, xt1, xt2}, x0);
-  vec3 xT = cp[1] * xt0 + cp[2] * xt1 + cp[3] * xt2;
-
-  return cp[0];
-#endif
-};
-
 std::mt19937_64 rng;
 std::uniform_real_distribution<real> unif(0.0, 1.0);
 
@@ -623,7 +548,7 @@ public:
       std::vector<index_t> collisions =
           arp::getNearest<2, 2>(e0, edge_verts_t, x_t, //
                                 *edge_tree,            //
-                                tol, &line_line_min);
+                                tol, &arp::line_line_min);
       for (index_t e1 : collisions) {
 
         index_t c0 = edge_map_t[e0];
@@ -661,7 +586,7 @@ public:
       std::vector<index_t> collisions =
           arp::getNearest<1, 3>(i, verts_t, x_t, //
                                 *face_tree,      //
-                                tol, &pnt_tri_min);
+                                tol, &arp::pnt_tri_min);
 
       for (index_t iti : collisions) {
         index_t iv = verts_map_t[i];
@@ -970,25 +895,43 @@ public:
                 });
   }
 
+  void test_nan() {
+    std::vector<vec3> &x = get_vec_data(*__M, 0);
+    for (int i = 0; i < x.size(); i++) {
+      if (x[i].hasNaN()) {
+        std::cout << "nan" << std::endl;
+        std::cout << i << std::endl;
+        std::cout << x[i] << std::endl;
+        exit(0);
+      }
+    }
+  }
+
   void update_positions(real dt, const std::vector<vec3> &dx) {
 
-    std::vector<vec3> &coords = get_vec_data(*__M, 0);
+    std::vector<vec3> &x = get_vec_data(*__M, 0);
     std::vector<vec3> &_dx = get_vec_data(*__M, __vdatum_id);
 
     for (int i = 0; i < _dx.size(); i++) {
       _dx[i] = dx[i];
-      coords[i] += dt * dx[i];
+      x[i] += dt * dx[i];
     }
   }
 
-  void step(bool merge_edges_ = true) {
+  void step(bool merge_edges_ = true, bool break_cycles_ = true) {
     for (int k = 0; k < 1; k++) {
       std::cout << "subd" << std::endl;
       subdivide_edges();
       delete_degenerates(*__M);
-      std::cout << "break" << std::endl;
-      break_cycles();
-      delete_degenerates(*__M);
+
+      if (break_cycles_) {
+        std::cout << "break, ";
+        break_cycles();
+        std::cout << "degenerates ";
+        delete_degenerates(*__M);
+      }
+      std::cout << std::endl;
+
       std::cout << "collapse" << std::endl;
       collapse_edges();
       delete_degenerates(*__M);
@@ -1009,6 +952,7 @@ public:
 
   void step(real dt, const std::vector<vec3> &dx) {
     update_positions(dt, dx);
+    test_nan();
     step();
   }
 
