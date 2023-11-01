@@ -109,6 +109,17 @@ inline vec3 hsv_mix(real t, vec3 a, vec3 b) {
   return va::hsv_to_rgb(vec3(h, s, v));
 }
 
+inline vec3 cie_mix(real t, vec3 a, vec3 b) {
+
+  real am = a.norm();
+  real bm = b.norm();
+  vec3 aN = a / am;
+  vec3 bN = b / bm;
+  real m = va::mix(t, am, bm);
+  vec3 N = va::mix(t, aN, bN).normalized();
+  return m * N;
+}
+
 inline std::array<vec3, 2> _get_colors(index_t frame) {
   //
   const vec3 colors[6][2] = {
@@ -125,8 +136,11 @@ inline std::array<vec3, 2> _get_colors(index_t frame) {
   std::array<vec3, 2> out = {vec3::Zero(), vec3::Zero()};
   if (frame < 600) {
     real t = real(frame) / 600.0;
-    out[0] = hsv_mix(t, cP[0], c0[0]);
-    out[1] = hsv_mix(t, cP[1], c0[1]);
+    // out[0] = hsv_mix(t, cP[0], c0[0]);
+    // out[1] = hsv_mix(t, cP[1], c0[1]);
+    out[0] = cie_mix(t, cP[0], c0[0]);
+    out[1] = cie_mix(t, cP[1], c0[1]);
+
   } else if (frame >= 600 && frame < 2400) {
     out = std::array<vec3, 2>{c0[0], c0[1]};
   } else if (frame >= 2400) {
@@ -519,7 +533,7 @@ public:
         _rod_control->set_rod_offset(offset);
         _rod_control->set_willmore_weight(3e-1);
         _rod_control->set_area_weight(1e-1);
-        _rod_control->set_shell_strain_weight(1e-1);
+        _rod_control->set_shell_strain_weight(1e-2);
 
         //_rod_control->set_rod_pin_weight(4e1);
         //_rod_control->set_rod_offset(10.0);
