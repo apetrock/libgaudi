@@ -44,6 +44,10 @@ template <class Tf, class Tv> inline Tv linear(Tf f, const Tv &x, const Tv &y) {
   return (y - x) * f + x;
 }
 
+template <class Tf, class Tv> inline Tv mix(Tf f, const Tv &x0, const Tv &x1) {
+  return (1.0 - f) * x0 + f * x1;
+}
+
 template <class Tf> inline bool mix(Tf f, const bool &x0, const bool &x1) {
   if (x0 && x1)
     return true;
@@ -55,13 +59,26 @@ template <class Tf> inline bool mix(Tf f, const bool &x0, const bool &x1) {
     return x1;
 }
 
-template <class Tf, class Tv> inline Tv mix(Tf f, const Tv &x0, const Tv &x1) {
-  return (1.0 - f) * x0 + f * x1;
+template <typename T> T polar_mix(T t, T a, T b) {
+  T d = b - a;
+  if (d > M_PI) {
+    d -= 2 * M_PI;
+  } else if (d < -M_PI) {
+    d += 2 * M_PI;
+  }
+  return a + d * t;
 }
 
 template <class T> inline T clamp(const T &v, const T &lb, const T &ub) {
   return std::max(lb, std::min(v, ub));
 }
+
+template <class T>
+auto smoothstep = [](T t, T t0 = 0.0, T t1 = 1.0) {
+  // smoother step
+  t = clamp(t, t0, t1);
+  return t * t * t * (t * (6.0f * t - 15.0f) + 10.0f);
+};
 
 template <typename T>
 VEC3<T> catmull_rom(const VEC3<T> &p0, const VEC3<T> &p1, const VEC3<T> &p2,
@@ -194,6 +211,27 @@ template <typename T> double norm(std::complex<T> a) {
 template <typename T> T norm2(VEC3<T> a) {
   return a[0] * a[0] + a[1] * a[1] + a[2] * a[2];
 };
+
+template <class T, class S>
+std::array<S, 2> mean_std(const std::vector<T> &vec) {
+  // calc mean/std using std::accum
+  S sz = real(vec.size());
+  S mean = std::accumulate(vec.begin(), vec.end(), 0.0,
+                           [&mean, &sz](S accumulator, const T &val) {
+                             return accumulator += norm(val);
+                           });
+  mean /= sz;
+  S var = std::accumulate(
+      vec.begin(), vec.end(), 0.0, [&mean, &sz](S accumulator, const T &val) {
+        S val_n = norm(val);
+        return accumulator + ((val_n - mean) * (val_n - mean));
+      });
+  var /= sz - 1.0;
+
+  S stddev = std::sqrt(var);
+  std::cout << "stddev: " << var << " " << stddev << std::endl;
+  return {mean, stddev};
+}
 
 template <typename T> VEC3<T> normalize(VEC3<T> a) { return a / norm(a); };
 template <typename T> VEC4<T> normalize(VEC4<T> a) { return a / norm(a); };
@@ -1181,6 +1219,119 @@ template <typename T> QUAT<T> exp_slerp(QUAT<T> qa, QUAT<T> qb, T t) {
     qo = slerp(qa, qb, t);
   return qo;
   // return qexp(mix(t, qla, qlb));
+}
+
+template <typename T> VEC3<T> rgb_to_hsv(const VEC3<T> &rgb) {
+  // http://en.literateprograms.org/RGB_to_HSV_color_space_conversion_%28C%29
+  VEC3<T> hsv;
+  T rgb_max = 0.0;
+  T rgb_min = 1.0;
+  rgb_max = (rgb[0] > rgb_max ? rgb[0] : rgb_max);
+  rgb_max = (rgb[1] > rgb_max ? rgb[1] : rgb_max);
+  rgb_max = (rgb[2] > rgb_max ? rgb[2] : rgb_max);
+  rgb_min = (rgb[0] < rgb_min ? rgb[0] : rgb_min);
+  rgb_min = (rgb[1] < rgb_min ? rgb[1] : rgb_min);
+  rgb_min = (rgb[2] < rgb_min ? rgb[2] : rgb_min);
+  // hsv[2] = rgb_max;
+  hsv[2] = rgb_max;
+  if (hsv[2] == 0) {
+    hsv[0] = hsv[1] = 0;
+    return hsv;
+  }
+  // normalize
+  T rgb_n[3];
+  rgb_n[0] = rgb[0] / hsv[2];
+  rgb_n[1] = rgb[1] / hsv[2];
+  rgb_n[2] = rgb[2] / hsv[2];
+  // Recomput max min?
+  rgb_max = 0;
+  rgb_max = (rgb_n[0] > rgb_max ? rgb_n[0] : rgb_max);
+  rgb_max = (rgb_n[1] > rgb_max ? rgb_n[1] : rgb_max);
+  rgb_max = (rgb_n[2] > rgb_max ? rgb_n[2] : rgb_max);
+  rgb_min = 1;
+  rgb_min = (rgb_n[0] < rgb_min ? rgb_n[0] : rgb_min);
+  rgb_min = (rgb_n[1] < rgb_min ? rgb_n[1] : rgb_min);
+  rgb_min = (rgb_n[2] < rgb_min ? rgb_n[2] : rgb_min);
+  hsv[1] = rgb_max - rgb_min;
+  if (hsv[1] == 0) {
+    hsv[0] = 0;
+    return hsv;
+  }
+  rgb_n[0] = (rgb_n[0] - rgb_min) / (rgb_max - rgb_min);
+  rgb_n[1] = (rgb_n[1] - rgb_min) / (rgb_max - rgb_min);
+  rgb_n[2] = (rgb_n[2] - rgb_min) / (rgb_max - rgb_min);
+  // Recomput max min?
+  rgb_max = 0;
+  rgb_max = (rgb_n[0] > rgb_max ? rgb_n[0] : rgb_max);
+  rgb_max = (rgb_n[1] > rgb_max ? rgb_n[1] : rgb_max);
+  rgb_max = (rgb_n[2] > rgb_max ? rgb_n[2] : rgb_max);
+  rgb_min = 1;
+  rgb_min = (rgb_n[0] < rgb_min ? rgb_n[0] : rgb_min);
+  rgb_min = (rgb_n[1] < rgb_min ? rgb_n[1] : rgb_min);
+  rgb_min = (rgb_n[2] < rgb_min ? rgb_n[2] : rgb_min);
+  if (rgb_max == rgb_n[0]) {
+    hsv[0] = 0.0 + 60.0 * (rgb_n[1] - rgb_n[2]);
+    if (hsv[0] < 0.0) {
+      hsv[0] += 360.0;
+    }
+  } else if (rgb_max == rgb_n[1]) {
+    hsv[0] = 120.0 + 60.0 * (rgb_n[2] - rgb_n[0]);
+  } else /* rgb_max == rgb_n[2] */ {
+    hsv[0] = 240.0 + 60.0 * (rgb_n[0] - rgb_n[1]);
+  }
+
+  return hsv;
+}
+template <typename T> VEC3<T> hsv_to_rgb(const VEC3<T> &hsv) {
+  VEC3<T> rgb;
+  // From medit
+  T f, p, q, t, hh;
+  int i;
+  T h = hsv[0];
+  T s = hsv[1];
+  T v = hsv[2];
+
+  // shift the hue to the range [0, 360] before performing calculations
+  hh = ((360 + ((int)h % 360)) % 360) / 60.;
+  i = (int)std::floor(hh); /* largest int <= h     */
+  f = hh - i;              /* fractional part of h */
+  p = v * (1.0 - s);
+  q = v * (1.0 - (s * f));
+  t = v * (1.0 - (s * (1.0 - f)));
+
+  switch (i) {
+  case 0:
+    rgb[0] = v;
+    rgb[1] = t;
+    rgb[2] = p;
+    break;
+  case 1:
+    rgb[0] = q;
+    rgb[1] = v;
+    rgb[2] = p;
+    break;
+  case 2:
+    rgb[0] = p;
+    rgb[1] = v;
+    rgb[2] = t;
+    break;
+  case 3:
+    rgb[0] = p;
+    rgb[1] = q;
+    rgb[2] = v;
+    break;
+  case 4:
+    rgb[0] = t;
+    rgb[1] = p;
+    rgb[2] = v;
+    break;
+  case 5:
+    rgb[0] = v;
+    rgb[1] = p;
+    rgb[2] = q;
+    break;
+  }
+  return rgb;
 }
 
 } // namespace va

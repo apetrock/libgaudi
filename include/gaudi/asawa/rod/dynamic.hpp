@@ -212,6 +212,7 @@ public:
     interp(c00, c10, cnew, __R->__M);
     interp(c00, c10, cnew, __R->__J);
     interp_l(c00, c10, cnew, __R->__l0);
+    interp(c00, c10, cnew, __R->__t);
   }
 
   void collapse_edge(index_t c00) {
@@ -233,6 +234,7 @@ public:
     interp(c01, c10, c10, __R->__M);
     interp(c01, c10, c10, __R->__J);
     interp_l(c01, c10, c10, __R->__l0);
+    interp(c01, c10, c10, __R->__t);
   }
 
 #if 1

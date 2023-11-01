@@ -18,14 +18,62 @@
 #include <regex>
 #include <sstream>
 
+inline const char *GLTypeToString(GLenum type) {
+  switch (type) {
+  case GL_DEBUG_TYPE_ERROR:
+    return "Error";
+  case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+    return "Deprecated Behavior";
+  case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+    return "Undefined Behavior";
+  case GL_DEBUG_TYPE_PORTABILITY:
+    return "Portability";
+  case GL_DEBUG_TYPE_PERFORMANCE:
+    return "Performance";
+  case GL_DEBUG_TYPE_MARKER:
+    return "Marker";
+  case GL_DEBUG_TYPE_PUSH_GROUP:
+    return "Push Group";
+  case GL_DEBUG_TYPE_POP_GROUP:
+    return "Pop Group";
+  case GL_DEBUG_TYPE_OTHER:
+    return "Other";
+  default:
+    return "";
+  }
+}
+
+inline const char *GLSeverityToString(GLenum severity) {
+  switch (severity) {
+  case GL_DEBUG_SEVERITY_HIGH:
+    return "High";
+  case GL_DEBUG_SEVERITY_MEDIUM:
+    return "Medium";
+  case GL_DEBUG_SEVERITY_LOW:
+    return "Low";
+  case GL_DEBUG_SEVERITY_NOTIFICATION:
+    return "Notification";
+  default:
+    return "";
+  }
+}
+
 inline void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id,
                                        GLenum severity, GLsizei length,
                                        const GLchar *message,
                                        const void *userParam) {
-  fprintf(stderr,
-          "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n",
-          (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""), type, severity,
-          message);
+  // const char *srcStr = GLTypeToString(source);
+  const char *typeStr = GLTypeToString(type);
+  const char *sevStr = GLSeverityToString(severity);
+
+  if (severity == GL_DEBUG_SEVERITY_NOTIFICATION)
+    return;
+  if (severity == GL_DEBUG_SEVERITY_LOW)
+    return;
+
+  fprintf(stderr, "GL CALLBACK: %s type = %s, severity = %s, message = %s\n",
+          (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""), typeStr,
+          sevStr, message);
 }
 
 namespace gg {
@@ -193,7 +241,7 @@ protected:
 
   // variables for selection and dragging, I maintain two selection groups
   // one for widgets and one for objects
-  double mDist = 3.0;
+  double mDist = 1.0;
   bool mDragging;
   Eigen::Vector2i pLast;
   Vec4 mObjCenCache;
@@ -527,7 +575,7 @@ public:
   SsaoShadingEffect(int w = 1280, int h = 720) : RenderingEffect(w, h) {
     initFbo();
     initKernel();
-    initNoise();
+    // initNoise();
     initShader();
     std::cout << "SSAO Shading effect created" << std::endl;
     std::cout << _width << " " << _height << std::endl;
@@ -608,7 +656,7 @@ public:
   virtual void initShader() override {
     this->mShader.bind();
     this->mShader.init("deffered_shader", get_shader("sqr_vert"),
-                       get_shader("ssao_sqr_frag"));
+                       get_shader("ssao_sqr_frag", _width, _height));
     // this->mShader.init("hdr_shader", get_shader("hdr_sqr_vert"),
     //                    get_shader("hdr_sqr_frag"));
   }
@@ -631,8 +679,8 @@ public:
     glBindTexture(GL_TEXTURE_2D, gPosition);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, gNormal);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, noiseTexture);
+    // glActiveTexture(GL_TEXTURE2);
+    // glBindTexture(GL_TEXTURE_2D, noiseTexture);
     /*
         for (unsigned int i = 0; i < 64; ++i)
           this->mShader.setUniform("samples[" + std::to_string(i) + "]",
@@ -726,7 +774,7 @@ public:
   virtual void initShader() override {
     this->mShader.bind();
     this->mShader.init("deffered_shader", get_shader("sqr_vert"),
-                       get_shader("bleed_sqr_frag"));
+                       get_shader("bleed_sqr_frag", _width, _height));
     // this->mShader.init("hdr_shader", get_shader("hdr_sqr_vert"),
     //                    get_shader("hdr_sqr_frag"));
   }
@@ -752,8 +800,8 @@ public:
     glBindTexture(GL_TEXTURE_2D, gNormal);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, noiseTexture);
+    // glActiveTexture(GL_TEXTURE3);
+    // glBindTexture(GL_TEXTURE_2D, noiseTexture);
     /*
         for (unsigned int i = 0; i < 64; ++i)
           this->mShader.setUniform("samples[" + std::to_string(i) + "]",

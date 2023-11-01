@@ -330,7 +330,7 @@ public:
     // make_tunnel();
     if ((frame) % 200 == 1) {
       // std::cout << "  -snap" << frame << std::endl;
-      // make_sdf_tunnel();
+      make_sdf_tunnel();
       // snap();
     }
 

@@ -377,7 +377,7 @@ public:
 
   ~laplacian3() {}
   /*L = MinvC*/
-
+  // need one that projects into null space
   void initC() {
     _matC = build_lap<3>(
         *__M, __x, //
@@ -404,7 +404,9 @@ public:
     return Uc;
   }
 
+  // need simple null space smoothing
   std::vector<vec3> smooth(const std::vector<vec3> &U, real c0, real c1) {
+
     // Eigen::VectorXd test(U.data());
     Eigen::VectorXd U0 = to(U);
     Eigen::SparseMatrix<real> I(_matC.rows(), _matC.cols());

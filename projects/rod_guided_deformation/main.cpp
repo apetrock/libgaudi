@@ -1,5 +1,6 @@
 #include "GaudiMath/typedefs.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <exception>
 #include <iterator>
@@ -30,6 +31,7 @@
 // #include "gaudi/asawa/asawa.h"
 
 #include "gaudi/duchamp/rod_guided_deformation.hpp"
+#include "gaudi/duchamp/rod_guided_deformation_with_morph.hpp"
 
 #define TRACKBALLSIZE (0.8f)
 #define RENORMCOUNT 97
@@ -82,22 +84,7 @@ public:
 
   Scene() : gg::Scene() { initScene(); }
 
-  void initScene() {
-    //_experiment = duchamp::mean_shift_experiment<growth>::create();
-
-    _objs.resize(2);
-
-    _objs[0] = gg::BufferObject::create();
-    _objs[0]->init();
-    mSceneObjects.push_back(_objs[0]);
-
-    _objs[1] = gg::BufferObject::create();
-    _objs[1]->init();
-    mSceneObjects.push_back(_objs[1]);
-
-    __surf = gaudi::duchamp::rod_guided_deformation::create();
-    mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
-
+  std::array<Vec3d, 2> get_rand_colors() {
     double gd = (3.0 - sqrt(5.0)) * M_PI;
     double phi = (1.0 + sqrt(5.0)) / 2.0;
     Vec2d c0 = random_vec2_with_angle();
@@ -116,6 +103,32 @@ public:
       c03 *= 1.0 - D;
       c13 *= 1.0 + D;
     }
+    return {c03, c13};
+  }
+
+  void initScene() {
+    //_experiment = duchamp::mean_shift_experiment<growth>::create();
+
+    _objs.resize(2);
+
+    _objs[0] = gg::BufferObject::create();
+    _objs[0]->init();
+    mSceneObjects.push_back(_objs[0]);
+
+    _objs[1] = gg::BufferObject::create();
+    _objs[1]->init();
+    mSceneObjects.push_back(_objs[1]);
+
+    __surf = gaudi::duchamp::rod_guided_deformation_with_morph::create();
+    mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
+    for (int i = 0; i < 12; i++) {
+      std::array<Vec3d, 2> colors = get_rand_colors();
+      std::cout << " {vec3(" << colors[0].transpose() << "),"
+                << "  vec3(" << colors[1].transpose() << ")}" << std::endl;
+    }
+    std::array<Vec3d, 2> colors_array = get_rand_colors();
+    Vec3d c03 = colors_array[0];
+    Vec3d c13 = colors_array[1];
     colors = {
         gg::colorRGB(c03.x(), c03.y(), c03.z(), 1.0),
         gg::colorRGB(c13.x(), c13.y(), c13.z(), 1.0),
@@ -124,6 +137,13 @@ public:
   virtual void onAnimate(int frame) {
 
     __surf->step(frame);
+    std::array<Vec3d, 2> colors_array = __surf->get_colors(frame);
+    Vec3d c03 = colors_array[0];
+    Vec3d c13 = colors_array[1];
+    colors = {
+        gg::colorRGB(c03.x(), c03.y(), c03.z(), 1.0),
+        gg::colorRGB(c13.x(), c13.y(), c13.z(), 1.0),
+    };
 
     gg::fillBuffer_ref(*__surf->__M, _objs[0], colors[0]);
     gg::fillBuffer_ref(*__surf->__R, _objs[1], colors[1]);
@@ -146,8 +166,8 @@ public:
   }
 
 private:
-  // gaudi::duchamp::fast_summation_test::ptr __surf;
-  gaudi::duchamp::rod_guided_deformation::ptr __surf;
+  // gaudi::duchamp::rod_guided_deformation::ptr __surf;
+  gaudi::duchamp::rod_guided_deformation_with_morph::ptr __surf;
 
   std::vector<gg::DrawablePtr> mSceneObjects;
   std::vector<gg::BufferObjectPtr> _objs;
@@ -169,8 +189,15 @@ public:
   static AppPtr create(std::string file) { return std::make_shared<App>(file); }
 
   typedef double Real;
+  int _screen_width = 1280, _screen_height = 720;
+// #define _screen_width 3840
+// #define _screen_height 2160
+#define _screen_width 1280
+#define _screen_height 720
 
-  App(std::string file) : gg::SimpleApp(1280, 720, 4.0, true, "florp_drive_") {
+  App(std::string file)
+      : gg::SimpleApp(_screen_width, _screen_height, 3.0, true,
+                      "florp_drive_") {
     this->setScene(scene = Scene::create());
     this->initUI();
   }

@@ -1,10 +1,11 @@
 #ifndef __GGSHADERS__
 #define __GGSHADERS__
 
+#include <iostream>
 #include <string>
-
 namespace gg {
-inline std::string get_shader(std::string name) {
+inline std::string get_shader(std::string name, int width = 1280,
+                              int height = 720) {
   std::string f_buff_vert =
       R"(
 #version 330 core
@@ -320,7 +321,7 @@ void main()
 
     vec2 tc = 1.0 + TexCoords;
     //if(tc.x < 0.5)
-      FragColor = vec4((1.0 * lighting + 0.8 * AmbientOcclusion * (0.65 * Bleed + 0.2 * ambient)), 1.0);
+      FragColor = vec4((1.0 * lighting + 0.8 * AmbientOcclusion * (1.5 * Bleed + 0.2 * ambient)), 1.0);
     //else
     //  FragColor = vec4(vec3(8.0 * Bleed), 1.0);
 }
@@ -360,7 +361,7 @@ float radius = 0.2;
 float bias = -0.01;
 
 // tile noise texture over screen based on screen dimensions divided by noise size
-const vec2 noiseScale = vec2(1280.0/4.0, 720.0/4.0); 
+const vec2 noiseScale = vec2(float(SCREEN_WIDTH)/4.0, float(SCREEN_HEIGHT)/4.0); 
 
 struct quat
 {
@@ -461,7 +462,7 @@ void main()
     //occlusion /= kernelSize;
     occlusion = 1.0 - (occlusion / float(KSIZE));
     
-    FragColor = pow(occlusion, 1.5);
+    FragColor = pow(occlusion, 1.8);
 }
 )";
 
@@ -501,7 +502,7 @@ float radius = 0.1;
 float bias = 0.02;
 
 // tile noise texture over screen based on screen dimensions divided by noise size
-const vec2 noiseScale = vec2(1280.0/4.0, 720.0/4.0); 
+const vec2 noiseScale = vec2(float(SCREEN_WIDTH)/4.0, float(SCREEN_HEIGHT)/4.0); 
 
 struct quat
 {
@@ -929,11 +930,28 @@ void main() {
   }
 
   if (name == "ssao_sqr_frag") {
-    return ssao_sqr_frag;
+    // find and replace SCREEN_WIDTH and SCREEN_HEIGHT
+    std::string s = ssao_sqr_frag;
+    std::string s1 = "SCREEN_WIDTH";
+    std::string s2 = "SCREEN_HEIGHT";
+    s.replace(s.find(s1), s1.length(), std::to_string(width));
+    s.replace(s.find(s2), s2.length(), std::to_string(height));
+
+    std::cout << name << std::endl;
+    std::cout << s << std::endl;
+    return s;
   }
 
   if (name == "bleed_sqr_frag") {
-    return bleed_sqr_frag;
+    std::string s = bleed_sqr_frag;
+    std::string s1 = "SCREEN_WIDTH";
+    std::string s2 = "SCREEN_HEIGHT";
+    s.replace(s.find(s1), s1.length(), std::to_string(width));
+    s.replace(s.find(s2), s2.length(), std::to_string(height));
+    // dump name and source
+    std::cout << name << std::endl;
+    std::cout << s << std::endl;
+    return s;
   }
 
   if (name == "blur_sqr_frag") {

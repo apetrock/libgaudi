@@ -45,6 +45,16 @@ void init_pinned(const asawa::rod::rod &R,
   }
 }
 
+void init_pinned(const asawa::rod::rod &R, std::vector<vec3> target,
+                 std::vector<projection_constraint::ptr> &constraints,
+                 const std::vector<vec3> &x, const real &w,
+                 std::vector<sim_block::ptr> blocks) {
+  for (int iv = 0; iv < R.corner_count(); iv++) {
+    constraints.push_back(
+        pinned::create(std::vector<index_t>({iv}), target[iv], w, blocks));
+  }
+}
+
 } // namespace block
 } // namespace hepworth
 } // namespace gaudi

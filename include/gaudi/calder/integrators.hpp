@@ -186,6 +186,80 @@ std::vector<real> fast_dist(const arp::T3::ptr &face_tree,
   return min_dists;
 }
 
+std::vector<real> fast_view(const arp::T3::ptr &face_tree,
+                            const std::vector<vec3> &pov,
+                            const std::vector<vec3> N_pov, //
+                            real spread = 1.0) {
+
+  const std::vector<vec3> x = face_tree->verts();
+  const std::vector<index_t> &face_vert_ids = face_tree->indices();
+  std::vector<index_t> face_ids(face_vert_ids.size() / 3);
+
+  for (int i = 0; i < face_ids.size(); i++) {
+    face_ids[i] = i;
+  }
+
+  std::vector<vec3> N(face_vert_ids.size() / 3);
+  real l0 = 0.0;
+  for (int i = 0; i < face_ids.size(); i++) {
+    vec3 x0 = x[face_vert_ids[i * 3 + 0]];
+    vec3 x1 = x[face_vert_ids[i * 3 + 1]];
+    vec3 x2 = x[face_vert_ids[i * 3 + 2]];
+    N[i] = (x1 - x0).cross(x2 - x0);
+    real A = N[i].norm();
+    l0 += A;
+  }
+
+  l0 /= face_ids.size();
+  l0 = pow(l0, 0.5);
+  l0 *= spread;
+
+  calder::fast_summation<arp::T3> sum(*face_tree);
+  sum.bind<vec3>(face_ids, N);
+  std::vector<real> dists(pov.size(), 0.0);
+  std::vector<real> u = sum.calc<real>(
+      pov,
+      [l0, &dists, &N_pov](const index_t &i, const index_t &j, const vec3 &pi,
+                           const std::vector<calder::datum::ptr> &data,
+                           calder::fast_summation<arp::T3>::Node_Type node_type,
+                           const arp::T3::node &node,
+                           const arp::T3 &tree) -> real {
+        const calder::vec3_datum::ptr N_datum =
+            static_pointer_cast<calder::vec3_datum>(data[0]);
+        const vec3 &N = N_datum->leaf_data()[j];
+        const vec3 &Ni = N_pov[i];
+        vec3 p0 = tree.vert(3 * j + 0);
+        vec3 p1 = tree.vert(3 * j + 1);
+        vec3 p2 = tree.vert(3 * j + 2);
+
+        std::array<real, 4> cp = va::closest_point({p0, p1, p2}, pi);
+        dists[i] = std::max(dists[i], cp[0]);
+        return 0.0;
+      },
+      [l0, &dists, &N_pov](const index_t &i, const index_t &j, const vec3 &pi,
+                           const std::vector<calder::datum::ptr> &data,
+                           calder::fast_summation<arp::T3>::Node_Type node_type,
+                           const arp::T3::node &node,
+                           const arp::T3 &tree) -> real {
+        const calder::vec3_datum::ptr N_datum =
+            static_pointer_cast<calder::vec3_datum>(data[0]);
+        const vec3 &N = N_datum->node_data()[j];
+        const vec3 &Ni = N_pov[i];
+        vec3 pj = node.center();
+        vec3 dp = pj - pi;
+
+        if (Ni.dot(N) < 0.0)
+          return 0.0;
+        // real dist = va::project_to_nullspace(dp, N);
+        real dist = va::norm(dp);
+        dists[i] = std::max(dists[i], dist);
+
+        return 0.0;
+      });
+
+  return dists;
+}
+
 std::vector<real> fast_winding(asawa::shell::shell &M,
                                const std::vector<vec3> &x,
                                const std::vector<vec3> &pov, real l0) {

@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <iostream>
 #include <ostream>
 #include <vector>
 
@@ -56,7 +57,7 @@ integrate_over_shell(asawa::shell::shell &M, const std::vector<vec3> &p_pov,
   std::vector<index_t> face_vert_ids = M.get_face_vert_ids();
   std::vector<index_t> face_map = M.get_face_map();
   std::vector<index_t> face_ids = M.get_face_range();
-  std::cout << __PRETTY_FUNCTION__ << std::endl;
+  // std::cout << __PRETTY_FUNCTION__ << std::endl;
   std::cout << "summing" << std::endl;
   std::cout << " -n_faces: " << face_ids.size() << std::endl;
   std::cout << " -create: " << std::endl;
@@ -187,6 +188,12 @@ std::vector<vec3> gradient_scalar(asawa::shell::shell &M,
   return us;
 }
 
+void log_v(vec3 pi, vec3 e) {
+  logger::line(pi, pi + 10.0 * e, vec4(0.0, 0.3, 1.0, 1.0));
+}
+
+void log_v(vec3 pi, real e) {}
+
 template <typename T>
 std::vector<T> mls_avg(asawa::shell::shell &M, const std::vector<T> &v,
                        const std::vector<vec3> &p_pov, real l0, real p = 3.0) {
@@ -218,23 +225,82 @@ std::vector<T> mls_avg(asawa::shell::shell &M, const std::vector<T> &v,
         real dist = (pj - pi).norm();
 
         real kappa = computeKg(dist, l0, p);
-        // real kappa = computeK(dist, l0, p);
 
+        // real kappa = computeK(dist, l0, p);
+        // if (i == 1250) {
+        // logger::line(pi, pj, vec4(1.0, 0.3, 0.3, 1.0));
+        // log_v(pj, kappa * e);
+        // logger::line(pj, pj + 0.1 * vec3(e), vec4(0.0, 0.3, 1.0, 1.0));
+        //}
         sums[i] += w * kappa;
         return kappa * e;
       });
 #if 1
-  int max_count = 0;
-  int max_count_i = 0;
-
   for (int i = 0; i < p_pov.size(); i++) {
-    if (sums[i] < 1e-1)
+    if (sums[i] < 1e-16)
       continue;
     us[i] /= sums[i];
   }
 #endif
   return us;
 }
+
+#if 0
+std::vector<vec3> collision_filter(asawa::shell::shell &M,
+                                   const std::vector<vec3> &v, ,
+                                   const std::vector<vec3> &v_pov,
+                                   const std::vector<vec3> &p_pov, real l0,
+                                   real p = 3.0) {
+  const std::vector<vec3> &x = asawa::get_vec_data(M, 0);
+
+  std::vector<real> sums(p_pov.size(), 0.0);
+  std::vector<real> weights = asawa::shell::face_areas(M, x);
+  std::vector<T> wV(v);
+  for (int i = 0; i < v.size(); i++) {
+    wV[i] *= weights[i];
+  }
+
+  std::vector<vec3> us = integrate_over_shell<T>(
+      M, p_pov,
+      [&wV, &weights, &v_pov](const std::vector<index_t> &face_ids,
+                              Shell_Sum_Type &sum) {
+        sum.bind(calder::datum_t<T>::create(face_ids, wV));
+        sum.bind(calder::datum_t<real>::create(face_ids, weights));
+      },
+      [l0, &sums, p](const index_t i, const index_t j, //
+                     const vec3 &pi, const vec3 &pj,
+                     const std::vector<calder::datum::ptr> &data,
+                     Shell_Sum_Type::Node_Type node_type, //
+                     const Shell_Sum_Type::Node &node,    //
+                     const Shell_Sum_Type::Tree &tree) -> vec3 {
+        vec3 vj = get_data<T>(node_type, j, 0, data);
+        vec3 vi = v_pov[i];
+
+        real dotvjvi = vj.normalized().dot(vi.normalized());
+        real w = get_data<real>(node_type, j, 1, data);
+
+        real dist = (pj - pi).norm();
+
+        real kappa = computeKg(dist, l0, p);
+        // real kappa = computeK(dist, l0, p);
+        // if (i == 1250) {
+        // logger::line(pi, pj, vec4(1.0, 0.3, 0.3, 1.0));
+        // log_v(pj, kappa * e);
+        // logger::line(pj, pj + 0.1 * vec3(e), vec4(0.0, 0.3, 1.0, 1.0));
+        //}
+        sums[i] += w * kappa;
+        return kappa * e;
+      });
+#if 1
+  for (int i = 0; i < p_pov.size(); i++) {
+    if (sums[i] < 1e-16)
+      continue;
+    us[i] /= sums[i];
+  }
+#endif
+  return us;
+}
+#endif
 
 std::vector<vec3> vortex_force(asawa::shell::shell &M,
                                const std::vector<vec3> &p_pov,

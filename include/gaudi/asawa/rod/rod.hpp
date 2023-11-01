@@ -124,9 +124,30 @@ public:
     __J.resize(__corners_next.size(), vec4::Zero());
     __o.resize(__corners_next.size(), quat::Identity());
     _lmax = 0.0;
+    init_t();
+
     update_lengths();
     update_mass();
     _update_frames();
+  }
+
+  void init_t() {
+
+    __t.resize(__corners_next.size(), 0.0);
+    real total_length = 0.0;
+    for (int i = 0; i < __corners_next.size(); i++) {
+      if (__corners_next[i] == -1)
+        continue;
+      index_t j = __corners_next[i];
+      vec3 q0 = __x[i];
+      vec3 q1 = __x[j];
+      __t[i] = total_length;
+      total_length += (q1 - q0).norm();
+    }
+
+    for (int i = 0; i < __t.size(); i++) {
+      __t[i] /= total_length;
+    }
   }
 
   void update_mass() {
@@ -261,7 +282,7 @@ public:
       F.col(2) = T;
 
       __u[i] = quat(F).normalized();
-      std::cout << i << " :" << __u[i] << std::endl;
+
       if (__u[i].coeffs().hasNaN()) {
         std::cout << __PRETTY_FUNCTION__ << i << std::endl;
         std::cout << dn0 << " " << d0p << " " << dd0 << std::endl;
@@ -425,6 +446,7 @@ public:
   const std::vector<vec3> &M() const { return __M; }
   const std::vector<vec4> &J() const { return __J; }
   const std::vector<real> &l0() const { return __l0; }
+  const std::vector<real> &t() const { return __t; }
 
   // Mutable accessors
   std::vector<vec3> &x() { return __x; }
@@ -434,6 +456,8 @@ public:
   std::vector<vec3> &M() { return __M; }
   std::vector<vec4> &J() { return __J; }
   std::vector<real> &l0() { return __l0; }
+
+  std::vector<real> &t() { return __t; }
 
   std::vector<vec3> xc() {
     std::vector<vec3> xc(__x);
@@ -521,6 +545,8 @@ public:
     std::vector<quat> o; // omega
 
     std::vector<real> l0;
+    std::vector<real> t;
+
     int ii = 0;
     for (int i = 0; i < __corners_next.size(); i++) {
       if (__corners_next[i] < 0 && __corners_prev[i] == -1)
@@ -532,6 +558,7 @@ public:
       v.push_back(__v[i]);
       u.push_back(__u[i]);
       o.push_back(__o[i]);
+      t.push_back(__t[i]);
       l0.push_back(__l0[i]);
     }
     std::vector<index_t> new_next;
@@ -559,6 +586,7 @@ public:
     __u = u;
     __o = o;
     __l0 = l0;
+    __t = t;
   }
 
   void debug() {
@@ -588,9 +616,11 @@ public:
 
   real _r = 0.05;
   real _lmax = 0.0;
+
   std::vector<index_t> __corners_next;
   std::vector<index_t> __corners_prev;
 
+  std::vector<real> __t;
   std::vector<vec3> __M;
   std::vector<vec4> __J;
 

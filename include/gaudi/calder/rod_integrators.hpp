@@ -61,7 +61,7 @@ std::vector<T> integrate_over_rod(asawa::rod::rod &R,
   std::vector<index_t> edge_map = R.get_edge_map();
   std::vector<index_t> edge_ids = R.get_vert_range();
 
-  std::cout << __PRETTY_FUNCTION__ << std::endl;
+  // std::cout << __PRETTY_FUNCTION__ << std::endl;
   std::cout << "summing" << std::endl;
   std::cout << " -n_faces: " << edge_ids.size() << std::endl;
   std::cout << " -create: " << std::endl;
@@ -101,10 +101,18 @@ std::vector<T> mls_avg(asawa::rod::rod &R, const std::vector<T> &v,
                        const std::vector<vec3> &p_pov, real l0, real p = 3.0) {
 
   std::vector<real> sums(p_pov.size(), 0.0);
+  std::vector<real> weights = R.l0();
+  std::vector<T> wV(v);
+  for (int i = 0; i < v.size(); i++) {
+    wV[i] *= weights[i];
+  }
+
   std::vector<T> us = integrate_over_rod<T>(
       R, p_pov,
-      [&v](const std::vector<index_t> &edge_ids, Rod_Sum_Type &sum) {
-        sum.bind(calder::vec3_datum::create(edge_ids, v));
+      [&wV, &v, &weights](const std::vector<index_t> &edge_ids,
+                          Rod_Sum_Type &sum) {
+        sum.bind(calder::vec3_datum::create(edge_ids, wV));
+        sum.bind(calder::datum_t<real>::create(edge_ids, weights));
       },
       [l0, &sums, p](const index_t i, const index_t j, //
                      const vec3 &pi, const vec3 &pj,
@@ -113,15 +121,19 @@ std::vector<T> mls_avg(asawa::rod::rod &R, const std::vector<T> &v,
                      const Rod_Sum_Type::Node &node,    //
                      const Rod_Sum_Type::Tree &tree) -> T {
         T e = get_data<T>(node_type, j, 0, data);
+        real w = get_data<real>(node_type, j, 1, data);
+
         real dist = (pj - pi).norm();
-        real kappa = computeK(dist, l0, p);
-        sums[i] += kappa;
+        real kappa = computeKg(dist, l0, p);
+        sums[i] += w * kappa;
         return kappa * e;
       });
 #if 1
   int max_count = 0;
   int max_count_i = 0;
   for (int i = 0; i < p_pov.size(); i++) {
+    if (sums[i] < 1e-16)
+      continue;
     us[i] /= sums[i];
   }
 #endif

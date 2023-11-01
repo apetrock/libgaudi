@@ -112,8 +112,8 @@ public:
     asawa::shell::shell &M = *_M;
     std::vector<vec3> &x = asawa::get_vec_data(M, 0);
     // std::vector<vec3> G = get_grad();
-    std::vector<vec3> G = get_frame_grad();
-    // std::vector<vec3> G = get_smoothd_grad();
+    // std::vector<vec3> G = get_frame_grad();
+    std::vector<vec3> G = get_smoothd_grad();
 
     real C = 0.0;
     for (int i = 0; i < G.size(); i++) {
@@ -123,7 +123,7 @@ public:
     // C /= real(G.size());
     //  real C = std::min()
     //  max = 16.0 * std::max(max, 50.0);
-    C *= 0.005;
+    C *= 0.05;
     for (int i = 0; i < G.size(); i++) {
       logger::line(x[i], x[i] + 0.25 * G[i] / C, vec4(1.0, 0.0, 0.0, 1.0));
       x[i] -= 1.0 * h * G[i] / C;

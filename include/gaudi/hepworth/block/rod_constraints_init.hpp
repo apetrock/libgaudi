@@ -28,12 +28,13 @@ namespace block {
 void init_smooth(const asawa::rod::rod &rod,
                  std::vector<projection_constraint::ptr> &constraints,
                  const real &w, std::vector<sim_block::ptr> blocks) {
-
+  // block is just a single rod position block Xr
   for (int i = 0; i < rod.corner_count(); i++) {
     asawa::rod::consec_t c = rod.consec(i);
     constraints.push_back(smooth::create({c[1], c[0], c[2]}, w, blocks));
   }
 }
+
 #if 1
 void init_cylinder(const asawa::rod::rod &rod,
                    std::vector<projection_constraint::ptr> &constraints,

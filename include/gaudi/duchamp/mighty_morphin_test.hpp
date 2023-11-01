@@ -21,7 +21,9 @@
 
 #include "gaudi/bontecou/laplacian.hpp"
 #include "gaudi/duchamp/modules/mighty_morphin.hpp"
+#include "modules/ccd.hpp"
 #include "modules/mighty_morphin.hpp"
+
 #include "modules/module_base.hpp"
 
 #include <algorithm>
@@ -70,10 +72,21 @@ public:
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, 0.5 * C * l0);
 
     std::vector<index_t> face_vert_ids = __M->get_face_vert_ids();
+    mighty_morphin::ptr mm4 = mighty_morphin::create(__M);
+    real off = 0.55;
+    real scale = 0.6;
+    mm4->add_geometry(x, face_vert_ids, scale, vec3(off, off, 0.0));
+    mm4->add_geometry(x, face_vert_ids, scale, vec3(-off, off, 0.0));
+    mm4->add_geometry(x, face_vert_ids, scale, vec3(off, -off, 0.0));
+    mm4->add_geometry(x, face_vert_ids, scale, vec3(-off, -off, 0.0));
+    mighty_morphin::ptr mm1 = mighty_morphin::create(__M);
+    mm1->add_geometry(x, face_vert_ids, 1.0, vec3(0, 0, 0.0));
 
-    _mighty_morphin = std::dynamic_pointer_cast<module_base>( //
-        mighty_morphin::create(__M, x, face_vert_ids, 1.1,
-                               vec3(0.5, 0.0, 0.0)));
+    _mighty_morphin4 = std::dynamic_pointer_cast<module_base>(mm4);
+    _mighty_morphin1 = std::dynamic_pointer_cast<module_base>(mm1);
+
+    _ccd = std::dynamic_pointer_cast<module_base>( //
+        continuous_collision_detection::create(__M, __surf, 0.1 * l0));
 
     for (int i = 0; i < 5; i++) {
       __surf->step();
@@ -87,14 +100,19 @@ public:
     asawa::shell::shell &M = *__M;
     std::vector<vec3> &x = asawa::get_vec_data(M, 0);
     mighty_morphin::ptr mm =
-        std::dynamic_pointer_cast<mighty_morphin>(_mighty_morphin);
+        std::dynamic_pointer_cast<mighty_morphin>(_mighty_morphin4);
+    if (frame > 400)
+      mm = std::dynamic_pointer_cast<mighty_morphin>(_mighty_morphin1);
+    // mm->debug_target();
 
-    const std::vector<vec3> &f = mm->forces();
-    for (int i = 0; i < f.size(); i++) {
-      vec3 xi = x[i];
-      vec3 fi = f[i];
-      x[i] += 0.5 * _h * f[i];
-    }
+    continuous_collision_detection::ptr ccd =
+        std::dynamic_pointer_cast<continuous_collision_detection>(_ccd);
+
+    real h_step = 0.0;
+    ccd->init_step(_h);
+    mm->step(_h);
+    ccd->add_shell_force(mm->forces(), 1.0);
+    ccd->step(_h);
   }
 
   void step(int frame) {
@@ -107,16 +125,21 @@ public:
       __surf->step(true);
     }
 
-    _mighty_morphin->step(_h);
     step_dynamics(frame);
+    if (frame > 600)
+      exit(0);
+
     //  step_sdf(frame);
   }
   // std::map<index_t, index_t> _rod_adjacent_edges;
-  real _h = 0.05;
+  real _h = 0.01;
   real _eps;
   index_t _ig0, _ig1;
 
-  module_base::ptr _mighty_morphin;
+  module_base::ptr _mighty_morphin4;
+  module_base::ptr _mighty_morphin1;
+
+  module_base::ptr _ccd;
 
   shell::shell::ptr __M;
   shell::dynamic::ptr __surf;
