@@ -2,6 +2,8 @@
 #ifndef __HEP_ROD_SOLVER__
 #define __HEP_ROD_SOLVER__
 
+#include "gaudi/sparse_solver.h"
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -101,16 +103,16 @@ public:
     std::cout << "M sum: " << M.sum() << std::endl;
 
     vecX p = vecX::Zero(id0);
-
+    vecX q0 = q;
     for (int k = 0; k < ITS; k++) {
       p.setZero();
       int ii = 0;
-      // #pragma omp parallel for
+#pragma omp parallel for
       for (int i = 0; i < _constraints.size(); i++) {
         auto &constraint = _constraints[i];
         constraint->project(q, p);
-#if 1
-        if (i < _constraints.size() - 1) {
+#if 0
+      if (i < _constraints.size() - 1) {
           index_t id0 = _constraints[i]->_id0;
           index_t id1 = _constraints[i + 1]->_id0;
           vecX pi = p.segment(id0, id1 - id0);
@@ -140,16 +142,15 @@ public:
 
       q = S.solve(b);
 
+      real dq = (q - q0).norm();
+      if (dq < 1e-8)
+        break;
+      q0 = q;
+
       if (k % 10 == 0)
         std::cout << "k: " << k << " -norms: "
-                  << " p-" << p.norm() //
-                  << " q-" << q.norm() //
-                  << " s-" << s.norm() << std::endl;
+                  << " q-q0: " << dq << std::endl;
 
-      if (q.hasNaN()) {
-        std::cout << "q has NaN" << std::endl;
-        exit(0);
-      }
       // q = qi + dq.min(bnd).max(-bnd);
     }
 

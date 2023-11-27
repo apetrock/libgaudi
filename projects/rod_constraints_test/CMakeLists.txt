@@ -10,9 +10,8 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 target_link_libraries(${PROJECT_NAME} PRIVATE -g -ltbb)
 
-#find_package(OpenMP)
-#if(OpenMP_CXX_FOUND)
-#    target_link_libraries(stretch PUBLIC OpenMP::OpenMP_CXX)
-#endif()
+if(GUADI_WITH_CHOLMOD)
+    target_link_libraries(${PROJECT_NAME} PRIVATE cholmod umfpack)
+endif()
 
 target_link_libraries(rod_constraints_test PRIVATE libGaudi nanogui ${NANOGUI_EXTRA_LIBS})

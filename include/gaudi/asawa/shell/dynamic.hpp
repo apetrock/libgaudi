@@ -143,7 +143,7 @@ op_edges(shell &M,                      //
              func) {
   int STRIDE = OP < 2 ? 1 : 2;
   size_t cstart = M.corner_count();
-  size_t estart = M.corner_count() / 2;
+  size_t estart = M.edge_count();
   size_t vstart = M.vert_count();
   size_t fstart = M.face_count();
   size_t Ne = edges_to_op.size();
@@ -310,21 +310,12 @@ public:
   std::vector<index_t> get_edges() const {
 
     std::vector<index_t> edges = _M.get_edge_range();
-    std::vector<real> lengths(_M.corner_count() / 2, -1);
-
+    // std::vector<real> lengths(_M.edge_count(), -1);
+    std::vector<real> lengths = edge_lengths(_M, _data);
     sort(edges.begin(), edges.end(),
          [this, &lengths](const index_t &ca, const index_t &cb) -> bool {
            real dva = lengths[ca / 2];
            real dvb = lengths[cb / 2];
-           if (dva < 0) {
-             dva = length(ca, _M.other(ca), _M, _data);
-             lengths[ca / 2] = dva;
-           }
-           if (dvb < 0) {
-             dvb = length(cb, _M.other(cb), _M, _data);
-             lengths[cb / 2] = dvb;
-           }
-
            return comp{}(dva, dvb);
          });
 

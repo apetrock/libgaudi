@@ -36,7 +36,7 @@ void init_smooth(const asawa::rod::rod &rod,
   }
 }
 #if 1
-void init_cylinder(const asawa::rod::rod &rod,
+void init_helicity(const asawa::rod::rod &rod,
                    std::vector<projection_constraint::ptr> &constraints,
                    const real &w) {
 

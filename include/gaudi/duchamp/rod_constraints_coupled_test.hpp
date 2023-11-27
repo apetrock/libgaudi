@@ -176,7 +176,7 @@ public:
         hepworth::block::init_angle(*R, constraints, vec3(0.0, 0.0, 1.0),
                                     0.39 * M_PI, 0.1, {u});
       } else {
-        // hepworth::block::init_cylinder(*R, constraints, 0.01, {x});
+        // hepworth::block::init_helicity(*R, constraints, 0.01, {x});
       }
 #endif
       hepworth::block::init_collisions(*R, *__Rd[k], constraints, 2.0, {x, x});

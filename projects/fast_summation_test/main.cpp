@@ -101,11 +101,13 @@ using AppPtr = std::shared_ptr<App>;
 
 class App : public gg::SimpleApp {
 public:
-  static AppPtr create(std::string file) { return std::make_shared<App>(file); }
+  static AppPtr create(int w, int h, std::string file) {
+    return std::make_shared<App>(w, h, file);
+  }
 
   typedef double Real;
 
-  App(std::string file) : gg::SimpleApp() {
+  App(int w, int h, std::string file) : gg::SimpleApp() {
     this->setScene(scene = Scene::create());
     this->initUI();
   }
@@ -132,7 +134,7 @@ int main(int argc, char *argv[]) {
 
     nanogui::init();
 
-    AppPtr app = App::create(std::string(argv[0]));
+    AppPtr app = App::create(1280, 720, std::string(argv[0]));
 
     // app->setScene(Scene::create());
     app->drawAll();

@@ -1,5 +1,3 @@
-
-
 #ifndef __LIBGAUDI_COMMON_TYPEDEFS__
 #define __LIBGAUDI_COMMON_TYPEDEFS__
 
@@ -35,6 +33,7 @@ TYPEDEF_MAT(12)
 
 TYPEDEF_MAT_NM(3, 2)
 TYPEDEF_MAT_NM(2, 3)
+TYPEDEF_MAT_NM(3, 6)
 TYPEDEF_MAT_NM(3, 9)
 TYPEDEF_MAT_NM(4, 10)
 
@@ -114,54 +113,6 @@ void split(const vecX &q, std::vector<vec3> &sv, std::vector<quat> &uv) {
 
 std::vector<real> from(vecX U) {
   return std::vector<real>(U.data(), U.data() + U.rows() * U.cols());
-}
-
-class m_solver {
-public:
-  m_solver(matS &A) { this->compute(A); }
-
-  void compute(matS &A) {
-    _decomposed = false;
-    __solver.compute(A);
-    if (__solver.info() == Eigen::Success) {
-      _decomposed = true;
-    } else {
-      std::cout << ".....decomposition error! " << std::endl;
-    }
-  }
-  vecX solve(vecX &b) {
-    vecX x = __solver.solve(b);
-    if (__solver.info() != Eigen::Success) {
-      // solving failed
-      std::cout << ".....solve error! " << std::endl;
-    }
-    return x;
-  }
-
-  bool success() { return _decomposed; }
-  Eigen::SimplicialLDLT<matS> __solver;
-  bool _decomposed = false;
-};
-
-vecX solve(matS &A, vecX &b) {
-
-  // Eigen::ConjugateGradient<matS, Eigen::Upper> solver;
-  Eigen::SimplicialLDLT<matS> solver;
-  solver;
-
-  solver.compute(A);
-
-  if (solver.info() != Eigen::Success) {
-    // decomposition failed
-    std::cout << ".....decomposition error! " << std::endl;
-  }
-  vecX x = solver.solve(b);
-  if (solver.info() != Eigen::Success) {
-    // solving failed
-    std::cout << ".....solve error! " << std::endl;
-  }
-
-  return x;
 }
 
 } // namespace gaudi

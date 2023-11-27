@@ -54,9 +54,11 @@ public:
 
     _obj = gg::BufferObject::create();
     _obj->init();
+
+    mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
+
     mSceneObjects.push_back(_obj);
     __surf = gaudi::duchamp::block_test::create();
-    mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }
 
   virtual void onAnimate(int frame) {
@@ -100,11 +102,13 @@ using AppPtr = std::shared_ptr<App>;
 
 class App : public gg::SimpleApp {
 public:
-  static AppPtr create(std::string file) { return std::make_shared<App>(file); }
+  static AppPtr create(int w, int h, std::string file) {
+    return std::make_shared<App>(w, h, file);
+  }
 
   typedef double Real;
-  App(std::string file)
-      : gg::SimpleApp(1280, 720, 4.0, true, "rod_test_single_") {
+  App(int w, int h, std::string file)
+      : gg::SimpleApp(w, h, 4.0, true, "rod_test_single_") {
 
     this->setScene(scene = Scene::create());
     this->initUI();
@@ -132,7 +136,7 @@ int main(int argc, char *argv[]) {
 
     nanogui::init();
 
-    AppPtr app = App::create(std::string(argv[0]));
+    AppPtr app = App::create(1280, 720, std::string(argv[0]));
 
     // app->setScene(Scene::create());
     app->drawAll();

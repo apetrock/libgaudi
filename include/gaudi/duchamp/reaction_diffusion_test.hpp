@@ -63,9 +63,11 @@ public:
     real C = 0.85;
     // real C = 2.0;
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, C * l0);
+
     real da = 5.00e-4, db = 0.4 * da;
-    reaction_diffusion::ptr rx =
-        reaction_diffusion::create(__M, 0.025, 0.0535, da, db);
+    // real f = 0.025, k = 0.0535;
+    real f = 0.05, k = 0.0630;
+    reaction_diffusion::ptr rx = reaction_diffusion::create(__M, f, k, da, db);
     _rx = std::dynamic_pointer_cast<module_base>(rx);
     init_normals();
   }

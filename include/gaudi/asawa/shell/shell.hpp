@@ -91,6 +91,7 @@ public:
 
   size_t vert_count() const { return __vert_begin.size(); }
   size_t face_count() const { return __face_begin.size(); }
+  size_t edge_count() const { return __corners_next.size() / 2; }
   size_t corner_count() const { return __corners_next.size(); }
 
   index_t other(index_t id) const { return 2 * (id / 2) + (id + 1) % 2; };

@@ -36,31 +36,37 @@ void init_smooth(const asawa::rod::rod &rod,
 }
 
 #if 1
-void init_cylinder(const asawa::rod::rod &rod,
+void init_helicity(const asawa::rod::rod &rod,
                    std::vector<projection_constraint::ptr> &constraints,
                    const real &w, std::vector<sim_block::ptr> blocks) {
 
   for (int i = 0; i < rod.corner_count(); i++) {
     index_t ip0 = rod.prev(i);
-    if (!ip0)
+    if (ip0 < 0)
       continue;
     index_t ip1 = rod.prev(ip0);
-    if (!ip1)
+    if (ip1 < 0)
       continue;
     index_t ip2 = rod.prev(ip1);
-    if (!ip2)
+    if (ip2 < 0)
+      continue;
+    index_t ip3 = rod.prev(ip2);
+    if (ip3 < 0)
       continue;
     index_t in0 = rod.next(i);
-    if (!in0)
+    if (in0 < 0)
       continue;
     index_t in1 = rod.next(in0);
-    if (!in1)
+    if (in1 < 0)
       continue;
     index_t in2 = rod.next(in1);
-    if (!in2)
+    if (in2 < 0)
       continue;
-    constraints.push_back(
-        cylinder::create({i, ip2, ip1, ip0, i, in0, in1, in2}, 1.25, blocks));
+    index_t in3 = rod.next(in2);
+    if (in3 < 0)
+      continue;
+    constraints.push_back(helicitiy::create(
+        {i, ip3, ip2, ip1, ip0, i, in0, in1, in2, in3}, 1.25, blocks));
   }
 }
 #endif

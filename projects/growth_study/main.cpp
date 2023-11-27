@@ -29,7 +29,7 @@
 #include "GaudiGraphics/viewer.hpp"
 // #include "gaudi/asawa/asawa.h"
 
-#include "gaudi/duchamp/test_template.hpp"
+#include "gaudi/duchamp/growth_study.hpp"
 
 #define TRACKBALLSIZE (0.8f)
 #define RENORMCOUNT 97
@@ -53,32 +53,35 @@ public:
   void initScene() {
     //_experiment = duchamp::mean_shift_experiment<growth>::create();
 
-    _objs.resize(2);
+    _objs.resize(1);
 
     _objs[0] = gg::BufferObject::create();
     _objs[0]->init();
     mSceneObjects.push_back(_objs[0]);
 
+    /* //a second buffer object... for curves or...
     _objs[1] = gg::BufferObject::create();
     _objs[1]->init();
     mSceneObjects.push_back(_objs[1]);
+    */
 
-    __surf = gaudi::duchamp::test_template::create();
+    __surf = gaudi::duchamp::growth_study::create();
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
     colors = {
-        gg::colorRGB(1.0, 0.0, 0.0, 1.0),
+        gg::colorRGB(0.0, 0.8, 0.4, 1.0),
         gg::colorRGB(0.0, 1.0, 1.0, 1.0),
     };
   }
   virtual void onAnimate(int frame) {
 
     __surf->step(frame);
+    std::vector<gg::colorRGB> colors;
+    auto mesh_colors = __surf->get_mesh_colors();
+    for (auto col : mesh_colors) {
+      colors.push_back(gg::colorRGB(col[0], col[1], col[2], 1.0));
+    }
 
-    gg::fillBuffer_ref(*__surf->__M, _objs[0], colors[0]);
-    gg::fillBuffer_ref(*__surf->__R, _objs[1], colors[1]);
-
-    //   std::cout << "rendering debug" << std::endl;
-    //   asawa::test();
+    gg::fillBuffer_ref(*__surf->__M, _objs[0], colors);
 
     gg::geometry_logger::render();
   }
@@ -95,7 +98,7 @@ public:
   }
 
 private:
-  gaudi::duchamp::test_template::ptr __surf;
+  gaudi::duchamp::growth_study::ptr __surf;
   std::vector<gg::DrawablePtr> mSceneObjects;
   std::vector<gg::BufferObjectPtr> _objs;
   vector<gg::colorRGB> colors;
@@ -120,7 +123,7 @@ public:
   typedef double Real;
 
   App(int width, int height, std::string file)
-      : gg::SimpleApp(width, height, 4.0, true, "blank_template_") {
+      : gg::SimpleApp(width, height, 4.0, true, "growth_study_") {
     this->setScene(scene = Scene::create());
     this->initUI();
   }

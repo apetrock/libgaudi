@@ -40,6 +40,21 @@ using std::cerr;
 using std::cout;
 using std::endl;
 
+// use #ifdef to defin screen size
+// 4k
+//  #define _SW 3840
+//  #define _SH 2160
+
+// HD
+// #define _SW 1920
+// #define _SH 1080
+
+// 720p
+// #define _SW 1280
+// #define _SH 720
+#define _SW 1280
+#define _SH 720
+
 using namespace GaudiMath;
 
 Vec2d random_vec2_with_angle() {
@@ -111,6 +126,8 @@ public:
 
     _objs.resize(2);
 
+    mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
+
     _objs[0] = gg::BufferObject::create();
     _objs[0]->init();
     mSceneObjects.push_back(_objs[0]);
@@ -120,7 +137,7 @@ public:
     mSceneObjects.push_back(_objs[1]);
 
     __surf = gaudi::duchamp::rod_guided_deformation_with_morph::create();
-    mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
+
     for (int i = 0; i < 12; i++) {
       std::array<Vec3d, 2> colors = get_rand_colors();
       std::cout << " {vec3(" << colors[0].transpose() << "),"
@@ -186,18 +203,14 @@ using AppPtr = std::shared_ptr<App>;
 
 class App : public gg::SimpleApp {
 public:
-  static AppPtr create(std::string file) { return std::make_shared<App>(file); }
+  static AppPtr create(int width, int height, std::string file) {
+    return std::make_shared<App>(width, height, file);
+  }
 
   typedef double Real;
-  int _screen_width = 1280, _screen_height = 720;
-// #define _screen_width 3840
-// #define _screen_height 2160
-#define _screen_width 1280
-#define _screen_height 720
 
-  App(std::string file)
-      : gg::SimpleApp(_screen_width, _screen_height, 3.0, true,
-                      "florp_drive_") {
+  App(int width, int height, std::string file)
+      : gg::SimpleApp(width, height, 3.0, true, "florp_drive_") {
     this->setScene(scene = Scene::create());
     this->initUI();
   }
@@ -224,7 +237,7 @@ int main(int argc, char *argv[]) {
 
     nanogui::init();
 
-    AppPtr app = App::create(std::string(argv[0]));
+    AppPtr app = App::create(_SW, _SH, std::string(argv[0]));
 
     // app->setScene(Scene::create());
     app->drawAll();

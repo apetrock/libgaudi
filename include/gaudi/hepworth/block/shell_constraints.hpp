@@ -363,9 +363,10 @@ public:
   DEFINE_CREATE_FUNC(area)
 
   area(const std::vector<index_t> &ids, const std::vector<vec3> &x,
-       real rangeMin, real rangeMax, real w, std::vector<sim_block::ptr> blocks)
+       real rangeMin, real rangeMax, real w, std::vector<sim_block::ptr> blocks,
+       bool zero = false)
       : block_constraint(ids, w, blocks), _rangeMin(rangeMin),
-        _rangeMax(rangeMax) {
+        _rangeMax(rangeMax), _zero(zero) {
     assert(ids.size() == 3);
     mat32 edges, P;
     edges.col(0) = x[_ids[1]] - x[_ids[0]];
@@ -373,7 +374,7 @@ public:
     P.col(0) = edges.col(0).normalized();
     P.col(1) =
         (edges.col(1) - edges.col(1).dot(P.col(0)) * P.col(0)).normalized();
-    _rest = 0.98 * (P.transpose() * edges).inverse();
+    _rest = (P.transpose() * edges).inverse();
     real A = (P.transpose() * edges).determinant() / 2.0f;
     _w *= std::sqrt(std::abs(A));
   }
@@ -408,11 +409,13 @@ public:
     // p.block(_id0, 0, 3, 2) = (_w * P * F);
     mat32 PF = P * F;
 
-    // p.block(_id0 + 0, 0, 3, 1) = _w * PF.col(0);
-    // p.block(_id0 + 3, 0, 3, 1) = _w * PF.col(1);
-
-    p.block(_id0 + 0, 0, 3, 1) = vec3::Zero();
-    p.block(_id0 + 3, 0, 3, 1) = vec3::Zero();
+    if (_zero) {
+      p.block(_id0 + 0, 0, 3, 1) = vec3::Zero();
+      p.block(_id0 + 3, 0, 3, 1) = vec3::Zero();
+    } else {
+      p.block(_id0 + 0, 0, 3, 1) = _w * 1.1 * PF.col(0);
+      p.block(_id0 + 3, 0, 3, 1) = _w * PF.col(1);
+    }
   }
 
   ///////////////////////////////////////////////////////////////////////////////
@@ -434,6 +437,7 @@ public:
     }
     id0 += 3 * n;
   }
+  bool _zero = false;
   real _rangeMax = 1.0;
   real _rangeMin = 0.0;
 

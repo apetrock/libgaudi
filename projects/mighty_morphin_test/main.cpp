@@ -53,14 +53,14 @@ public:
   void initScene() {
     //_experiment = duchamp::mean_shift_experiment<growth>::create();
 
-    _objs.resize(2);
+    mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
 
+    _objs.resize(2);
     _objs[0] = gg::BufferObject::create();
     _objs[0]->init();
     mSceneObjects.push_back(_objs[0]);
 
     __surf = gaudi::duchamp::mighty_morphin_test::create();
-    mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
 
     colors = {
         gg::colorRGB(0.5, 0.5, 0.5, 1.0),
@@ -111,12 +111,14 @@ using AppPtr = std::shared_ptr<App>;
 
 class App : public gg::SimpleApp {
 public:
-  static AppPtr create(std::string file) { return std::make_shared<App>(file); }
+  static AppPtr create(int width, int height, std::string file) {
+    return std::make_shared<App>(width, height, file);
+  }
 
   typedef double Real;
 
-  App(std::string file)
-      : gg::SimpleApp(1280, 720, 4.0, true, "mighty_morphin_test_") {
+  App(int width, int height, std::string file)
+      : gg::SimpleApp(width, height, 4.0, true, "mighty_morphin_test_") {
     this->setScene(scene = Scene::create());
     this->initUI();
   }
@@ -143,7 +145,7 @@ int main(int argc, char *argv[]) {
 
     nanogui::init();
 
-    AppPtr app = App::create(std::string(argv[0]));
+    AppPtr app = App::create(1280, 720, std::string(argv[0]));
 
     // app->setScene(Scene::create());
     app->drawAll();

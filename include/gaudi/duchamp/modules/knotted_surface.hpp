@@ -31,11 +31,12 @@ namespace gaudi {
 
 namespace duchamp {
 
-class rod_control_module : public module_base {
+class knotted_surface_module : public module_base {
 public:
-  DEFINE_CREATE_FUNC(rod_control_module)
-  rod_control_module(asawa::shell::shell::ptr &M, asawa::shell::dynamic::ptr &D,
-                     asawa::rod::rod::ptr &R, asawa::rod::dynamic::ptr &Rd)
+  DEFINE_CREATE_FUNC(knotted_surface_module)
+  knotted_surface_module(asawa::shell::shell::ptr &M,
+                         asawa::shell::dynamic::ptr &D, asawa::rod::rod::ptr &R,
+                         asawa::rod::dynamic::ptr &Rd)
       : __M(M), __surf(D), __R(R), __Rd(Rd) {
 
     D->set_flip_pred([&](asawa::shell::shell &M, const index_t &c0) {
@@ -274,7 +275,7 @@ public:
 
       real is_perp = pow(Ns.dot(dx.normalized()), 2.0);
       // if (8.0 * d[0] * (1.0 - is_perp) < eps) {
-      if ((is_perp > 0.6 && d[0] < 2.0 * eps)) {
+      if ((is_perp > 0.60 && d[0] < 2.0 * eps)) {
 
         // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
 
@@ -333,11 +334,12 @@ public:
     }
     return df;
   }
-
+#if 0
   void init_weighted_willmore(
-      asawa::shell::shell &M,
+      asawa::shell::shell &M, asawa::rod::rod &R,
       std::vector<hepworth::projection_constraint::ptr> &constraints,
-      const real &w, std::vector<hepworth::sim_block::ptr> blocks) {
+      const real &w_min, const real &w_max,
+      std::vector<hepworth::sim_block::ptr> blocks) {
 
     std::vector<vec3> &xv = asawa::get_vec_data(*__M, 0);
     std::vector<vec3> xf = asawa::shell::face_centers(*__M, xv);
@@ -346,14 +348,17 @@ public:
     std::vector<vec3> Ne = asawa::shell::edge_normals(*__M, xv);
     real eps = 0.5 * __surf->_Cc;
 
-    std::vector<real> mask_exp =
-        asawa::shell::expand_from_vert_range(M, _willmore_mask);
-    std::vector<real> mask =
-        asawa::shell::vert_to_face<real>(*__M, xv, mask_exp);
-    std::vector<real> df = calder::mls_avg<real>(M, mask, xe, eps, 2.0);
+    std::vector<real> dist = calc_dist_1(R, M, eps, 4);
+    std::transform(dist.begin(), dist.end(), dist.begin(),
+                          [](real x) { return x > eps ? 1.0 : 0.0; });
 
+    std::vector<real> df = calder::mls_avg<real>(R, dist, xe, eps, 2.0);
+    // scale by w_min/w_max x = x +
     std::transform(df.begin(), df.end(), df.begin(),
-                   [w](real x) { return w * (1.0 - 0.5 * x); });
+                   [w_min, w_max](real x) {
+                     return w_min + (w_max - w_min) * x;
+                   });
+
 #if 0
     for (int i = 0; i < df.size(); i++) {
       gg::geometry_logger::line(xe[i], xe[i] + 0.1 * df[i] * Ne[i],
@@ -363,7 +368,7 @@ public:
 
     hepworth::block::init_edge_willmore(M, constraints, df, blocks);
   }
-
+#endif
   void init_weighted_area(
       const asawa::shell::shell &M,
       std::vector<hepworth::projection_constraint::ptr> &constraints,
@@ -394,7 +399,7 @@ public:
       return w * (x - vmin) / (vmax - vmin);
     });
 
-    hepworth::block::init_area(M, constraints, xv, df, blocks);
+    hepworth::block::init_area(M, constraints, xv, df, blocks, true);
     // return g;
   }
 
@@ -482,13 +487,21 @@ public:
                         4.0 * eps, {Xr, Xs});
 #endif
 
+#if 1
+    if (_helicity_constraint)
+      for (int i = 0; i < lr.size(); i++) {
+        lr[i] *= 1.01;
+      }
+#endif
     std::cout << "main constraints" << std::endl;
     hepworth::block::init_stretch_shear(*__R, constraints, lr,
                                         _config.w_rod_strain, {Xr, Ur});
     hepworth::block::init_bend_twist(*__R, constraints, _config.w_rod_bending,
                                      {Ur});
-    // hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
-    //                             1e-1 * M_PI, 1e-3, {Ur});
+    if (_helicity_constraint) {
+      hepworth::block::init_helicity(*__R, constraints, _config.w_helicity,
+                                     {Xr});
+    }
 
     for (int i = 0; i < _angle_constraints.size(); i++) {
       real theta = _angle_constraints[i].theta;
@@ -515,15 +528,23 @@ public:
                                        _config.rod_offset);
     }
 
+    std::cout << "shell edge strain" << std::endl;
+
     hepworth::block::init_edge_strain(*__M, constraints, xs, li,
                                       _config.w_shell_strain, {Xs});
+
+    std::cout << "shell bending" << std::endl;
     hepworth::block::init_bending(*__M, constraints, xs,
                                   _config.w_shell_bending, {Xs});
+
+    std::cout << "shell willmore" << std::endl;
+
 #if 1
     hepworth::block::init_edge_willmore(*__M, constraints, _config.w_willmore,
                                         blocks);
 #endif
 #if 1
+    std::cout << "shell area" << std::endl;
     init_weighted_area(*__M, constraints, _config.w_area, blocks);
 #endif
     if (_shell_collisions) {
@@ -541,13 +562,18 @@ public:
     solver.step(blocks, h, 0.5, 30);
 
     // final state is mix of initial and final
+    real t = 0.5; // make this a parameter
+#if 1
     for (int i = 0; i < xr.size(); i++)
-      xr[i] = va::mix(0.5, xr0[i], xr[i]);
+      xr[i] = va::mix(t, xr0[i], xr[i]);
     for (int i = 0; i < xs.size(); i++)
-      xs[i] = va::mix(0.5, xs0[i], xs[i]);
+      xs[i] = va::mix(t, xs0[i], xs[i]);
+#endif
     _frame++;
   }
 
+  void set_helicity_constraint(bool b) { _helicity_constraint = b; }
+  void set_helicity_weight(real w) { _config.w_helicity = w; }
   void set_willmore_weight(real w) { _config.w_willmore = w; }
   void set_area_weight(real w) { _config.w_area = w; }
   void set_shell_strain_weight(real w) { _config.w_shell_strain = w; }
@@ -599,8 +625,9 @@ public:
   bool _repel_rods = true;
   bool _shell_collisions = true;
   bool _pin_rod = true;
-
+  bool _helicity_constraint = false;
   struct {
+    real w_helicity = 1.0e-1;
     real w_willmore = 8e-1;
     real w_area = 2e-2;
     real w_shell_strain = 1.0e-3;
@@ -609,7 +636,7 @@ public:
     real w_rod_bending = 1.0e-1;
     real w_rod_weld = 1.0;
     real w_shell_weld = 1.0;
-    real w_rod_pin = 1.0e-1;
+    real w_rod_pin = 1.0e-2;
     real rod_offset = 1.0;
   } _config;
 };

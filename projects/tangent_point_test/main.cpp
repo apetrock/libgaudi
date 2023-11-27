@@ -55,11 +55,12 @@ public:
 
     _objs.resize(2);
 
+    __surf = gaudi::duchamp::tangent_point_test::create();
+
     _objs[0] = gg::BufferObject::create();
     _objs[0]->init();
     mSceneObjects.push_back(_objs[0]);
 
-    __surf = gaudi::duchamp::tangent_point_test::create();
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
 
     colors = {
@@ -111,12 +112,14 @@ using AppPtr = std::shared_ptr<App>;
 
 class App : public gg::SimpleApp {
 public:
-  static AppPtr create(std::string file) { return std::make_shared<App>(file); }
+  static AppPtr create(int w, int h, std::string file) {
+    return std::make_shared<App>(w, h, file);
+  }
 
   typedef double Real;
 
-  App(std::string file)
-      : gg::SimpleApp(1280, 720, 4.0, true, "tangent_point_test_") {
+  App(int w, int h, std::string file)
+      : gg::SimpleApp(w, h, 4.0, true, "tangent_point_test_") {
     this->setScene(scene = Scene::create());
     this->initUI();
   }
@@ -143,7 +146,7 @@ int main(int argc, char *argv[]) {
 
     nanogui::init();
 
-    AppPtr app = App::create(std::string(argv[0]));
+    AppPtr app = App::create(1280, 720, std::string(argv[0]));
 
     // app->setScene(Scene::create());
     app->drawAll();

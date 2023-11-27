@@ -177,8 +177,8 @@ public:
     std::vector<vec3> g0 =
         calder::tangent_point_gradient(*__R, x, l, T, 1.0 * eps, 6.0);
     for (int i = 0; i < g0.size(); i++) {
-      gg::geometry_logger::line(x[i], x[i] + 1.0e-5 * g0[i],
-                                vec4(0.6, 0.0, 0.8, 1.0));
+      // gg::geometry_logger::line(x[i], x[i] + 1.0e-5 * g0[i],
+      //                           vec4(0.6, 0.0, 0.8, 1.0));
       g0[i] *= -1.0e-6;
     }
     return g0;
@@ -212,8 +212,8 @@ public:
       if (xn > bnd) {
         f[i] = -0.01 * (xn - bnd) / h / h * x;
       }
-      f[i] += fr[i];
-      // f[i] += 1e-1 * vec3::Random();
+      // f[i] += fr[i];
+      //  f[i] += 1e-1 * vec3::Random();
     }
 
     hepworth::vec3_block::ptr x =
@@ -227,17 +227,17 @@ public:
     for (auto &l : l0)
       l *= att;
     // hepworth::rod::init_smooth(*__R, constraints, 0.2);
-    // hepworth::rod::init_cylinder(*__R, constraints, 0.1);
-    hepworth::block::init_stretch_shear(*__R, constraints, l0, 0.2, {x, u});
+    hepworth::block::init_helicity(*__R, constraints, 1.0e-1, {x});
+    hepworth::block::init_stretch_shear(*__R, constraints, l0, 0.1, {x, u});
     hepworth::block::init_bend_twist(*__R, constraints, 0.05, {u});
     //  hepworth::rod::init_smooth_bend(*__R, constraints, 0.01);
 #if 0
-    hepworth::block::init_angle(*__R, constraints, vec3(1.0, 0.0, 0.0),
-                                0.20 * M_PI, 0.05, {u});
-    // hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
-    //                           0.33 * M_PI, 0.1, {u});
+    // hepworth::block::init_angle(*__R, constraints, vec3(1.0, 0.0, 0.0),
+    //                             0.20 * M_PI, 0.05, {u});
+    //  hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
+    //                            0.33 * M_PI, 0.1, {u});
     hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
-                                0.30 * M_PI, 0.1, {u});
+                                0.15 * M_PI, 0.1, {u});
 #endif
     hepworth::block::init_collisions(*__R, *__Rd, constraints, 1.0, {x, x});
     solver.set_constraints(constraints);

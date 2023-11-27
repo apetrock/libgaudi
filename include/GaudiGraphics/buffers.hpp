@@ -269,7 +269,8 @@ public:
 
     // mDispShader->init(
     //     convert.str(), get_shader("f_buff_vert"), get_shader("f_buff_frag"));
-    mDispShader->init(convert.str(), get_shader("g_buff_vert"),
+    mDispShader->init(convert.str(),             //
+                      get_shader("g_buff_vert"), //
                       get_shader("g_buff_frag"));
   };
 

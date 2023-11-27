@@ -17,16 +17,16 @@
 #include "gaudi/asawa/shell/walk.hpp"
 
 #include "gaudi/bontecou/laplacian.hpp"
-#include "gaudi/calder/quadric_integrators.hpp"
+#include "gaudi/calder/darboux_cyclide_fit.hpp"
+#include "gaudi/calder/quadric_fit.hpp"
 #include "gaudi/calder/tangent_point_integrators.hpp"
-#include "gaudi/calder/torus_estimation.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
 #include "gaudi/common.h"
 
 #include "modules/ccd.hpp"
+#include "modules/knotted_surface.hpp"
 #include "modules/mighty_morphin.hpp"
-#include "modules/rod_control.hpp"
 #include "utils/point_things.hpp"
 #include "utils/string_things.hpp"
 
@@ -53,7 +53,7 @@ struct walk_config {
   walk_config(index_t i0 = 0, index_t N_steps = 4000, real thet = 0.0, //
               bool rotate = false, vec2 cr = vec2(5.0, -8.0),
               bool align = false, vec4 ca = vec4(1.0, 0.5, 0.0, 0.0))
-      : i0(i0), thet(thet), rotate(rotate), align(align) {
+      : i0(i0), N_steps(N_steps), thet(thet), rotate(rotate), align(align) {
     this->ca = ca;
     this->cr = cr;
   };
@@ -72,19 +72,19 @@ int iw0 = 1;
 
 int iw1 = (iw0 + 1) % N_walk_configs;
 int iwp = (iw0 + N_walk_configs - 1) % N_walk_configs;
-
+int Nw = 15000;
 walk_config _wc[N_walk_configs] = {
-    walk_config(100, 4000, 0.021, false, vec2(0.0, 0.0), false,
+    walk_config(100, Nw, 0.021, false, vec2(0.0, 0.0), false,
                 vec4(0.0, 0.0, 0.0, 0.0)),
-    walk_config(100, 4000, 0.022, false, vec2(0.0, 0.0), false,
+    walk_config(100, Nw, 0.022, false, vec2(0.0, 0.0), false,
                 vec4(0.0, 0.0, 0.0, 0.0)),
-    walk_config(100, 4000, 0.23, true, vec2(3.0, -5.0), false,
+    walk_config(100, Nw, 0.23, true, vec2(3.0, -5.0), false,
                 vec4(0.0, 0.0, 0.0, 0.0)),
-    walk_config(100, 4000, 0.245, true, vec2(6.0, -8.0), false,
+    walk_config(100, Nw, 0.245, true, vec2(6.0, -8.0), false,
                 vec4(0.0, 0, 0.0, 0.0)),
-    walk_config(100, 4000, 0.265, false, vec2(0.0, 0.0), true,
+    walk_config(100, Nw, 0.265, false, vec2(0.0, 0.0), true,
                 vec4(0.6, 0.0, 0.0, 0.8)),
-    walk_config(100, 4000, 2.5, false, vec2(0.0, 0.0), true,
+    walk_config(100, Nw, 2.5, false, vec2(0.0, 0.0), true,
                 vec4(0.5, 0.0, 0.65, 0.22))};
 // walk_config(0, 4000, 0.0, false, vec2(5.0, -8.0), false,
 // vec4(1.0, 0.5, 0.0, 0.0)),
@@ -109,15 +109,12 @@ inline vec3 hsv_mix(real t, vec3 a, vec3 b) {
   return va::hsv_to_rgb(vec3(h, s, v));
 }
 
-inline vec3 cie_mix(real t, vec3 a, vec3 b) {
-
-  real am = a.norm();
-  real bm = b.norm();
-  vec3 aN = a / am;
-  vec3 bN = b / bm;
-  real m = va::mix(t, am, bm);
-  vec3 N = va::mix(t, aN, bN).normalized();
-  return m * N;
+inline vec3 lab_mix(real t, vec3 a, vec3 b) {
+  // this wrong, replace with good code
+  vec3 aLab = va::rgb_to_lab(a);
+  vec3 bLab = va::rgb_to_lab(b);
+  vec3 lerp_lab = va::mix(t, aLab, bLab);
+  return va::lab_to_rgb(lerp_lab);
 }
 
 inline std::array<vec3, 2> _get_colors(index_t frame) {
@@ -138,8 +135,8 @@ inline std::array<vec3, 2> _get_colors(index_t frame) {
     real t = real(frame) / 600.0;
     // out[0] = hsv_mix(t, cP[0], c0[0]);
     // out[1] = hsv_mix(t, cP[1], c0[1]);
-    out[0] = cie_mix(t, cP[0], c0[0]);
-    out[1] = cie_mix(t, cP[1], c0[1]);
+    out[0] = lab_mix(t, cP[0], c0[0]);
+    out[1] = lab_mix(t, cP[1], c0[1]);
 
   } else if (frame >= 600 && frame < 2400) {
     out = std::array<vec3, 2>{c0[0], c0[1]};
@@ -164,7 +161,8 @@ public:
 
   rod_guided_deformation_with_morph() {
     //__M = load_cube();
-    __M = shell::load_bunny();
+    //__M = shell::load_bunny();
+    __M = shell::load_obj("assets/dennis.obj");
     //__M = shell::load_crab();
 
     shell::triangulate(*__M);
@@ -181,8 +179,8 @@ public:
     // dynamic surface
     /////////
     real l0 = asawa::shell::avg_length(*__M, x);
-    real C = 0.55;
-    // real C = 2.0;
+    // real C = 0.5;
+    real C = 1.5;
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, C * l0);
 
     /////////////////////
@@ -203,8 +201,8 @@ public:
     __R = rod::rod::create(x_w, false);
     //__R->_update_frames(normals);
 
-    real lavg = 1.0 * l0;
-    __R->_r = 0.8 * lavg;
+    real lavg = 1.5 * l0;
+    __R->_r = 1.75 * lavg;
     __Rd = rod::dynamic::create(__R, 0.5 * lavg, 1.5 * lavg, 0.25 * lavg);
     _eps = l0;
 
@@ -213,17 +211,22 @@ public:
       __Rd->step();
     }
 
-    _rod_control = rod_control_module::create(__M, __surf, __R, __Rd);
+    _knotted_surface = knotted_surface_module::create(__M, __surf, __R, __Rd);
     if (iw0 == 2) {
-      _rod_control->add_angle_constraint(vec3(0.0, 0.0, 1.0), 0.15 * M_PI, 0.1);
-      _rod_control->add_angle_constraint(vec3(0.0, 1.0, 0.0), 0.10 * M_PI, 0.1);
+      _knotted_surface->add_angle_constraint(vec3(0.0, 0.0, 1.0), 0.15 * M_PI,
+                                             0.1);
+      _knotted_surface->add_angle_constraint(vec3(0.0, 1.0, 0.0), 0.10 * M_PI,
+                                             0.1);
     } else if (iw0 == 3) {
-      _rod_control->add_angle_constraint(vec3(0.0, 0.0, 1.0), 0.23 * M_PI, 0.1);
-      _rod_control->add_angle_constraint(vec3(0.0, 1.0, 0.0), 0.15 * M_PI, 0.1);
-      _rod_control->add_angle_constraint(vec3(1.0, 0.0, 0.0), 0.125 * M_PI,
-                                         0.1);
+      _knotted_surface->add_angle_constraint(vec3(0.0, 0.0, 1.0), 0.23 * M_PI,
+                                             0.1);
+      _knotted_surface->add_angle_constraint(vec3(0.0, 1.0, 0.0), 0.15 * M_PI,
+                                             0.1);
+      _knotted_surface->add_angle_constraint(vec3(1.0, 0.0, 0.0), 0.125 * M_PI,
+                                             0.1);
     } else if (iw0 == 5) {
-      _rod_control->add_angle_constraint(vec3(0.0, 0.0, 1.0), 0.05 * M_PI, 0.1);
+      _knotted_surface->add_angle_constraint(vec3(0.0, 0.0, 1.0), 0.05 * M_PI,
+                                             0.1);
     }
 
     std::vector<index_t> face_vert_ids = __M->get_face_vert_ids();
@@ -279,8 +282,8 @@ public:
       const std::vector<vec3> &x_r = __R->x();
 
       std::vector<vec3> x = createPoints(200000, 0.5);
-      real eps = 0.5 * _rod_control->get_eps();
-      std::vector<vec3> Nr = _rod_control->get_rod_normals(*__R, *__M, eps);
+      real eps = 0.5 * _knotted_surface->get_eps();
+      std::vector<vec3> Nr = _knotted_surface->get_rod_normals(*__R, *__M, eps);
 
       std::vector<real> sdf = calder::quadric_sdf(*__R, Nr, x, eps);
 
@@ -290,7 +293,8 @@ public:
       }
     }
   */
-  std::vector<vec3> calc_quadric_normal_flow(real cN, real cQ, real cS) {
+  std::vector<vec3> calc_quadric_normal_flow(real cN, real cQ, real cS,
+                                             real t) {
     asawa::shell::shell &M = *__M;
     asawa::rod::rod &R = *__R;
     asawa::shell::dynamic &Md = *__surf;
@@ -301,10 +305,10 @@ public:
     std::vector<vec3> N_s_f = asawa::shell::face_normals(*__M, x_s);
     const std::vector<vec3> &x_r = R.x();
 
-    std::vector<vec3> Nr = _rod_control->get_rod_normals(R, M, cN * _eps);
+    std::vector<vec3> Nr = _knotted_surface->get_rod_normals(R, M, cN * _eps);
 
     std::vector<real> Q =
-        calder::quadric_sdf(R, Nr, x_s_f, N_s_f, cQ * _eps, 3.0);
+        calder::quadric_sdf(R, Nr, x_s_f, N_s_f, cQ * _eps, 3.0, 6.0, t);
 
 #if 1
     int i = 0;
@@ -329,7 +333,7 @@ public:
     std::vector<vec3> N_s_f = asawa::shell::face_normals(*__M, x_s);
     const std::vector<vec3> &x_r = R.x();
 
-    std::vector<vec3> Nr = _rod_control->get_rod_normals(R, M, cN * _eps);
+    std::vector<vec3> Nr = _knotted_surface->get_rod_normals(R, M, cN * _eps);
 
     std::vector<vec3> Q =
         calder::quadric_grad(R, Nr, x_s_f, N_s_f, cQ * _eps, 3.0);
@@ -345,34 +349,59 @@ public:
     return Nss;
   }
 
-#if 1
-  void calc_torus_gradient() {
+  std::vector<vec3> calc_cyclide_normal_flow(real cN, real cQ, real cS) {
     asawa::shell::shell &M = *__M;
     asawa::rod::rod &R = *__R;
     asawa::shell::dynamic &Md = *__surf;
     asawa::rod::dynamic &Rd = *__Rd;
 
-    real eps = _rod_control->get_eps();
     std::vector<vec3> x_s = asawa::get_vec_data(M, 0);
     std::vector<vec3> x_s_f = asawa::shell::face_centers(M, x_s);
     std::vector<vec3> N_s_f = asawa::shell::face_normals(*__M, x_s);
     const std::vector<vec3> &x_r = R.x();
 
-    std::vector<vec3> Nr = _rod_control->get_rod_normals(R, M, 1.0 * _eps);
+    std::vector<vec3> Nr = _knotted_surface->get_rod_normals(R, M, cN * _eps);
 
-    std::vector<vec3> cen = calder::calc_center(*__R, Nr, x_s, 2.0 * eps, 3.0);
-    for (int i = 0; i < cen.size(); i++) {
-      vec3 p = x_s[i];
-      logger::line(p, p + cen[i], vec4(0.0, 1.0, 0.5, 1.0));
+    std::vector<real> Q =
+        calder::darboux_cyclide_sdf(R, Nr, x_s_f, N_s_f, cQ * _eps, 3.0);
+
+#if 1
+    int i = 0;
+    for (vec3 &N : N_s_f) {
+      N *= -Q[i];
+      i++;
     }
-    // return g0;
+#endif
+    std::vector<vec3> Nss =
+        calder::mls_avg<vec3>(*__M, N_s_f, x_s, cS * _eps, 2.0);
+    return Nss;
+  }
+
+#if 1
+  std::vector<vec3> calc_tangent_point_gradient_from_shell() {
+
+    real eps = _knotted_surface->get_eps();
+    std::vector<vec3> &x_s = asawa::get_vec_data(*__M, 0);
+    std::vector<vec3> &x = __R->x();
+    std::vector<real> l = __R->l0();
+    std::vector<vec3> T = __R->N2c();
+    std::vector<vec3> xc = __R->xc();
+
+    std::vector<vec3> g0 =
+        calder::tangent_point_gradient(*__R, x_s, l, T, 2.0 * eps, 6.0);
+    for (int i = 0; i < g0.size(); i++) {
+      // gg::geometry_logger::line(x[i], x[i] + 1.0e-7 * g0[i],
+      //                           vec4(0.6, 0.0, 0.8, 1.0));
+      g0[i] *= -1.0;
+    }
+    return g0;
   }
 #endif
 
 #if 1
   std::vector<vec3> calc_tangent_point_gradient() {
 
-    real eps = _rod_control->get_eps();
+    real eps = _knotted_surface->get_eps();
     std::vector<vec3> &x = __R->x();
     std::vector<real> l = __R->l0();
     std::vector<vec3> T = __R->N2c();
@@ -478,8 +507,15 @@ public:
       _ccd->init_step(0.1);
       // std::vector<vec3> quad_force_0 = calc_quadric_grad(1.0, 0.5, 2.0);
       //_ccd->add_shell_force(quad_force_0, (1.0 - t));
-      std::vector<vec3> quad_force_1 = calc_quadric_normal_flow(1.0, 1.0, 2.0);
-      _ccd->add_shell_force(quad_force_1, (1.0 - t_s) / _h);
+      // std::vector<vec3> quad_force_1 =
+      //    calc_quadric_normal_flow(1.0, 1.0, 2.0, 0.5);
+      // std::vector<vec3> tp_force = calc_tangent_point_gradient_from_shell();
+      //_ccd->add_shell_force(quad_force_1, (1.0 - t_s) / _h);
+      //_ccd->add_shell_force(tp_force, (1.0 - t_s) / _h);
+      //_ccd->add_shell_force(tp_force, (1.0 - t_s) * 1e-6);
+      // std::vector<vec3> quad_force_2 =
+      // calc_cyclide_normal_flow(1.0, 6.0, 2.0);
+      //_ccd->add_shell_force(quad_force_2, (1.0 - t_s) / _h);
 
       if (t > 0.5) {
         _morphin->step(h);
@@ -526,23 +562,32 @@ public:
     if (frame < 3000) {
 
       if (frame >= 600 && frame < 1200) {
-        _rod_control->init_step(_h);
 
+        _knotted_surface->init_step(_h);
+        real t = calc_frame_t(frame, 600, 1200);
         real offset = 1.0;
-        offset = min(1.0 + 0.02 * real(frame - 600), 10.0);
-        _rod_control->set_rod_offset(offset);
-        _rod_control->set_willmore_weight(3e-1);
-        _rod_control->set_area_weight(1e-1);
-        _rod_control->set_shell_strain_weight(1e-2);
-
-        //_rod_control->set_rod_pin_weight(4e1);
-        //_rod_control->set_rod_offset(10.0);
+        offset = min(1.0 + 15.0 * t, 10.0);
+        //_knotted_surface->set_helicity_constraint(true);
+        //_knotted_surface->set_helicity_weight(1.0e-1);
+        _knotted_surface->set_rod_offset(offset);
+        _knotted_surface->set_willmore_weight(0.8e-0);
+        _knotted_surface->set_area_weight(1.0e-2);
+        _knotted_surface->set_shell_strain_weight(1.0e-1);
+        _knotted_surface->set_rod_pin_weight(1e-3);
+        _knotted_surface->set_rod_strain_weight(1.0e-1);
+        _knotted_surface->set_rod_bending_weight(1.0e-1);
+        //_knotted_surface->set_rod_offset(10.0);
         // calc_torus_gradient();
-        _rod_control->add_rod_force(calc_tangent_point_gradient(), 6.0e-6);
-        //_rod_control->add_shell_force(calc_quadric_grad(0.5, 2.0, 4.0), 4.0);
-        _rod_control->add_shell_force(calc_quadric_normal_flow(1.0, 6.0, 2.0),
-                                      0.5 / _h);
-        _rod_control->step(_h);
+        //_knotted_surface->add_rod_force(calc_tangent_point_gradient(), 5.0e-7);
+        //_knotted_surface->add_shell_force(calc_quadric_grad(0.5, 2.0, 4.0), 4.0);
+        /*
+        _knotted_surface->add_shell_force(
+            calc_quadric_normal_flow(1.0, 6.0, 2.0, 0.5), 0.5 / _h);
+        */
+        _knotted_surface->add_shell_force(
+            calc_cyclide_normal_flow(1.0, 3.0, 1.0), 1.0 / _h);
+
+        _knotted_surface->step(_h);
       }
 
       if (frame >= 1800 && frame < 2100) {
@@ -555,7 +600,7 @@ public:
       }
     }
 
-    if (frame > 3000)
+    if (frame > 1200)
       exit(0);
 
     for (int k = 0; k < 1; k++) {
@@ -566,7 +611,7 @@ public:
   }
   // std::map<index_t, index_t> _rod_adjacent_edges;
   std::vector<vec3> _target;
-  rod_control_module::ptr _rod_control;
+  knotted_surface_module::ptr _knotted_surface;
   mighty_morphin::ptr _morphin;
   continuous_collision_detection::ptr _ccd;
 

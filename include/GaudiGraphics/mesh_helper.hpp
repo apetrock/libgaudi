@@ -1,7 +1,7 @@
 #ifndef __MESH_HELPER__
 #define __MESH_HELPER__
 
-#include "gaudi/common.h"
+// #include "gaudi/common.h"
 #include <GaudiGraphics/buffers.hpp>
 #include <GaudiGraphics/viewer.hpp>
 #include <GaudiMath/typedefs.hpp>

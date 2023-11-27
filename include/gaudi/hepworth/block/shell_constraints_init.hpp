@@ -28,21 +28,21 @@ namespace block {
 void init_edge_growth(const asawa::shell::shell &shell,
                       std::vector<projection_constraint::ptr> &constraints,
                       const std::vector<vec3> &x, const std::vector<real> &l0,
-                      const real &g, const real &w,
+                      const std::vector<real> &g, const real &w,
                       std::vector<sim_block::ptr> blocks) {
 
   std::vector<real> ct = asawa::shell::edge_cotan_weights(shell, x);
 
   auto range = shell.get_edge_range();
-  int k = 0;
+
   for (auto c0 : range) {
     int i = shell.vert(c0);
     int j = shell.vert(shell.other(c0));
 
-    if (std::isnan(l0[k]))
+    if (std::isnan(l0[c0 / 2]))
       continue;
 
-    real cti = ct[k];
+    real cti = ct[c0 / 2];
     if (std::isnan(cti))
       continue;
     cti = va::clamp(cti, 0.0, 10.0);
@@ -55,10 +55,19 @@ void init_edge_growth(const asawa::shell::shell &shell,
       continue;
 
     constraints.push_back(
-        edge_strain::create(std::vector<index_t>({i, j}), 0.85 * l0[c0 / 2], g,
-                            w * pow(cti, 2.0) / (Ai + Aj), blocks));
-    k++;
+        edge_strain::create(std::vector<index_t>({i, j}), 0.85 * l0[c0 / 2],
+                            g[c0 / 2], w * pow(cti, 1.0) / (Ai + Aj), blocks));
   }
+}
+
+void init_edge_growth(const asawa::shell::shell &shell,
+                      std::vector<projection_constraint::ptr> &constraints,
+                      const std::vector<vec3> &x, const std::vector<real> &l0,
+                      const real &g, const real &w,
+                      std::vector<sim_block::ptr> blocks) {
+
+  std::vector<real> gt(shell.edge_count(), g);
+  init_edge_growth(shell, constraints, x, l0, gt, w, blocks);
 }
 
 void init_edge_strain(const asawa::shell::shell &shell,
@@ -66,10 +75,8 @@ void init_edge_strain(const asawa::shell::shell &shell,
                       const std::vector<vec3> &x, const std::vector<real> &l0,
                       const real &w, std::vector<sim_block::ptr> blocks) {
 
-  std::vector<real> ct = asawa::shell::edge_cotan_weights(shell, x);
-
   auto range = shell.get_edge_range();
-  int i = 0;
+
   for (auto c0 : range) {
     int i = shell.vert(c0);
     int j = shell.vert(shell.other(c0));
@@ -130,15 +137,14 @@ void init_willmore(const asawa::shell::shell &shell,
                    const std::vector<vec3> &x, const real &w,
                    std::vector<sim_block::ptr> blocks) {
 
-  auto range = shell.get_edge_range();
-  std::vector<real> ws = std::vector<real>(range.size(), w);
+  std::vector<real> ws = std::vector<real>(shell.vert_count(), w);
   init_willmore(shell, constraints, x, ws, blocks);
 }
 
 void init_area(const asawa::shell::shell &shell,
                std::vector<projection_constraint::ptr> &constraints,
                const std::vector<vec3> &x, const std::vector<real> &w,
-               std::vector<sim_block::ptr> blocks) {
+               std::vector<sim_block::ptr> blocks, bool zero = false) {
 
   auto range = shell.get_face_range();
   int i = 0;
@@ -153,18 +159,18 @@ void init_area(const asawa::shell::shell &shell,
                                            tri[1],
                                            tri[2],
                                        }),
-                                       x, 0.98, 1.02, w[i++], blocks));
+                                       x, 0.98, 1.02, w[i++], blocks, zero));
   }
 }
 
 void init_area(const asawa::shell::shell &shell,
                std::vector<projection_constraint::ptr> &constraints,
                const std::vector<vec3> &x, const real &w,
-               std::vector<sim_block::ptr> blocks) {
+               std::vector<sim_block::ptr> blocks, bool zero = false) {
 
   auto range = shell.get_face_range();
   std::vector<real> ws(range.size(), w);
-  init_area(shell, constraints, x, ws, blocks);
+  init_area(shell, constraints, x, ws, blocks, zero);
 }
 
 void init_laplacian(const asawa::shell::shell &shell,
@@ -220,7 +226,7 @@ void init_edge_willmore(const asawa::shell::shell &shell,
 #endif
 
     auto constraint = edge_willmore::create(
-        std::vector<index_t>({i0, ip, j0, jp}), w[k], blocks);
+        std::vector<index_t>({i0, ip, j0, jp}), w[c0 / 2], blocks);
     constraint->set_align_normal(N);
     constraints.push_back(constraint);
     k++;
@@ -231,8 +237,7 @@ void init_edge_willmore(const asawa::shell::shell &shell,
                         std::vector<projection_constraint::ptr> &constraints,
                         const real &w, std::vector<sim_block::ptr> blocks) {
 
-  auto range = shell.get_edge_range();
-  std::vector<real> ws = std::vector<real>(range.size(), w);
+  std::vector<real> ws = std::vector<real>(shell.edge_count(), w);
   init_edge_willmore(shell, constraints, ws, blocks);
 }
 

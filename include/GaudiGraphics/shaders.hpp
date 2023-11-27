@@ -4,8 +4,7 @@
 #include <iostream>
 #include <string>
 namespace gg {
-inline std::string get_shader(std::string name, int width = 1280,
-                              int height = 720) {
+inline std::string get_shader(std::string name) {
   std::string f_buff_vert =
       R"(
 #version 330 core
@@ -297,6 +296,7 @@ void main()
         
         vec3 lcol = 5.0 * vec3(1.0, 1.0, 1.0);
         vec3 lpos = vec3(1.0, 1.0, 1.0);
+        lpos = normalize(lpos);
         float llin = 0.05;
         float lquad = 0.8;
 
@@ -320,10 +320,9 @@ void main()
 
 
     vec2 tc = 1.0 + TexCoords;
-    //if(tc.x < 0.5)
-      FragColor = vec4((1.0 * lighting + 0.8 * AmbientOcclusion * (1.5 * Bleed + 0.2 * ambient)), 1.0);
-    //else
-    //  FragColor = vec4(vec3(8.0 * Bleed), 1.0);
+    //FragColor = vec4(0.1 *lighting + 5.0 * Bleed, 1.0);
+    FragColor = vec4((1.0 * lighting  + 16.0 * Bleed )* AmbientOcclusion + 0.1 * ambient, 1.0);
+    
 }
 )";
 
@@ -357,11 +356,8 @@ uniform vec3 samples[256];
 
 // parameters (you'd probably want to use them as uniforms to more easily tweak the effect)
 
-float radius = 0.2;
-float bias = -0.01;
-
-// tile noise texture over screen based on screen dimensions divided by noise size
-const vec2 noiseScale = vec2(float(SCREEN_WIDTH)/4.0, float(SCREEN_HEIGHT)/4.0); 
+float radius = 0.75;
+float bias = 0.05;
 
 struct quat
 {
@@ -422,7 +418,6 @@ void main()
     vec3 fragPos = texture(gPosition, TexCoords).xyz;
     vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
     vec3 randomVec = 0.5 - normalize(rvec(500.0 * TexCoords));
-    //vec3 randomVec = normalize(texture(texNoise, TexCoords * noiseScale).xyz);
     
     // create TBN change-of-basis matrix: from tangent-space to view-space
     vec3 tangent = normalize(randomVec - normal * dot(randomVec, normal));
@@ -470,7 +465,7 @@ void main()
       R"(
         #version 330 core
 
-#define KSIZE 128
+#define KSIZE 512
 #define PSI  1.533751168755204288118041 
 #define PHI  sqrt(2.0)
 #define ROOT3  sqrt(3.0)
@@ -500,9 +495,6 @@ uniform vec3 viewPos;
 
 float radius = 0.1;
 float bias = 0.02;
-
-// tile noise texture over screen based on screen dimensions divided by noise size
-const vec2 noiseScale = vec2(float(SCREEN_WIDTH)/4.0, float(SCREEN_HEIGHT)/4.0); 
 
 struct quat
 {
@@ -585,7 +577,41 @@ void find_pos(vec3 p0, vec3 p1, out vec3 gpos, out vec3 gnorm){
 
     gpos = texture(gPosition, offset.xy).rgb;
     gnorm = texture(gNormal, offset.xy).rgb;
+}
 
+
+bool accum(vec3 pi, out vec3 pj, vec3 p_test, vec3 N0, out vec3 N1, vec3 pf, in out vec3 bleed){
+    
+    vec3 p_screen = project(p_test);
+    vec3 p_ground = texture(gPosition, p_screen.xy).rgb;
+
+    if(p_test.z > p_ground.z + bias) return true;
+    
+    vec3 N_ground = texture(gNormal, p_screen.xy).rgb;
+
+    vec3 dp = p_ground - pi;
+    float ldp = length(dp);
+
+    if(ldp < 1.0e-8) return false;
+
+    vec3 dpN = dp / ldp;
+
+    float c0 = dot(dpN, N0);
+    float c1 = -dot(dpN, N_ground);
+
+    if(c0 < 0.0 || c1 < 0.0) return false;
+
+    float dist = length(p_ground - pf);
+    
+    float denom = 1.0 / (dist * dist + 0.1 * radius*radius);
+    denom = clamp(denom, 0.0, 1.0);
+
+    bleed += 1.0 * c0 * c1 * denom * texture(gAlbedoSpec, p_screen.xy).rgb;
+    //bleed +=  c0 * texture(gAlbedoSpec, p_screen.xy).rgb;
+    //bleed += dpN;
+    N1 = N_ground;
+    pj = p_ground;
+    return true;
 }
 
 void main()
@@ -593,90 +619,51 @@ void main()
 
     // get input for SSAO algorithm
     vec3 fragPos = texture(gPosition, TexCoords).xyz;
-    vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
-    //vec3 normal = vec3(0.0, 0.0, 1.0);
+    vec3 fragNorm = normalize(texture(gNormal, TexCoords).rgb);
+
     vec3 randomVec = normalize(rvec(499.0 * TexCoords));
-    //vec3 randomVec = normalize(texture(texNoise, TexCoords * noiseScale).xyz);
     
     // create TBN change-of-basis matrix: from tangent-space to view-space
-    vec3 tangent = normalize(randomVec - normal * dot(randomVec, normal));
-    vec3 bitangent = cross(normal, tangent);
+    vec3 tangent = normalize(randomVec - fragNorm * dot(randomVec, fragNorm));
+    vec3 bitangent = cross(fragNorm, tangent);
 
-    mat3 TBN = mat3(tangent, bitangent, normal);
+    mat3 TBN = mat3(tangent, bitangent, fragNorm);
     // iterate over the sample kernel and calculate occlusion factor
-    vec3 occlusion = vec3(0.0);
+    vec3 bleed = vec3(0.0);
     vec3 viewDir  = normalize(viewPos - fragPos);
-    float accum = 0.0;
+    
     for(int i = 0; i < KSIZE; ++i)
     {
-        // get sample position
-        //vec3 samplePos = TBN * samples[i]; // from tangent to view-space
         vec3 sphere = getSphere(i);
         sphere.z = abs(sphere.z);
-        vec3 samplePos = TBN * sphere; // from tangent to view-space
 
-        samplePos = fragPos + samplePos * radius; 
-
-        vec3 p0, p1, p2;
-        float cdist;
-        //guess
-        p0 = viewPos;
-        p1 = samplePos;
+        vec3 p_test = fragPos + TBN * sphere * radius;
         
-        vec3 gpos, gnorm0, gnorm1, offset;
-        
-        offset = project(p1);
-        gpos = texture(gPosition, offset.xy).rgb;
-        gnorm0 = texture(gNormal, offset.xy).rgb;
-        float sampleDepth = gpos.z; // get depth value of kernel sample
-        float rc = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));
-
-        if(gpos.z <= p1.z + bias){
-
-          vec3 dv = -normalize(reflect(gnorm0, viewDir));
-          float c0 = dot(viewDir, gnorm0);
-          occlusion += c0 * texture(gAlbedoSpec, offset.xy).rgb;
-          continue;
-        } 
-        continue;
-        //find_pos(p0, p1, gpos, gnorm0);
-        p1 = gpos;
-
-        offset = project(p1);
-
-        vec3 d0 = normalize(p1 - p0);
+        vec3 pj, N1;
+        bool test = accum(fragPos, pj, p_test, fragNorm, N1, fragPos, bleed);
+        if(!test) continue;
 
         //calc new direction
-        vec3 d1 = -normalize(reflect(gnorm0, d0));
-        p2 = p1 + (0.25 * radius  + 0.75 * gold_noise(250.0 * TexCoords, GPHI) * radius) * d1;
+        vec3 dp = pj - fragPos; 
+        dp = -normalize(reflect(N1, dp));
+        dp *= radius;
+        p_test = pj + dp;
+        test = accum(pj, pj, p_test, N1, N1, fragPos, bleed);
+        if(!test) continue;
 
-        offset = project(p2);
-
-        gpos = texture(gPosition, offset.xy).rgb;
-        gnorm1 = texture(gNormal, offset.xy).rgb;
-        if(gpos.z < p2.z + bias) continue;
-
-        find_pos(p1, p2, gpos, gnorm1);
-
-        float c0 = -dot(d1, gnorm0);
-        float c1 = -dot(d1, gnorm1);
-        c0 = clamp(c0, 0.0, 1.0);
-        c1 = clamp(c1, 0.0, 1.0);
-
-        p2 = gpos;
-        float dist = length(p2 - p1); //use dot prod instea
-
-        float denom = 1.0 / (dist * dist + 1e-6);
-        denom = clamp(denom, 0.0, 1.0);
-        
-        occlusion += c0 * c1 * denom * texture(gAlbedoSpec, offset.xy).rgb;
+        //calc new direction
+        dp = pj - fragPos; 
+        dp = -normalize(reflect(N1, dp));
+        dp *= radius;
+        p_test = pj + dp;
+        accum(pj, pj, p_test, N1, N1, fragPos, bleed);
     }
 
     float A = PI * radius * radius / float(KSIZE);
     //occlusion *= A;
-    occlusion /= float(KSIZE);
+    bleed /= float(KSIZE);
     
-    FragColor = vec4(1.0 * occlusion, 1.0);
+    FragColor = vec4(1.0 * bleed, 1.0);
 }
 )";
 
@@ -932,25 +919,18 @@ void main() {
   if (name == "ssao_sqr_frag") {
     // find and replace SCREEN_WIDTH and SCREEN_HEIGHT
     std::string s = ssao_sqr_frag;
-    std::string s1 = "SCREEN_WIDTH";
-    std::string s2 = "SCREEN_HEIGHT";
-    s.replace(s.find(s1), s1.length(), std::to_string(width));
-    s.replace(s.find(s2), s2.length(), std::to_string(height));
+    // std::string s1 = "SCREEN_WIDTH";
+    // std::string s2 = "SCREEN_HEIGHT";
+    // s.replace(s.find(s1), s1.length(), std::to_string(width));
+    // s.replace(s.find(s2), s2.length(), std::to_string(height));
 
-    std::cout << name << std::endl;
-    std::cout << s << std::endl;
+    // std::cout << name << std::endl;
+    // std::cout << s << std::endl;
     return s;
   }
 
   if (name == "bleed_sqr_frag") {
     std::string s = bleed_sqr_frag;
-    std::string s1 = "SCREEN_WIDTH";
-    std::string s2 = "SCREEN_HEIGHT";
-    s.replace(s.find(s1), s1.length(), std::to_string(width));
-    s.replace(s.find(s2), s2.length(), std::to_string(height));
-    // dump name and source
-    std::cout << name << std::endl;
-    std::cout << s << std::endl;
     return s;
   }
 

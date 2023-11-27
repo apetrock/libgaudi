@@ -53,7 +53,7 @@ void center(std::vector<vec3> &coords, real scale = 2.0) {
   std::cout << " scale: " << scale / maxl << std::endl;
 }
 
-std::array<vec3, 2> extents(std::vector<vec3> &coords) {
+std::array<vec3, 2> extents(const std::vector<vec3> &coords) {
   real accum = 0.0;
   vec3 min = coords[0];
   vec3 max = coords[0];
@@ -284,7 +284,7 @@ std::vector<vec3> vertex_areas_3(const shell &M, const std::vector<vec3> &x) {
 std::vector<real> edge_cotan_weights(const shell &M,
                                      const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
-  std::vector<real> ws(M.corner_count() / 2, 0.0);
+  std::vector<real> ws(M.edge_count(), 0.0);
   int i = 0;
   for (auto ci : range) {
     index_t c0p = M.prev(ci);
@@ -313,30 +313,30 @@ std::vector<real> align_edges(shell &M, const std::vector<vec3> &x) {
 
 std::vector<real> edge_lengths(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
-  std::vector<real> l(range.size());
+  std::vector<real> l(M.edge_count());
   int i = 0;
   for (auto ci : range) {
-    l[i++] = edge_length(M, ci, x);
+    l[ci / 2] = edge_length(M, ci, x);
   }
   return l;
 }
 
 std::vector<vec3> edge_centers(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
-  std::vector<vec3> cens(range.size());
+  std::vector<vec3> cens(M.edge_count(), vec3::Zero());
   int i = 0;
   for (auto ci : range) {
-    cens[i++] = edge_center(M, ci, x);
+    cens[ci / 2] = edge_center(M, ci, x);
   }
   return cens;
 }
 
 std::vector<vec3> edge_normals(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
-  std::vector<vec3> Ns(range.size());
+  std::vector<vec3> Ns(M.edge_count(), vec3::Zero());
   int i = 0;
   for (auto ci : range) {
-    Ns[i++] = edge_normal(M, ci, x);
+    Ns[ci / 2] = edge_normal(M, ci, x);
   }
   return Ns;
 }
@@ -344,24 +344,24 @@ std::vector<vec3> edge_normals(const shell &M, const std::vector<vec3> &x) {
 std::vector<real> edge_areas(const shell &M, const std::vector<vec3> &x) {
   // well this is wrong...
   auto range = M.get_edge_range();
-  std::vector<real> ws(range.size());
+  std::vector<real> ws(M.edge_count(), 0.0);
   int i = 0;
   for (auto ci : range) {
     int i0 = ci;
     int i1 = M.other(i0);
     int f0 = M.face(i0);
     int f1 = M.face(i1);
-    ws[i++] = (face_area(M, f0, x) + face_area(M, f1, x)) / 3.0;
+    ws[ci / 2] = (face_area(M, f0, x) + face_area(M, f1, x)) / 3.0;
   }
   return ws;
 }
 
 std::vector<vec3> edge_tangents(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
-  std::vector<vec3> dirs(range.size());
+  std::vector<vec3> dirs(M.edge_count(), vec3::Zero());
   int i = 0;
   for (auto ci : range) {
-    dirs[i++] = edge_tangent(M, ci, x);
+    dirs[ci / 2] = edge_tangent(M, ci, x);
   }
   return dirs;
 }
@@ -480,6 +480,19 @@ real surface_area(const shell &M, const std::vector<vec3> &x) {
   return A;
 }
 
+/*
+real avg_length(const shell &M, const std::vector<vec3> &x) {
+  real accum = 0.0;
+  auto range = M.get_edge_range();
+  int count = 0;
+  for (auto ci : range) {
+    accum += edge_length(M, ci, x);
+    count++;
+  }
+
+  return accum / real(count);
+}
+*/
 real avg_length(const shell &M, const std::vector<vec3> &coords) {
   real accum = 0.0;
   for (int i = 0; i < M.__corners_next.size(); i += 2) {

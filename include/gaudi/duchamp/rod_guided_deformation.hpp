@@ -17,13 +17,13 @@
 #include "gaudi/asawa/shell/walk.hpp"
 
 #include "gaudi/bontecou/laplacian.hpp"
-#include "gaudi/calder/quadric_integrators.hpp"
+#include "gaudi/calder/quadric_fit.hpp"
 #include "gaudi/calder/tangent_point_integrators.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
 #include "gaudi/common.h"
 
-#include "modules/rod_control.hpp"
+#include "modules/knotted_surface.hpp"
 #include "utils/point_things.hpp"
 #include "utils/string_things.hpp"
 
@@ -84,7 +84,7 @@ public:
     //__R->_update_frames(normals);
 
     real lavg = 1.0 * l0;
-    __R->_r = 0.015;
+    __R->_r = 0.020;
     __Rd = rod::dynamic::create(__R, 0.35 * lavg, 2.0 * lavg, 0.25 * lavg);
 
     for (int i = 0; i < 5; i++) {
@@ -92,7 +92,7 @@ public:
       __Rd->step();
     }
 
-    _rod_control = rod_control_module::create(__M, __surf, __R, __Rd);
+    _knotted_surface = knotted_surface_module::create(__M, __surf, __R, __Rd);
   };
 
   std::vector<vec3> calc_quadric_grad() {
@@ -107,8 +107,8 @@ public:
     std::vector<vec3> N_s_f = asawa::shell::face_normals(*__M, x_s);
     const std::vector<vec3> &x_r = R.x();
 
-    real eps = _rod_control->get_eps();
-    std::vector<vec3> Nr = _rod_control->get_rod_normals(R, M, 1.0 * eps);
+    real eps = _knotted_surface->get_eps();
+    std::vector<vec3> Nr = _knotted_surface->get_rod_normals(R, M, 1.0 * eps);
 
     std::vector<real> Q = calder::quadric_sdf(R, Nr, x_s_f, N_s_f, 0.25 * eps);
 
@@ -137,7 +137,7 @@ public:
 #if 1
   std::vector<vec3> compute_tangent_point_gradient() {
 
-    real eps = _rod_control->get_eps();
+    real eps = _knotted_surface->get_eps();
     std::vector<vec3> &x = __R->x();
     std::vector<real> l = __R->l0();
     std::vector<vec3> T = __R->N2c();
@@ -165,10 +165,10 @@ public:
 
     // walk(__surf->_Cc);
     if (frame < 1200) {
-      _rod_control->init_step(_h);
-      _rod_control->add_rod_force(compute_tangent_point_gradient());
-      _rod_control->add_shell_force(calc_quadric_grad());
-      _rod_control->step(_h);
+      _knotted_surface->init_step(_h);
+      _knotted_surface->add_rod_force(compute_tangent_point_gradient());
+      _knotted_surface->add_shell_force(calc_quadric_grad());
+      _knotted_surface->step(_h);
     }
 
     if (frame > 1200)
@@ -181,7 +181,7 @@ public:
     // step_sdf(frame);
   }
   // std::map<index_t, index_t> _rod_adjacent_edges;
-  rod_control_module::ptr _rod_control;
+  knotted_surface_module::ptr _knotted_surface;
 
   real _h = 0.05;
   shell::shell::ptr __M;

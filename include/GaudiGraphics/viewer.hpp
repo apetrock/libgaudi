@@ -101,7 +101,6 @@ public:
     _frame++;
     this->onAnimate(_frame);
   };
-
   int _frame = 0;
 };
 
@@ -411,7 +410,8 @@ public:
 
   virtual void initShader() override {
     this->mShader.bind();
-    this->mShader.init("hdr_shader", get_shader("sqr_vert"),
+    this->mShader.init("hdr_shader",           //
+                       get_shader("sqr_vert"), //
                        get_shader("hdr_sqr_frag"));
   }
 
@@ -656,7 +656,7 @@ public:
   virtual void initShader() override {
     this->mShader.bind();
     this->mShader.init("deffered_shader", get_shader("sqr_vert"),
-                       get_shader("ssao_sqr_frag", _width, _height));
+                       get_shader("ssao_sqr_frag"));
     // this->mShader.init("hdr_shader", get_shader("hdr_sqr_vert"),
     //                    get_shader("hdr_sqr_frag"));
   }
@@ -774,7 +774,7 @@ public:
   virtual void initShader() override {
     this->mShader.bind();
     this->mShader.init("deffered_shader", get_shader("sqr_vert"),
-                       get_shader("bleed_sqr_frag", _width, _height));
+                       get_shader("bleed_sqr_frag"));
     // this->mShader.init("hdr_shader", get_shader("hdr_sqr_vert"),
     //                    get_shader("hdr_sqr_frag"));
   }
@@ -919,7 +919,7 @@ public:
   SimpleApp(int w = 1280, int h = 720, double d = 4.0, bool grab = true,
             std::string frame_grabber_pattern = "output")
       : _width(w), _height(h),
-        nanogui::Screen(Eigen::Vector2i(w, h), "App Simple") {
+        nanogui::Screen(Eigen::Vector2i(w, h), frame_grabber_pattern, false) {
     using namespace nanogui;
 
     // now for GUI

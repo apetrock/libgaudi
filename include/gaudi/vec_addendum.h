@@ -303,6 +303,16 @@ inline T abs_cotan(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2) {
 }
 
 template <typename T>
+VEC<6, T> plucker_coordinates(const VEC3<T> &p0, const VEC3<T> &p1) {
+  VEC3<T> d = p1 - p0;
+  VEC3<T> n = d.normalized();
+  VEC3<T> p = cross(p0, p1);
+  VEC<6, T> out;
+  out << n[0], n[1], n[2], p[0], p[1], p[2];
+  return out;
+}
+
+template <typename T>
 inline bool ray_triangle_intersect(VEC3<T> &pi, const VEC3<T> &r0,
                                    const VEC3<T> &r1, const VEC3<T> &v0,
                                    const VEC3<T> &v1, const VEC3<T> &v2,
@@ -1331,6 +1341,69 @@ template <typename T> VEC3<T> hsv_to_rgb(const VEC3<T> &hsv) {
     rgb[2] = q;
     break;
   }
+  return rgb;
+}
+
+template <typename T> VEC3<T> rgb_to_xyz(const VEC3<T> &rgb) {
+  // rgb is in 0-1 range
+  VEC3<T> xyz;
+  xyz[0] = 0.412453 * rgb[0] + 0.357580 * rgb[1] + 0.180423 * rgb[2];
+  xyz[1] = 0.212671 * rgb[0] + 0.715160 * rgb[1] + 0.072169 * rgb[2];
+  xyz[2] = 0.019334 * rgb[0] + 0.119193 * rgb[1] + 0.950227 * rgb[2];
+  return xyz;
+}
+template <typename T> VEC3<T> xyz_to_rgb(const VEC3<T> &lab) {
+  // rgb is in 0-1 range
+  VEC3<T> rgb;
+  rgb[0] = 3.240479 * lab[0] - 1.537150 * lab[1] - 0.498535 * lab[2];
+  rgb[1] = -0.969256 * lab[0] + 1.875992 * lab[1] + 0.041556 * lab[2];
+  rgb[2] = 0.055648 * lab[0] - 0.204043 * lab[1] + 1.057311 * lab[2];
+  return rgb;
+}
+
+template <typename T> T fxyz(T v) {
+  if (v > 0.008856)
+    return std::pow(v, 1.0 / 3.0);
+  else
+    return 7.787 * v + 16.0 / 116.0;
+}
+
+template <typename T> T fixyz(T v) {
+  if (v > 0.008856)
+    return std::pow(v, 3.0);
+  else
+    return (v - 16.0 / 116.0) / 7.787;
+}
+
+template <typename T> VEC3<T> rgb_to_lab(const VEC3<T> &rgb) {
+  VEC3<T> xyz = rgb_to_xyz(rgb);
+  // F1 98.074	100.000	118.232 old daylight
+  xyz[0] = xyz[0] / 0.95047;
+  xyz[1] = xyz[1] / 1.0;
+  xyz[2] = xyz[2] / 1.08883;
+
+  VEC3<T> lab;
+  lab[0] = 116.0 * fxyz(xyz[1]) - 16.0;
+  lab[1] = 500.0 * (fxyz(xyz[0]) - fxyz(xyz[1]));
+  lab[2] = 200.0 * (fxyz(xyz[1]) - fxyz(xyz[2]));
+  return lab;
+}
+
+template <typename T> VEC3<T> lab_to_rgb(const VEC3<T> &lab) {
+  VEC3<T> xyz;
+  xyz[1] = (lab[0] + 16.0) / 116.0;
+  xyz[0] = lab[1] / 500.0 + xyz[1];
+  xyz[2] = xyz[1] - lab[2] / 200.0;
+
+  xyz[0] = fixyz(xyz[0]);
+  xyz[1] = fixyz(xyz[1]);
+  xyz[2] = fixyz(xyz[2]);
+
+  xyz[0] = xyz[0] * 0.95047;
+  xyz[1] = xyz[1] * 1.0;
+  xyz[2] = xyz[2] * 1.08883;
+
+  VEC3<T> rgb = xyz_to_rgb(xyz);
   return rgb;
 }
 
