@@ -108,8 +108,10 @@ std::vector<vec14> darboux_cyclide(asawa::rod::rod &R,
         // real kappa = computeKg(dist, l0, p);
         real w_total = w * kappa;
 
+        // Nr = dp.normalized();
         mat414 A = mkA(dp);
         vec4 n = mkN(Nr);
+
         ns[i] += w_total * A.transpose() * n;
         As[i] += w_total * A.transpose() * A;
         return 0.0;

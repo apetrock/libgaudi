@@ -85,7 +85,8 @@ std::vector<real> fast_winding(const arp::T3::ptr &face_tree,
   l0 *= spread;
 
   calder::fast_summation<arp::T3> sum(*face_tree);
-  sum.bind<vec3>(face_ids, N);
+  std::vector<vec3> Nc = asawa::shell::compress_to_range<vec3>(face_ids, N);
+  sum.bind<vec3>(face_ids, Nc);
 
   std::vector<real> u = sum.calc<real>(
       pov,
@@ -114,7 +115,8 @@ std::vector<real> fast_winding(const arp::T3::ptr &face_tree,
         real dist = va::norm(dp);
         real kappa = computeK(dist, 0.0, 3.0);
         return 0.25 / M_PI * kappa * va::dot(N, dp);
-      });
+      },
+      0.25);
 
   return u;
 }
@@ -146,7 +148,8 @@ std::vector<real> fast_dist(const arp::T3::ptr &face_tree,
   l0 *= spread;
 
   calder::fast_summation<arp::T3> sum(*face_tree);
-  sum.bind<vec3>(face_ids, N);
+  std::vector<vec3> Nc = asawa::shell::compress_to_range<vec3>(face_ids, N);
+  sum.bind<vec3>(face_ids, Nc);
   std::vector<real> min_dists(pov.size(),
                               std::numeric_limits<real>::infinity());
   std::vector<real> u = sum.calc<real>(
@@ -181,9 +184,104 @@ std::vector<real> fast_dist(const arp::T3::ptr &face_tree,
         min_dists[i] = std::min(min_dists[i], dist);
 
         return 0.0;
-      });
+      },
+      0.25);
 
   return min_dists;
+}
+
+std::vector<vec3> fast_normals(const arp::T3::ptr &face_tree,
+                               const std::vector<vec3> &pov,
+                               real spread = 1.0) {
+
+  const std::vector<vec3> x = face_tree->verts();
+  const std::vector<index_t> &face_vert_ids = face_tree->indices();
+  std::vector<index_t> face_ids(face_vert_ids.size() / 3);
+
+  for (int i = 0; i < face_ids.size(); i++) {
+    face_ids[i] = i;
+  }
+
+  std::vector<vec3> N(face_vert_ids.size() / 3);
+  real l0 = 0.0;
+  for (int i = 0; i < face_ids.size(); i++) {
+    vec3 x0 = x[face_vert_ids[i * 3 + 0]];
+    vec3 x1 = x[face_vert_ids[i * 3 + 1]];
+    vec3 x2 = x[face_vert_ids[i * 3 + 2]];
+    N[i] = (x1 - x0).cross(x2 - x0);
+    real A = N[i].norm();
+    l0 += A;
+  }
+
+  l0 /= face_ids.size();
+  l0 = pow(l0, 0.5);
+  l0 *= spread;
+
+  calder::fast_summation<arp::T3> sum(*face_tree);
+  std::vector<vec3> Nc = asawa::shell::compress_to_range<vec3>(face_ids, N);
+  sum.bind<vec3>(face_ids, Nc);
+  std::vector<real> dists(pov.size(), 999.9);
+  std::vector<vec3> normals(pov.size(), vec3(0.0, 0.0, 0.0));
+  std::vector<real> W(pov.size(), 0.0);
+  std::vector<real> u = sum.calc<real>(
+      pov,
+      [l0, &W, &normals,
+       &dists](const index_t &i, const index_t &j, const vec3 &pi,
+               const std::vector<calder::datum::ptr> &data,
+               calder::fast_summation<arp::T3>::Node_Type node_type,
+               const arp::T3::node &node, const arp::T3 &tree) -> real {
+        const calder::vec3_datum::ptr N_datum =
+            static_pointer_cast<calder::vec3_datum>(data[0]);
+        const vec3 &N = N_datum->leaf_data()[j];
+        real w = N.dot(N);
+
+        vec3 p0 = tree.vert(3 * j + 0);
+        vec3 p1 = tree.vert(3 * j + 1);
+        vec3 p2 = tree.vert(3 * j + 2);
+        // logger::line(p0, p0 + 0.1 * N, vec4(0.0, 1.0, 1.0, 1.0));
+
+        std::array<real, 4> cp = va::closest_point({p0, p1, p2}, pi);
+        real dist = cp[0];
+        real kappa = computeK(dist, 0.0, 3.0);
+        // W[i] += w * kappa;
+        // normals[i] += w * kappa * N;
+        if (dist < dists[i]) {
+          dists[i] = dist;
+          normals[i] = N.normalized();
+        }
+        return 0.0;
+      },
+      [l0, &W, &normals,
+       &dists](const index_t &i, const index_t &j, const vec3 &pi,
+               const std::vector<calder::datum::ptr> &data,
+               calder::fast_summation<arp::T3>::Node_Type node_type,
+               const arp::T3::node &node, const arp::T3 &tree) -> real {
+        const calder::vec3_datum::ptr N_datum =
+            static_pointer_cast<calder::vec3_datum>(data[0]);
+        const vec3 &N = N_datum->node_data()[j];
+        real w = N.dot(N);
+        vec3 pj = node.center();
+        // logger::line(pj, pj + 0.1 * N, vec4(0.5, 0.0, 1.0, 1.0));
+        vec3 dp = pj - pi;
+        // real dist = va::project_to_nullspace(dp, N);
+        real dist = va::norm(dp);
+        real kappa = computeK(dist, 0.0, 3.0);
+        // W[i] += w * kappa;
+        // normals[i] += w * kappa * N;
+        if (dist < dists[i]) {
+          dists[i] = dist;
+          normals[i] = N.normalized();
+        }
+        return 0.0;
+      },
+      0.25);
+  // normalize normals
+  for (int i = 0; i < normals.size(); i++) {
+    if (W[i] > 0.0)
+      normals[i] /= W[i];
+    normals[i].normalize();
+  }
+  return normals;
 }
 
 std::vector<real> fast_view(const arp::T3::ptr &face_tree,
@@ -215,7 +313,8 @@ std::vector<real> fast_view(const arp::T3::ptr &face_tree,
   l0 *= spread;
 
   calder::fast_summation<arp::T3> sum(*face_tree);
-  sum.bind<vec3>(face_ids, N);
+  std::vector<vec3> Nc = asawa::shell::compress_to_range<vec3>(face_ids, N);
+  sum.bind<vec3>(face_ids, Nc);
   std::vector<real> dists(pov.size(), 0.0);
   std::vector<real> u = sum.calc<real>(
       pov,
@@ -283,7 +382,9 @@ std::vector<real> fast_winding(asawa::shell::shell &M,
   // face_tree->debug_half();
 
   calder::fast_summation<arp::T3> sum(*face_tree);
-  sum.bind<vec3>(face_ids, wN);
+  std::vector<vec3> Nc = asawa::shell::compress_to_range<vec3>(face_ids, wN);
+
+  sum.bind<vec3>(face_ids, Nc);
   std::vector<real> u = sum.calc<real>(
       pov,
       [l0](const index_t &i, const index_t &j, const vec3 &pi,
@@ -343,7 +444,8 @@ std::vector<mat3> fast_frame(asawa::shell::shell &M, const std::vector<vec3> &x,
 
   calder::fast_summation<arp::T2> sum(*edge_tree);
   std::cout << " ==== wE.size(): " << wE.size() << std::endl;
-  sum.bind(calder::edge_frame_datum::create(edge_ids, wE));
+  std::vector<vec3> Ec = asawa::shell::compress_to_range<vec3>(edge_ids, wE);
+  sum.bind(calder::edge_frame_datum::create(edge_ids, Ec));
   std::vector<real> sums(p_pov.size(), 0.0);
   std::vector<mat3> u = sum.calc<mat3>(
       p_pov,

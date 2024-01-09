@@ -89,13 +89,15 @@ void init_stretch_shear(const asawa::rod::rod &R,
 
 void init_bend_twist(const asawa::rod::rod &R,
                      std::vector<projection_constraint::ptr> &constraints,
-                     const real &w, std::vector<sim_block::ptr> blocks) {
+                     const real &w, std::vector<sim_block::ptr> blocks,
+                     bool skip = false) {
   int Ni = R.corner_count();
   std::vector<index_t> verts = R.get_vert_range();
-  for (auto i : verts) {
+  int N = skip ? verts.size() - 1 : verts.size();
+  for (int i = 0; i < N; i++) {
     if (R.length(i) < 1e-8)
       continue;
-    asawa::rod::consec_t c = R.consec(i);
+    asawa::rod::consec_t c = R.consec(verts[i]);
     constraints.push_back(bend_twist::create({c[1], c[2], Ni}, w, blocks));
   }
 }

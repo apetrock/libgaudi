@@ -14,4 +14,4 @@ if(GUADI_WITH_CHOLMOD)
     target_link_libraries(${PROJECT_NAME} PRIVATE cholmod umfpack)
 endif()
 
-target_link_libraries(rod_constraints_test PRIVATE libGaudi nanogui ${NANOGUI_EXTRA_LIBS})
+target_link_libraries(${PROJECT_NAME} PRIVATE libGaudi nanogui ${NANOGUI_EXTRA_LIBS})

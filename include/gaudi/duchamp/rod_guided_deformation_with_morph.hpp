@@ -68,19 +68,19 @@ struct walk_config {
 
 const int N_walk_configs = 6;
 
-int iw0 = 1;
+int iw0 = 0;
 
 int iw1 = (iw0 + 1) % N_walk_configs;
 int iwp = (iw0 + N_walk_configs - 1) % N_walk_configs;
-int Nw = 15000;
+int Nw = 24000;
 walk_config _wc[N_walk_configs] = {
     walk_config(100, Nw, 0.021, false, vec2(0.0, 0.0), false,
                 vec4(0.0, 0.0, 0.0, 0.0)),
-    walk_config(100, Nw, 0.022, false, vec2(0.0, 0.0), false,
-                vec4(0.0, 0.0, 0.0, 0.0)),
+    walk_config(100, Nw, 0.55, false, vec2(0.0, 0.0), false,
+                vec4(0.0, 0.0, 0.0, 0.0)), // jennifer_0
     walk_config(100, Nw, 0.23, true, vec2(3.0, -5.0), false,
                 vec4(0.0, 0.0, 0.0, 0.0)),
-    walk_config(100, Nw, 0.245, true, vec2(6.0, -8.0), false,
+    walk_config(100, Nw, 0.6, true, vec2(6.0, -8.0), false,
                 vec4(0.0, 0, 0.0, 0.0)),
     walk_config(100, Nw, 0.265, false, vec2(0.0, 0.0), true,
                 vec4(0.6, 0.0, 0.0, 0.8)),
@@ -162,7 +162,12 @@ public:
   rod_guided_deformation_with_morph() {
     //__M = load_cube();
     //__M = shell::load_bunny();
-    __M = shell::load_obj("assets/dennis.obj");
+    //__M = shell::load_obj("assets/dennis.obj");
+    //__M = shell::load_obj("assets/jennifer_0.obj");
+    //__M = shell::load_obj("assets/joel_0.obj");
+    //__M = shell::load_obj("assets/hand.obj");
+    __M = shell::load_obj("assets/washington.obj");
+
     //__M = shell::load_crab();
 
     shell::triangulate(*__M);
@@ -181,7 +186,7 @@ public:
     real l0 = asawa::shell::avg_length(*__M, x);
     // real C = 0.5;
     real C = 1.5;
-    __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, C * l0);
+    __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, 0.75 * C * l0);
 
     /////////////////////
     // Rod
@@ -203,14 +208,14 @@ public:
 
     real lavg = 1.5 * l0;
     __R->_r = 1.75 * lavg;
-    __Rd = rod::dynamic::create(__R, 0.5 * lavg, 1.5 * lavg, 0.25 * lavg);
+    __Rd = rod::dynamic::create(__R, 0.75 * lavg, 2.25 * lavg, 0.25 * lavg);
     _eps = l0;
-
+    /*
     for (int i = 0; i < 5; i++) {
       __surf->step();
       __Rd->step();
     }
-
+*/
     _knotted_surface = knotted_surface_module::create(__M, __surf, __R, __Rd);
     if (iw0 == 2) {
       _knotted_surface->add_angle_constraint(vec3(0.0, 0.0, 1.0), 0.15 * M_PI,
@@ -349,32 +354,38 @@ public:
     return Nss;
   }
 
-  std::vector<vec3> calc_cyclide_normal_flow(real cN, real cQ, real cS) {
+  std::vector<vec3> calc_cyclide_normal_flow(real cN, real cQ) {
     asawa::shell::shell &M = *__M;
     asawa::rod::rod &R = *__R;
     asawa::shell::dynamic &Md = *__surf;
     asawa::rod::dynamic &Rd = *__Rd;
 
     std::vector<vec3> x_s = asawa::get_vec_data(M, 0);
+    std::vector<vec3> N_s_v = asawa::shell::vertex_normals(*__M, x_s);
     std::vector<vec3> x_s_f = asawa::shell::face_centers(M, x_s);
     std::vector<vec3> N_s_f = asawa::shell::face_normals(*__M, x_s);
     const std::vector<vec3> &x_r = R.x();
 
     std::vector<vec3> Nr = _knotted_surface->get_rod_normals(R, M, cN * _eps);
 
+    //    std::vector<real> Q =
+    //        calder::darboux_cyclide_sdf(R, Nr, x_s_f, N_s_f, cQ * _eps, 3.0);
+
     std::vector<real> Q =
-        calder::darboux_cyclide_sdf(R, Nr, x_s_f, N_s_f, cQ * _eps, 3.0);
+        calder::darboux_cyclide_sdf(R, Nr, x_s, N_s_v, cQ * _eps, 3.0);
 
 #if 1
     int i = 0;
-    for (vec3 &N : N_s_f) {
+    for (vec3 &N : N_s_v) {
       N *= -Q[i];
+      // gg::geometry_logger::line(x_s[i], x_s[i] + 1.0e0 * N,
+      //                           vec4(0.6, 0.0, 0.8, 1.0));
+
       i++;
     }
 #endif
-    std::vector<vec3> Nss =
-        calder::mls_avg<vec3>(*__M, N_s_f, x_s, cS * _eps, 2.0);
-    return Nss;
+
+    return N_s_v;
   }
 
 #if 1
@@ -557,56 +568,51 @@ public:
       return real(frame - start_frame) / real(end_frame - start_frame);
     };
 
-    frame = frame + 600;
+    frame = frame;
     // walk(__surf->_Cc);
     if (frame < 3000) {
 
-      if (frame >= 600 && frame < 1200) {
+      if (frame >= 600 && frame < 1800) {
 
         _knotted_surface->init_step(_h);
-        real t = calc_frame_t(frame, 600, 1200);
+        real t = calc_frame_t(frame, 600, 1800);
         real offset = 1.0;
         offset = min(1.0 + 15.0 * t, 10.0);
         //_knotted_surface->set_helicity_constraint(true);
         //_knotted_surface->set_helicity_weight(1.0e-1);
         _knotted_surface->set_rod_offset(offset);
-        _knotted_surface->set_willmore_weight(0.8e-0);
-        _knotted_surface->set_area_weight(1.0e-2);
+        _knotted_surface->set_willmore_weight(4.0e-1);
+        _knotted_surface->set_area_weight(3.0e-3);
         _knotted_surface->set_shell_strain_weight(1.0e-1);
-        _knotted_surface->set_rod_pin_weight(1e-3);
+        _knotted_surface->set_shell_bending_weight(1.0e-1);
+
+        _knotted_surface->set_rod_pin_weight(1.0e-3);
         _knotted_surface->set_rod_strain_weight(1.0e-1);
         _knotted_surface->set_rod_bending_weight(1.0e-1);
         //_knotted_surface->set_rod_offset(10.0);
         // calc_torus_gradient();
-        //_knotted_surface->add_rod_force(calc_tangent_point_gradient(), 5.0e-7);
+        _knotted_surface->add_rod_force(calc_tangent_point_gradient(), 1.0e-7);
         //_knotted_surface->add_shell_force(calc_quadric_grad(0.5, 2.0, 4.0), 4.0);
         /*
         _knotted_surface->add_shell_force(
             calc_quadric_normal_flow(1.0, 6.0, 2.0, 0.5), 0.5 / _h);
         */
-        _knotted_surface->add_shell_force(
-            calc_cyclide_normal_flow(1.0, 3.0, 1.0), 1.0 / _h);
+
+        _knotted_surface->add_shell_force(calc_cyclide_normal_flow(1.0, 1.0),
+                                          1.0 / _h);
 
         _knotted_surface->step(_h);
-      }
 
-      if (frame >= 1800 && frame < 2100) {
-        real t = calc_frame_t(frame, 1800, 2100);
-        morph_rod_step(_h, t);
-      }
-      if (frame >= 2100 && frame < 2400) {
-        real t = calc_frame_t(frame, 2100, 2400);
-        morph_step(_h, t);
+        for (int k = 0; k < 1; k++) {
+          __surf->step(true);
+          __Rd->step();
+        }
       }
     }
 
-    if (frame > 1200)
+    if (frame > 2400)
       exit(0);
 
-    for (int k = 0; k < 1; k++) {
-      __surf->step(true);
-      __Rd->step();
-    }
     // step_sdf(frame);
   }
   // std::map<index_t, index_t> _rod_adjacent_edges;
@@ -615,7 +621,7 @@ public:
   mighty_morphin::ptr _morphin;
   continuous_collision_detection::ptr _ccd;
 
-  real _h = 0.05;
+  real _h = 0.025;
   real _eps = 0.1;
   shell::shell::ptr __M;
   shell::dynamic::ptr __surf;

@@ -54,17 +54,17 @@ public:
 
     _obj = gg::BufferObject::create();
     _obj->init();
+    mSceneObjects.push_back(_obj);
 
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
 
-    mSceneObjects.push_back(_obj);
     __surf = gaudi::duchamp::block_test::create();
   }
 
   virtual void onAnimate(int frame) {
 
     __surf->step(frame);
-    gg::fillBuffer_ref(*__surf->__R, _obj);
+    gg::fillBuffer_ref(*__surf->__R, _obj, gg::colorRGB(1.0, 0.0, 0.7, 1.0));
     //   std::cout << "rendering debug" << std::endl;
     //   asawa::test();
 

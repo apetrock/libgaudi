@@ -25,28 +25,24 @@ namespace gaudi {
 namespace hepworth {
 namespace block {
 
-void init_edge_growth(const asawa::shell::shell &shell,
+void init_edge_strain(const asawa::shell::shell &shell,
                       std::vector<projection_constraint::ptr> &constraints,
-                      const std::vector<vec3> &x, const std::vector<real> &l0,
-                      const std::vector<real> &g, const real &w,
+                      const std::vector<vec3> &x, const real &w,
                       std::vector<sim_block::ptr> blocks) {
-
-  std::vector<real> ct = asawa::shell::edge_cotan_weights(shell, x);
 
   auto range = shell.get_edge_range();
 
   for (auto c0 : range) {
     int i = shell.vert(c0);
     int j = shell.vert(shell.other(c0));
+    real l0 = asawa::shell::edge_length(shell, c0, x);
 
-    if (std::isnan(l0[c0 / 2]))
+    if (std::isnan(l0))
+      continue;
+    if (l0 < 1e-8)
       continue;
 
-    real cti = ct[c0 / 2];
-    if (std::isnan(cti))
-      continue;
-    cti = va::clamp(cti, 0.0, 10.0);
-
+    real ct = asawa::shell::cotan(shell, c0, x);
     real Ai = asawa::shell::face_area(shell, shell.face(c0), x);
     real Aj = asawa::shell::face_area(shell, shell.face(shell.other(c0)), x);
     if (Ai < 1e-8)
@@ -55,19 +51,8 @@ void init_edge_growth(const asawa::shell::shell &shell,
       continue;
 
     constraints.push_back(
-        edge_strain::create(std::vector<index_t>({i, j}), 0.85 * l0[c0 / 2],
-                            g[c0 / 2], w * pow(cti, 1.0) / (Ai + Aj), blocks));
+        edge_strain::create(std::vector<index_t>({i, j}), x, w, blocks));
   }
-}
-
-void init_edge_growth(const asawa::shell::shell &shell,
-                      std::vector<projection_constraint::ptr> &constraints,
-                      const std::vector<vec3> &x, const std::vector<real> &l0,
-                      const real &g, const real &w,
-                      std::vector<sim_block::ptr> blocks) {
-
-  std::vector<real> gt(shell.edge_count(), g);
-  init_edge_growth(shell, constraints, x, l0, gt, w, blocks);
 }
 
 void init_edge_strain(const asawa::shell::shell &shell,
@@ -94,9 +79,66 @@ void init_edge_strain(const asawa::shell::shell &shell,
     if (Aj < 1e-8)
       continue;
 
-    constraints.push_back(edge_strain::create(std::vector<index_t>({i, j}),
-                                              l0[c0 / 2], 1.0, w, blocks));
+    edge_strain::ptr edge_strain =
+        edge_strain::create(std::vector<index_t>({i, j}), x, w, blocks);
+    edge_strain->set_goal_length(l0[c0 / 2]);
+    constraints.push_back(edge_strain);
   }
+}
+
+void init_triangle_strain(const asawa::shell::shell &shell,
+                          std::vector<projection_constraint::ptr> &constraints,
+                          const std::vector<vec3> &x, real w,
+                          std::vector<sim_block::ptr> blocks) {
+
+  auto range = shell.get_face_range();
+  int i = 0;
+  for (auto fi : range) {
+    if (shell.fsize(fi) != 3)
+      continue;
+    if (asawa::shell::face_area(shell, fi, x) < 1e-8)
+      continue;
+    auto tri = shell.get_tri(fi);
+    constraints.push_back( //
+        triangle_strain::create(std::vector<index_t>({
+                                    tri[0],
+                                    tri[1],
+                                    tri[2],
+                                }),
+                                x, 0.5, 1.5, w, blocks));
+  }
+}
+
+void init_area(const asawa::shell::shell &shell,
+               std::vector<projection_constraint::ptr> &constraints,
+               const std::vector<vec3> &x, const std::vector<real> &w,
+               std::vector<sim_block::ptr> blocks, bool zero = false) {
+
+  auto range = shell.get_face_range();
+  int i = 0;
+  for (auto fi : range) {
+    if (shell.fsize(fi) != 3)
+      continue;
+    if (asawa::shell::face_area(shell, fi, x) < 1e-8)
+      continue;
+    auto tri = shell.get_tri(fi);
+    constraints.push_back(area::create(std::vector<index_t>({
+                                           tri[0],
+                                           tri[1],
+                                           tri[2],
+                                       }),
+                                       x, 0.5, 1.5, w[i++], blocks, zero));
+  }
+}
+
+void init_area(const asawa::shell::shell &shell,
+               std::vector<projection_constraint::ptr> &constraints,
+               const std::vector<vec3> &x, const real &w,
+               std::vector<sim_block::ptr> blocks, bool zero = false) {
+
+  auto range = shell.get_face_range();
+  std::vector<real> ws(range.size(), w);
+  init_area(shell, constraints, x, ws, blocks, zero);
 }
 
 void init_bending(const asawa::shell::shell &shell,
@@ -139,38 +181,6 @@ void init_willmore(const asawa::shell::shell &shell,
 
   std::vector<real> ws = std::vector<real>(shell.vert_count(), w);
   init_willmore(shell, constraints, x, ws, blocks);
-}
-
-void init_area(const asawa::shell::shell &shell,
-               std::vector<projection_constraint::ptr> &constraints,
-               const std::vector<vec3> &x, const std::vector<real> &w,
-               std::vector<sim_block::ptr> blocks, bool zero = false) {
-
-  auto range = shell.get_face_range();
-  int i = 0;
-  for (auto fi : range) {
-    if (shell.fsize(fi) != 3)
-      continue;
-    if (asawa::shell::face_area(shell, fi, x) < 1e-8)
-      continue;
-    auto tri = shell.get_tri(fi);
-    constraints.push_back(area::create(std::vector<index_t>({
-                                           tri[0],
-                                           tri[1],
-                                           tri[2],
-                                       }),
-                                       x, 0.98, 1.02, w[i++], blocks, zero));
-  }
-}
-
-void init_area(const asawa::shell::shell &shell,
-               std::vector<projection_constraint::ptr> &constraints,
-               const std::vector<vec3> &x, const real &w,
-               std::vector<sim_block::ptr> blocks, bool zero = false) {
-
-  auto range = shell.get_face_range();
-  std::vector<real> ws(range.size(), w);
-  init_area(shell, constraints, x, ws, blocks, zero);
 }
 
 void init_laplacian(const asawa::shell::shell &shell,

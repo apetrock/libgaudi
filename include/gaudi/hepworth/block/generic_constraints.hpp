@@ -153,6 +153,7 @@ public:
 
       xB0 = slide(xA0, xA1, xB0, s, _t1);
       xB1 = slide(xA0, xA1, xB1, s, _t1);
+      // logger::line(xB0, xB1, vec4(0.0, 1.0, 1.0, 1.0));
     }
 
     if (_rotate_to) {

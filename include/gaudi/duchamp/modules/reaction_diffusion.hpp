@@ -4,6 +4,7 @@
 #include "gaudi/asawa/datums.hpp"
 #include "gaudi/bontecou/laplacian.hpp"
 #include "module_base_shell.hpp"
+#include <vector>
 namespace gaudi {
 namespace duchamp {
 class reaction_diffusion : public module_base_shell {
@@ -40,22 +41,26 @@ public:
       rxa[i] = 1.0;
       rxb[i] = 0.0;
 
-      if (tb > 0.95) {
+      if (tb > 0.975) {
         rxb[i] = 1.0;
       }
     }
   }
 
-  virtual void step(real h) {
+  virtual void step_anisotropic(real h, //
+                                const std::vector<real> &f,
+                                const std::vector<real> &k) {
+
+    std::vector<vec3> &x = asawa::get_vec_data(*_M, 0);
     std::vector<real> &rxa = get_rxa();
     std::vector<real> &rxb = get_rxb();
-    std::vector<vec3> &x = asawa::get_vec_data(*_M, 0);
 
     for (int i = 0; i < rxa.size(); i++) {
       real u0 = rxa[i];
       real v0 = rxb[i];
       vec2 un0 = vec2(u0, v0);
-      auto [rxai, rxbi] = bontecou::grey_scott_2({rxa[i], rxb[i]}, _f, _k, h);
+      auto [rxai, rxbi] =
+          bontecou::grey_scott_2({rxa[i], rxb[i]}, f[i], k[i], h);
       rxa[i] = rxai, rxb[i] = rxbi;
     }
 
@@ -63,10 +68,20 @@ public:
     diffuse(_M, x, rxb, h * _db);
   }
 
+  virtual void step_isotropic(real h, real fi, real ki) {
+    std::vector<vec3> &x = asawa::get_vec_data(*_M, 0);
+    std::vector<real> f(x.size(), fi);
+    std::vector<real> k(x.size(), ki);
+    step_anisotropic(h, f, k);
+  }
+
+  virtual void step(real h) { step_isotropic(h, _f, _k); }
+
   std::vector<real> &get_rxa() { return asawa::get_real_data(*_M, _irxa); }
   std::vector<real> &get_rxb() { return asawa::get_real_data(*_M, _irxb); }
 
   index_t _irxa = -1, _irxb = -1;
+
   real _f = 0.025, _k = 0.535;
   real _da = 5.00e-4, _db = 0.4 * _da;
 };

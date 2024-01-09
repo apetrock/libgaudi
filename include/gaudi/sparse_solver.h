@@ -1,7 +1,7 @@
 
 
 #ifndef __LIBGAUDI_SPARSE_SOLVER__
-#define __LIBGAUDI_SPARSE_SOLVER_
+#define __LIBGAUDI_SPARSE_SOLVER__
 
 #ifdef CHOLMOD_H
 #define USE_CHOLMOD 1

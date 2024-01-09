@@ -34,10 +34,18 @@ class edge_strain : public block_constraint {
 public:
   DEFINE_CREATE_FUNC(edge_strain)
 
-  edge_strain(const std::vector<index_t> &ids, const real &l, const real &g,
+  edge_strain(const std::vector<index_t> &ids, const std::vector<vec3> &x,
               const real &w, std::vector<sim_block::ptr> blocks)
-      : block_constraint(ids, w, blocks), _l(l), _g(g) {}
+      : block_constraint(ids, w, blocks) {
+    _l = (x[_ids[1]] - x[_ids[0]]).norm();
+  }
+
   virtual std::string name() { return typeid(*this).name(); }
+
+  virtual void set_goal_length(const real &l) {
+    _limit = false;
+    _l = l;
+  }
 
   virtual void project(const vecX &q, vecX &p) {
 
@@ -46,23 +54,19 @@ public:
 
     vec3 q0 = _blocks[0]->get_vec3(i, q);
     vec3 q1 = _blocks[0]->get_vec3(j, q);
+    vec3 qc = 0.5 * (q0 + q1);
     vec3 dq = q1 - q0;
 
     real l = dq.norm();
     l = std::max(l, 1e-4);
     dq /= l;
-    // std::cout << l << " " << _l << " " << l / _l << std::endl;
-    //   gg::geometry_logger::line(q0, q0 + 0.01 * l / _l * dq,
-    //                             vec4(1.0, 0.0, 0.0, 1.0));
-
-    l = std::clamp(l / _l, 0.1, 2.0);
-    if ((_w * _g * l * dq).hasNaN()) {
-      std::cout << "--" << std::endl;
-      std::cout << q0.transpose() << " " << q1.transpose() << std::endl;
-      std::cout << _w << " g: " << _g << " l:" << l << " _l: " << _l
-                << std::endl;
-    }
-    p.block(_id0, 0, 3, 1) = _w * _g * l * dq;
+    real r = _limit ? std::clamp(l / _l, 0.1, 2.0) : 1.0;
+    // std::cout << "l " << l << " " << _l << " " << l / _l << std::endl;
+    // real r = std::clamp(l / _l, 0.1, 2.0);
+    // l = std::clamp(_l / l, 0.1, 4.0);
+    // logger::line(qc - 0.5 * l * dq, qc + 0.5 * l * dq,
+    //             vec4(0.0, 0.0, 1.0, 1.0));
+    p.block(_id0, 0, 3, 1) = _w * r * dq;
   }
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
 
@@ -76,11 +80,179 @@ public:
       triplets.push_back(trip(_id0 + ax, j + ax, _w / _l));
     id0 += 3;
   }
+  bool _limit = true;
   real _l = -1.0;
-  real _g = 1.0;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+#if 1
+class triangle_strain : public block_constraint {
+public:
+  DEFINE_CREATE_FUNC(triangle_strain)
+
+  triangle_strain(const std::vector<index_t> &ids, const std::vector<vec3> &x,
+                  real rangeMin, real rangeMax, real w,
+                  std::vector<sim_block::ptr> blocks, bool zero = false)
+      : block_constraint(ids, w, blocks), _rangeMin(rangeMin),
+        _rangeMax(rangeMax) {
+    assert(ids.size() == 3);
+    mat32 edges, P;
+    edges.col(0) = x[_ids[1]] - x[_ids[0]];
+    edges.col(1) = x[_ids[2]] - x[_ids[0]];
+    P.col(0) = edges.col(0).normalized();
+    P.col(1) =
+        (edges.col(1) - edges.col(1).dot(P.col(0)) * P.col(0)).normalized();
+    _rest = (P.transpose() * edges).inverse();
+    real A = (P.transpose() * edges).determinant() / 2.0f;
+    _w *= std::sqrt(std::abs(A));
+  }
+
+  virtual void project(const vecX &q, vecX &p) {
+    mat32 edges, P;
+    vec3 q0 = _blocks[0]->get_vec3(_ids[0], q);
+    vec3 q1 = _blocks[0]->get_vec3(_ids[1], q);
+    vec3 q2 = _blocks[0]->get_vec3(_ids[2], q);
+
+    edges.col(0) = q1 - q0;
+    edges.col(1) = q2 - q0;
+    P.col(0) = edges.col(0).normalized();
+    P.col(1) =
+        (edges.col(1) - edges.col(1).dot(P.col(0)) * P.col(0)).normalized();
+
+    mat2 F = P.transpose() * edges * _rest;
+    Eigen::JacobiSVD<mat2> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
+
+    vec2 S = svd.singularValues();
+    S(0) = clamp(S(0), _rangeMin, _rangeMax);
+    S(1) = clamp(S(1), _rangeMin, _rangeMax);
+    F = svd.matrixU() * S.asDiagonal() * svd.matrixV().transpose();
+
+    mat32 PF = P * F;
+
+    p.block(_id0 + 0, 0, 3, 1) = _w * PF.col(0);
+    p.block(_id0 + 3, 0, 3, 1) = _w * PF.col(1);
+  }
+
+  ///////////////////////////////////////////////////////////////////////////////
+  virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
+    _id0 = id0;
+    int n = 2;
+    index_t i0 = _blocks[0]->get_offset_idx(this->_ids[0]);
+    index_t i1 = _blocks[0]->get_offset_idx(this->_ids[1]);
+    index_t i2 = _blocks[0]->get_offset_idx(this->_ids[2]);
+
+    for (int i = 0; i < n; ++i) {
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(_id0 + 3 * i + ax, i0 + ax,
+                                -_w * (_rest(0, i) + _rest(1, i))));
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(_id0 + 3 * i + ax, i1 + ax, _w * _rest(0, i)));
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(_id0 + 3 * i + ax, i2 + ax, _w * _rest(1, i)));
+    }
+    id0 += 3 * n;
+  }
+
+  real _rangeMax = 1.0;
+  real _rangeMin = 0.0;
+
+  mat2 _rest;
+};
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+#if 1
+
+class area : public block_constraint {
+public:
+  DEFINE_CREATE_FUNC(area)
+
+  area(const std::vector<index_t> &ids, const std::vector<vec3> &x,
+       real rangeMin, real rangeMax, real w, std::vector<sim_block::ptr> blocks,
+       bool zero = false)
+      : block_constraint(ids, w, blocks), _rangeMin(rangeMin),
+        _rangeMax(rangeMax), _zero(zero) {
+    assert(ids.size() == 3);
+    mat32 edges, P;
+    edges.col(0) = x[_ids[1]] - x[_ids[0]];
+    edges.col(1) = x[_ids[2]] - x[_ids[0]];
+    P.col(0) = edges.col(0).normalized();
+    P.col(1) =
+        (edges.col(1) - edges.col(1).dot(P.col(0)) * P.col(0)).normalized();
+    _rest = (P.transpose() * edges).inverse();
+    real A = (P.transpose() * edges).determinant() / 2.0f;
+    _w *= std::sqrt(std::abs(A));
+  }
+
+  virtual void project(const vecX &q, vecX &p) {
+    mat32 edges, P;
+    vec3 q0 = _blocks[0]->get_vec3(_ids[0], q);
+    vec3 q1 = _blocks[0]->get_vec3(_ids[1], q);
+    vec3 q2 = _blocks[0]->get_vec3(_ids[2], q);
+
+    edges.col(0) = q1 - q0;
+    edges.col(1) = q2 - q0;
+    P.col(0) = edges.col(0).normalized();
+    P.col(1) =
+        (edges.col(1) - edges.col(1).dot(P.col(0)) * P.col(0)).normalized();
+
+    mat2 F = P.transpose() * edges * _rest;
+    Eigen::JacobiSVD<mat2> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    vec2 S = svd.singularValues();
+    vec2 d(0.0f, 0.0f);
+    for (int i = 0; i < 20; ++i) {
+      real v = S(0) * S(1);
+      real f = v - clamp(v, _rangeMin, _rangeMax);
+
+      vec2 g(S(1), S(0));
+      d = -((f - g.dot(d)) / g.dot(g)) * g;
+      S = svd.singularValues() + d;
+    }
+
+    F = svd.matrixU() * S.asDiagonal() * svd.matrixV().transpose();
+    // p.block<3, 2>(0, _id0) = (_w * P * F);
+    // p.block(_id0, 0, 3, 2) = (_w * P * F);
+    mat32 PF = P * F;
+
+    if (_zero) {
+      p.block(_id0 + 0, 0, 3, 1) = vec3::Zero();
+      p.block(_id0 + 3, 0, 3, 1) = vec3::Zero();
+    } else {
+      p.block(_id0 + 0, 0, 3, 1) = _w * PF.col(0);
+      p.block(_id0 + 3, 0, 3, 1) = _w * PF.col(1);
+    }
+  }
+
+  ///////////////////////////////////////////////////////////////////////////////
+  virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
+    _id0 = id0;
+    int n = 2;
+    index_t i0 = _blocks[0]->get_offset_idx(this->_ids[0]);
+    index_t i1 = _blocks[0]->get_offset_idx(this->_ids[1]);
+    index_t i2 = _blocks[0]->get_offset_idx(this->_ids[2]);
+
+    for (int i = 0; i < n; ++i) {
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(_id0 + 3 * i + ax, i0 + ax,
+                                -_w * (_rest(0, i) + _rest(1, i))));
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(_id0 + 3 * i + ax, i1 + ax, _w * _rest(0, i)));
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(_id0 + 3 * i + ax, i2 + ax, _w * _rest(1, i)));
+    }
+    id0 += 3 * n;
+  }
+  bool _zero = false;
+  real _rangeMax = 1.0;
+  real _rangeMin = 0.0;
+
+  mat2 _rest;
+};
+#endif
 
 typedef std::function<void(const index_t &j, const real &k, const vec3 &dq,
                            const vec3 &N)>
@@ -353,97 +525,6 @@ public:
   bool _align = false;
   std::vector<real> _edge_weights;
 };
-
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
-
-#if 1
-class area : public block_constraint {
-public:
-  DEFINE_CREATE_FUNC(area)
-
-  area(const std::vector<index_t> &ids, const std::vector<vec3> &x,
-       real rangeMin, real rangeMax, real w, std::vector<sim_block::ptr> blocks,
-       bool zero = false)
-      : block_constraint(ids, w, blocks), _rangeMin(rangeMin),
-        _rangeMax(rangeMax), _zero(zero) {
-    assert(ids.size() == 3);
-    mat32 edges, P;
-    edges.col(0) = x[_ids[1]] - x[_ids[0]];
-    edges.col(1) = x[_ids[2]] - x[_ids[0]];
-    P.col(0) = edges.col(0).normalized();
-    P.col(1) =
-        (edges.col(1) - edges.col(1).dot(P.col(0)) * P.col(0)).normalized();
-    _rest = (P.transpose() * edges).inverse();
-    real A = (P.transpose() * edges).determinant() / 2.0f;
-    _w *= std::sqrt(std::abs(A));
-  }
-
-  virtual void project(const vecX &q, vecX &p) {
-    mat32 edges, P;
-    vec3 q0 = _blocks[0]->get_vec3(_ids[0], q);
-    vec3 q1 = _blocks[0]->get_vec3(_ids[1], q);
-    vec3 q2 = _blocks[0]->get_vec3(_ids[2], q);
-
-    edges.col(0) = q1 - q0;
-    edges.col(1) = q2 - q0;
-    P.col(0) = edges.col(0).normalized();
-    P.col(1) =
-        (edges.col(1) - edges.col(1).dot(P.col(0)) * P.col(0)).normalized();
-
-    mat2 F = P.transpose() * edges * _rest;
-    Eigen::JacobiSVD<mat2> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    vec2 S = svd.singularValues();
-    vec2 d(0.0f, 0.0f);
-    for (int i = 0; i < 20; ++i) {
-      real v = S(0) * S(1);
-      real f = v - clamp(v, _rangeMin, _rangeMax);
-
-      vec2 g(S(1), S(0));
-      d = -((f - g.dot(d)) / g.dot(g)) * g;
-      S = svd.singularValues() + d;
-    }
-
-    F = svd.matrixU() * S.asDiagonal() * svd.matrixV().transpose();
-    // p.block<3, 2>(0, _id0) = (_w * P * F);
-    // p.block(_id0, 0, 3, 2) = (_w * P * F);
-    mat32 PF = P * F;
-
-    if (_zero) {
-      p.block(_id0 + 0, 0, 3, 1) = vec3::Zero();
-      p.block(_id0 + 3, 0, 3, 1) = vec3::Zero();
-    } else {
-      p.block(_id0 + 0, 0, 3, 1) = _w * 1.1 * PF.col(0);
-      p.block(_id0 + 3, 0, 3, 1) = _w * PF.col(1);
-    }
-  }
-
-  ///////////////////////////////////////////////////////////////////////////////
-  virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
-    _id0 = id0;
-    int n = 2;
-    index_t i0 = _blocks[0]->get_offset_idx(this->_ids[0]);
-    index_t i1 = _blocks[0]->get_offset_idx(this->_ids[1]);
-    index_t i2 = _blocks[0]->get_offset_idx(this->_ids[2]);
-
-    for (int i = 0; i < n; ++i) {
-      for (int ax = 0; ax < 3; ax++)
-        triplets.push_back(trip(_id0 + 3 * i + ax, i0 + ax,
-                                -_w * (_rest(0, i) + _rest(1, i))));
-      for (int ax = 0; ax < 3; ax++)
-        triplets.push_back(trip(_id0 + 3 * i + ax, i1 + ax, _w * _rest(0, i)));
-      for (int ax = 0; ax < 3; ax++)
-        triplets.push_back(trip(_id0 + 3 * i + ax, i2 + ax, _w * _rest(1, i)));
-    }
-    id0 += 3 * n;
-  }
-  bool _zero = false;
-  real _rangeMax = 1.0;
-  real _rangeMin = 0.0;
-
-  mat2 _rest;
-};
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////

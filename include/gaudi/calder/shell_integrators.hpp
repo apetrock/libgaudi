@@ -91,7 +91,7 @@ integrate_over_shell(asawa::shell::shell &M, const std::vector<vec3> &p_pov,
         vec3 pj = node.center();
         return compute_fcn(i, j, pi, pj, data, node_type, node, tree);
       },
-      0.5, false);
+      0.25, false);
   return us;
 }
 
@@ -197,6 +197,8 @@ void log_v(vec3 pi, real e) {}
 template <typename T>
 std::vector<T> mls_avg(asawa::shell::shell &M, const std::vector<T> &v,
                        const std::vector<vec3> &p_pov, real l0, real p = 3.0) {
+  // takes a surface and a vector field, v defined on the faces of the surface
+  // and returns the mls average of v at the points p_pov
   const std::vector<vec3> &x = asawa::get_vec_data(M, 0);
 
   std::vector<real> sums(p_pov.size(), 0.0);
@@ -328,6 +330,198 @@ std::vector<vec3> vortex_force(asawa::shell::shell &M,
       });
   return us;
 }
+
+#if 1
+// use Taubin curvature
+std::vector<mat3> covariant_frame(asawa::shell::shell &M,
+                                  const std::vector<vec3> &p_pov, //
+                                  real l0, real p = 3.0) {
+  std::vector<vec3> x = asawa::get_vec_data(M, 0);
+  std::vector<real> weights = asawa::shell::face_areas(M, x);
+  std::vector<vec3> N = asawa::shell::face_normals(M, x);
+  for (int i = 0; i < N.size(); i++) {
+    if (weights[i] < 1e-16)
+      continue;
+    N[i] = weights[i] * N[i];
+  }
+  std::vector<real> sums(p_pov.size(), 0.0);
+  std::vector<mat3> us = integrate_over_shell<mat3>(
+      M, p_pov,
+      [&weights, &N](const std::vector<index_t> &face_ids,
+                     Shell_Sum_Type &sum) {
+        sum.bind(calder::vec3_datum::create(face_ids, N));
+      },
+      [l0, p, &N, &sums](const index_t i, const index_t j, //
+                         const vec3 &pi, const vec3 &pj,
+                         const std::vector<calder::datum::ptr> &data,
+                         Shell_Sum_Type::Node_Type node_type, //
+                         const Shell_Sum_Type::Node &node,    //
+                         const Shell_Sum_Type::Tree &tree) -> mat3 {
+        // vec3 Ni = N[i].normalized();
+        vec3 Nj = get_data<vec3>(node_type, j, 0, data);
+        real wN = Nj.norm();
+        Nj /= wN;
+        vec3 dp = pj - pi;
+        real dist = dp.norm();
+        // real w = calc_w(dp, l0, p);
+        real w = computeK(dist, l0, p);
+        sums[i] += w * wN;
+        return w * wN * dp * dp.transpose();
+      });
+
+  for (int i = 0; i < us.size(); i++) {
+    if (sums[i] < 1e-16) {
+      us[i] = mat3::Zero();
+      continue;
+    }
+    mat3 H = us[i] / sums[i];
+
+    Eigen::JacobiSVD<mat3> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    mat3 U = svd.matrixU();
+    mat3 V = svd.matrixV();
+    vec3 s = svd.singularValues();
+
+    us[i] = U * s.asDiagonal();
+  }
+
+  return us;
+}
+#endif
+
+#if 1
+std::vector<mat3> normal_covariant_frame(asawa::shell::shell &M,
+                                         const std::vector<vec3> &p_pov, //
+                                         const std::vector<vec3> &N_pov, //
+                                         real l0, real p = 3.0) {
+  std::vector<vec3> x = asawa::get_vec_data(M, 0);
+  std::vector<real> weights = asawa::shell::face_areas(M, x);
+  std::vector<vec3> N = asawa::shell::face_normals(M, x);
+  for (int i = 0; i < N.size(); i++) {
+    if (weights[i] < 1e-16)
+      continue;
+    N[i] = weights[i] * N[i];
+  }
+  std::vector<real> sums(p_pov.size(), 0.0);
+  std::vector<mat3> us = integrate_over_shell<mat3>(
+      M, p_pov,
+      [&weights, &N](const std::vector<index_t> &face_ids,
+                     Shell_Sum_Type &sum) {
+        sum.bind(calder::vec3_datum::create(face_ids, N));
+      },
+      [l0, p, &N_pov, &sums](const index_t i, const index_t j, //
+                             const vec3 &pi, const vec3 &pj,
+                             const std::vector<calder::datum::ptr> &data,
+                             Shell_Sum_Type::Node_Type node_type, //
+                             const Shell_Sum_Type::Node &node,    //
+                             const Shell_Sum_Type::Tree &tree) -> mat3 {
+        vec3 Ni = N_pov[i];
+        vec3 Nj = get_data<vec3>(node_type, j, 0, data);
+        real wN = Nj.norm();
+        Nj /= wN;
+
+        vec3 dp = pj - pi;
+        real Nidp = Ni.dot(dp);
+        if (Nidp > 0)
+          return mat3::Zero();
+
+        real dist = dp.norm();
+
+        real w = computeK(dist, l0, p);
+        sums[i] += w * wN;
+        return w * wN * Nj * Nj.transpose();
+        // return w * wN * dp * dp.transpose();
+      });
+
+  for (int i = 0; i < us.size(); i++) {
+    if (sums[i] < 1e-16) {
+      us[i] = mat3::Zero();
+      continue;
+    }
+    mat3 H = us[i] / sums[i];
+
+    Eigen::JacobiSVD<mat3> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    mat3 U = svd.matrixU();
+    mat3 V = svd.matrixV();
+    vec3 s = svd.singularValues();
+
+    us[i] = U; // always assume U.col[2] is represents the null vector of the
+               // subspace
+    // us[i] = U * s.asDiagonal();
+  }
+
+  return us;
+}
+#endif
+
+#if 1
+// use Taubin curvature
+std::vector<mat3> taubin_curvature(asawa::shell::shell &M,
+                                   const std::vector<vec3> &p_pov, //
+                                   const std::vector<vec3> &N_pov, //
+                                   real l0, real p = 3.0) {
+  std::vector<vec3> x = asawa::get_vec_data(M, 0);
+  std::vector<real> weights = asawa::shell::face_areas(M, x);
+  std::vector<vec3> N = asawa::shell::face_normals(M, x);
+  for (int i = 0; i < N.size(); i++) {
+    if (weights[i] < 1e-16)
+      continue;
+    N[i] = weights[i] * N[i];
+  }
+  std::vector<real> sums(p_pov.size(), 0.0);
+  std::vector<mat3> us = integrate_over_shell<mat3>(
+      M, p_pov,
+      [&weights, &N](const std::vector<index_t> &face_ids,
+                     Shell_Sum_Type &sum) {
+        sum.bind(calder::vec3_datum::create(face_ids, N));
+      },
+      [l0, p, &N_pov, &sums](const index_t i, const index_t j, //
+                             const vec3 &pi, const vec3 &pj,
+                             const std::vector<calder::datum::ptr> &data,
+                             Shell_Sum_Type::Node_Type node_type, //
+                             const Shell_Sum_Type::Node &node,    //
+                             const Shell_Sum_Type::Tree &tree) -> mat3 {
+        vec3 Ni = N_pov[i];
+        vec3 Nj = get_data<vec3>(node_type, j, 0, data);
+        real wN = Nj.norm();
+        Nj /= wN;
+        mat3 R = va::rejection_matrix(Ni);
+        // mat3 R = mat3::Identity() - Ni * Nj.transpose();
+        real Nij = Ni.dot(Nj);
+        if (Nij < 0)
+          return mat3::Zero();
+
+        vec3 dp = pj - pi;
+        vec3 Rdp = R * dp;
+        Rdp.normalize();
+
+        real kij = Ni.dot(dp) / dp.dot(dp);
+
+        real dist = dp.norm();
+        sums[i] += wN;
+
+        return wN * kij * Rdp * Rdp.transpose();
+        // return w * wN * dp * dp.transpose();
+      });
+
+  for (int i = 0; i < us.size(); i++) {
+    if (sums[i] < 1e-16) {
+      us[i] = mat3::Zero();
+      continue;
+    }
+    mat3 H = us[i] / sums[i];
+
+    Eigen::JacobiSVD<mat3> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    mat3 U = svd.matrixU();
+    mat3 V = svd.matrixV();
+    vec3 s = svd.singularValues();
+
+    us[i] = U * s.asDiagonal();
+  }
+
+  return us;
+}
+
+#endif
 
 } // namespace calder
 } // namespace gaudi

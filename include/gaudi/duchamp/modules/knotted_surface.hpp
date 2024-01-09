@@ -128,7 +128,7 @@ public:
 
     std::vector<index_t> rverts = R.get_ordered_verts();
 
-    for (int k = 0; k < 4; k++) {
+    for (int k = 0; k < 2; k++) {
       // this should only need one it, why not working?
 
       for (int i = 0; i < rverts.size(); i++) {
@@ -148,7 +148,7 @@ public:
       }
     }
 
-    for (int k = 0; k < 2; k++) {
+    for (int k = 0; k < 8; k++) {
       int i0 = k % 2;
       for (int i = i0; i < rverts.size(); i += 2) {
         auto cons = R.consec(rverts[i]);
@@ -158,7 +158,7 @@ public:
         index_t i0 = cons[1];
         index_t im = cons[0];
 
-        dist[i0] = 0.1 * dist[im] + 0.8 * dist[i0] + 0.1 * dist[ip];
+        dist[i0] = 0.25 * dist[im] + 0.5 * dist[i0] + 0.25 * dist[ip];
       }
     }
 #if 0
@@ -187,7 +187,7 @@ public:
     std::vector<vec3> xr = R.x();
     for (int i = 0; i < dist.size(); i++) {
       auto idx = R.consec(i);
-      index_t im = idx[1];
+      index_t im = idx[0];
       index_t ip = idx[2];
       vec3 xr1 = xr[ip];
       vec3 xr0 = xr[im];
@@ -198,6 +198,22 @@ public:
       g_d[i] = ddi / di;
       // g_d[i] = va::sgn(g_d[i]) * std::min(abs(g_d[i]), 2.0);
     }
+#if 0
+
+    std::vector<index_t> rverts = R.get_ordered_verts();
+    std::vector<vec3> Nr = get_rod_normals(R, *__M, 4.0 * eps);
+
+    for (int i : rverts) {
+      auto cons = R.consec(i);
+      index_t i0 = cons[1];
+      if (cons[2] < 0)
+        continue;
+
+      gg::geometry_logger::line(xr[i0],
+                                xr[i0] + 0.1 * g_d[i0] * Nr[i0].normalized(),
+                                vec4(0.0, 1.0, 1.0, 1.0));
+    }
+#endif
     // g_d = __R->vert_avg(g_d);
     return g_d;
   }
@@ -228,7 +244,7 @@ public:
     auto g_d = calc_rod_dist_grad(R, M, 0.5 * eps, 4);
     _willmore_mask = std::vector<real>(x1.size(), 0.0);
     vector<std::array<index_t, 4>> sr_collisions =
-        rod_d.get_collisions(edge_verts_M, x1, eps);
+        rod_d.get_collisions(edge_verts_M, x1, 1.0 * eps);
 
     for (auto &c : sr_collisions) {
       if (c[0] < 0)
@@ -258,8 +274,8 @@ public:
         continue;
 
       std::array<real, 3> d = va::distance_Segment_Segment(xr0, xr1, xs0, xs1);
-
       real g_di = va::mix(d[1], g_d[vr0], g_d[vr1]);
+
       if (abs(g_di) > 1e-3) {
         _willmore_mask[vs0] = 1.0;
         _willmore_mask[vs1] = 1.0;
@@ -271,11 +287,12 @@ public:
       vec3 dx = xr - xs;
       vec3 Ns0 = asawa::shell::vert_normal(M, vs0, x1);
       vec3 Ns1 = asawa::shell::vert_normal(M, vs1, x1);
+
       vec3 Ns = va::mix(d[2], Ns0, Ns1);
 
       real is_perp = pow(Ns.dot(dx.normalized()), 2.0);
       // if (8.0 * d[0] * (1.0 - is_perp) < eps) {
-      if ((is_perp > 0.60 && d[0] < 2.0 * eps)) {
+      if ((is_perp > 0.75 && d[0] < 1.0 * eps)) {
 
         // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
 
@@ -297,13 +314,15 @@ public:
     */
         // gg::geometry_logger::line(xs, xs + 1.0 * g_di * dr,
         //                           vec4(0.5, 0.5, 1.0, 1.0));
+        // gg::geometry_logger::line(xs, xs + 0.1 * g_di * Nri,
+        //                          vec4(0.5, 0.5, 1.0, 1.0));
         _adjacent.insert(M.find_edge_from_verts(vs0, vs1));
         // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
 
         hepworth::block::edge_edge_weld::ptr constraint =
             hepworth::block::edge_edge_weld::create(
                 std::vector<index_t>({vr0, vr1, vs0, vs1}), wr, ws, blocks);
-        constraint->set_slide(d[1] + 4.0 * g_di);
+        constraint->set_slide(d[1] + 8.0 * g_di);
 
         // constraint->set_rotate_to(0.001, Nri, Nr0i);
         constraints.push_back(constraint);
@@ -527,16 +546,17 @@ public:
       hepworth::block::init_collisions(*__R, *__Rd, constraints, 1.0, {Xr, Xr},
                                        _config.rod_offset);
     }
+#if 1
+    std::cout << "shell strain" << std::endl;
 
-    std::cout << "shell edge strain" << std::endl;
-
-    hepworth::block::init_edge_strain(*__M, constraints, xs, li,
-                                      _config.w_shell_strain, {Xs});
-
+    hepworth::block::init_triangle_strain(*__M, constraints, xs,
+                                          _config.w_shell_strain, {Xs});
+#endif
+#if 1
     std::cout << "shell bending" << std::endl;
     hepworth::block::init_bending(*__M, constraints, xs,
                                   _config.w_shell_bending, {Xs});
-
+#endif
     std::cout << "shell willmore" << std::endl;
 
 #if 1
@@ -559,7 +579,7 @@ public:
     std::vector<vec3> xs0 = xs;
     std::vector<vec3> xr0 = xr;
 
-    solver.step(blocks, h, 0.5, 30);
+    solver.step(blocks, h, 0.5, 10);
 
     // final state is mix of initial and final
     real t = 0.5; // make this a parameter
@@ -630,7 +650,7 @@ public:
     real w_helicity = 1.0e-1;
     real w_willmore = 8e-1;
     real w_area = 2e-2;
-    real w_shell_strain = 1.0e-3;
+    real w_shell_strain = 1.0e-2;
     real w_shell_bending = 1.0e-1;
     real w_rod_strain = 1.0e-1;
     real w_rod_bending = 1.0e-1;

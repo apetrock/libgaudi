@@ -22,6 +22,7 @@
 #endif
 
 #include "gaudi/common.h"
+#include "gaudi/sparse_solver.h"
 
 #include "gaudi/asawa/datums.hpp"
 #include "gaudi/asawa/shell/datum_x.hpp"
@@ -60,8 +61,11 @@ build_lap(asawa::shell::shell &M,     //
   std::vector<index_t> verts = M.get_vert_range();
   std::vector<index_t> edges = M.get_edge_vert_ids();
 
+  index_t vert_count = M.vert_count();
+  index_t edge_count = M.edge_count();
+
   std::vector<triplet> tripletList;
-  tripletList.reserve(S * verts.size() + S * edges.size());
+  tripletList.reserve(S * vert_count + S * edge_count);
 
   real Kmin = 9999;
   real Kmax = -9999;
@@ -74,7 +78,9 @@ build_lap(asawa::shell::shell &M,     //
 
   for (auto v : M.get_vert_range()) {
     real Km = 0.0;
-    index_t i = i_range[v];
+    // index_t i = i_range[v];
+    index_t i = v;
+
     if (M.vsize(v) < 4) {
       for (int k = 0; k < S; k++)
         tripletList.push_back(triplet(S * i + k, S * i + k, 1.0));
@@ -101,7 +107,7 @@ build_lap(asawa::shell::shell &M,     //
   }
   std::cout << " min/max K: " << Kmin << "/" << Kmax << std::endl;
 
-  Eigen::SparseMatrix<real> mat(S * verts.size(), S * verts.size());
+  Eigen::SparseMatrix<real> mat(S * vert_count, S * vert_count);
   mat.setFromTriplets(tripletList.begin(), tripletList.end());
 
   return mat;
@@ -208,6 +214,16 @@ public:
 
     Eigen::VectorXd Le = _matM * Ue;
     return std::vector<real>(Le.data(), Le.data() + Le.rows() * Le.cols());
+  }
+
+  virtual vecX solve_2(sparmat &A, vecX &b) {
+    // this is correct way, but does not work at moment
+    m_solver S(A);
+    if (!S.success()) {
+      std::cout << "Solve failed" << std::endl;
+      return vecX();
+    }
+    return S.solve(b);
   }
 
   virtual vecX solve(sparmat &A, vecX &b) {
@@ -355,6 +371,28 @@ public:
     // std::vector<real> x = lap.diffuse(divu, dt);
 
     return x;
+  }
+
+  std::vector<mat3> heatFrame(const std::vector<real> &f, real dt) {
+    // frame centered on the faces
+    std::vector<real> u = diffuse(f, dt);
+    int i = 0;
+    std::vector<vec3> N = asawa::shell::face_normals(*__M, __x);
+    std::vector<vec3> gradU = asawa::shell::gradient(*__M, u, __x);
+
+    std::vector<mat3> frame(__M->face_count(), mat3::Identity());
+    i = 0;
+    for (auto gi : gradU) {
+      gi.normalize();
+      gi *= -1;
+      mat3 F;
+      F.col(0) = gi;
+      F.col(2) = N[i];
+      F.col(1) = gi.cross(N[i]).normalized();
+      frame[i] = F;
+      i++;
+    }
+    return frame;
   }
 
   bool inited = false;

@@ -399,15 +399,27 @@ std::vector<TYPE> expand_from_vert_range(const shell &M,
 }
 
 template <typename TYPE>
-std::vector<TYPE> compress_to_vert_range(const shell &M,
-                                         const std::vector<TYPE> &x) {
-  auto v_range = M.get_vert_range();
-  std::vector<TYPE> x_comp(v_range.size());
+std::vector<TYPE> compress_to_range(const std::vector<index_t> &element_range,
+                                    const std::vector<TYPE> &v) {
+  assert(element_range.size() == v.size());
+  std::vector<TYPE> v_comp(element_range.size());
   int i = 0;
-  for (auto vi : v_range) {
-    x_comp[i++] = x[vi];
+  for (auto ei : element_range) {
+    v_comp[i++] = v[ei];
   }
-  return x_comp;
+  return v_comp;
+}
+
+template <typename TYPE>
+std::vector<TYPE> compress_to_vert_range(const shell &M,
+                                         const std::vector<TYPE> &v) {
+  return compress_to_range<TYPE>(M.get_vert_range(), v);
+}
+
+template <typename TYPE>
+std::vector<TYPE> compress_to_face_range(const shell &M,
+                                         const std::vector<TYPE> &v) {
+  return compress_to_range<TYPE>(M.get_face_range(), v);
 }
 
 template <typename TYPE>

@@ -658,6 +658,8 @@ void for_each(
 }
 
 bool l_isnan(vec3 v) { return v.hasNaN(); }
+bool l_isnan(vec4 v) { return v.hasNaN(); }
+
 bool l_isnan(mat3 v) { return v.hasNaN(); }
 bool l_isnan(mat4 v) { return v.hasNaN(); }
 bool l_isnan(std::array<vec3, 2> v) { return v[0].hasNaN() || v[1].hasNaN(); }

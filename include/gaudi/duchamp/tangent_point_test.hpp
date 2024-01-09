@@ -19,7 +19,7 @@
 #include "modules/module_base.hpp"
 #include "modules/tangent_point.hpp"
 #include "modules/tunnel.hpp"
-
+#include "utils/sdf.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -38,50 +38,6 @@
 namespace gaudi {
 namespace duchamp {
 using namespace asawa;
-
-// these will be moved to arp, I think
-// power smooth min (k=8)
-real smin_pow(real a, real b, real k) {
-  a = pow(a, k);
-  b = pow(b, k);
-  return pow((a * b) / (a + b), 1.0 / k);
-}
-
-float smin_cubic(real a, real b, real k) {
-  real h = std::max(k - abs(a - b), 0.0) / k;
-  return std::min(a, b) - h * h * h * k * (1.0 / 6.0);
-}
-
-class sdf_base {
-public:
-  DEFINE_CREATE_FUNC(sdf_base)
-  sdf_base() {}
-  virtual ~sdf_base() {}
-  virtual real distance(const vec3 &x) const = 0;
-};
-
-class sdf_sphere : public sdf_base {
-public:
-  DEFINE_CREATE_FUNC(sdf_sphere)
-  sdf_sphere(const vec3 &c, real r) : _c(c), _r(r) {}
-  virtual ~sdf_sphere() {}
-  virtual real distance(const vec3 &x) const { return (x - _c).norm() - _r; }
-  vec3 _c;
-  real _r;
-};
-
-class sdf_cylinder : public sdf_base {
-public:
-  DEFINE_CREATE_FUNC(sdf_cylinder)
-  sdf_cylinder(const vec3 &x0, const vec3 &x1, real r)
-      : _x0(x0), _x1(x1), _r(r) {}
-  virtual ~sdf_cylinder() {}
-  virtual real distance(const vec3 &x) const {
-    return va::distance_from_line(_x0, _x1, x) - _r;
-  }
-  vec3 _x0, _x1;
-  real _r;
-};
 
 class tangent_point_test {
 public:

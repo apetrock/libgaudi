@@ -440,8 +440,13 @@ template <> inline double one<double>() { return 1.0; }
 
 template <>
 inline Eigen::Matrix<double, 3, 1> zero<Eigen::Matrix<double, 3, 1>>() {
-  return Eigen::Matrix<double, 3, 1>(0, 0, 0);
+  return Eigen::Matrix<double, 3, 1>::Zero();
 }
+template <>
+inline Eigen::Matrix<double, 4, 1> zero<Eigen::Matrix<double, 4, 1>>() {
+  return Eigen::Matrix<double, 4, 1>::Zero();
+}
+
 template <>
 inline Eigen::Matrix<double, 3, 1> one<Eigen::Matrix<double, 3, 1>>() {
   return Eigen::Matrix<double, 3, 1>(1, 1, 1);

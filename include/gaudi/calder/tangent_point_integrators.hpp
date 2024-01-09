@@ -302,6 +302,69 @@ std::vector<mat3> tangent_point_gradient_frame(asawa::shell::shell &M,
   return us;
 }
 
+std::vector<vec3> tangent_point_center(asawa::shell::shell &M,
+                                       const std::vector<vec3> &p_pov,
+                                       const std::vector<real> &w_pov,
+                                       const std::vector<vec3> &N_pov, real l0,
+                                       real p = 3.0) {
+  std::vector<vec3> x = asawa::get_vec_data(M, 0);
+  std::vector<real> weights = asawa::shell::face_areas(M, x);
+  std::vector<vec3> Nc = asawa::shell::face_normals(M, x);
+  std::vector<vec3> acc(p_pov.size(), vec3::Zero());
+  std::vector<real> acc_w(p_pov.size(), 0.0);
+
+  std::vector<vec3> us = integrate_over_shell<vec3>(
+      M, p_pov,
+      [&weights, &Nc](const std::vector<index_t> &face_ids,
+                      Shell_Sum_Type &sum) {
+        sum.bind(calder::scalar_datum::create(face_ids, weights));
+        sum.bind(calder::vec3_datum::create(face_ids, Nc));
+      },
+      [l0, &w_pov, &N_pov, &acc, &acc_w,
+       p](const index_t i, const index_t j, //
+          const vec3 &pi, const vec3 &pj,
+          const std::vector<calder::datum::ptr> &data,
+          Shell_Sum_Type::Node_Type node_type, //
+          const Shell_Sum_Type::Node &node,    //
+          const Shell_Sum_Type::Tree &tree) -> vec3 {
+        real wi = w_pov[i];
+        vec3 Ni = N_pov[i];
+        real wj = get_data<real>(node_type, j, 0, data);
+        vec3 Nj = get_data<vec3>(node_type, j, 1, data);
+        wi = std::max(wi, 1e-6);
+        wj = std::max(wj, 1e-6);
+
+        vec3 dp = pj - pi;
+        real dpNj = dp.dot(Nj);
+        if (dp.dot(Ni) > 0) {
+          return vec3::Zero();
+        }
+
+        //  if (i == 0) {
+        //    logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
+        //    logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
+        //  }
+        Ni.normalize();
+        Nj.normalize();
+        real pk = p;
+        real ri = compute_tangent_point_radius(dp, Ni);
+        real rj = compute_tangent_point_radius(-dp, Nj);
+        vec3 ci = pi - 0.5 * ri * Ni;
+        vec3 cj = pj - 0.5 * rj * Nj;
+        real kij = computeK(dp.norm(), l0, p);
+        acc[i] += kij * pj;
+        acc_w[i] += kij;
+        return vec3::Zero();
+        // return wi * gi;
+
+        // return -wj * gj;
+      });
+  for (int i = 0; i < acc.size(); i++) {
+    us[i] = acc[i] / acc_w[i];
+  }
+  return us;
+}
+
 } // namespace calder
 } // namespace gaudi
 #endif

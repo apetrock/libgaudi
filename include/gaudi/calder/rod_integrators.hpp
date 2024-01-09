@@ -91,7 +91,7 @@ std::vector<T> integrate_over_rod(asawa::rod::rod &R,
         vec3 pj = node.center();
         return compute_fcn(i, j, pi, pj, data, node_type, node, tree);
       },
-      0.5, false);
+      0.25, false);
   return us;
 }
 #endif
