@@ -190,9 +190,9 @@ std::vector<real> fast_dist(const arp::T3::ptr &face_tree,
   return min_dists;
 }
 
-std::vector<vec3> fast_normals(const arp::T3::ptr &face_tree,
-                               const std::vector<vec3> &pov,
-                               real spread = 1.0) {
+std::vector<vec3> fast_dist_gradient(const arp::T3::ptr &face_tree,
+                                     const std::vector<vec3> &pov,
+                                     real spread = 1.0) {
 
   const std::vector<vec3> x = face_tree->verts();
   const std::vector<index_t> &face_vert_ids = face_tree->indices();
@@ -241,13 +241,14 @@ std::vector<vec3> fast_normals(const arp::T3::ptr &face_tree,
         // logger::line(p0, p0 + 0.1 * N, vec4(0.0, 1.0, 1.0, 1.0));
 
         std::array<real, 4> cp = va::closest_point({p0, p1, p2}, pi);
+        vec3 pT = cp[1] * p0 + cp[2] * p1 + cp[3] * p2;
         real dist = cp[0];
         real kappa = computeK(dist, 0.0, 3.0);
         // W[i] += w * kappa;
         // normals[i] += w * kappa * N;
         if (dist < dists[i]) {
           dists[i] = dist;
-          normals[i] = N.normalized();
+          normals[i] = (pT - pi).normalized();
         }
         return 0.0;
       },
@@ -270,7 +271,7 @@ std::vector<vec3> fast_normals(const arp::T3::ptr &face_tree,
         // normals[i] += w * kappa * N;
         if (dist < dists[i]) {
           dists[i] = dist;
-          normals[i] = N.normalized();
+          normals[i] = dp.normalized();
         }
         return 0.0;
       },

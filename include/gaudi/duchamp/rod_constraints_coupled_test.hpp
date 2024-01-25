@@ -112,11 +112,14 @@ public:
     std::vector<hepworth::projection_constraint::ptr> constraints;
 
     real h = 0.1;
-    std::vector<real> bnd = {1.5, 1.25};
 
-    std::vector<real> tk = {0.04, 0.125};
+    std::vector<real> bnd = {999.99, 0.85};
+    if (frame < 1000)
+      bnd = {0.65, 1.0};
+
+    std::vector<real> tk = {0.05, 0.14};
+    std::vector<real> t0k = {1.035, 1.305};
     real t1 = 1.0;
-    real t0 = 1.01;
 
     std::vector<vec3> cens = {
         vec3(0.0, 0.0, 0.0),
@@ -126,22 +129,24 @@ public:
     std::vector<hepworth::sim_block::ptr> blocks;
 
     for (int k = 0; k < __R.size(); k++) {
+      std::cout << "frame: " << frame << " rod " << k
+                << " size: " << __R[k]->__x.size() << std::endl;
       asawa::rod::rod::ptr R = __R[k];
       std::vector<real> &l0 = R->__l0;
 
       real s_vol = 4.0 / 3.0 * M_PI * pow(bnd[k], 3.0);
       real r_vol = R->get_total_volume();
+      real t0 = t0k[k];
       real att = t0 + (t1 - t0) / (1.0 + exp(-tk[k] * (r_vol)));
       std::vector<vec3> f(R->__v.size(), vec3::Zero());
-      if (k != 0) {
-        for (int i = 0; i < R->__x.size(); i++) {
-          vec3 dx = R->__x[i] - cens[k];
-          real xn = dx.norm();
-          if (xn > bnd[k]) {
-            f[i] = -0.02 * (xn - bnd[k]) / h / h * dx;
-          }
-          // f[i] += 1e-1 * vec3::Random();
+
+      for (int i = 0; i < R->__x.size(); i++) {
+        vec3 dx = R->__x[i] - cens[k];
+        real xn = dx.norm();
+        if (xn > bnd[k]) {
+          f[i] = -0.02 * (xn - bnd[k]) / h / h * dx;
         }
+        // f[i] += 1e-1 * vec3::Random();
       }
 
       hepworth::vec3_block::ptr x =
@@ -152,29 +157,32 @@ public:
       blocks.push_back(x);
       blocks.push_back(u);
 
-      std::cout << "vol:" << r_vol << "/" << s_vol << " attenuation: " << att
+      std::cout << "  -vol:" << r_vol << "/" << s_vol << " attenuation: " << att
                 << std::endl;
 
-      for (auto &l : l0)
-        l *= att;
+      std::vector<index_t> verts = R->get_vert_range();
+      for (auto i : verts) {
+        asawa::rod::consec_t c = R->consec(i);
+        l0[i] *= att;
+      }
 
-      real str = 0.1;
-      real twi = 0.05;
+      real str = 0.015;
+      real twi = 0.010;
       if (k == 0) {
-        str = 0.25;
+        str = 0.1;
         twi = 0.1;
       }
       // hepworth::rod::init_smooth(*__R, constraints, 0.2);
       hepworth::block::init_stretch_shear(*R, constraints, l0, str, {x, u});
-      hepworth::block::init_bend_twist(*R, constraints, 0.1, {u});
+      hepworth::block::init_bend_twist(*R, constraints, twi, {u}, true);
 #if 1
       if (k == 0) {
-        hepworth::block::init_angle(*R, constraints, vec3(1.0, 1.0, 0.0),
-                                    0.23 * M_PI, 0.05, {u});
+        hepworth::block::init_angle(*R, constraints, vec3(1.0, 0.0, 0.0),
+                                    0.27 * M_PI, 0.05, {u});
         // hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
         //                           0.33 * M_PI, 0.1, {u});
         hepworth::block::init_angle(*R, constraints, vec3(0.0, 0.0, 1.0),
-                                    0.39 * M_PI, 0.1, {u});
+                                    0.23 * M_PI, 0.1, {u});
       } else {
         // hepworth::block::init_helicity(*R, constraints, 0.01, {x});
       }
@@ -202,6 +210,10 @@ public:
     step_dynamics(frame);
     for (auto Rd : __Rd)
       Rd->step();
+
+    if (frame > 3000) {
+      exit(0);
+    }
     //__R->debug();
   }
 

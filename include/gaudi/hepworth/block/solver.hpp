@@ -43,6 +43,7 @@ public:
     }
     std::vector<trip> triplets;
     for (int i = 0; i < M.rows(); i++) {
+      real Mi = M[i] < 1e-8 ? 1e-8 : M[i];
       triplets.push_back(trip(i, i, M[i]));
     }
     __M = matS(M.size(), M.size());
@@ -79,16 +80,31 @@ public:
     matS AtA = A.transpose() * A;
     matS MAtA = M + AtA;
 
-#if 1
+#if 0
+    if (!MAtA.isApprox(MAtA.transpose())) {
+      throw std::runtime_error("Possibly non semi-positive definitie matrix!");
+    }
     vecX z = vecX::Zero(MAtA.rows());
     if ((MAtA * z).hasNaN()) {
       std::cout << "MAtA has NaN" << std::endl;
       exit(0);
     }
+    for (int i = 0; i < MAtA.rows(); i++) {
+      if (MAtA.coeff(i, i) < 1e-9) {
+        std::cout << "MAtA has zero diagonal" << std::endl;
+        exit(0);
+      }
+    }
 #endif
+
+    std::cout << "A   sum: " << A.sum() << std::endl;
+    std::cout << "AtA sum: " << AtA.sum() << std::endl;
+    std::cout << "M sum: " << M.sum() << std::endl;
+    std::cout << "MAtA sum: " << MAtA.sum() << std::endl;
 
     m_solver S(MAtA);
     if (!S.success()) {
+      std::cout << "Solve failed, attempting normalization" << std::endl;
       Eigen::SparseMatrix<double> I(MAtA.rows(), MAtA.cols());
       MAtA += 1e-6 * I;
       S.compute(MAtA);
@@ -97,10 +113,6 @@ public:
       std::cout << "Solve failed" << std::endl;
       return;
     }
-
-    std::cout << "A   sum: " << A.sum() << std::endl;
-    std::cout << "AtA sum: " << AtA.sum() << std::endl;
-    std::cout << "M sum: " << M.sum() << std::endl;
 
     vecX p = vecX::Zero(id0);
     vecX q0 = q;

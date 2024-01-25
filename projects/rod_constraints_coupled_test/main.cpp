@@ -28,7 +28,8 @@
 #include "GaudiGraphics/viewer.hpp"
 // #include "gaudi/asawa/asawa.h"
 
-#include "gaudi/duchamp/rod_constraints_coupled_test.hpp"
+#include "gaudi/duchamp/rod_constraints_coupled_test_2.hpp"
+// #include "gaudi/duchamp/rod_constraints_coupled_test.hpp"
 
 #define TRACKBALLSIZE (0.8f)
 #define RENORMCOUNT 97
@@ -38,6 +39,63 @@ using std::cout;
 using std::endl;
 
 using namespace GaudiMath;
+
+Vec2d random_vec2_with_angle() {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<double> dis(0.0f, 2.0f * M_PI);
+  double angle = dis(gen);
+  return Vec2d(std::cos(angle), std::sin(angle));
+}
+
+double random_normal(double mean, double std_dev) {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::normal_distribution<double> dis(mean, std_dev);
+  return dis(gen);
+}
+
+Vec2d rotate_on_disk(const Vec2d &v, double angle) {
+  double radius = v.norm();
+  double theta = std::atan2(v.y(), v.x());
+  theta += angle;
+  double x = radius * std::cos(theta);
+  double y = radius * std::sin(theta);
+  return Vec2d(x, y);
+}
+
+Vec3d compose_color(const Vec2d &v) {
+  double angle = std::atan2(v.y(), v.x());
+  double red = std::cos(angle);
+  double green = std::cos(angle + M_PI * 2.0f / 3.0f);
+  double blue = std::cos(angle + M_PI * 4.0f / 3.0f);
+  return Vec3d(red, green, blue) * 0.5f + Vec3d(0.5f, 0.5f, 0.5f);
+}
+
+std::array<Vec3d, 3> get_rand_colors() {
+  double gd = (3.0 - sqrt(5.0)) * M_PI;
+  double phi = (1.0 + sqrt(5.0)) / 2.0;
+  Vec2d c0 = random_vec2_with_angle();
+  c0.normalize();
+  gaudi::vec2 c1 = rotate_on_disk(c0, random_normal(1.0, 0.75) * M_PI);
+  c1.normalize();
+  gaudi::vec2 c2 = rotate_on_disk(c0, random_normal(1.0, 0.75) * M_PI);
+  c2.normalize();
+
+  Vec3d c03 = compose_color(c0);
+  Vec3d c13 = compose_color(c1);
+  Vec3d c23 = compose_color(c2);
+
+  double D = random_normal(0.1, 0.05);
+  if (random_normal(0.0, 0.5) > 0) {
+    c03 *= 1.0 + D;
+    c13 *= 1.0 - D;
+  } else {
+    c03 *= 1.0 - D;
+    c13 *= 1.0 + D;
+  }
+  return {c03, c13, c23};
+}
 
 class Scene;
 using ScenePtr = std::shared_ptr<Scene>;
@@ -59,6 +117,11 @@ public:
       _objs[i]->init();
       mSceneObjects.push_back(_objs[i]);
     }
+    std::array<Vec3d, 3> colors_xyz = get_rand_colors();
+    // use std::transform to convert colors_xyz to std::vector<gg::colorRGB>
+    std::transform(
+        colors_xyz.begin(), colors_xyz.end(), this->colors.begin(),
+        [](const Vec3d &v) { return gg::colorRGB(v.x(), v.y(), v.z(), 1.0); });
 
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }
@@ -66,10 +129,7 @@ public:
   virtual void onAnimate(int frame) {
 
     __surf->step(frame);
-    vector<gg::colorRGB> colors = {
-        gg::colorRGB(1.0, 0.0, 0.7, 1.0),
-        gg::colorRGB(0.4, 0.4, 1.0, 1.0),
-    };
+
     for (int i = 0; i < __surf->__R.size(); i++) {
       gg::fillBuffer_ref(*__surf->__R[i], _objs[i], colors[i]);
     }
@@ -93,7 +153,7 @@ public:
 private:
   // gaudi::duchamp::fast_summation_test::ptr __surf;
   gaudi::duchamp::block_test::ptr __surf;
-
+  std::array<gg::colorRGB, 3> colors;
   std::vector<gg::DrawablePtr> mSceneObjects;
   std::vector<gg::BufferObjectPtr> _objs;
 };
@@ -117,7 +177,7 @@ public:
   typedef double Real;
 
   App(int w, int h, std::string file)
-      : gg::SimpleApp(w, h, 4.0, true, "flump_") {
+      : gg::SimpleApp(w, h, 6.0, true, "flump_") {
 
     this->setScene(scene = Scene::create());
     this->initUI();
@@ -144,7 +204,7 @@ int main(int argc, char *argv[]) {
 
     nanogui::init();
 
-    AppPtr app = App::create(1280, 720, std::string(argv[0]));
+    AppPtr app = App::create(1920, 1080, std::string(argv[0]));
 
     // app->setScene(Scene::create());
     app->drawAll();

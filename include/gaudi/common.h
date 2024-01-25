@@ -5,6 +5,7 @@
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 #include <Eigen/Sparse>
+#include <vector>
 
 #define TYPEDEF_VEC(N) typedef Eigen::Matrix<real, N, 1> vec##N;
 #define TYPEDEF_MAT(N) typedef Eigen::Matrix<real, N, N> mat##N;
@@ -113,6 +114,34 @@ void split(const vecX &q, std::vector<vec3> &sv, std::vector<quat> &uv) {
 
 std::vector<real> from(vecX U) {
   return std::vector<real>(U.data(), U.data() + U.rows() * U.cols());
+}
+
+template <typename T>
+std::vector<T> operator+(const std::vector<T> &a, const std::vector<T> &b) {
+  assert(a.size() == b.size());
+  std::vector<T> result(a.size());
+  std::transform(a.begin(), a.end(), b.begin(), result.begin(), std::plus<T>());
+
+  return std::move(result);
+}
+
+template <typename T>
+std::vector<T> operator-(const std::vector<T> &a, const std::vector<T> &b) {
+  assert(a.size() == b.size());
+  std::vector<T> result(a.size());
+  std::transform(a.begin(), a.end(), b.begin(), result.begin(),
+                 std::minus<T>());
+
+  return std::move(result);
+}
+
+template <typename T>
+std::vector<T> operator*(const real &a, const std::vector<T> &b) {
+  std::vector<T> result(b.size());
+  std::transform(b.begin(), b.end(), result.begin(),
+                 [&a](const T &elem) { return a * elem; });
+
+  return std::move(result);
 }
 
 } // namespace gaudi

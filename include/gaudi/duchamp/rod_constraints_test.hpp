@@ -88,8 +88,8 @@ public:
     //__M = load_cube();
 
     __M = shell::load_bunny();
-    load_loop_rod();
-
+    // load_loop_rod();
+    load_fib_rod();
     triangulate(*__M);
     for (int i = 0; i < __M->face_count(); i++) {
       if (__M->fbegin(i) > 0) {
@@ -104,9 +104,27 @@ public:
     center(x);
 
     //__sdf = sdf_sphere::create(vec3(0.0, 0.0, 0.0), 2.0);
-    //__sdf = sdf_fib_sphere::create(vec3(0.0, 0.0, 0.0), 1.5, 0.5, 8);
-    load_sdf();
+    __sdf = sdf_multi_sphere::create(__R->__x, 0.5);
+    // load_sdf();
   };
+  void load_fib_rod() {
+    int N = 13;
+    real r0 = 1.5;
+    real golden = 0.5 * (1.0 + sqrt(5));
+    std::vector<vec3> cens(N, vec3::Zero());
+    for (int i = 0; i < N; i++) {
+      real theta = 2.0 * M_PI * i / golden;
+      real phi = acos(1.0 - 2.0 * (i + 0.5) / real(N));
+      vec3 ci =
+          r0 * vec3(cos(theta) * sin(phi), sin(theta) * sin(phi), cos(phi));
+      cens[i] = ci;
+    }
+
+    __R = rod::rod::create(cens);
+
+    real lavg = 0.01 * __R->lavg();
+    __Rd = rod::dynamic::create(__R, 0.25 * lavg, 2.5 * lavg, 0.25 * lavg);
+  }
 
   void load_loop_rod() {
     std::uniform_real_distribution<real> dist(0.5, 1.0);
@@ -138,21 +156,6 @@ public:
 
     real lavg = __R->lavg();
     __Rd = rod::dynamic::create(__R, 0.25 * lavg, 2.5 * lavg, 0.25 * lavg);
-  }
-
-  void load_sdf() {
-
-    shell::shell::ptr __M = shell::load_obj("assets/hand.obj");
-    shell::triangulate(*__M);
-
-    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-    asawa::center(x, 2.0);
-    real l0 = asawa::shell::avg_length(*__M, x);
-
-    std::vector<index_t> face_vert_ids = __M->get_face_vert_ids();
-    geometry_sdf::ptr sdf = geometry_sdf::create();
-    sdf->add_geometry(x, face_vert_ids, 3.0, vec3(0.0, 0.0, 0.0));
-    __sdf = sdf;
   }
 
 #if 1
@@ -201,33 +204,14 @@ public:
   }
 #endif
 
-  void step_dynamics(int frame) {
-
-    hepworth::block::projection_solver solver;
-
-    std::vector<hepworth::projection_constraint::ptr> constraints;
-
-    std::vector<real> &l0 = __R->__l0;
-    std::vector<real> lp(l0);
-    real h = 0.05;
-    real bnd = 1.0;
-    real s_vol = 4.0 / 3.0 * M_PI * pow(bnd, 3.0);
-    real r_vol = __R->get_total_volume();
-    real k = 0.1;
-    real t1 = 1.0;
-    real t0 = 1.01;
-    real att = t0 + (t1 - t0) / (1.0 + exp(-k * (r_vol)));
-
-    std::vector<vec3> f(__R->__v.size(), vec3::Zero());
-    // std::vector<vec3> fr = compute_coulomb_gradient();
-    // std::vector<vec3> fr = compute_null_coulomb_gradient();
-    std::vector<vec3> fr = compute_tangent_point_gradient();
+  std::vector<vec3> compute_boundary_gradients() {
     std::vector<real> dists = __sdf->distance(__R->__x);
     std::vector<vec3> gdists = __sdf->grad_distance(__R->__x);
+    std::vector<vec3> f(__R->__x.size(), vec3::Zero());
 
     for (int i = 0; i < __R->__x.size(); i++) {
-      vec3 x = __R->__x[i];
 #if 0
+      vec3 x = __R->__x[i];
       if (dists[i] > 0.0) {
         logger::line(x, x - dists[i] * gdists[i], vec4(0.0, 1.0, 0.0, 1.0));
       } else {
@@ -235,11 +219,31 @@ public:
       }
 #endif
       if (dists[i] > 0.0) {
-        f[i] -= 16.0 * dists[i] * gdists[i];
-      } else {
+        f[i] = dists[i] * gdists[i];
       }
-      f[i] -= 1.0e-6 * fr[i];
-      //   f[i] += 1e-1 * vec3::Random();
+    }
+    return f;
+  }
+
+  void step_dynamics(int frame) {
+    std::cout << "frame: " << frame << ", size: " << __R->__x.size()
+              << std::endl;
+    hepworth::block::projection_solver solver;
+
+    std::vector<hepworth::projection_constraint::ptr> constraints;
+
+    std::vector<real> &l0 = __R->__l0;
+    std::vector<real> lp(l0);
+    real h = 0.05;
+    std::vector<vec3> f(__R->__v.size(), vec3::Zero());
+    // std::vector<vec3> fr = compute_coulomb_gradient();
+    // std::vector<vec3> fr = compute_null_coulomb_gradient();
+    std::vector<vec3> fr = compute_tangent_point_gradient();
+    std::vector<vec3> fb = compute_boundary_gradients();
+
+    for (int i = 0; i < __R->__x.size(); i++) {
+      f[i] -= 16.0 * fb[i];
+      f[i] -= 1e-6 * fr[i];
     }
 
     hepworth::vec3_block::ptr x =
@@ -247,15 +251,12 @@ public:
     hepworth::quat_block::ptr u =
         hepworth::quat_block::create(__R->__J, __R->__u, __R->__o);
 
-    std::cout << "vol:" << r_vol << "/" << s_vol << " attenuation: " << att
-              << std::endl;
-
     for (auto &l : l0)
-      l *= att;
+      l *= 1.3;
     // hepworth::rod::init_smooth(*__R, constraints, 0.2);
-    // hepworth::block::init_helicity(*__R, constraints, 1.0e-1, {x});
-    hepworth::block::init_stretch_shear(*__R, constraints, l0, 0.1, {x, u});
-    hepworth::block::init_bend_twist(*__R, constraints, 0.05, {u}, true);
+    hepworth::block::init_helicity(*__R, constraints, 1.0e-2, {x});
+    hepworth::block::init_stretch_shear(*__R, constraints, l0, 5e-2, {x, u});
+    hepworth::block::init_bend_twist(*__R, constraints, 3e-2, {u}, true);
     //  hepworth::rod::init_smooth_bend(*__R, constraints, 0.01);
 #if 0
     // hepworth::block::init_angle(*__R, constraints, vec3(1.0, 0.0, 0.0),

@@ -549,8 +549,9 @@ public:
 
     int ii = 0;
     for (int i = 0; i < __corners_next.size(); i++) {
-      if (__corners_next[i] < 0 && __corners_prev[i] == -1)
+      if (__corners_next[i] < 0 && __corners_prev[i] == -1) {
         continue;
+      }
       cmap[i] = ii++;
       M.push_back(__M[i]);
       J.push_back(__J[i]);
@@ -563,9 +564,8 @@ public:
     }
     std::vector<index_t> new_next;
     std::vector<index_t> new_prev;
-
-    for (int i = 0; i < __corners_next.size(); i++) {
-      if (__corners_next[i] < 0 && __corners_prev[i] < 0)
+    for (int i = 0; i < cmap.size(); i++) {
+      if (cmap[i] < 0)
         continue;
       if (__corners_next[i] > -1)
         new_next.push_back(cmap[__corners_next[i]]);
@@ -577,6 +577,7 @@ public:
       else
         new_prev.push_back(-1);
     }
+
     __corners_next = new_next;
     __corners_prev = new_prev;
     __M = M;
@@ -613,7 +614,7 @@ public:
 #endif
     }
   }
-
+  void set_radius(real r) { _r = r; }
   real _r = 0.05;
   real _lmax = 0.0;
 

@@ -17,7 +17,6 @@
 #include "gaudi/asawa/shell/walk.hpp"
 
 #include "gaudi/bontecou/laplacian.hpp"
-#include "gaudi/calder/darboux_cyclide_fit.hpp"
 #include "gaudi/calder/quadric_fit.hpp"
 #include "gaudi/calder/tangent_point_integrators.hpp"
 
@@ -68,7 +67,7 @@ struct walk_config {
 
 const int N_walk_configs = 6;
 
-int iw0 = 0;
+int iw0 = 4;
 
 int iw1 = (iw0 + 1) % N_walk_configs;
 int iwp = (iw0 + N_walk_configs - 1) % N_walk_configs;
@@ -83,7 +82,7 @@ walk_config _wc[N_walk_configs] = {
     walk_config(100, Nw, 0.6, true, vec2(6.0, -8.0), false,
                 vec4(0.0, 0, 0.0, 0.0)),
     walk_config(100, Nw, 0.265, false, vec2(0.0, 0.0), true,
-                vec4(0.6, 0.0, 0.0, 0.8)),
+                vec4(1.0, 0.2, 0.3, 0.00)),
     walk_config(100, Nw, 2.5, false, vec2(0.0, 0.0), true,
                 vec4(0.5, 0.0, 0.65, 0.22))};
 // walk_config(0, 4000, 0.0, false, vec2(5.0, -8.0), false,
@@ -125,7 +124,7 @@ inline std::array<vec3, 2> _get_colors(index_t frame) {
       {vec3(0.36217, 0.105595, 0.858886), vec3(0.789299, 0.0025459, 0.881501)},
       {vec3(1.03731, 0.44225, 0.124936), vec3(0.113354, 0.377527, 0.904618)},
       {vec3(0.19887, 0.263064, 0.919388), vec3(0.848492, 0.57854, 0.091643)},
-      {vec3(0.02987, 0.76066, 0.489041), vec3(0.0804837, 1.0736, 0.566248)}}; //
+      {vec3(0.02987, 0.76066, 0.489041), vec3(0.848492, 0.57854, 0.091643)}}; //
 
   const vec3 *cP = colors[iwp];
   const vec3 *c0 = colors[iw0];
@@ -145,6 +144,9 @@ inline std::array<vec3, 2> _get_colors(index_t frame) {
     out[0] = va::mix(t, c0[0], cN[0]);
     out[1] = va::mix(t, c0[1], cN[1]);
   }
+  out[0] = colors[iw0][0];
+  out[1] = colors[iw0][1];
+
   return out;
 };
 
@@ -186,6 +188,7 @@ public:
     real l0 = asawa::shell::avg_length(*__M, x);
     // real C = 0.5;
     real C = 1.5;
+    C = 2.0;
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, 0.75 * C * l0);
 
     /////////////////////
@@ -598,7 +601,7 @@ public:
             calc_quadric_normal_flow(1.0, 6.0, 2.0, 0.5), 0.5 / _h);
         */
 
-        _knotted_surface->add_shell_force(calc_cyclide_normal_flow(1.0, 1.0),
+        _knotted_surface->add_shell_force(calc_cyclide_normal_flow(4.0, 1.0),
                                           1.0 / _h);
 
         _knotted_surface->step(_h);

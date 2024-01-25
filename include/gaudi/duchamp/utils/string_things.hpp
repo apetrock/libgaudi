@@ -82,9 +82,9 @@ vec3 align_walk(const vec3 x0, const vec3 &d0, const vec3 &N0, real li,
   vec3 f2 = es.eigenvectors().col(2);
 
   vec3 dir = C[0] * d0;
-  dir += C[1] * va::sgn(d0, f0) * l0 * f0;
+  dir += C[3] * va::sgn(d0, f0) * l0 * f0;
   dir += C[2] * va::sgn(d0, f1) * l1 * f1;
-  dir += C[3] * va::sgn(d0, f2) * l2 * f2;
+  dir += C[1] * va::sgn(d0, f2) * l2 * f2;
   dir.normalize();
   return dir;
 }

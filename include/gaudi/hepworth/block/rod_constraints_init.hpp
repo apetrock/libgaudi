@@ -79,7 +79,7 @@ void init_stretch_shear(const asawa::rod::rod &R,
   std::vector<index_t> verts = R.get_vert_range();
   for (auto i : verts) {
     asawa::rod::consec_t c = R.consec(i);
-    if (l0[i] < 1e-10)
+    if (l0[i] < 1e-6)
       continue;
 
     constraints.push_back(
@@ -95,7 +95,7 @@ void init_bend_twist(const asawa::rod::rod &R,
   std::vector<index_t> verts = R.get_vert_range();
   int N = skip ? verts.size() - 1 : verts.size();
   for (int i = 0; i < N; i++) {
-    if (R.length(i) < 1e-8)
+    if (R.length(i) < 1e-6)
       continue;
     asawa::rod::consec_t c = R.consec(verts[i]);
     constraints.push_back(bend_twist::create({c[1], c[2], Ni}, w, blocks));
@@ -124,6 +124,9 @@ void init_collisions(asawa::rod::rod &R, asawa::rod::dynamic &dynamic,
   const std::vector<vec3> &x = R.__x;
   vector<std::array<index_t, 4>> collisions =
       dynamic.get_internal_collisions(K);
+  // randomize the collision order
+  std::random_shuffle(collisions.begin(), collisions.end());
+
   for (auto &c : collisions) {
     if (c[0] > -1) {
       vec3 xA0 = x[c[0]];
@@ -149,6 +152,10 @@ void init_collisions(asawa::rod::rod &R, asawa::rod::dynamic &dynamic,
       if (R.next(c[1]) == c[2])
         continue;
 
+      if (rand() % 2 == 0) {
+        std::swap(c[0], c[2]);
+        std::swap(c[1], c[3]);
+      }
       constraints.push_back(
           rod_collision::create({c[0], c[1], c[2], c[3]}, w, K * R._r, blocks));
     }

@@ -346,6 +346,7 @@ public:
     }
     __R->pack();
     __R->update_mass();
+    __R->update_lengths();
   }
   rod::ptr __R;
   arp::aabb_tree<2>::ptr edge_tree;

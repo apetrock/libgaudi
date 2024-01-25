@@ -7,8 +7,8 @@
  *
  */
 
-#ifndef __ASAWA_LAPLACE_REF_MAT__
-#define __ASAWA_LAPLACE_REF_MAT__
+#ifndef __KUSAMA_LAPLACE_REF_MAT__
+#define __KUSAMA_LAPLACE_REF_MAT__
 
 // #include "Eigen/src/SparseCore/SparseMatrix.h"
 #include <algorithm>
@@ -467,6 +467,7 @@ private:
 
 std::array<real, 2> grey_scott(std::array<real, 2> uv0a, const real &f,
                                const real &k, const real &h, const int N = 40) {
+  // first order formulation
   vec2 uv0 = vec2(uv0a[0], uv0a[1]);
   vec2 uvi = uv0;
   for (int j = 0; j < N; j++) {
@@ -501,6 +502,7 @@ std::array<real, 2> grey_scott(std::array<real, 2> uv0a, const real &f,
 std::array<real, 2> grey_scott_2(std::array<real, 2> uv0a, const real &f,
                                  const real &k, const real &h,
                                  const int N = 40) {
+  // second order formulation
   vec2 uv0 = vec2(uv0a[0], uv0a[1]);
   real u0 = uv0[0];
   real v0 = uv0[1];

@@ -46,14 +46,14 @@ using std::endl;
 //  #define _SH 2160
 
 // HD
-// #define _SW 1920
-// #define _SH 1080
+#define _SW 1920
+#define _SH 1080
 
 // 720p
 // #define _SW 1280
 // #define _SH 720
-#define _SW 1280
-#define _SH 720
+// #define _SW 1280
+// #define _SH 720
 
 using namespace GaudiMath;
 
@@ -210,7 +210,7 @@ public:
   typedef double Real;
 
   App(int width, int height, std::string file)
-      : gg::SimpleApp(width, height, 3.0, true, "florp_drive_") {
+      : gg::SimpleApp(width, height, 2.0, true, "florp_drive_") {
     this->setScene(scene = Scene::create());
     this->initUI();
   }

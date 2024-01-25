@@ -1010,7 +1010,7 @@ public:
     if (Screen::keyboardEvent(key, scancode, action, modifiers))
       return true;
 
-    if (key == GLFW_KEY_A && action == GLFW_PRESS) {
+    if (key == GLFW_KEY_W && action == GLFW_PRESS) {
       _animate = !_animate;
     }
 
