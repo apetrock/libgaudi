@@ -271,7 +271,7 @@ void main()
     float AmbientOcclusion = texture(ssao, TexCoords).r;
     vec3 Bleed = texture(bleed, TexCoords).rgb;
     
-    //FragColor = vec4(Normal, 1.0);
+    //fFragColor = vec4(Normal, 1.0);
     //FragColor = vec4(vec3(AmbientOcclusion), 1.0);
     //FragColor = vec4(Bleed, 1.0);
     //return;
@@ -580,7 +580,7 @@ void find_pos(vec3 p0, vec3 p1, out vec3 gpos, out vec3 gnorm){
 }
 
 
-bool accum(vec3 pi, out vec3 pj, vec3 p_test, vec3 N0, out vec3 N1, vec3 pf, in out vec3 bleed){
+bool accum(vec3 pi, out vec3 pj, vec3 p_test, vec3 N0, out vec3 N1, vec3 pf, inout vec3 bleed){
     
     vec3 p_screen = project(p_test);
     vec3 p_ground = texture(gPosition, p_screen.xy).rgb;
@@ -606,7 +606,7 @@ bool accum(vec3 pi, out vec3 pj, vec3 p_test, vec3 N0, out vec3 N1, vec3 pf, in 
     float denom = 1.0 / (dist * dist + 0.1 * radius*radius);
     denom = clamp(denom, 0.0, 1.0);
 
-    bleed += 1.0 * c0 * c1 * denom * texture(gAlbedoSpec, p_screen.xy).rgb;
+    bleed +=  1.0 * c0 * c1 * denom * texture(gAlbedoSpec, p_screen.xy).rgb;
     //bleed +=  c0 * texture(gAlbedoSpec, p_screen.xy).rgb;
     //bleed += dpN;
     N1 = N_ground;
@@ -764,9 +764,10 @@ void main()
   std::string dbg_line_geo =
       R"(
 /* geometry shader */
-#version 330 core
+#version 460 core
+#extension ARB_geometry_shader4 : enable
 layout (lines) in;
-layout (triangle_strip, max_vertices = 128) out;
+layout (triangle_strip, max_vertices = 64) out;
 
 uniform mat4 P;
 uniform mat4 M;
@@ -779,8 +780,8 @@ out vec3 wpos_frag;
 out vec3 color_frag;
 void main() {
   mat4 MVP = P * V * M;
-
-  float r = 0.003;
+    
+    float r = 0.003;
     vec3 p0 = wpos_vert[0];
     vec3 p1 = wpos_vert[1];
     
@@ -791,9 +792,12 @@ void main() {
     vec3 B = normalize(cross(T, normalize(c)));
     vec3 N = normalize(cross(B, T));
     
-    const int Nv = 6;
+    const int Nv = 3;
     float Nvf = float(Nv);
-    vec3[Nv] circ = vec3[Nv]( 0.0 );
+    vec3[Nv] circ;
+    for (int i = 0; i < Nv; i++) {
+        circ[i] = vec3(0.0);
+    }
     for (int i = 0; i < Nv; i++) {
         float thet = float(i) / Nvf * 2.0 * 3.14159265359;
         float s0 = sin(thet);
@@ -803,7 +807,7 @@ void main() {
 
     //endcaps
     
-    const int Nk = 3;
+    const int Nk = 2;
     const float Nkf = float(Nk);
     for(int k = 0; k < Nk; k++){
       float z0 = float(k) * r / Nkf;

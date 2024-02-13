@@ -532,17 +532,21 @@ public:
 
     edge_tree = arp::aabb_tree<2>::create(edge_verts_m, x_m, 16);
 
-    std::vector<std::array<index_t, 2>> collected(edge_verts_t.size() / 2);
+    std::vector<std::array<index_t, 2>> collected(edge_verts_t.size() / 2, {-1, -1});
 #pragma omp parallel for
     for (int i = 0; i < edge_verts_t.size(); i += 2) {
       index_t e0 = i / 2;
+
       std::vector<index_t> collisions =
           arp::getNearest<2, 2>(e0, edge_verts_t, x_t, //
                                 *edge_tree,            //
                                 tol, &arp::line_line_min);
-      for (index_t e1 : collisions) {
+      
+      
+      index_t c0 = edge_map_t[e0];
+      collected[i / 2] = {c0, -1};
 
-        index_t c0 = edge_map_t[e0];
+      for (index_t e1 : collisions) { 
         // debug_line(M, c0, x);
         index_t c1 = -1;
         if (e1 > 0) {
@@ -550,10 +554,11 @@ public:
           c1 = edge_map_m[e1];
         }
 
+        if(c0 < 0 || c1 < 0) continue;
+        //std::cout << "c0: " << c0 << " c1: " << c1 << std::endl;
         collected[i / 2] = {c0, c1};
       }
     }
-
     return collected;
   }
 
@@ -607,11 +612,12 @@ public:
         get_edge_edge_collisions(edge_verts, edge_map, x, tol);
 
     for (auto &c : collected) {
+      //std::cout << "aligning " << c[0] << " " << c[1] << std::endl;
       if (c[0] > -1 && c[1] > -1) {
+        //std::cout << "aligning " << c[0] << " " << c[1] << std::endl;
         c[1] = align_edges(M, c[0], c[1], x);
       }
     }
-
     return collected;
   }
 

@@ -28,8 +28,7 @@
 #include "GaudiGraphics/viewer.hpp"
 // #include "gaudi/asawa/asawa.h"
 
-#include "gaudi/duchamp/rod_constraints_coupled_test_2.hpp"
-// #include "gaudi/duchamp/rod_constraints_coupled_test.hpp"
+#include "gaudi/duchamp/gravitys_rainbow.hpp"
 
 #define TRACKBALLSIZE (0.8f)
 #define RENORMCOUNT 97
@@ -109,7 +108,7 @@ public:
 
   void initScene() {
     //_experiment = duchamp::mean_shift_experiment<growth>::create();
-    __surf = gaudi::duchamp::block_test::create();
+    __surf = gaudi::duchamp::rainbow::create();
 
     _objs.resize(__surf->__R.size());
     for (int i = 0; i < __surf->__R.size(); i++) {
@@ -152,7 +151,7 @@ public:
 
 private:
   // gaudi::duchamp::fast_summation_test::ptr __surf;
-  gaudi::duchamp::block_test::ptr __surf;
+  gaudi::duchamp::rainbow::ptr __surf;
   std::array<gg::colorRGB, 3> colors;
   std::vector<gg::DrawablePtr> mSceneObjects;
   std::vector<gg::BufferObjectPtr> _objs;
@@ -177,7 +176,7 @@ public:
   typedef double Real;
 
   App(int w, int h, std::string file)
-      : gg::SimpleApp(w, h, 6.0, false, "flump_") {
+      : gg::SimpleApp(w, h, 6.0, true, "gravitys_rainbow_") {
 
     this->setScene(scene = Scene::create());
     this->initUI();

@@ -6,7 +6,7 @@
 #ifdef CHOLMOD_H
 #define USE_CHOLMOD 1
 #else
-#define USE_CHOLMOD 1 // I guess I need to force it..
+#define USE_CHOLMOD 0 // I guess I need to force it..
 #endif
 
 #if USE_CHOLMOD

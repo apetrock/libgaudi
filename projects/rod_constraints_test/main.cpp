@@ -135,8 +135,8 @@ int main(int argc, char *argv[]) {
       cout << argv[i] << "\n";
 
     nanogui::init();
-
-    AppPtr app = App::create(1280, 720, std::string(argv[0]));
+    //1920, 1080;
+    AppPtr app = App::create(1920, 1080, std::string(argv[0]));
 
     // app->setScene(Scene::create());
     app->drawAll();

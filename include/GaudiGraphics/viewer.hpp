@@ -265,6 +265,7 @@ public:
     // start ffmpeg telling it to expect raw rgba 720p-60hz frames
     // -i - tells it to read frames from stdin
     std::string nextFileName = getNextFileName(_filename_pattern);
+    std::cout << "saving to: " << nextFileName << std::endl;
     std::string sz = std::to_string(_width) + "x" + std::to_string(_height);
     std::string cmd = "ffmpeg -r 60 -f rawvideo -pix_fmt rgba -s " + sz +
                       " -i - "
@@ -289,10 +290,16 @@ public:
   std::string getNextFileName(const std::string &pattern) {
     // Define a regular expression to match the file name pattern
     std::regex regex(pattern + "(\\d{2})\\.mp4");
+    // Define the directory to save files
+    std::string directory = "dump";
 
+    // Check if the directory exists, if not, create it
+    if (!std::filesystem::exists(directory)) {
+      std::filesystem::create_directory(directory);
+    }
     // Find the highest numbered file in the sequence
     int maxNum = 0;
-    for (const auto &entry : std::filesystem::directory_iterator(".")) {
+    for (const auto &entry : std::filesystem::directory_iterator("./" + directory + "/")) {
       if (entry.is_regular_file()) {
         std::string fileName = entry.path().filename().string();
         std::smatch match;
@@ -307,7 +314,7 @@ public:
 
     // Generate the next file name in the sequence
     std::stringstream ss;
-    ss << pattern << std::setfill('0') << std::setw(2) << (maxNum + 1)
+    ss << directory << "/" << pattern << std::setfill('0') << std::setw(2) << (maxNum + 1)
        << ".mp4";
     return ss.str();
   }
@@ -921,12 +928,14 @@ public:
       : _width(w), _height(h),
         nanogui::Screen(Eigen::Vector2i(w, h), frame_grabber_pattern, false) {
     using namespace nanogui;
+    
 
     // now for GUI
     // Window *window = new Window(this, "coordinates");
     // window->setPosition(Vector2i(15, 15));
     // window->setLayout(new GroupLayout());
-
+    const GLubyte* version = glGetString(GL_VERSION);
+    std::cout << "OpenGL Version: " << version << std::endl;
     std::cout << "screen size: " << _width << " " << _height << std::endl;
     std::cout << "size: " << mSize.transpose() << std::endl;
 
@@ -935,6 +944,8 @@ public:
 
     // During init, enable debug output
     glEnable(GL_DEBUG_OUTPUT);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+
     glDebugMessageCallback(MessageCallback, 0);
 
     glEnable(GL_DEPTH_TEST);
@@ -946,39 +957,41 @@ public:
       _frameGrabber =
           FrameGrabber::create(_width, _height, frame_grabber_pattern);
 
-    _renderingEffects.resize(4);
-    //_renderingEffects[0] = SsaoShadingEffect::create(_width, _height);
-    _renderingEffects[0] = SsaoShadingEffect::create(_width, _height);
-    _renderingEffects[1] = ColorBleedEffect::create(_width, _height);
-    _renderingEffects[2] = BlurEffect::create(_width, _height);
-    _renderingEffects[3] = DeferredShadingEffect::create(_width, _height);
+    _renderingEffects.clear();
+    _effect_ids.SSAO = _renderingEffects.size();
+    _renderingEffects.push_back(SsaoShadingEffect::create(_width, _height));
+    
+    //_renderingEffects[_effect_ids.BLEED] = ColorBleedEffect::create(_width, _height);
+    //_renderingEffects[_effect_ids.BLUR] = BlurEffect::create(_width, _height);
+    _effect_ids.DEFERRED = _renderingEffects.size();
+    _renderingEffects.push_back(DeferredShadingEffect::create(_width, _height));
 
-    //    SsaoShadingEffectPtr ssao =
-    //        std::dynamic_pointer_cast<SsaoShadingEffect>(_renderingEffects[0]);
     SsaoShadingEffectPtr ssao =
-        std::dynamic_pointer_cast<SsaoShadingEffect>(_renderingEffects[0]);
+         std::dynamic_pointer_cast<SsaoShadingEffect>(_renderingEffects[_effect_ids.SSAO]);
 
-    ColorBleedEffectPtr bleed =
-        std::dynamic_pointer_cast<ColorBleedEffect>(_renderingEffects[1]);
+    //ColorBleedEffectPtr bleed =
+    //    std::dynamic_pointer_cast<ColorBleedEffect>(_renderingEffects[_effect_ids.BLEED]);
 
-    BlurEffectPtr blur =
-        std::dynamic_pointer_cast<BlurEffect>(_renderingEffects[2]);
+    //BlurEffectPtr blur =
+    //    std::dynamic_pointer_cast<BlurEffect>(_renderingEffects[_effect_ids.BLUR]);
 
     DeferredShadingEffectPtr deffered =
-        std::dynamic_pointer_cast<DeferredShadingEffect>(_renderingEffects[3]);
+        std::dynamic_pointer_cast<DeferredShadingEffect>(_renderingEffects[_effect_ids.DEFERRED]);
 
     ssao->setPositionTexture(deffered->getPositionTexture());
     ssao->setNormalTexture(deffered->getNormalTexture());
 
-    bleed->setPositionTexture(deffered->getPositionTexture());
-    bleed->setNormalTexture(deffered->getNormalTexture());
-    bleed->setAlbedo(deffered->getAlbedo());
+    //bleed->setPositionTexture(deffered->getPositionTexture());
+    //bleed->setNormalTexture(deffered->getNormalTexture());
+    //bleed->setAlbedo(deffered->getAlbedo());
 
-    blur->setTarget(bleed->getBleedTexture());
-    blur->setNormal(deffered->getNormalTexture());
+    //blur->setTarget(bleed->getBleedTexture());
+    //blur->setTarget(bleed->getBleedTexture());
+    
+    //blur->setNormal(deffered->getNormalTexture());
 
     deffered->setSsaoTexture(ssao->getSsaoTexture());
-    deffered->setBleedTexture(blur->getBlurred());
+    //deffered->setBleedTexture(blur->getBlurred());
 
     //_renderingEffect = HdrEffect::create(_width, _height);
   }
@@ -1052,6 +1065,7 @@ public:
     glfwGetTime();
 
     if (this->_animate) {
+      std::cout << "animating" << std::endl;
       this->animate();
 
       if (_rotate_ball)
@@ -1059,9 +1073,10 @@ public:
     }
 
     glEnable(GL_DEPTH_TEST);
-    glBindFramebuffer(GL_FRAMEBUFFER, _renderingEffects[3]->getFBO());
+    std::cout << "gl bind frame buffer: "  << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, _renderingEffects[_effect_ids.DEFERRED]->getFBO());
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
+    std::cout << "draw scene" << std::endl;
     if (mScene)
       mScene->onDraw(*_viewer);
 
@@ -1069,6 +1084,7 @@ public:
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
+    std::cout << "render effects" << std::endl;
     for (auto &effect : _renderingEffects)
       effect->render(_viewer);
 
@@ -1082,6 +1098,14 @@ public:
   }
 
 private:
+
+  struct {
+    int SSAO = 0;
+    int BLEED = 1;
+    int BLUR = 2;
+    int DEFERRED = 3;
+  } _effect_ids;
+
   bool _animate = false;
   bool _rotate_ball = true;
   unsigned int _frame = 0;

@@ -34,7 +34,7 @@ vec3 align_walk(const vec3 x0, const vec3 &d0, const vec3 &N0, real li,
                 const std::vector<vec3> walk, const std::vector<vec3> &normals,
                 real eps = 1e-1, vec4 C = vec4(5.0, -8.0, 0.0, 0.0)) {
   // dumb little test to see if I can align the walk to neighboring lines...
-  // we'll do this N^2 for fun
+  // we'll do this N^2 for fun... this is slow, I know its slow, so sue me
   if (walk.size() < 16)
     return d0;
 

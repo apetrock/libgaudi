@@ -800,11 +800,13 @@ void pack(shell &M) {
   }
 
   for (auto d : M.get_data()) {
+
     if (d->type() == EDGE) {
       std::cout << "edge" << std::endl;
       d->permute(cperm_half);
       d->resize(Nc / 2);
     }
+
     if (d->type() == CORNER) {
       std::cout << "corner" << std::endl;
       d->permute(cperm);

@@ -445,7 +445,7 @@ public:
     }
     dq /= real(k);
     U /= real(k);
-    cen /= 2.0 * real(k);
+    cen /= real(k);
 
     Eigen::JacobiSVD<mat3> svd(U, Eigen::ComputeFullU);
     U = svd.matrixU();
@@ -459,14 +459,15 @@ public:
     real t2 = abs(Ti.dot(T2));
     T0 = va::sgn(Ti.dot(T0)) * T0;
     T1 = va::sgn(dq.dot(T1)) * T1;
+    
     // eigen::angleaxis rotation about T0, '
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<> dis(-1.0, 1.0);
+    //std::random_device rd;
+    //s/td::mt19937 gen(rd());
+    //std::uniform_real_distribution<> dis(-1.0, 1.0);
 
-    Eigen::AngleAxis<real> R(0.01 * dis(gen) * M_PI, T1);
+    //Eigen::AngleAxis<real> R(0.01 * dis(gen) * M_PI, T1);
 
-    T2 = R * T2;
+    //T2 = R * T2;
     //  logger::line(q0, q0 + 0.1 * T2, vec4(0.5, 0.0, 1.0, 1.0));
     int i = 0;
     i = t0 < t1 && t0 < t2 ? 0 : i;
@@ -497,7 +498,7 @@ public:
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis(-1.0, 1.0);
-    vec3 qp = qc + (1.0 + dis(gen) * 0.01) * sqrt(r2) * (q0 - qc).normalized();
+    vec3 qp = qc + (1.0 + dis(gen) * 0.001) * sqrt(r2) * (q0 - qc).normalized();
     // logger::line(qc, qp, vec4(0.5, 0.0, 1.0, 1.0));
     p.block(_id0, 0, 3, 1) += _w * qp;
   }

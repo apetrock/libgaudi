@@ -17,7 +17,7 @@
 #include "gaudi/asawa/shell/walk.hpp"
 
 #include "gaudi/bontecou/laplacian.hpp"
-#include "gaudi/calder/quadric_fit.hpp"
+#include "gaudi/calder/least_squares_fit.hpp"
 #include "gaudi/calder/tangent_point_integrators.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"

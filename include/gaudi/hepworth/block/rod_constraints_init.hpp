@@ -66,7 +66,7 @@ void init_helicity(const asawa::rod::rod &rod,
     if (in3 < 0)
       continue;
     constraints.push_back(helicitiy::create(
-        {i, ip3, ip2, ip1, ip0, i, in0, in1, in2, in3}, 1.25, blocks));
+        {i, ip3, ip2, ip1, ip0, i, in0, in1, in2, in3}, w, blocks));
   }
 }
 #endif

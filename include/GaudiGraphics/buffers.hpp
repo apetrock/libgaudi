@@ -81,6 +81,7 @@ public:
     // free everything here
 
     mDispShader->free();
+    delete mDispShader;
   };
 
   virtual void init() { this->initBuffer(); }
@@ -414,6 +415,7 @@ public:
   };
 
   void initDisplayShader() {
+    
     // std::cout << " system: ";
     // system("less src/shaders/standard.vs");
     mDispShader->init(
@@ -433,6 +435,7 @@ public:
   };
 
   virtual void draw(Mat4 &mProject, Mat4 &mModelView) {
+    
     bind();
     Mat4 matrix = this->matrix();
     Mat4 mvp = mProject * mModelView * matrix;
@@ -460,10 +463,12 @@ public:
   };
 
   virtual void init() {
+    #if 1
     if (!_lines) {
       _lines = gg::LineBuffer::create();
       _lines->initBuffer();
     }
+    #endif
     if (!_points) {
       _points = gg::PointBuffer::create();
       _points->initBuffer();
@@ -471,6 +476,7 @@ public:
   }
 
   void renderPoints() {
+    
     using namespace nanogui;
 
     int numVerts = mPointPositions.size();
@@ -496,6 +502,7 @@ public:
   };
 
   void renderLines() {
+    
     using namespace nanogui;
 
     int numVerts = 0, numIndices = 0;
@@ -506,6 +513,7 @@ public:
     for (int i = 0; i < mLinePositions.size(); i++) {
       numVerts += mLinePositions[i].cols();
     }
+    #if 1
     _lines->fillBuffer([&](gg::BufferObject &o) -> void {
       o.allocateVerts(numIndices, numVerts);
 
@@ -533,9 +541,11 @@ public:
         iP += mLinePositions[i].cols();
       }
     });
+    #endif
   };
 
   void pushBox(Vec4 cen4, Vec4 h, Vec4 col) {
+    
     nanogui::MatrixXu indices = nanogui::MatrixXu(2, 12);
     nanogui::MatrixXf positions = nanogui::MatrixXf(3, 8);
     Vec3 cen = cen4(Eigen::seq(0, 2), 0);
@@ -570,11 +580,13 @@ public:
   };
 
   void pushPoint(Vec4 c0, Vec4 col) {
+    
     mPointPositions.push_back(c0);
     mPointColors.push_back(col);
   };
 
   void pushLine(Vec4 c0, Vec4 c1, Vec4 col) {
+    
     nanogui::MatrixXu indices = nanogui::MatrixXu(2, 1);
     nanogui::MatrixXf positions = nanogui::MatrixXf(3, 2);
 

@@ -21,7 +21,7 @@
 #include "gaudi/hepworth/block/solver.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
-#include "gaudi/calder/quadric_fit.hpp"
+#include "gaudi/calder/least_squares_fit.hpp"
 #include "gaudi/calder/tangent_point_integrators.hpp"
 #include "gaudi/common.h"
 #include "gaudi/logger.hpp"

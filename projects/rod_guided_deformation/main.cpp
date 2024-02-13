@@ -152,7 +152,7 @@ public:
     };
   }
   virtual void onAnimate(int frame) {
-
+    
     __surf->step(frame);
     std::array<Vec3d, 2> colors_array = __surf->get_colors(frame);
     Vec3d c03 = colors_array[0];

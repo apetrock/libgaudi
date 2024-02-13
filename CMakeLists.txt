@@ -17,6 +17,7 @@ if(${CMAKE_VERSION} VERSION_LESS 3.14)
 endif()
 
 
+message(STATUS "WITH_CUDA: ${WITH_CUDA}")
 
 
 # Build Types
@@ -122,6 +123,7 @@ option(WITH_OPENMP "Use OpenMP" ON)
 if(WITH_OPENMP)
     find_package(OpenMP)
     if (OPENMP_FOUND)
+        message(STATUS "OpenMP found, setting OpenMP vars")
         set(ENV{OMP_NUM_THREADS} 8)
         set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
         set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
@@ -129,7 +131,7 @@ if(WITH_OPENMP)
     endif()
 endif()
 
-set(EIGEN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen-3.4.0")
+set(EIGEN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen")
 set(SPECTRA_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/spectra/include")
 
 option(WITH_CUDA "Build with CUDA support" ON)
@@ -155,7 +157,17 @@ if(WITH_CUDA)
     enable_language(CUDA)
 endif()
 
-option(GUADI_WITH_CHOLMOD   "Use Cholmod" ON)
+option(GUADI_WITH_CHOLMOD   "Use Cholmod" OFF)
+find_package(BLAS QUIET)
+find_package(LAPACK QUIET)
+
+if(BLAS_FOUND AND LAPACK_FOUND)
+    set(GUADI_WITH_CHOLMOD ON)
+else()
+    message(STATUS "Lapack and Blas not available")
+    set(GUADI_WITH_CHOLMOD OFF)
+endif()
+
 if(GUADI_WITH_CHOLMOD)
 
   #find_package(CHOLMOD)
@@ -188,6 +200,7 @@ if(GUADI_WITH_CHOLMOD)
   list(REMOVE_DUPLICATES SUITESPARSE_INCLUDE_DIRS)
   #message(STATUS "cholmod include dirs: ${SUITESPARSE_INCLUDE_DIRS}")
   include_directories(${SUITESPARSE_INCLUDE_DIRS})
+
 endif()
 
 
@@ -210,6 +223,9 @@ set(CMAKE_BINARY_DIR ${SAVED_BINARY_DIR})
 set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 
 include_directories("${NANOGUI_EXTRA_INCS}")
+
+#I haven't had to include this before
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/ext/nanogui/include/")
 add_definitions("${NANOGUI_EXTRA_DEFS}")
 
 #set(SPECTRA_EIGEN_INCLUDE_DIR "${EIGEN_INCLUDE_DIR}" CACHE FILEPATH " " FORCE)
@@ -222,8 +238,10 @@ add_subdirectory(src)
 
 add_subdirectory(projects/blank_template)
 #add_subdirectory(projects/dynamic_shell_test)
-add_subdirectory(projects/rod_constraints_test)
+#add_subdirectory(projects/rod_constraints_test)
 add_subdirectory(projects/rod_constraints_coupled_test)
+add_subdirectory(projects/gravitys_rainbow)
+
 #add_subdirectory(projects/shell_constraints_test)
 #add_subdirectory(projects/shell_constraints_align_test)
 
@@ -231,10 +249,10 @@ add_subdirectory(projects/rod_constraints_coupled_test)
 
 #add_subdirectory(projects/mighty_morphin_test)
 add_subdirectory(projects/rod_guided_deformation)
-add_subdirectory(projects/growth_study)
+#add_subdirectory(projects/growth_study)
 
 #add_subdirectory(projects/reaction_diffusion_test)
-#add_subdirectory(projects/vortex_test)
+add_subdirectory(projects/vortex_test)
 #add_subdirectory(projects/tangent_point_test)
 
 #add_subdirectory(projects/shell_walk_test)

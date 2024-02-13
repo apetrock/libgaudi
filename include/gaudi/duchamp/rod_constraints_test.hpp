@@ -53,31 +53,6 @@ namespace duchamp {
 
 using namespace asawa;
 
-void center(std::vector<vec3> &coords) {
-  real accum = 0.0;
-  vec3 min = coords[0];
-  vec3 max = coords[0];
-
-  for (auto &c : coords) {
-    min = va::min(c, min);
-    max = va::max(c, max);
-  }
-
-  vec3 dl = (max - min);
-  real maxl = dl[0];
-  maxl = maxl > dl[1] ? maxl : dl[1];
-  maxl = maxl > dl[2] ? maxl : dl[2];
-  real s = 2.0 / maxl;
-  vec3 cen = (0.5 * (max + min) - min) * s;
-  std::cout << " scale: " << s << std::endl;
-  cen -= min;
-  for (auto &c : coords) {
-    c -= min;
-    c = s * c;
-    c -= cen;
-  }
-}
-
 class block_test {
 public:
   typedef std::shared_ptr<block_test> ptr;
@@ -85,31 +60,22 @@ public:
   static ptr create() { return std::make_shared<block_test>(); }
 
   block_test() {
-    //__M = load_cube();
-
-    __M = shell::load_bunny();
-    // load_loop_rod();
-    load_fib_rod();
-    triangulate(*__M);
-    for (int i = 0; i < __M->face_count(); i++) {
-      if (__M->fbegin(i) > 0) {
-        assert(__M->fsize(i) == 3);
-      }
-    }
-
-    vec3_datum::ptr x_datum =
-        static_pointer_cast<vec3_datum>(__M->get_datum(0));
-
-    std::vector<vec3> &x = x_datum->data();
-    center(x);
-
-    //__sdf = sdf_sphere::create(vec3(0.0, 0.0, 0.0), 2.0);
-    __sdf = sdf_multi_sphere::create(__R->__x, 0.5);
+    //load_fib_rod();
+    load_loop_rod();
+    int N = 13;
+    real r1 = 1.5;
+    real r11 = 0.5;
+    real pi43 = 4.0 / 3.0 * M_PI;
+    real v0 = real(13.0) * pi43 * pow(r11, 3.0);
+    real r0 = std::pow(v0 / pi43, 1.0 / 3.0);
+    std::cout << "radius 0"<<r0 << std::endl;
+    __sdf0 = sdf_sphere::create(vec3(0.0, 0.0, 0.0), r0);
+    __sdf1 = sdf_multi_sphere::create(get_fib(r1, 13), r11);
     // load_sdf();
   };
-  void load_fib_rod() {
-    int N = 13;
-    real r0 = 1.5;
+
+  std::vector<vec3> get_fib(real r0, int N = 13){
+    
     real golden = 0.5 * (1.0 + sqrt(5));
     std::vector<vec3> cens(N, vec3::Zero());
     for (int i = 0; i < N; i++) {
@@ -119,8 +85,11 @@ public:
           r0 * vec3(cos(theta) * sin(phi), sin(theta) * sin(phi), cos(phi));
       cens[i] = ci;
     }
+    return cens;
+  }
 
-    __R = rod::rod::create(cens);
+  void load_fib_rod() {
+    __R = rod::rod::create(get_fib(1.5, 13));
 
     real lavg = 0.01 * __R->lavg();
     __Rd = rod::dynamic::create(__R, 0.25 * lavg, 2.5 * lavg, 0.25 * lavg);
@@ -152,43 +121,16 @@ public:
       vec3 pi = r0 * cos(thet) * f0 + r1 * sin(thet) * f1;
       points.push_back(pi);
     }
+    //compute _l0 sum of distances
+    _lt0 = 0.0;
+    for (int i = 0; i < N; i++) {
+      _lt0 += (points[(i + 1) % N] - points[i]).norm();
+    }
     __R = rod::rod::create(points);
 
     real lavg = __R->lavg();
     __Rd = rod::dynamic::create(__R, 0.25 * lavg, 2.5 * lavg, 0.25 * lavg);
   }
-
-#if 1
-  std::vector<vec3> compute_coulomb_gradient() {
-    real eps = __Rd->_Cc;
-    std::vector<vec3> &x = __R->x();
-    std::vector<vec3> xc = __R->xc();
-
-    std::vector<vec3> g0 = calder::coulomb_force(*__R, x, 1.0 * eps, 4.0);
-    for (int i = 0; i < g0.size(); i++) {
-      gg::geometry_logger::line(x[i], x[i] + 1.0e-5 * g0[i],
-                                vec4(0.6, 0.0, 0.8, 1.0));
-      g0[i] *= -1.0e-3;
-    }
-    return g0;
-  }
-#endif
-
-#if 1
-  std::vector<vec3> compute_null_coulomb_gradient() {
-    real eps = __Rd->_Cc;
-    std::vector<vec3> &x = __R->x();
-    std::vector<vec3> xc = __R->xc();
-
-    std::vector<vec3> g0 = calder::null_coulomb_force(*__R, x, 1.0 * eps, 6.0);
-    for (int i = 0; i < g0.size(); i++) {
-      gg::geometry_logger::line(x[i], x[i] + 1.0e-9 * g0[i],
-                                vec4(0.6, 0.0, 0.8, 1.0));
-      g0[i] *= -5.0e-8;
-    }
-    return g0;
-  }
-#endif
 
 #if 1
   std::vector<vec3> compute_tangent_point_gradient() {
@@ -203,26 +145,75 @@ public:
     return g0;
   }
 #endif
-
-  std::vector<vec3> compute_boundary_gradients() {
-    std::vector<real> dists = __sdf->distance(__R->__x);
-    std::vector<vec3> gdists = __sdf->grad_distance(__R->__x);
-    std::vector<vec3> f(__R->__x.size(), vec3::Zero());
-
-    for (int i = 0; i < __R->__x.size(); i++) {
-#if 0
-      vec3 x = __R->__x[i];
-      if (dists[i] > 0.0) {
-        logger::line(x, x - dists[i] * gdists[i], vec4(0.0, 1.0, 0.0, 1.0));
-      } else {
-        logger::line(x, x - dists[i] * gdists[i], vec4(1.0, 0.0, 0.0, 1.0));
-      }
-#endif
-      if (dists[i] > 0.0) {
-        f[i] = dists[i] * gdists[i];
-      }
+  
+  sdf_base::ptr get_sdf(int frame) {
+    if ((frame / 400) % 2 == 0) {
+      return __sdf0;
+    } else {
+      return __sdf1;
     }
-    return f;
+  }
+  
+    
+  std::vector<real> compute_growth_weights(index_t frame){
+
+    auto sdf = get_sdf(frame);
+    
+    std::vector<real> dists = sdf->distance(__R->__x);
+    std::vector<real> w(__R->__x.size(), 0);
+    std::vector<vec3> xc = __R->xc();
+    std::vector<vec3> N = __R->N0c();
+    std::vector<index_t> verts = __R->get_vert_range();
+      for (auto i : verts) {
+        asawa::rod::consec_t c = __R->consec(i);
+
+        vec3 xi = xc[i];
+        vec3 Ni = N[i];
+        real di = dists[i];
+
+        #if 0
+          vec4 c0 = vec4(0.0, 1.0, 0.0, 1.0);
+        vec4 c1 = vec4(1.0, 0.0, 0.0, 1.0);
+        if(di > 0.0){
+            gg::geometry_logger::line(xi, xi + 0.1*di * Ni, c0);
+        } else{
+            gg::geometry_logger::line(xi, xi + 0.1*di * Ni, c1);
+        }
+        #endif
+        di = di < 0.0 ? -1.0 : 0.5*di;
+        w[i] = (1.0 - 0.28 * di);
+        w[i] = va::clamp(w[i], 0.0, 4.00);
+        // l0[i] = std::max(l0[i], 1e-8);
+      }
+  
+    return std::move(w);
+  }
+
+  std::vector<vec3> compute_boundary_gradients(index_t frame) {
+
+    auto sdf = get_sdf(frame);
+    
+    std::vector<real> dists = sdf->distance(__R->__x);
+    std::vector<vec3> gdists = sdf->grad_distance(__R->__x);
+    std::vector<vec3> f(__R->__x.size(), vec3::Zero());
+    std::vector<vec3> xc = __R->xc();
+    for (int i = 0; i < __R->__x.size(); i++) {
+      if (dists[i] > 0.0) {
+        f[i] = -dists[i] * gdists[i];
+      }
+        #if 0
+        vec4 c0 = vec4(0.0, 1.0, 0.0, 1.0);
+        vec4 c1 = vec4(1.0, 0.0, 0.0, 1.0);
+        if(dists[i] > 0.0){
+            gg::geometry_logger::line(xc[i], xc[i] + f[i], c0);
+        } else{
+            gg::geometry_logger::line(xc[i], xc[i] + f[i], c1);   
+        }
+        #endif
+    }
+
+    
+    return std::move(f);
   }
 
   void step_dynamics(int frame) {
@@ -239,32 +230,54 @@ public:
     // std::vector<vec3> fr = compute_coulomb_gradient();
     // std::vector<vec3> fr = compute_null_coulomb_gradient();
     std::vector<vec3> fr = compute_tangent_point_gradient();
-    std::vector<vec3> fb = compute_boundary_gradients();
-
-    for (int i = 0; i < __R->__x.size(); i++) {
-      f[i] -= 16.0 * fb[i];
-      f[i] -= 1e-6 * fr[i];
-    }
+    std::vector<vec3> fb = compute_boundary_gradients(frame);
+    real fwave = 0.5 + 0.5*cos(M_PI * real(frame)/250.0);
+    //f = 16.0 * fb - 1e-6*fwave* fr;
+    f = 8.0 * fb;
 
     hepworth::vec3_block::ptr x =
         hepworth::vec3_block::create(__R->__M, __R->__x, __R->__v, f);
     hepworth::quat_block::ptr u =
         hepworth::quat_block::create(__R->__J, __R->__u, __R->__o);
 
-    for (auto &l : l0)
-      l *= 1.3;
+
+
     // hepworth::rod::init_smooth(*__R, constraints, 0.2);
-    hepworth::block::init_helicity(*__R, constraints, 1.0e-2, {x});
-    hepworth::block::init_stretch_shear(*__R, constraints, l0, 5e-2, {x, u});
-    hepworth::block::init_bend_twist(*__R, constraints, 3e-2, {u}, true);
+
+
     //  hepworth::rod::init_smooth_bend(*__R, constraints, 0.01);
-#if 0
-    // hepworth::block::init_angle(*__R, constraints, vec3(1.0, 0.0, 0.0),
-    //                             0.20 * M_PI, 0.05, {u});
-    //  hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
-    //                            0.33 * M_PI, 0.1, {u});
-    hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
-                                0.15 * M_PI, 0.1, {u});
+#if 1
+    if(real(frame % 500) / 500.0 > 0.5 && 0){
+      for(int i = 0; i < l0.size(); i++){
+        l0[i] *= 1.035;
+      }
+      hepworth::block::init_stretch_shear(*__R, constraints, l0, 1e-1, {x, u});
+      hepworth::block::init_bend_twist(*__R, constraints, 1e-1, {u}, true);
+      hepworth::block::init_angle(*__R, constraints, vec3(1.0, 0.0, 0.0),
+                                  0.28 * M_PI, 0.1, {u});
+      //  hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
+      hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
+                                  0.25 * M_PI, 0.1, {u});
+    }
+    else{
+      //real th = (1000.0 - real(frame))/1000.0;
+      std::vector<real> w = compute_growth_weights(frame);
+      real lt = 0.0;
+      for(int i = 0; i < w.size(); i++){
+        lt += l0[i];
+      }
+      real wl = pow(_lt0 / lt, 0.25);
+      
+      for(int i = 0; i < w.size(); i++){
+        l0[i] *= w[i];
+      }
+
+      std::cout << " lt0 / lt: " << _lt0 / lt << " w: " << wl << std::endl;
+      hepworth::block::init_helicity(*__R, constraints, 1e-0*wl, {x});
+      
+      hepworth::block::init_stretch_shear(*__R, constraints, l0, 2e-2, {x, u});
+      hepworth::block::init_bend_twist(*__R, constraints, 2e-2, {u}, true);
+    }
 #endif
     hepworth::block::init_collisions(*__R, *__Rd, constraints, 1.0, {x, x});
     solver.set_constraints(constraints);
@@ -278,18 +291,19 @@ public:
 
     _frame = frame;
 
-    vec3_datum::ptr x_datum =
-        static_pointer_cast<vec3_datum>(__M->get_datum(0));
-    std::vector<vec3> &x = x_datum->data();
 
     step_dynamics(frame);
     __Rd->step();
+    if(frame > 3000)
+    exit(0);
     //__R->debug();
   }
 
   int _frame;
-  sdf_base::ptr __sdf;
-  shell::shell::ptr __M;
+  real _lt0 = 1.0;
+  sdf_base::ptr __sdf0;
+  sdf_base::ptr __sdf1;
+  
   rod::rod::ptr __R;
   rod::dynamic::ptr __Rd;
 };

@@ -17,7 +17,7 @@
 #include "gaudi/asawa/shell/walk.hpp"
 
 #include "gaudi/bontecou/laplacian.hpp"
-#include "gaudi/calder/quadric_fit.hpp"
+#include "gaudi/calder/least_squares_fit.hpp"
 #include "gaudi/calder/tangent_point_integrators.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
@@ -67,7 +67,7 @@ struct walk_config {
 
 const int N_walk_configs = 6;
 
-int iw0 = 4;
+int iw0 = 3;
 
 int iw1 = (iw0 + 1) % N_walk_configs;
 int iwp = (iw0 + N_walk_configs - 1) % N_walk_configs;
@@ -78,9 +78,9 @@ walk_config _wc[N_walk_configs] = {
     walk_config(100, Nw, 0.55, false, vec2(0.0, 0.0), false,
                 vec4(0.0, 0.0, 0.0, 0.0)), // jennifer_0
     walk_config(100, Nw, 0.23, true, vec2(3.0, -5.0), false,
-                vec4(0.0, 0.0, 0.0, 0.0)),
-    walk_config(100, Nw, 0.6, true, vec2(6.0, -8.0), false,
-                vec4(0.0, 0, 0.0, 0.0)),
+                vec4(0.0, 0.6, 0.0, 0.0)),
+    walk_config(100, Nw, 0.6, true, vec2(6.0, -8.0), true,
+                vec4(1.0, 0.1, 0.1, 0.25)),
     walk_config(100, Nw, 0.265, false, vec2(0.0, 0.0), true,
                 vec4(1.0, 0.2, 0.3, 0.00)),
     walk_config(100, Nw, 2.5, false, vec2(0.0, 0.0), true,
@@ -168,7 +168,9 @@ public:
     //__M = shell::load_obj("assets/jennifer_0.obj");
     //__M = shell::load_obj("assets/joel_0.obj");
     //__M = shell::load_obj("assets/hand.obj");
-    __M = shell::load_obj("assets/washington.obj");
+    //__M = shell::load_obj("assets/washington.obj");
+    __M = shell::load_obj("assets/messer.obj");
+    
 
     //__M = shell::load_crab();
 
@@ -187,8 +189,8 @@ public:
     /////////
     real l0 = asawa::shell::avg_length(*__M, x);
     // real C = 0.5;
-    real C = 1.5;
-    C = 2.0;
+    real C = 2.0;
+    C = 2.5;
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, 0.75 * C * l0);
 
     /////////////////////
@@ -210,15 +212,16 @@ public:
     //__R->_update_frames(normals);
 
     real lavg = 1.5 * l0;
-    __R->_r = 1.75 * lavg;
+    __R->_r = 2.5 * lavg;
     __Rd = rod::dynamic::create(__R, 0.75 * lavg, 2.25 * lavg, 0.25 * lavg);
     _eps = l0;
-    /*
-    for (int i = 0; i < 5; i++) {
+    #if 0
+    std::cout << "stepping: " << std::endl;
+    for (int i = 0; i < 1; i++) {
       __surf->step();
       __Rd->step();
     }
-*/
+#endif
     _knotted_surface = knotted_surface_module::create(__M, __surf, __R, __Rd);
     if (iw0 == 2) {
       _knotted_surface->add_angle_constraint(vec3(0.0, 0.0, 1.0), 0.15 * M_PI,
@@ -226,11 +229,9 @@ public:
       _knotted_surface->add_angle_constraint(vec3(0.0, 1.0, 0.0), 0.10 * M_PI,
                                              0.1);
     } else if (iw0 == 3) {
-      _knotted_surface->add_angle_constraint(vec3(0.0, 0.0, 1.0), 0.23 * M_PI,
+      _knotted_surface->add_angle_constraint(vec3(0.0, 0.0, 1.0), 0.025 * M_PI,
                                              0.1);
-      _knotted_surface->add_angle_constraint(vec3(0.0, 1.0, 0.0), 0.15 * M_PI,
-                                             0.1);
-      _knotted_surface->add_angle_constraint(vec3(1.0, 0.0, 0.0), 0.125 * M_PI,
+      _knotted_surface->add_angle_constraint(vec3(0.0, 1.0, 0.0), 0.037 * M_PI,
                                              0.1);
     } else if (iw0 == 5) {
       _knotted_surface->add_angle_constraint(vec3(0.0, 0.0, 1.0), 0.05 * M_PI,
@@ -242,7 +243,7 @@ public:
     _morphin->add_geometry(x, face_vert_ids, 1.0, vec3(0.0, 0.0, 0.0));
     _ccd = continuous_collision_detection::create(__M, __surf, 0.1 * l0);
   };
-
+  
   std::array<vec3, 2> get_colors(int frame) { return _get_colors(frame); }
 
   std::vector<vec3> rod_target(const std::vector<vec3> &target) {
@@ -580,12 +581,12 @@ public:
         _knotted_surface->init_step(_h);
         real t = calc_frame_t(frame, 600, 1800);
         real offset = 1.0;
-        offset = min(1.0 + 15.0 * t, 10.0);
+        offset = min(1.0 + 15.0 * t, 20.0);
         //_knotted_surface->set_helicity_constraint(true);
         //_knotted_surface->set_helicity_weight(1.0e-1);
         _knotted_surface->set_rod_offset(offset);
-        _knotted_surface->set_willmore_weight(4.0e-1);
-        _knotted_surface->set_area_weight(3.0e-3);
+        _knotted_surface->set_willmore_weight(5.0e-1);
+        _knotted_surface->set_area_weight(5.0e-2);
         _knotted_surface->set_shell_strain_weight(1.0e-1);
         _knotted_surface->set_shell_bending_weight(1.0e-1);
 
@@ -594,14 +595,14 @@ public:
         _knotted_surface->set_rod_bending_weight(1.0e-1);
         //_knotted_surface->set_rod_offset(10.0);
         // calc_torus_gradient();
-        _knotted_surface->add_rod_force(calc_tangent_point_gradient(), 1.0e-7);
+        _knotted_surface->add_rod_force(calc_tangent_point_gradient(), 3.0e-7);
         //_knotted_surface->add_shell_force(calc_quadric_grad(0.5, 2.0, 4.0), 4.0);
         /*
         _knotted_surface->add_shell_force(
             calc_quadric_normal_flow(1.0, 6.0, 2.0, 0.5), 0.5 / _h);
         */
 
-        _knotted_surface->add_shell_force(calc_cyclide_normal_flow(4.0, 1.0),
+        _knotted_surface->add_shell_force(calc_cyclide_normal_flow(0.5, 1.0),
                                           1.0 / _h);
 
         _knotted_surface->step(_h);
