@@ -115,7 +115,7 @@ namespace gaudi
       using Sum_Type = Rod_Sum_Type;
       using Bind_Fcn = Rod_Bind_Fcn;
       using Compute_Fcn = Rod_Compute_Fcn<T>;
-      
+
       static std::vector<T> integrate(Manifold_Type &M, const std::vector<vec3> &p_pov,
                                       Bind_Fcn bind_fcn = nullptr,
                                       Compute_Fcn compute_fcn = nullptr)
@@ -155,8 +155,8 @@ namespace gaudi
             T e = get_data<T>(node_type, j, 0, data);
             real w = get_data<real>(node_type, j, 1, data);
 
-            real dist = (pj - pi).norm();
-            real kappa = computeKg(dist, l0, p);
+            vec3 dp = pj - pi;
+            real kappa = calc_gaussian(dp, l0);
             sums[i] += w * kappa;
             return kappa * e;
           });
@@ -194,7 +194,7 @@ namespace gaudi
           {
             real w = get_data<real>(node_type, j, 0, data);
             vec3 dp = pj - pi;
-            real kappa = computeK(dp.norm(), l0, p);
+            real kappa = calc_inv_dist(dp, l0, p);
             return w * kappa * dp;
           });
       return us;
@@ -227,7 +227,7 @@ namespace gaudi
             vec3 dp = pj - pi;
             T.normalize();
             vec3 N = va::rejection_matrix(T) * dp;
-            real kappa = computeK(dp.norm(), l0, p);
+            real kappa = calc_inv_dist(dp, l0, p);
             return w * kappa * N;
           });
       return us;
@@ -276,7 +276,7 @@ namespace gaudi
             real l = (x1 - x0).norm();
             vec3 pj = va::project_on_line(x0, x1, pi);
             vec3 dp = pj - pi;
-            real kappa = computeK(dp.norm(), l0, p);
+            real kappa = calc_inv_dist(dp, l0, p);
             /*
             gg::geometry_logger::line(pj, pj + 0.1 * T, vec4(0.0, 0.0, 1.0, 1.0));
             gg::geometry_logger::line(pi, pj, vec4(0.0, 1.0, 0.0, 1.0));
@@ -298,7 +298,7 @@ namespace gaudi
             // Nr.normalize();
             vec3 pj = node.center();
             vec3 dp = pj - pi;
-            real kappa = computeK(dp.norm(), l0, p);
+            real kappa = calc_inv_dist(dp, l0, p);
 
             return kappa * dp.cross(T);
           });
@@ -363,7 +363,7 @@ namespace gaudi
 
             vec3 dpN = dp / dist;
 
-            real kappa = computeK(dist, l0, p);
+            real kappa = calc_inv_dist(dp, l0, p);
             real w = (x0 - x1).norm();
             sums[i] += w * kappa;
             return kappa * w * e * e.transpose();
@@ -386,7 +386,7 @@ namespace gaudi
             pj -= r * Nr[i];
             vec3 dp = pj - pi;
             real dist = va::norm(dp);
-            real kappa = computeK(dist, l0, p);
+            real kappa = calc_inv_dist(dp, l0, p);
             vec3 dpN = dp / dist;
 
             sums[i] += w * kappa;

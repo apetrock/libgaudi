@@ -95,7 +95,7 @@ std::vector<std::vector<vec3>> tunnel(asawa::shell::shell &M,
         real r = 0.5 * ndp / nNdp;
         vec3 cen = pj - r * Nj;
 
-        real kappa = computeK(dp.norm(), l0, p);
+        real kappa = calc_inv_dist(dp, l0, p);
         w += wj * kappa;
         Nh += wj * kappa * dp;
         // Nh += wj * kappa * (cen - pi);

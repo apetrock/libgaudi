@@ -328,7 +328,10 @@ public:
   }
 
   std::vector<real> &get_circulation() { return asawa::get_real_data(*_M, _i); }
+  
   std::vector<vec3> &get_vorticity() { return _w; }
+  void set_voriticity(const std::vector<vec3> &w) { _w = w; }
+
   index_t _i;
 
   real _b;

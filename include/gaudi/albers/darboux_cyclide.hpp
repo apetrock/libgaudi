@@ -14,6 +14,11 @@ namespace gaudi
     TYPEDEF_VEC(14)
     TYPEDEF_MAT(14)
     TYPEDEF_MAT_NM(4, 14)
+    // darboux cyclide is a type of implicit surface
+    // X = (x*x + y*y + z*z)
+    // L = m*x + n*y + k*z
+    // Q = A*x*x + B*y*y + C*z*z + 2*D*x*y + 2*E*x*z + 2*F*y*z + 2*G*x + 2*H*y + 2*I*z + J
+    // D = lambda * X * X + L * X + Q
 
     mat414 mk_darboux_A(vec3 dx)
     {
@@ -56,12 +61,72 @@ namespace gaudi
       return A;
     }
 
+    void unpack_darboux(const vec14 &Q, real &A, real &B, real &C, real &D, real &E, real &F, real &G, real &H, real &I, real &J, real &lambda, real &mu, real &nu, real &kappa)
+    {
+      A = Q[0];
+      B = Q[1];
+      C = Q[2];
+      D = Q[3];
+      E = Q[4];
+      F = Q[5];
+      G = Q[6];
+      H = Q[7];
+      I = Q[8];
+      J = Q[9];
+      lambda = Q[10];
+      mu = Q[11];
+      nu = Q[12];
+      kappa = Q[13];
+    }
+
+    vec3 darboux_grad(const vec14 &Q, const vec3 x_v)
+    {
+      real x = x_v[0], y = x_v[1], z = x_v[2];
+
+      real A, B, C, D, E, F, G, H, I, J, lambda, mu, nu, kappa;
+      unpack_darboux(Q, A, B, C, D, E, F, G, H, I, J, lambda, mu, nu, kappa);
+      real X = x_v.dot(x_v);
+      real L = vec3(mu, nu, kappa).dot(x_v);
+      real dx = 2.0 * A * x + 2.0 * D * y + 2.0 * E * z + 2.0 * G + 4.0 * lambda * x * X + mu * X + 2.0 * x * L;
+      real dy = 2.0 * B * y + 2.0 * D * x + 2.0 * F * z + 2.0 * H + 4.0 * lambda * y * X + nu * X + 2.0 * y * L;
+      real dz = 2.0 * C * z + 2.0 * E * x + 2.0 * F * y + 2.0 * I + 4.0 * lambda * z * X + kappa * X + 2.0 * z * L;
+      return vec3(dx, dy, dz);
+    }
+
+    vec3 darboux_center(const vec14 &Q)
+    {
+      // the machine spit this out, this is probably wrongo
+
+      real A, B, C, D, E, F, G, H, I, J, lambda, mu, nu, kappa;
+      unpack_darboux(Q, A, B, C, D, E, F, G, H, I, J, lambda, mu, nu, kappa);
+      vec3 center = vec3(-G / A, -H / B, -I / C);
+      return center;
+    }
+
+    mat3 darboux_hessian(const vec14 &Q, const vec3 x_v)
+    {
+      real x = x_v[0], y = x_v[1], z = x_v[2];
+      real A, B, C, D, E, F, G, H, I, J, lambda, mu, nu, kappa;
+      unpack_darboux(Q, A, B, C, D, E, F, G, H, I, J, lambda, mu, nu, kappa);
+      real X = x_v.dot(x_v);
+      real L = vec3(mu, nu, kappa).dot(x_v);
+      mat3 M = mat3::Zero();
+      M(0, 0) = 2.0 * A + 8.0 * lambda * x * x + 4.0 * lambda * X + 6.0 * mu * x + 2.0 * nu * y + 2.0 * kappa * z;
+      M(1, 1) = 2.0 * B + 8.0 * lambda * y * y + 4.0 * lambda * X + 2.0 * mu * x + 6.0 * nu * y + 2.0 * kappa * z;
+      M(2, 2) = 2.0 * C + 8.0 * lambda * z * z + 4.0 * lambda * X + 2.0 * mu * x + 2.0 * nu * y + 6.0 * kappa * z;
+
+      M(0, 1) = M(1, 0) = 2.0 * D + 8.0 * lambda * x * y + 2.0 * mu * y + 2.0 * nu * x;
+      M(0, 2) = M(2, 0) = 2.0 * E + 8.0 * lambda * x * z + 2.0 * mu * z + 2.0 * kappa * x;
+      M(1, 2) = M(2, 1) = 2.0 * F + 8.0 * lambda * y * z + 2.0 * nu * z + 2.0 * kappa * y;
+
+      return M;
+    }
+
     class darboux_cyclide
     {
     public:
-
       using coefficients = vec14;
-    
+
       darboux_cyclide()
       {
         A = mat14::Zero();

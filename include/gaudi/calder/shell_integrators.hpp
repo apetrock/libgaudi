@@ -104,15 +104,6 @@ namespace gaudi
       return us;
     }
 
-    real calc_w(vec3 dx, real eps, real p)
-    {
-      // std laplace kernel
-      real dist = dx.norm();
-      real distp = pow(dist, p);
-      real kappa = 1.0 / (distp + eps);
-      return kappa;
-    };
-
     template <typename T>
     class shell_integration_bundle
     {
@@ -125,45 +116,11 @@ namespace gaudi
       using Compute_Fcn = Shell_Compute_Fcn<T>;
 
       static std::vector<T> integrate(Manifold_Type &M, const std::vector<vec3> &p_pov,
-                       Bind_Fcn bind_fcn = nullptr,
-                       Compute_Fcn compute_fcn = nullptr)
+                                      Bind_Fcn bind_fcn = nullptr,
+                                      Compute_Fcn compute_fcn = nullptr)
       {
         return integrate_over_shell<T>(M, p_pov, bind_fcn, compute_fcn);
       }
-      
-    };
-
-    vec3 calc_dw(vec3 dx, real eps, real p)
-    {
-      real dist = dx.norm();
-      real distpm1 = pow(dist, p - 1);
-      real distp = pow(dist, p);
-      real distp_eps_2 = pow(distp + eps, 2.0);
-      return -p * distpm1 / distp_eps_2 * dx / dist;
-    };
-
-    // calc w/dw but using gaussian kernel instead of std laplace
-    real calc_kg(vec3 dx, real l)
-    {
-      real dist = dx.norm();
-      real distp = pow(dist, 2.0);
-      real lp = pow(l, 2.0);
-      real C = 1.0 / std::sqrt(2.0 * M_PI);
-      real expx2 = exp(-distp / lp);
-      real kappa = C / l * expx2;
-      // real kappa = exp(-distp / eps);
-      return kappa;
-    };
-
-    vec3 calc_dkg(vec3 dx, real l)
-    {
-      real dist = dx.norm();
-      real distp = pow(dist, 2.0);
-      real lp = pow(l, 2.0);
-      real C = 1.0 / std::sqrt(2.0 * M_PI);
-      real expx2 = exp(-distp / lp);
-
-      return -2.0 * dx * C / l / lp * expx2;
     };
 
     std::vector<vec3> smoothed_gradient(asawa::shell::shell &M,
@@ -192,7 +149,7 @@ namespace gaudi
             vec3 w = get_data<vec3>(node_type, j, 1, data);
             vec3 dp = pj - pi;
             // real kappa = calc_w(dp, l0, p);
-            real kappa = calc_kg(dp, l0);
+            real kappa = calc_gaussian(dp, l0);
 
             return kappa * w;
           });
@@ -221,7 +178,7 @@ namespace gaudi
             real w = get_data<real>(node_type, j, 0, data);
             vec3 dp = pj - pi;
             // vec3 dkappa = calc_dw(dp, l0, p);
-            vec3 dkappa = calc_dkg(dp, l0);
+            vec3 dkappa = calc_d_gaussian(dp, l0);
             return -dkappa * w;
           });
       return us;
@@ -269,8 +226,8 @@ namespace gaudi
             real w = get_data<real>(node_type, j, 1, data);
 
             real dist = (pj - pi).norm();
-
-            real kappa = computeKg(dist, l0, p);
+            vec3 dp = pj - pi;
+            real kappa = calc_gaussian(dp, l0);
 
             // real kappa = computeK(dist, l0, p);
             // if (i == 1250) {
@@ -327,14 +284,8 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
         real w = get_data<real>(node_type, j, 1, data);
 
         real dist = (pj - pi).norm();
-
-        real kappa = computeKg(dist, l0, p);
-        // real kappa = computeK(dist, l0, p);
-        // if (i == 1250) {
-        // logger::line(pi, pj, vec4(1.0, 0.3, 0.3, 1.0));
-        // log_v(pj, kappa * e);
-        // logger::line(pj, pj + 0.1 * vec3(e), vec4(0.0, 0.3, 1.0, 1.0));
-        //}
+        vec3 dp = pj - pi;
+        real kappa = calc_gaussian(dist, l0);
         sums[i] += w * kappa;
         return kappa * e;
       });
@@ -372,7 +323,7 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
             vec3 dp = pj - pi;
             real dist = dp.norm();
             // dist = std::max(dist, l0);
-            real kappa = computeKm(dist, l0, p);
+            real kappa = calc_mollified(dp, l0, p);
 
             return -kappa * dp.cross(w);
           });
@@ -414,9 +365,8 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
             real wN = Nj.norm();
             Nj /= wN;
             vec3 dp = pj - pi;
-            real dist = dp.norm();
             // real w = calc_w(dp, l0, p);
-            real w = computeK(dist, l0, p);
+            real w = calc_inv_dist(dp, l0, p);
             sums[i] += w * wN;
             return w * wN * dp * dp.transpose();
           });
@@ -482,9 +432,7 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
             if (Nidp > 0)
               return mat3::Zero();
 
-            real dist = dp.norm();
-
-            real w = computeK(dist, l0, p);
+            real w = calc_inv_dist(dp, l0, p);
             sums[i] += w * wN;
             return w * wN * Nj * Nj.transpose();
             // return w * wN * dp * dp.transpose();

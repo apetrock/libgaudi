@@ -15,6 +15,8 @@
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
 
+#include "weight_functions.hpp"
+
 #include "tree_code.hpp"
 #include <algorithm>
 #include <cmath>
@@ -25,37 +27,6 @@
 namespace gaudi {
 
 namespace calder {
-
-real computeK(real dist, real C, real p) {
-  // std laplace kernel
-  real distp = pow(dist, p);
-  real lp = pow(C, p);
-  real kappa = 1.0 / (distp + lp);
-  return kappa;
-};
-
-real computeKm(real dist, real C, real p) {
-  // mollified kernel
-  real distp = pow(dist, p);
-  real lp = pow(C, p);
-
-  real kappa = (1.0 - exp(-distp / lp)) / distp;
-  return kappa;
-};
-
-// gaussian kernel
-real computeKg(real dist, real C, real p) {
-  real distp = pow(dist, p);
-  real lp = pow(C, p);
-  real kappa = exp(-distp / lp);
-  return kappa;
-};
-
-real compute3K(real dist) {
-  real dist3 = dist * dist * dist;
-  real kappa = 1.0 / dist3;
-  return kappa;
-};
 
 std::vector<real> fast_winding(const arp::T3::ptr &face_tree,
                                const std::vector<vec3> &pov,
@@ -112,8 +83,7 @@ std::vector<real> fast_winding(const arp::T3::ptr &face_tree,
         const vec3 &N = N_datum->node_data()[j];
         vec3 pj = node.center();
         vec3 dp = pj - pi;
-        real dist = va::norm(dp);
-        real kappa = computeK(dist, 0.0, 3.0);
+        real kappa = calc_inv_dist(dp, 0.0, 3.0);
         return 0.25 / M_PI * kappa * va::dot(N, dp);
       },
       0.25);
@@ -242,10 +212,8 @@ std::vector<vec3> fast_dist_gradient(const arp::T3::ptr &face_tree,
 
         std::array<real, 4> cp = va::closest_point({p0, p1, p2}, pi);
         vec3 pT = cp[1] * p0 + cp[2] * p1 + cp[3] * p2;
+        vec3 dp = pT - pi;
         real dist = cp[0];
-        real kappa = computeK(dist, 0.0, 3.0);
-        // W[i] += w * kappa;
-        // normals[i] += w * kappa * N;
         if (dist < dists[i]) {
           dists[i] = dist;
           normals[i] = (pT - pi).normalized();
@@ -266,9 +234,7 @@ std::vector<vec3> fast_dist_gradient(const arp::T3::ptr &face_tree,
         vec3 dp = pj - pi;
         // real dist = va::project_to_nullspace(dp, N);
         real dist = va::norm(dp);
-        real kappa = computeK(dist, 0.0, 3.0);
-        // W[i] += w * kappa;
-        // normals[i] += w * kappa * N;
+
         if (dist < dists[i]) {
           dists[i] = dist;
           normals[i] = dp.normalized();
@@ -410,8 +376,7 @@ std::vector<real> fast_winding(asawa::shell::shell &M,
         const vec3 &N = N_datum->node_data()[j];
         vec3 pj = node.center();
         vec3 dp = pj - pi;
-        real dist = va::norm(dp);
-        real kappa = computeK(dist, 0.0, 3.0);
+        real kappa = calc_inv_dist(dp, 0.0, 3.0);
         return 0.25 / M_PI * kappa * va::dot(N, dp);
       });
 
@@ -463,7 +428,7 @@ std::vector<mat3> fast_frame(asawa::shell::shell &M, const std::vector<vec3> &x,
         vec3 pj = va::project_on_line(x0, x1, pi);
         vec3 dp = pj - pi;
         real dist = va::norm(dp);
-        real kappa = computeK(dist, l0, 3.0);
+        real kappa = calc_inv_dist(dp, l0, 3.0);
         sums[i] += kappa;
         return kappa * e * e.transpose();
       },
@@ -477,8 +442,7 @@ std::vector<mat3> fast_frame(asawa::shell::shell &M, const std::vector<vec3> &x,
 
         vec3 pj = node.center();
         vec3 dp = pj - pi;
-        real dist = va::norm(dp);
-        real kappa = computeK(dist, l0, 3.0);
+        real kappa = calc_inv_dist(dp, l0, 3.0);
         sums[i] += kappa;
         return kappa * E;
       });

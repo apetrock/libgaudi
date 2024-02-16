@@ -11,7 +11,6 @@
 #define __TANGENT_POINT_INTEGRATOR__
 
 #include "gaudi/logger.hpp"
-#include "integrators.hpp"
 #include "rod_integrators.hpp"
 #include "shell_integrators.hpp"
 #include <cmath>
@@ -19,352 +18,284 @@
 #include <ostream>
 #include <vector>
 
-namespace gaudi {
+namespace gaudi
+{
 
-namespace calder {
+  namespace calder
+  {
 
-real compute_tangent_point_radius(const vec3 &dp, const vec3 &N) {
-  real ndp = dp.squaredNorm();
-  real nPdp = (N * N.transpose() * dp).norm();
-  return 0.5 * ndp / nPdp;
-};
+    std::vector<vec3> tangent_point_gradient(asawa::rod::rod &R,
+                                             const std::vector<vec3> &p_pov,
+                                             const std::vector<real> &w_pov,
+                                             const std::vector<vec3> &T_pov,
+                                             real l0, real p = 3.0)
+    {
+      std::vector<real> weights = R.l0();
+      std::vector<vec3> Tc = R.N2c();
 
-real compute_tangent_point_inverse_radius(const vec3 &dp, const vec3 &N,
-                                          const real &l0, const double &p) {
-  // computes the inverse radius of the tangent point to power p
-  real ndp = dp.norm();
-  real nPdp = (N * N.transpose() * dp).norm();
-  real lp = pow(l0, p);
-  real k = pow(nPdp, p) / (pow(ndp, 2.0 * p) + lp);
-  return k;
-};
+      std::vector<vec3> us = integrate_over_rod<vec3>(
+          R, p_pov,
+          [&weights, &Tc](const std::vector<index_t> &edge_ids, Rod_Sum_Type &sum)
+          {
+            sum.bind(calder::scalar_datum::create(edge_ids, weights));
+            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
+          },
+          [l0, &w_pov, &T_pov, p](const index_t i, const index_t j, //
+                                  const vec3 &pi, const vec3 &pj,
+                                  const std::vector<calder::datum::ptr> &data,
+                                  Rod_Sum_Type::Node_Type node_type, //
+                                  const Rod_Sum_Type::Node &node,    //
+                                  const Rod_Sum_Type::Tree &tree) -> vec3
+          {
+            real wi = w_pov[i];
+            vec3 Ti = T_pov[i];
+            real wj = get_data<real>(node_type, j, 0, data);
+            vec3 Tj = get_data<vec3>(node_type, j, 1, data);
+            Ti.normalize();
+            Tj.normalize();
 
-vec3 compute_tangent_point_radius_grad_0(const vec3 &dp0, const vec3 &N,
-                                         const real &l0, const real &p) {
-  real Ndp = dp0.dot(N);
+            vec3 dp = pj - pi;
+            // vec3 Ni = va::rejection_matrix(Ti) * dp;
+            // vec3 Nj = va::rejection_matrix(Tj) * dp;
+            vec3 Bi = Ti.cross(dp).normalized();
+            vec3 Bj = Tj.cross(dp).normalized();
+            vec3 Ni = Bi.cross(Ti).normalized();
+            vec3 Nj = Bj.cross(Tj).normalized();
 
-  real ndp = dp0.norm();
-  vec3 dp = ndp * dp0.normalized();
+            vec3 gj = calc_tangent_point_radius_grad(dp, Nj, l0, p);
+            vec3 gi = calc_tangent_point_radius_grad(-dp, Ni, l0, p);
 
-  mat3 P = N * N.transpose();
-  vec3 Pdp = P * dp;
+            return 0.5 * (wi * gi - wj * gj);
+          });
+      return us;
+    }
 
-  real nPdp = (Pdp).norm();
-  real lp = pow(l0, p);
-  real l2 = pow(l0, 2.0);
+    std::vector<real> tangent_point_energy(asawa::shell::shell &M,
+                                           const std::vector<vec3> &p_pov,
+                                           const std::vector<real> &w_pov,
+                                           const std::vector<vec3> &N_pov, //
+                                           real l0, real p = 3.0)
+    {
+      std::vector<vec3> x = asawa::get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Nc = asawa::shell::face_normals(M, x);
 
-  real k = pow(nPdp, p) / (pow(ndp, 2.0 * p) + lp);
-  vec3 dk0 = P * Pdp / (nPdp * nPdp + l2);
-  vec3 dk1 = 2.0 * dp / (ndp * ndp + l2);
-  vec3 dk = p * k * (dk0 - dk1);
-  // vec3 dk = p * k * (dk0);
+      std::vector<real> us = integrate_over_shell<real>(
+          M, p_pov,
+          [&weights, &Nc](const std::vector<index_t> &face_ids,
+                          Shell_Sum_Type &sum)
+          {
+            sum.bind(calder::scalar_datum::create(face_ids, weights));
+            sum.bind(calder::vec3_datum::create(face_ids, Nc));
+          },
+          [l0, &w_pov, &N_pov, p](const index_t i, const index_t j, //
+                                  const vec3 &pi, const vec3 &pj,
+                                  const std::vector<calder::datum::ptr> &data,
+                                  Shell_Sum_Type::Node_Type node_type, //
+                                  const Shell_Sum_Type::Node &node,    //
+                                  const Shell_Sum_Type::Tree &tree) -> real
+          {
+            real wi = w_pov[i];
+            vec3 Ni = N_pov[i];
 
-  return dk;
-};
+            real wj = get_data<real>(node_type, j, 0, data);
+            vec3 Nj = get_data<vec3>(node_type, j, 1, data);
 
-vec3 compute_tangent_point_radius_grad_1(const vec3 &dp0, const vec3 &N,
-                                         const real &l0, const real &p) {
-  real Ndp = dp0.dot(N);
+            wi = std::max(wi, 1e-6);
+            wj = std::max(wj, 1e-6);
 
-  real fx = dp0.norm();
-  vec3 dfx = fx * dp0.normalized();
+            Ni.normalize();
+            Nj.normalize();
 
-  mat3 P = N * N.transpose();
-  vec3 Pdp = P * dp0;
+            vec3 dp = pj - pi;
 
-  real fPx = (Pdp).norm();
-  vec3 dfPx = fPx * Pdp.normalized();
+            real jr = calc_tangent_point_inverse_radius(dp, Nj, l0, p);
+            real ir = calc_tangent_point_inverse_radius(-dp, Ni, l0, p);
+            // not sure if symmetric?
+            return wj * jr;
+          });
+      return us;
+    }
 
-  real lp = pow(l0, p);
+    std::vector<vec3> tangent_point_gradient(asawa::shell::shell &M,
+                                             const std::vector<vec3> &p_pov,
+                                             const std::vector<real> &w_pov,
+                                             const std::vector<vec3> &N_pov,
+                                             real l0, real p = 3.0)
+    {
+      std::vector<vec3> x = asawa::get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Nc = asawa::shell::face_normals(M, x);
 
-  real denom = (pow(fx, 2.0 * p) + lp);
-  real k = pow(fPx, p) / denom;
-  vec3 dk0 = P * pow(fPx, p - 1.0) * dfPx / denom;
-  vec3 dk1 = 2.0 * k * pow(fx, 2.0 * p - 1.0) * dfx / denom;
-  vec3 dk = p * (dk0 - dk1);
-  // vec3 dk = p * k * (dk0);
+      std::vector<vec3> us = integrate_over_shell<vec3>(
+          M, p_pov,
+          [&weights, &Nc](const std::vector<index_t> &face_ids,
+                          Shell_Sum_Type &sum)
+          {
+            sum.bind(calder::scalar_datum::create(face_ids, weights));
+            sum.bind(calder::vec3_datum::create(face_ids, Nc));
+          },
+          [l0, &w_pov, &N_pov, p](const index_t i, const index_t j, //
+                                  const vec3 &pi, const vec3 &pj,
+                                  const std::vector<calder::datum::ptr> &data,
+                                  Shell_Sum_Type::Node_Type node_type, //
+                                  const Shell_Sum_Type::Node &node,    //
+                                  const Shell_Sum_Type::Tree &tree) -> vec3
+          {
+            real wi = w_pov[i];
+            vec3 Ni = N_pov[i];
+            real wj = get_data<real>(node_type, j, 0, data);
+            vec3 Nj = get_data<vec3>(node_type, j, 1, data);
+            wi = std::max(wi, 1e-6);
+            wj = std::max(wj, 1e-6);
 
-  return -dk;
-};
+            vec3 dp = pj - pi;
+            // if (i == 0) {
+            //   logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
+            //   logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
+            // }
+            Ni.normalize();
+            Nj.normalize();
+            real pk = p;
 
-vec3 compute_tangent_point_radius_grad(const vec3 &dp, const vec3 &N,
-                                       const real &l0, const real &p) {
+            vec3 gj = calc_tangent_point_radius_grad(dp, Nj, l0, pk);
+            vec3 gi = calc_tangent_point_radius_grad(-dp, Ni, l0, pk);
 
-  real fx = dp.norm();
-  mat3 P = N * N.transpose();
-  vec3 Px = P * dp;
+            return wi * gi - wj * gj;
+            // return wi * gi;
 
-  real fPx = Px.norm();
-  // vec3 dfPx = fPx * Pdp.normalized();
+            // return -wj * gj;
+          });
+      return us;
+    }
 
-  real lp = pow(l0, p);
-  real l2 = pow(l0, 2.0);
+    std::vector<mat3> tangent_point_gradient_frame(asawa::shell::shell &M,
+                                                   const std::vector<vec3> &p_pov,
+                                                   const std::vector<real> &w_pov,
+                                                   const std::vector<vec3> &N_pov,
+                                                   real l0, real p = 3.0)
+    {
+      std::vector<vec3> x = asawa::get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Nc = asawa::shell::face_normals(M, x);
 
-  real k = pow(fPx, p) / (pow(fx, 2.0 * p) + lp);
+      std::vector<real> sums(x.size(), 0.0);
+      std::vector<mat3> us = integrate_over_shell<mat3>(
+          M, p_pov,
+          [&weights, &Nc](const std::vector<index_t> &face_ids,
+                          Shell_Sum_Type &sum)
+          {
+            sum.bind(calder::scalar_datum::create(face_ids, weights));
+            sum.bind(calder::vec3_datum::create(face_ids, Nc));
+          },
+          [l0, &w_pov, &N_pov, p](const index_t i, const index_t j, //
+                                  const vec3 &pi, const vec3 &pj,
+                                  const std::vector<calder::datum::ptr> &data,
+                                  Shell_Sum_Type::Node_Type node_type, //
+                                  const Shell_Sum_Type::Node &node,    //
+                                  const Shell_Sum_Type::Tree &tree) -> mat3
+          {
+            real wi = w_pov[i];
+            vec3 Ni = N_pov[i];
+            real wj = get_data<real>(node_type, j, 0, data);
+            vec3 Nj = get_data<vec3>(node_type, j, 1, data);
+            wi = std::max(wi, 1e-6);
+            wj = std::max(wj, 1e-6);
 
-  //  P = N*Nt => P * P = N*Nt*N*Nt = N*Nt = P
-  vec3 dk = p * k * (Px / (Px.dot(Px) + l2) - 2.0 * dp / (dp.dot(dp) + l2));
+            vec3 dp = pj - pi;
+            // if (i == 0) {
+            //   logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
+            //   logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
+            // }
+            Ni.normalize();
+            Nj.normalize();
+            real pk = p;
 
-  // vec3 dk = p * k * (dk0);
+            vec3 gj = calc_tangent_point_radius_grad(dp, Nj, l0, pk);
+            vec3 gi = calc_tangent_point_radius_grad(-dp, Ni, l0, pk);
+            vec3 wg = wi * gi - wj * gj;
+            // sums[i] += wi + wj;
+            return wg * wg.transpose();
+            // return wi * gi;
 
-  return dk;
-};
+            // return -wj * gj;
+          });
+      /*
+      for (int i = 0; i < us.size(); i++) {
+        us[i] /= sums[i];
+      }
+      */
+      return us;
+    }
 
-std::vector<vec3> tangent_point_gradient(asawa::rod::rod &R,
-                                         const std::vector<vec3> &p_pov,
-                                         const std::vector<real> &w_pov,
-                                         const std::vector<vec3> &T_pov,
-                                         real l0, real p = 3.0) {
-  std::vector<real> weights = R.l0();
-  std::vector<vec3> Tc = R.N2c();
+    std::vector<vec3> tangent_point_center(asawa::shell::shell &M,
+                                           const std::vector<vec3> &p_pov,
+                                           const std::vector<real> &w_pov,
+                                           const std::vector<vec3> &N_pov, real l0,
+                                           real p = 3.0)
+    {
+      std::vector<vec3> x = asawa::get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Nc = asawa::shell::face_normals(M, x);
+      std::vector<vec3> acc(p_pov.size(), vec3::Zero());
+      std::vector<real> acc_w(p_pov.size(), 0.0);
 
-  std::vector<vec3> us = integrate_over_rod<vec3>(
-      R, p_pov,
-      [&weights, &Tc](const std::vector<index_t> &edge_ids, Rod_Sum_Type &sum) {
-        sum.bind(calder::scalar_datum::create(edge_ids, weights));
-        sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-      },
-      [l0, &w_pov, &T_pov, p](const index_t i, const index_t j, //
-                              const vec3 &pi, const vec3 &pj,
-                              const std::vector<calder::datum::ptr> &data,
-                              Rod_Sum_Type::Node_Type node_type, //
-                              const Rod_Sum_Type::Node &node,    //
-                              const Rod_Sum_Type::Tree &tree) -> vec3 {
-        real wi = w_pov[i];
-        vec3 Ti = T_pov[i];
-        real wj = get_data<real>(node_type, j, 0, data);
-        vec3 Tj = get_data<vec3>(node_type, j, 1, data);
-        Ti.normalize();
-        Tj.normalize();
+      std::vector<vec3> us = integrate_over_shell<vec3>(
+          M, p_pov,
+          [&weights, &Nc](const std::vector<index_t> &face_ids,
+                          Shell_Sum_Type &sum)
+          {
+            sum.bind(calder::scalar_datum::create(face_ids, weights));
+            sum.bind(calder::vec3_datum::create(face_ids, Nc));
+          },
+          [l0, &w_pov, &N_pov, &acc, &acc_w,
+           p](const index_t i, const index_t j, //
+              const vec3 &pi, const vec3 &pj,
+              const std::vector<calder::datum::ptr> &data,
+              Shell_Sum_Type::Node_Type node_type, //
+              const Shell_Sum_Type::Node &node,    //
+              const Shell_Sum_Type::Tree &tree) -> vec3
+          {
+            real wi = w_pov[i];
+            vec3 Ni = N_pov[i];
+            real wj = get_data<real>(node_type, j, 0, data);
+            vec3 Nj = get_data<vec3>(node_type, j, 1, data);
+            wi = std::max(wi, 1e-6);
+            wj = std::max(wj, 1e-6);
 
-        vec3 dp = pj - pi;
-        // vec3 Ni = va::rejection_matrix(Ti) * dp;
-        // vec3 Nj = va::rejection_matrix(Tj) * dp;
-        vec3 Bi = Ti.cross(dp).normalized();
-        vec3 Bj = Tj.cross(dp).normalized();
-        vec3 Ni = Bi.cross(Ti).normalized();
-        vec3 Nj = Bj.cross(Tj).normalized();
+            vec3 dp = pj - pi;
+            real dpNj = dp.dot(Nj);
+            if (dp.dot(Ni) > 0)
+            {
+              return vec3::Zero();
+            }
 
-        vec3 gj = compute_tangent_point_radius_grad(dp, Nj, l0, p);
-        vec3 gi = compute_tangent_point_radius_grad(-dp, Ni, l0, p);
+            //  if (i == 0) {
+            //    logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
+            //    logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
+            //  }
+            Ni.normalize();
+            Nj.normalize();
+            real pk = p;
+            real ri = calc_tangent_point_radius(dp, Ni);
+            real rj = calc_tangent_point_radius(-dp, Nj);
+            vec3 ci = pi - 0.5 * ri * Ni;
+            vec3 cj = pj - 0.5 * rj * Nj;
+            real kij = calc_inv_dist(dp, l0, p);
+            acc[i] += kij * pj;
+            acc_w[i] += kij;
+            return vec3::Zero();
+            // return wi * gi;
 
-        return 0.5 * (wi * gi - wj * gj);
-      });
-  return us;
-}
+            // return -wj * gj;
+          });
+      for (int i = 0; i < acc.size(); i++)
+      {
+        us[i] = acc[i] / acc_w[i];
+      }
+      return us;
+    }
 
-std::vector<real> tangent_point_energy(asawa::shell::shell &M,
-                                       const std::vector<vec3> &p_pov,
-                                       const std::vector<real> &w_pov,
-                                       const std::vector<vec3> &N_pov, //
-                                       real l0, real p = 3.0) {
-  std::vector<vec3> x = asawa::get_vec_data(M, 0);
-  std::vector<real> weights = asawa::shell::face_areas(M, x);
-  std::vector<vec3> Nc = asawa::shell::face_normals(M, x);
-
-  std::vector<real> us = integrate_over_shell<real>(
-      M, p_pov,
-      [&weights, &Nc](const std::vector<index_t> &face_ids,
-                      Shell_Sum_Type &sum) {
-        sum.bind(calder::scalar_datum::create(face_ids, weights));
-        sum.bind(calder::vec3_datum::create(face_ids, Nc));
-      },
-      [l0, &w_pov, &N_pov, p](const index_t i, const index_t j, //
-                              const vec3 &pi, const vec3 &pj,
-                              const std::vector<calder::datum::ptr> &data,
-                              Shell_Sum_Type::Node_Type node_type, //
-                              const Shell_Sum_Type::Node &node,    //
-                              const Shell_Sum_Type::Tree &tree) -> real {
-        real wi = w_pov[i];
-        vec3 Ni = N_pov[i];
-
-        real wj = get_data<real>(node_type, j, 0, data);
-        vec3 Nj = get_data<vec3>(node_type, j, 1, data);
-
-        wi = std::max(wi, 1e-6);
-        wj = std::max(wj, 1e-6);
-
-        Ni.normalize();
-        Nj.normalize();
-
-        vec3 dp = pj - pi;
-
-        real jr = compute_tangent_point_inverse_radius(dp, Nj, l0, p);
-        real ir = compute_tangent_point_inverse_radius(-dp, Ni, l0, p);
-        // not sure if symmetric?
-        return wj * jr;
-      });
-  return us;
-}
-
-std::vector<vec3> tangent_point_gradient(asawa::shell::shell &M,
-                                         const std::vector<vec3> &p_pov,
-                                         const std::vector<real> &w_pov,
-                                         const std::vector<vec3> &N_pov,
-                                         real l0, real p = 3.0) {
-  std::vector<vec3> x = asawa::get_vec_data(M, 0);
-  std::vector<real> weights = asawa::shell::face_areas(M, x);
-  std::vector<vec3> Nc = asawa::shell::face_normals(M, x);
-
-  std::vector<vec3> us = integrate_over_shell<vec3>(
-      M, p_pov,
-      [&weights, &Nc](const std::vector<index_t> &face_ids,
-                      Shell_Sum_Type &sum) {
-        sum.bind(calder::scalar_datum::create(face_ids, weights));
-        sum.bind(calder::vec3_datum::create(face_ids, Nc));
-      },
-      [l0, &w_pov, &N_pov, p](const index_t i, const index_t j, //
-                              const vec3 &pi, const vec3 &pj,
-                              const std::vector<calder::datum::ptr> &data,
-                              Shell_Sum_Type::Node_Type node_type, //
-                              const Shell_Sum_Type::Node &node,    //
-                              const Shell_Sum_Type::Tree &tree) -> vec3 {
-        real wi = w_pov[i];
-        vec3 Ni = N_pov[i];
-        real wj = get_data<real>(node_type, j, 0, data);
-        vec3 Nj = get_data<vec3>(node_type, j, 1, data);
-        wi = std::max(wi, 1e-6);
-        wj = std::max(wj, 1e-6);
-
-        vec3 dp = pj - pi;
-        // if (i == 0) {
-        //   logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
-        //   logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
-        // }
-        Ni.normalize();
-        Nj.normalize();
-        real pk = p;
-
-        vec3 gj = compute_tangent_point_radius_grad(dp, Nj, l0, pk);
-        vec3 gi = compute_tangent_point_radius_grad(-dp, Ni, l0, pk);
-
-        return wi * gi - wj * gj;
-        // return wi * gi;
-
-        // return -wj * gj;
-      });
-  return us;
-}
-
-std::vector<mat3> tangent_point_gradient_frame(asawa::shell::shell &M,
-                                               const std::vector<vec3> &p_pov,
-                                               const std::vector<real> &w_pov,
-                                               const std::vector<vec3> &N_pov,
-                                               real l0, real p = 3.0) {
-  std::vector<vec3> x = asawa::get_vec_data(M, 0);
-  std::vector<real> weights = asawa::shell::face_areas(M, x);
-  std::vector<vec3> Nc = asawa::shell::face_normals(M, x);
-
-  std::vector<real> sums(x.size(), 0.0);
-  std::vector<mat3> us = integrate_over_shell<mat3>(
-      M, p_pov,
-      [&weights, &Nc](const std::vector<index_t> &face_ids,
-                      Shell_Sum_Type &sum) {
-        sum.bind(calder::scalar_datum::create(face_ids, weights));
-        sum.bind(calder::vec3_datum::create(face_ids, Nc));
-      },
-      [l0, &w_pov, &N_pov, p](const index_t i, const index_t j, //
-                              const vec3 &pi, const vec3 &pj,
-                              const std::vector<calder::datum::ptr> &data,
-                              Shell_Sum_Type::Node_Type node_type, //
-                              const Shell_Sum_Type::Node &node,    //
-                              const Shell_Sum_Type::Tree &tree) -> mat3 {
-        real wi = w_pov[i];
-        vec3 Ni = N_pov[i];
-        real wj = get_data<real>(node_type, j, 0, data);
-        vec3 Nj = get_data<vec3>(node_type, j, 1, data);
-        wi = std::max(wi, 1e-6);
-        wj = std::max(wj, 1e-6);
-
-        vec3 dp = pj - pi;
-        // if (i == 0) {
-        //   logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
-        //   logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
-        // }
-        Ni.normalize();
-        Nj.normalize();
-        real pk = p;
-
-        vec3 gj = compute_tangent_point_radius_grad(dp, Nj, l0, pk);
-        vec3 gi = compute_tangent_point_radius_grad(-dp, Ni, l0, pk);
-        vec3 wg = wi * gi - wj * gj;
-        // sums[i] += wi + wj;
-        return wg * wg.transpose();
-        // return wi * gi;
-
-        // return -wj * gj;
-      });
-  /*
-  for (int i = 0; i < us.size(); i++) {
-    us[i] /= sums[i];
-  }
-  */
-  return us;
-}
-
-std::vector<vec3> tangent_point_center(asawa::shell::shell &M,
-                                       const std::vector<vec3> &p_pov,
-                                       const std::vector<real> &w_pov,
-                                       const std::vector<vec3> &N_pov, real l0,
-                                       real p = 3.0) {
-  std::vector<vec3> x = asawa::get_vec_data(M, 0);
-  std::vector<real> weights = asawa::shell::face_areas(M, x);
-  std::vector<vec3> Nc = asawa::shell::face_normals(M, x);
-  std::vector<vec3> acc(p_pov.size(), vec3::Zero());
-  std::vector<real> acc_w(p_pov.size(), 0.0);
-
-  std::vector<vec3> us = integrate_over_shell<vec3>(
-      M, p_pov,
-      [&weights, &Nc](const std::vector<index_t> &face_ids,
-                      Shell_Sum_Type &sum) {
-        sum.bind(calder::scalar_datum::create(face_ids, weights));
-        sum.bind(calder::vec3_datum::create(face_ids, Nc));
-      },
-      [l0, &w_pov, &N_pov, &acc, &acc_w,
-       p](const index_t i, const index_t j, //
-          const vec3 &pi, const vec3 &pj,
-          const std::vector<calder::datum::ptr> &data,
-          Shell_Sum_Type::Node_Type node_type, //
-          const Shell_Sum_Type::Node &node,    //
-          const Shell_Sum_Type::Tree &tree) -> vec3 {
-        real wi = w_pov[i];
-        vec3 Ni = N_pov[i];
-        real wj = get_data<real>(node_type, j, 0, data);
-        vec3 Nj = get_data<vec3>(node_type, j, 1, data);
-        wi = std::max(wi, 1e-6);
-        wj = std::max(wj, 1e-6);
-
-        vec3 dp = pj - pi;
-        real dpNj = dp.dot(Nj);
-        if (dp.dot(Ni) > 0) {
-          return vec3::Zero();
-        }
-
-        //  if (i == 0) {
-        //    logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
-        //    logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
-        //  }
-        Ni.normalize();
-        Nj.normalize();
-        real pk = p;
-        real ri = compute_tangent_point_radius(dp, Ni);
-        real rj = compute_tangent_point_radius(-dp, Nj);
-        vec3 ci = pi - 0.5 * ri * Ni;
-        vec3 cj = pj - 0.5 * rj * Nj;
-        real kij = computeK(dp.norm(), l0, p);
-        acc[i] += kij * pj;
-        acc_w[i] += kij;
-        return vec3::Zero();
-        // return wi * gi;
-
-        // return -wj * gj;
-      });
-  for (int i = 0; i < acc.size(); i++) {
-    us[i] = acc[i] / acc_w[i];
-  }
-  return us;
-}
-
-} // namespace calder
+  } // namespace calder
 } // namespace gaudi
 #endif
