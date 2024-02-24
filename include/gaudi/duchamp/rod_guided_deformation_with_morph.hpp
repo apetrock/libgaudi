@@ -67,7 +67,7 @@ struct walk_config {
 
 const int N_walk_configs = 6;
 
-int iw0 = 3;
+int iw0 = 2;
 
 int iw1 = (iw0 + 1) % N_walk_configs;
 int iwp = (iw0 + N_walk_configs - 1) % N_walk_configs;
@@ -164,12 +164,12 @@ public:
   rod_guided_deformation_with_morph() {
     //__M = load_cube();
     //__M = shell::load_bunny();
-    //__M = shell::load_obj("assets/dennis.obj");
+    __M = shell::load_obj("assets/dennis.obj");
     //__M = shell::load_obj("assets/jennifer_0.obj");
     //__M = shell::load_obj("assets/joel_0.obj");
     //__M = shell::load_obj("assets/hand.obj");
     //__M = shell::load_obj("assets/washington.obj");
-    __M = shell::load_obj("assets/messer.obj");
+    //__M = shell::load_obj("assets/messer.obj");
     
 
     //__M = shell::load_crab();
@@ -190,7 +190,7 @@ public:
     real l0 = asawa::shell::avg_length(*__M, x);
     // real C = 0.5;
     real C = 2.0;
-    C = 2.5;
+    C = 1.0;
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, 0.75 * C * l0);
 
     /////////////////////
@@ -317,7 +317,7 @@ public:
     std::vector<vec3> Nr = _knotted_surface->get_rod_normals(R, M, cN * _eps);
 
     std::vector<real> Q =
-        calder::quadric_sdf(R, Nr, x_s_f, N_s_f, cQ * _eps, 3.0, 6.0, t);
+        calder::quadric_sdf(R, Nr, x_s_f, N_s_f, cQ * _eps, 3.0);
 
 #if 1
     int i = 0;
@@ -376,7 +376,7 @@ public:
     //        calder::darboux_cyclide_sdf(R, Nr, x_s_f, N_s_f, cQ * _eps, 3.0);
 
     std::vector<real> Q =
-        calder::darboux_cyclide_sdf(R, Nr, x_s, N_s_v, cQ * _eps, 3.0);
+        calder::darboux_cyclide_sdf_quadric_centers(R, Nr, x_s, N_s_v, cQ * _eps, 3.0);
 
 #if 1
     int i = 0;

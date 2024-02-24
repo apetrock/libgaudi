@@ -79,6 +79,28 @@ namespace gaudi
       kappa = Q[13];
     }
 
+    real eval_darboux(const vec14 &Q, const vec3 x_v)
+    {
+      vec4 p = {x_v[0], x_v[1], x_v[2], 1.0};
+
+      real x = x_v[0], y = x_v[1], z = x_v[2];
+      real A, B, C, D, E, F, G, H, I, J, lambda, mu, nu, kappa;
+
+      unpack_darboux(Q, A, B, C, D, E, F, G, H, I, J, lambda, mu, nu, kappa);
+      mat4 Qm = mat4::Zero();
+      Qm << A, D, E, G,
+          D, B, F, H,
+          E, F, C, I,
+          G, H, I, J;
+
+      real X = x_v.dot(x_v);
+      real L = vec3(mu, nu, kappa).dot(x_v);
+      real Q_ = p.transpose() * Qm * p;
+
+      real D_ = lambda * X * X + L * X + Q_;
+      return D_;
+    }
+
     vec3 darboux_grad(const vec14 &Q, const vec3 x_v)
     {
       real x = x_v[0], y = x_v[1], z = x_v[2];

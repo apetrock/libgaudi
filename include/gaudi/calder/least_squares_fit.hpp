@@ -154,8 +154,7 @@ namespace gaudi
     std::vector<vec10> quadric(asawa::rod::rod &R, const std::vector<vec3> &Nr,
                                const std::vector<vec3> &p_pov,
                                const std::vector<vec3> &N_pov, real l0,
-                               real p = 3.0, real w_r = 6.0,
-                               real k_r = 0.5)
+                               real p = 3.0)
     {
 
       std::vector<real> weights = R.l0();
@@ -173,9 +172,9 @@ namespace gaudi
     std::vector<vec3> quadric_grad(asawa::rod::rod &R, const std::vector<vec3> &Nr,
                                    const std::vector<vec3> &p_pov,
                                    const std::vector<vec3> &N_pov, real l0,
-                                   real p = 3.0, real w_r = 6.0, real k_r = 0.5)
+                                   real p = 3.0)
     {
-      std::vector<vec10> Q = quadric(R, Nr, p_pov, N_pov, l0, p, w_r, k_r);
+      std::vector<vec10> Q = quadric(R, Nr, p_pov, N_pov, l0, p);
       std::vector<vec3> out(p_pov.size(), vec3::Zero());
       for (int i = 0; i < Q.size(); i++)
       {
@@ -191,9 +190,9 @@ namespace gaudi
     std::vector<real> quadric_sdf(asawa::rod::rod &R, const std::vector<vec3> &Nr,
                                   const std::vector<vec3> &p_pov,
                                   const std::vector<vec3> &N_pov, real l0,
-                                  real p = 3.0, real w_r = 6.0, real k_r = 0.5)
+                                  real p = 3.0)
     {
-      std::vector<vec10> Q = quadric(R, Nr, p_pov, N_pov, l0, p, w_r, k_r);
+      std::vector<vec10> Q = quadric(R, Nr, p_pov, N_pov, l0, p);
       std::vector<real> out(p_pov.size(), 0.0);
       for (int i = 0; i < Q.size(); i++)
       {
@@ -202,6 +201,24 @@ namespace gaudi
         {
           out[i] = 0.0;
         }
+      }
+      return out;
+    }
+
+    std::vector<vec3> quadric_center(asawa::rod::rod &R,
+                                     const std::vector<vec3> &Nr,
+                                     const std::vector<vec3> &p_pov,
+                                     const std::vector<vec3> &n_pov, real l0,
+                                     real p = 3.0)
+    {
+      std::vector<vec10> Q = quadric(R, Nr, p_pov, n_pov, l0, p);
+      std::vector<vec3> out(p_pov.size(), vec3::Zero());
+      for (int i = 0; i < Q.size(); i++)
+      {
+        vec3 x = p_pov[i];
+        vec10 Qi = Q[i];
+        vec3 cen = albers::quadric_center(Q[i]);
+        out[i] = cen;
       }
       return out;
     }
@@ -471,7 +488,7 @@ namespace gaudi
                                        const std::vector<vec3> &Nr,
                                        const std::vector<vec3> &p_pov,
                                        const std::vector<vec3> &N_pov, real l0,
-                                       real p = 3.0, real w0 = 1e-2)
+                                       real p = 3.0)
     {
       std::vector<real> weights = R.l0();
       std::vector<vec3> Ns = Nr;
@@ -489,7 +506,7 @@ namespace gaudi
                                            const std::vector<vec3> &N_pov, real l0,
                                            real p = 3.0)
     {
-      std::vector<vec14> Q = darboux_cyclide(R, Nr, p_pov, N_pov, l0, p, 1e-3);
+      std::vector<vec14> Q = darboux_cyclide(R, Nr, p_pov, N_pov, l0, p);
       std::vector<vec3> out(p_pov.size(), vec3::Zero());
       for (int i = 0; i < Q.size(); i++)
       {
@@ -508,11 +525,33 @@ namespace gaudi
                                           const std::vector<vec3> &N_pov, real l0,
                                           real p = 3.0)
     {
-      std::vector<vec14> Q = darboux_cyclide(R, Nr, p_pov, N_pov, l0, p, 0.0);
+      std::vector<vec14> Q = darboux_cyclide(R, Nr, p_pov, N_pov, l0, p);
       std::vector<real> out(p_pov.size(), 0.0);
       for (int i = 0; i < Q.size(); i++)
       {
         out[i] = Q[i][9]; //* q.segment(6, 3);
+        if (std::isnan(out[i]))
+        {
+          out[i] = 0.0;
+        }
+      }
+      return out;
+    }
+
+    std::vector<real> darboux_cyclide_sdf_quadric_centers(asawa::rod::rod &R,
+                                                          const std::vector<vec3> &Nr,
+                                                          const std::vector<vec3> &p_pov,
+                                                          const std::vector<vec3> &N_pov, real l0,
+                                                          real p = 3.0)
+    {
+      std::vector<vec3> cens = quadric_center(R, Nr, p_pov, N_pov, l0, p);
+      std::vector<vec14> Q = darboux_cyclide(R, Nr, cens, N_pov, l0, p);
+      std::vector<real> out(p_pov.size(), 0.0);
+      for (int i = 0; i < Q.size(); i++)
+      {
+        out[i] = Q[i][9]; //* q.segment(6, 3);
+        vec3 dp = p_pov[i] - cens[i];
+        out[i] = albers::eval_darboux(Q[i], dp);
         if (std::isnan(out[i]))
         {
           out[i] = 0.0;
@@ -533,8 +572,8 @@ namespace gaudi
       {
         Ns[i] = weights[i] * Ns[i];
       }
-       return generic_fit<albers::darboux_cyclide, shell_bundle>(
-           M, Ns, p_pov, N_pov, l0, p, shell_inv_rad_weight);
+      return generic_fit<albers::darboux_cyclide, shell_bundle>(
+          M, Ns, p_pov, N_pov, l0, p, shell_inv_rad_weight);
       return generic_fit<albers::darboux_cyclide, shell_bundle>(
           M, Ns, p_pov, N_pov, l0, p, shell_inv_dist_weight);
     }
