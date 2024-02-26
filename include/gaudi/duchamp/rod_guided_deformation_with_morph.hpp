@@ -67,7 +67,7 @@ struct walk_config {
 
 const int N_walk_configs = 6;
 
-int iw0 = 2;
+int iw0 = 0;
 
 int iw1 = (iw0 + 1) % N_walk_configs;
 int iwp = (iw0 + N_walk_configs - 1) % N_walk_configs;
@@ -190,7 +190,7 @@ public:
     real l0 = asawa::shell::avg_length(*__M, x);
     // real C = 0.5;
     real C = 2.0;
-    C = 1.0;
+    //C = 1.0;
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, 0.75 * C * l0);
 
     /////////////////////
@@ -572,7 +572,7 @@ public:
       return real(frame - start_frame) / real(end_frame - start_frame);
     };
 
-    frame = frame;
+    frame = frame + 600;
     // walk(__surf->_Cc);
     if (frame < 3000) {
 

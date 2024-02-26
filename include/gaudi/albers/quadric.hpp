@@ -69,25 +69,18 @@ namespace gaudi
         {
             mat3 A = quadric_hessian(Q);
             vec3 b = -vec3(Q[6], Q[7], Q[8]);
-            vec3 c = A.colPivHouseholderQr().solve(b);
+            //hmmm... what if we solve in least squares sense?
+            A =  A + 1e-8 * mat3::Identity();
             Eigen::FullPivLU<Eigen::MatrixXd> lu_decomp(A);
             int rank = lu_decomp.rank();
             if (rank < 3)
             {
-                std::cout << "rank: " << rank << std::endl;
+                return vec3::Zero();
             }
-            // vec3 c = -A.inverse() * b;
-#if 0
-  real det = A.determinant();
-  Eigen::FullPivLU<Eigen::MatrixXd> lu_decomp(A);
-  int rank = lu_decomp.rank();
-  std::cout << "Q: " << Q.transpose() << std::endl;
-  std::cout << "rank: " << rank << std::endl;
-  std::cout << "det: " << det << std::endl;
 
-#endif
-            std::cout << "calc'd grad: " << quadric_grad(Q, c).norm() << std::endl;
+            vec3 c = lu_decomp.solve(b);
             return c;
+            
         }
 
 

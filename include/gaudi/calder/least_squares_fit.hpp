@@ -85,13 +85,24 @@ namespace gaudi
                        typename M_TYPE::Sum_Type::Node_Type node_type, //
                        const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p = 3.0)
     {
-      return dp.dot(Nj) > 0 ? 1.0 : 0.0;
+      // return dp.dot(Nj) > 0 ? 1.0 : 0.0;
+      return dp.dot(Ni) < 0 ? 1.0 : 0.0;
+    }
+    template <typename M_TYPE>
+    real inv_convex_weight(int i, int j, //
+                           const std::vector<calder::datum::ptr> &data,
+                           typename M_TYPE::Sum_Type::Node_Type node_type, //
+                           const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p = 3.0)
+    {
+      // return dp.dot(Nj) > 0 ? 1.0 : 0.0;
+      return dp.dot(Ni) < 0 ? calc_inv_dist(dp, l0, p) : 0.0;
     }
 
     GENERATE_WEIGHT_FUNCS(identity_weight)
     GENERATE_WEIGHT_FUNCS(inv_dist_weight)
     GENERATE_WEIGHT_FUNCS(inv_rad_weight)
     GENERATE_WEIGHT_FUNCS(convex_weight)
+    GENERATE_WEIGHT_FUNCS(inv_convex_weight)
 
     template <typename F_TYPE, typename M_TYPE>
     std::vector<typename F_TYPE::coefficients> generic_fit(typename M_TYPE::Manifold_Type &M,
@@ -104,9 +115,9 @@ namespace gaudi
     {
 
       using type = typename M_TYPE::type;
-
+      std::cout << "gf 0 " << std::endl;
       std::vector<F_TYPE> accumulators(p_pov.size());
-
+      std::cout << "gf 1 " << std::endl;
       std::vector<type> us = M_TYPE::integrate(
           M, p_pov,
           [&Ns](const std::vector<index_t> &edge_ids, typename M_TYPE::Sum_Type &sum)
@@ -129,7 +140,7 @@ namespace gaudi
 
             vec3 dp = pj - pi;
             real wf = weight_func(i, j, data, node_type, dp, Ni, Nj, l0, p);
-            real kappa = calc_inv_dist(dp, l0, p);
+
             real w_total = wj * wf;
 
             if (w_total < 1e-8)
@@ -141,13 +152,16 @@ namespace gaudi
 
             return 0.0;
           });
-
+      std::cout << "gf 2 " << std::endl;
       std::vector<typename F_TYPE::coefficients> out(p_pov.size(), F_TYPE::coefficients::Zero());
+      std::cout << "gf 3 " << std::endl;
+      std::cout << "out.size() " << out.size() << " " << accumulators.size() << std::endl;
+
       for (int i = 0; i < accumulators.size(); i++)
       {
         out[i] = accumulators[i].solve();
       }
-
+      std::cout << "gf 4 " << std::endl;
       return out;
     }
 
@@ -166,7 +180,7 @@ namespace gaudi
       }
 
       return generic_fit<albers::quadric, rod_bundle>(
-          R, Ns, p_pov, N_pov, l0, p, rod_inv_dist_weight);
+          R, Ns, p_pov, N_pov, l0, p, rod_inv_convex_weight);
     }
 
     std::vector<vec3> quadric_grad(asawa::rod::rod &R, const std::vector<vec3> &Nr,
@@ -319,7 +333,7 @@ namespace gaudi
         vec3 x = p_pov[i];
         vec10 Qi = Q[i];
         vec3 cen = albers::quadric_center(Q[i]);
-        vec3 g = albers::quadric_grad(Q[i], p_pov[i]);
+        // vec3 g = albers::quadric_grad(Q[i], p_pov[i]);
 
         out[i] = cen;
       }
@@ -343,10 +357,9 @@ namespace gaudi
       {
         return dp.dot(Nj) > 0 ? 1.0 : 0.0;
       };
-      std::vector<albers::sphere> accum(p_pov.size());
       std::vector<vec4> S = generic_fit<albers::sphere, shell_bundle>(
           M, asawa::shell::face_normals(M, x), p_pov, n_pov, l0, p,
-          convex_weight);
+          shell_inv_convex_weight);
 
       for (int i = 0; i < S.size(); i++)
       {
@@ -356,6 +369,45 @@ namespace gaudi
         //  logger::line(x, x + dc, vec4(0.0, 1.0, 0.0, 1.0));
       }
 
+      return S;
+    }
+
+    std::vector<vec4> sphere(asawa::rod::rod &R, const std::vector<vec3> &Nr,
+                             const std::vector<vec3> &p_pov,
+                             const std::vector<vec3> &N_pov, real l0,
+                             real p = 3.0)
+    {
+
+      std::vector<real> weights = R.l0();
+
+      std::vector<vec3> Ns = Nr;
+      for (int i = 0; i < Ns.size(); i++)
+      {
+        Ns[i] = weights[i] * Nr[i];
+      }
+
+      std::vector<vec4> S = generic_fit<albers::sphere, rod_bundle>(
+          R, Nr, p_pov, N_pov, l0, p,
+          rod_inv_convex_weight);
+
+      return S;
+    }
+
+    std::vector<vec4> constrained_sphere(asawa::rod::rod &R, const std::vector<vec3> &Nr,
+                                         const std::vector<vec3> &p_pov,
+                                         const std::vector<vec3> &N_pov, real l0,
+                                         real p = 3.0)
+    {
+
+      std::vector<real> weights = R.l0();
+      std::vector<vec3> Ns = Nr;
+      for (int i = 0; i < Ns.size(); i++)
+      {
+        Ns[i] = weights[i] * Nr[i];
+      }
+      std::vector<vec4> S = generic_fit<albers::constrained_sphere, rod_bundle>(
+          R, Nr, p_pov, N_pov, l0, p,
+          rod_inv_convex_weight);
       return S;
     }
 
@@ -544,7 +596,33 @@ namespace gaudi
                                                           const std::vector<vec3> &N_pov, real l0,
                                                           real p = 3.0)
     {
-      std::vector<vec3> cens = quadric_center(R, Nr, p_pov, N_pov, l0, p);
+#if 1
+      std::cout << "using constrained sphere\n";
+      std::vector<vec4> S = constrained_sphere(R, Nr, p_pov, N_pov, l0, 3.0);
+      std::cout << "done\n";
+      std::vector<vec3> cens(S.size());
+      for (int i = 0; i < cens.size(); i++)
+      {
+        // quadric center is relative to the point
+        vec3 x = p_pov[i];
+        vec3 dc = S[i].segment(0, 3);
+
+        real lc = dc.norm();
+        lc = std::clamp(lc, 0.0, 20.0 * l0);
+        dc = dc.normalized() * lc;
+
+        //logger::line(x, x + dc, vec4(0.0, 1.0, 0.0, 1.0));
+        cens[i] = p_pov[i] + dc;
+      }
+#else
+      std::vector<vec3> cens(p_pov);
+      std::vector<vec4> S = sphere(R, Nr, p_pov, N_pov, l0, p);
+      for (int i = 0; i < cens.size(); i++)
+      {
+        // quadric center is relative to the point
+        cens[i] = S[i].segment(0, 3);
+      }
+#endif
       std::vector<vec14> Q = darboux_cyclide(R, Nr, cens, N_pov, l0, p);
       std::vector<real> out(p_pov.size(), 0.0);
       for (int i = 0; i < Q.size(); i++)
