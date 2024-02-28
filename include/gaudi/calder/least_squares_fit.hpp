@@ -598,7 +598,7 @@ namespace gaudi
     {
 #if 1
       std::cout << "using constrained sphere\n";
-      std::vector<vec4> S = constrained_sphere(R, Nr, p_pov, N_pov, l0, 3.0);
+      std::vector<vec4> S = constrained_sphere(R, Nr, p_pov, N_pov, l0, 2.0);
       std::cout << "done\n";
       std::vector<vec3> cens(S.size());
       for (int i = 0; i < cens.size(); i++)
@@ -608,7 +608,7 @@ namespace gaudi
         vec3 dc = S[i].segment(0, 3);
 
         real lc = dc.norm();
-        lc = std::clamp(lc, 0.0, 20.0 * l0);
+        lc = std::clamp(lc, 0.0, 8.0 * l0);
         dc = dc.normalized() * lc;
 
         //logger::line(x, x + dc, vec4(0.0, 1.0, 0.0, 1.0));

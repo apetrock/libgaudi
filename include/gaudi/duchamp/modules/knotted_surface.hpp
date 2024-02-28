@@ -515,8 +515,11 @@ public:
     std::cout << "main constraints" << std::endl;
     hepworth::block::init_stretch_shear(*__R, constraints, lr,
                                         _config.w_rod_strain, {Xr, Ur});
+    hepworth::block::init_straight(*__R, constraints, _config.w_rod_straight,
+                                     {Ur});
     hepworth::block::init_bend_twist(*__R, constraints, _config.w_rod_bending,
                                      {Ur});
+                                     
     if (_helicity_constraint) {
       hepworth::block::init_helicity(*__R, constraints, _config.w_helicity,
                                      {Xr});
@@ -600,6 +603,7 @@ public:
   void set_shell_bending_weight(real w) { _config.w_shell_bending = w; }
   void set_rod_strain_weight(real w) { _config.w_rod_strain = w; }
   void set_rod_bending_weight(real w) { _config.w_rod_bending = w; }
+  void set_rod_straight_weight(real w) { _config.w_rod_straight = w; }
 
   void set_rod_pin_weight(const real &w) { _config.w_rod_pin = w; }
   void set_rod_weld_weight(real w) { _config.w_rod_weld = w; }
@@ -652,6 +656,7 @@ public:
     real w_area = 2e-2;
     real w_shell_strain = 1.0e-2;
     real w_shell_bending = 1.0e-1;
+    real w_rod_straight = 1.0e-2;
     real w_rod_strain = 1.0e-1;
     real w_rod_bending = 1.0e-1;
     real w_rod_weld = 1.0;

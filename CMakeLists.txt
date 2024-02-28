@@ -238,8 +238,8 @@ add_subdirectory(src)
 
 add_subdirectory(projects/blank_template)
 #add_subdirectory(projects/dynamic_shell_test)
-#add_subdirectory(projects/rod_constraints_test)
-add_subdirectory(projects/rod_constraints_coupled_test)
+add_subdirectory(projects/rod_constraints_test)
+#add_subdirectory(projects/rod_constraints_coupled_test)
 add_subdirectory(projects/gravitys_rainbow)
 
 #add_subdirectory(projects/shell_constraints_test)

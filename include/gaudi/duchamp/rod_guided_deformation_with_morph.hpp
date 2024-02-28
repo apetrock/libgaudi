@@ -164,11 +164,11 @@ public:
   rod_guided_deformation_with_morph() {
     //__M = load_cube();
     //__M = shell::load_bunny();
-    __M = shell::load_obj("assets/dennis.obj");
+    //__M = shell::load_obj("assets/dennis.obj");
     //__M = shell::load_obj("assets/jennifer_0.obj");
     //__M = shell::load_obj("assets/joel_0.obj");
     //__M = shell::load_obj("assets/hand.obj");
-    //__M = shell::load_obj("assets/washington.obj");
+  __M = shell::load_obj("assets/washington.obj");
     //__M = shell::load_obj("assets/messer.obj");
     
 
@@ -491,7 +491,7 @@ public:
 
     hepworth::block::init_smooth(*__R, constraints, 0.2, {Xr});
     hepworth::block::init_stretch_shear(*__R, constraints, l_r, 1e-3, {Xr, Ur});
-    hepworth::block::init_bend_twist(*__R, constraints, 1e-3, {Ur});
+    hepworth::block::init_straight(*__R, constraints, 1e-3, {Ur});
     // hepworth::block::init_collisions(*__R, *__Rd, constraints, 1.0, {Xr,
     // Xr},
     //                                  1.0);
@@ -585,8 +585,8 @@ public:
         //_knotted_surface->set_helicity_constraint(true);
         //_knotted_surface->set_helicity_weight(1.0e-1);
         _knotted_surface->set_rod_offset(offset);
-        _knotted_surface->set_willmore_weight(5.0e-1);
-        _knotted_surface->set_area_weight(5.0e-2);
+        _knotted_surface->set_willmore_weight(3.0e-1);
+        _knotted_surface->set_area_weight(1.0e-2);
         _knotted_surface->set_shell_strain_weight(1.0e-1);
         _knotted_surface->set_shell_bending_weight(1.0e-1);
 

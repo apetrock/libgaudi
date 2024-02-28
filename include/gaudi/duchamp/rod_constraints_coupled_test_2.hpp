@@ -281,7 +281,7 @@ public:
 
       // hepworth::rod::init_smooth(*__R, constraints, 0.2);
       hepworth::block::init_stretch_shear(*R, constraints, l0, 4.0e-2, {x, u});
-      hepworth::block::init_bend_twist(*R, constraints, 1.0e-2, {u}, true);
+      hepworth::block::init_straight(*R, constraints, 1.0e-2, {u}, true);
 
       hepworth::block::init_collisions(*R, *__Rd[k], constraints, 2.0, {x, x});
     }

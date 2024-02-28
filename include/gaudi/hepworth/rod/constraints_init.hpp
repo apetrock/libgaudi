@@ -75,13 +75,13 @@ void init_stretch_shear(const asawa::rod::rod &rod,
   }
 }
 
-void init_bend_twist(const asawa::rod::rod &rod,
+void init_straight(const asawa::rod::rod &rod,
                      std::vector<projection_constraint::ptr> &constraints,
                      const real &w) {
   int Ni = rod.corner_count();
   for (int i = 0; i < rod.corner_count(); i++) {
     index_t j = rod.next(i);
-    constraints.push_back(bend_twist::create({i, j, Ni}, w));
+    constraints.push_back(straight::create({i, j, Ni}, w));
   }
 }
 

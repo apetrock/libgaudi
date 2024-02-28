@@ -174,7 +174,7 @@ public:
       }
       // hepworth::rod::init_smooth(*__R, constraints, 0.2);
       hepworth::block::init_stretch_shear(*R, constraints, l0, str, {x, u});
-      hepworth::block::init_bend_twist(*R, constraints, twi, {u}, true);
+      hepworth::block::init_straight(*R, constraints, twi, {u}, true);
 #if 1
       if (k == 0) {
         hepworth::block::init_angle(*R, constraints, vec3(1.0, 0.0, 0.0),

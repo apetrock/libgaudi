@@ -126,15 +126,15 @@ public:
   real _l0;
 };
 
-class bend_twist : public projection_constraint {
+class straight : public projection_constraint {
 public:
-  typedef std::shared_ptr<bend_twist> ptr;
+  typedef std::shared_ptr<straight> ptr;
 
   static ptr create(const std::vector<index_t> &ids, const real &w) {
-    return std::make_shared<bend_twist>(ids, w);
+    return std::make_shared<straight>(ids, w);
   }
 
-  bend_twist(const std::vector<index_t> &ids, const real &w)
+  straight(const std::vector<index_t> &ids, const real &w)
       : projection_constraint(ids, w) {}
 
   virtual void project(const vecX &q, vecX &p) {

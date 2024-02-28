@@ -104,7 +104,7 @@ public:
 
     vec3 d2 = u * vec3(0, 0, 1);
     // d2.normalize();
-
+    //logger::line(q0, q0 + 0.1 * d2, vec4(1.0, 0.0, 0.0, 1.0));
     quat du = quat::FromTwoVectors(d2, dq);
 
     u = du * u;
@@ -149,16 +149,16 @@ public:
   real _l0;
 };
 
-class bend_twist : public block_constraint {
+class straight : public block_constraint {
 public:
-  typedef std::shared_ptr<bend_twist> ptr;
+  typedef std::shared_ptr<straight> ptr;
 
   static ptr create(const std::vector<index_t> &ids, const real &w,
                     std::vector<sim_block::ptr> blocks) {
-    return std::make_shared<bend_twist>(ids, w, blocks);
+    return std::make_shared<straight>(ids, w, blocks);
   }
 
-  bend_twist(const std::vector<index_t> &ids, const real &w,
+  straight(const std::vector<index_t> &ids, const real &w,
              std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks) {}
   virtual std::string name() { return typeid(*this).name(); }
@@ -170,28 +170,10 @@ public:
 
     quat ui = _blocks[0]->get_quat(ii, q);
     quat uj = _blocks[0]->get_quat(jj, q);
-    // vec3 ov = 0.5 * (ui.conjugate() * uj).vec().normalized();
-    // quat om = quat(0.0, ov.x(), ov.y(), ov.z());
-    // ui = ui * om;
-    // uj = uj * om.conjugate();
-
-    // quat uij = ui.slerp(0.5, uj);
-    // quat uij = va::exp_slerp(ui, uj, 0.5);
     quat uij = va::slerp(ui, uj, 0.5);
 
     uij.normalize();
 
-    // std::cout << "u: " << uij.coeffs().transpose() << std::endl;
-    if (uij.coeffs().hasNaN()) {
-      std::cout << __PRETTY_FUNCTION__ << " uij is nan" << std::endl;
-      std::cout << ui << " " << uj << std::endl;
-      std::cout << ii << " " << jj << std::endl;
-      exit(0);
-    }
-    if (uj.coeffs().hasNaN()) {
-      std::cout << __PRETTY_FUNCTION__ << " uj is nan" << std::endl;
-      exit(0);
-    }
     ui = uij;
     uj = uij;
 
@@ -211,6 +193,63 @@ public:
     id0 += 8;
   }
 };
+
+
+class bend_twist : public block_constraint {
+public:
+
+  //DEFINE_CREATE_FUNC(bend_twist)
+  static ptr create(const std::vector<index_t> &ids, 
+             const std::vector<quat> &u, const real &w,
+             std::vector<sim_block::ptr> blocks) {
+    return std::make_shared<bend_twist>(ids, u, w, blocks);
+  }
+  bend_twist(const std::vector<index_t> &ids, 
+             const std::vector<quat> &u, const real &w,
+             std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks) {
+
+        quat ui = u[ids[0]];
+        quat uj = u[ids[1]];
+        _O = ui.inverse() * uj;
+      }
+
+  virtual std::string name() { return typeid(*this).name(); }
+
+  virtual void project(const vecX &q, vecX &p) {
+
+    index_t ii = this->_ids[0];
+    index_t jj = this->_ids[1];
+
+    quat ui = _blocks[0]->get_quat(ii, q);
+    quat uj = _blocks[0]->get_quat(jj, q);
+    quat O = ui.inverse() * uj;
+    quat dO = O.inverse() * _O;
+    //dO = uj * ui.inverse() * _
+    ui = ui * dO.inverse();
+    uj = uj * dO;
+
+    ui.normalize();
+    uj.normalize();
+
+    p.block(_id0 + 0, 0, 4, 1) = _w * vec4(ui.coeffs().data());
+    p.block(_id0 + 4, 0, 4, 1) = _w * vec4(uj.coeffs().data());
+  }
+
+  virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
+    _id0 = id0;
+    index_t i = _blocks[0]->get_offset_idx(this->_ids[0]);
+    index_t j = _blocks[0]->get_offset_idx(this->_ids[1]);
+
+    for (int ax = 0; ax < 4; ax++)
+      triplets.push_back(trip(_id0 + 0 + ax, i + ax, _w));
+    for (int ax = 0; ax < 4; ax++)
+      triplets.push_back(trip(_id0 + 4 + ax, j + ax, _w));
+    id0 += 8;
+  }
+  quat _O;
+};
+
 
 class angle : public block_constraint {
 public:
@@ -285,6 +324,7 @@ public:
     id0 += 8;
   }
   real _phi = 0.0;
+
   vec3 _z = vec3(1.0, 0.0, 0.0);
 };
 
