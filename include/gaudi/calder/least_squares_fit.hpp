@@ -98,6 +98,25 @@ namespace gaudi
       return dp.dot(Ni) < 0 ? calc_inv_dist(dp, l0, p) : 0.0;
     }
 
+    template <typename M_TYPE>
+    real cauchy_weight(int i, int j, //
+                         const std::vector<calder::datum::ptr> &data,
+                         typename M_TYPE::Sum_Type::Node_Type node_type, //
+                         const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p = 3.0)
+    {
+      return calc_cauchy(dp, l0, p);
+    }
+
+    template <typename M_TYPE>
+    real cauchy_convex_weight(int i, int j, //
+                           const std::vector<calder::datum::ptr> &data,
+                           typename M_TYPE::Sum_Type::Node_Type node_type, //
+                           const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p = 3.0)
+    {
+      // return dp.dot(Nj) > 0 ? 1.0 : 0.0;
+      return dp.dot(Ni) < 0 ? calc_inv_dist(dp, l0, p) : 0.0;
+    }
+
     GENERATE_WEIGHT_FUNCS(identity_weight)
     GENERATE_WEIGHT_FUNCS(inv_dist_weight)
     GENERATE_WEIGHT_FUNCS(inv_rad_weight)

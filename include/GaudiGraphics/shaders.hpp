@@ -792,7 +792,7 @@ void main() {
     vec3 B = normalize(cross(T, normalize(c)));
     vec3 N = normalize(cross(B, T));
     
-    const int Nv = 3;
+    const int Nv = 6;
     float Nvf = float(Nv);
     vec3[Nv] circ;
     for (int i = 0; i < Nv; i++) {

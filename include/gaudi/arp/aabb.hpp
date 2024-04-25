@@ -322,7 +322,7 @@ public:
         mx = std::max(mx, dp.norm());
       }
     }
-    gg::geometry_logger::line(c, c + mx * N, vec4(1.0, 0.0, 0.0, 0.0));
+    //gg::geometry_logger::line(c, c + mx * N, vec4(1.0, 0.0, 0.0, 0.0));
     half.set(c, mx * N);
 #endif
   }

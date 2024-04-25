@@ -241,6 +241,7 @@ namespace gaudi
 
       std::vector<vec3> &x = R.x();
       std::vector<vec3> T = R.dirs();
+      std::vector<real> weights = R.l0();
 
       index_t i = 0;
       for (auto &t : T)
@@ -248,61 +249,30 @@ namespace gaudi
         t *= phi[i++];
       }
 
-      std::vector<index_t> edge_verts = R.get_edge_vert_ids();
-      std::vector<index_t> edge_map = R.get_edge_map();
-      std::vector<index_t> edge_ids = R.get_vert_range();
-
-      Rod_Tree_Type::ptr edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 12);
-
-      calder::fast_summation<Rod_Tree_Type> sum(*edge_tree);
-
-      sum.bind<vec3>(edge_ids, T);
-
-      std::vector<vec3> us = sum.calc<vec3>(
-          p_pov,
-          [&](const index_t &i, const index_t &j, const vec3 &pi,
-              const std::vector<calder::datum::ptr> &data,
-              Rod_Sum_Type::Node_Type node_type, //
-              const Rod_Sum_Type::Node &node,    //
-              const Rod_Sum_Type::Tree &tree) -> vec3
+      std::vector<vec3> us = integrate_over_rod<vec3>(
+          R, p_pov,
+          [&weights, &T](const std::vector<index_t> &edge_ids, Rod_Sum_Type &sum)
           {
-            const calder::vec3_datum::ptr F_datum =
-                static_pointer_cast<calder::vec3_datum>(data[0]);
-
-            vec3 T = F_datum->leaf_data()[j];
-
-            vec3 x0 = tree.vert(2 * j + 0);
-            vec3 x1 = tree.vert(2 * j + 1);
-            real l = (x1 - x0).norm();
-            vec3 pj = va::project_on_line(x0, x1, pi);
-            vec3 dp = pj - pi;
-            real kappa = calc_inv_dist(dp, l0, p);
-            /*
-            gg::geometry_logger::line(pj, pj + 0.1 * T, vec4(0.0, 0.0, 1.0, 1.0));
-            gg::geometry_logger::line(pi, pj, vec4(0.0, 1.0, 0.0, 1.0));
-            gg::geometry_logger::line(pi, pi + 1.0 * dp.cross(T),
-                                      vec4(1.0, 0.0, 1.0, 1.0));
-    */
-            return kappa * dp.cross(T);
+            sum.bind(calder::scalar_datum::create(edge_ids, weights));
+            sum.bind(calder::vec3_datum::create(edge_ids, T));
           },
-          [&](const index_t &i, const index_t &j, const vec3 &pi,
-              const std::vector<calder::datum::ptr> &data,
-              Rod_Sum_Type::Node_Type node_type, //
-              const Rod_Sum_Type::Node &node,    //
-              const Rod_Sum_Type::Tree &tree) -> vec3
+          [l0, p](const index_t i, const index_t j, //
+                  const vec3 &pi, const vec3 &pj,
+                  const std::vector<calder::datum::ptr> &data,
+                  Rod_Sum_Type::Node_Type node_type, //
+                  const Rod_Sum_Type::Node &node,    //
+                  const Rod_Sum_Type::Tree &tree) -> vec3
           {
-            const calder::vec3_datum::ptr F_datum =
-                static_pointer_cast<calder::vec3_datum>(data[0]);
-
-            vec3 T = F_datum->node_data()[j];
-            // Nr.normalize();
-            vec3 pj = node.center();
+            real w = get_data<real>(node_type, j, 0, data);
+            vec3 T = get_data<vec3>(node_type, j, 1, data);
             vec3 dp = pj - pi;
+            //real kappa = calc_mollified(dp, l0, p);
             real kappa = calc_inv_dist(dp, l0, p);
-
-            return kappa * dp.cross(T);
+            //real kappa = calc_cauchy(dp, l0, p);
+            //real kappa = calc_gaussian(dp, l0);
+            
+            return -w * kappa * dp.cross(T);
           });
-
       return us;
     }
 

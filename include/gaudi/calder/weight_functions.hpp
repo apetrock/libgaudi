@@ -31,6 +31,13 @@ namespace gaudi
       return kappa;
     };
 
+    real calc_cauchy(vec3 dp, real C, real p) {
+      // mollified kernel
+      real dist = dp.norm();
+      real kappa = pow(1.0 + pow(dist / C, 2.0), 2.0);
+      return kappa;
+    };
+
     real calc_inv_dist(vec3 dx, real eps, real p)
     {
       // std laplace kernel

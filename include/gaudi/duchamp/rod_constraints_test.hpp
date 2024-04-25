@@ -249,7 +249,7 @@ public:
 #if 1
     if(real(frame % 500) / 500.0 > 0.5 && 0){
       for(int i = 0; i < l0.size(); i++){
-        l0[i] *= 1.1;
+        l0[i] *= 1.25;
       }
       hepworth::block::init_stretch_shear(*__R, constraints, l0, 1e-1, {x, u});
       hepworth::block::init_bend_twist(*__R, constraints, 1e-1, {u}, true);
@@ -261,23 +261,23 @@ public:
     }
     else{
       //real th = (1000.0 - real(frame))/1000.0;
-      //std::vector<real> w = compute_growth_weights(frame);
-      //real lt = 0.0;
-      //for(int i = 0; i < w.size(); i++){
-      //  lt += l0[i];
-      //}
-      //real wl = pow(_lt0 / lt, 0.25);
+      std::vector<real> w = compute_growth_weights(frame);
+      real lt = 0.0;
+      for(int i = 0; i < w.size(); i++){
+        lt += l0[i];
+      }
+      real wl = pow(_lt0 / lt, 0.25);
       
       for(int i = 0; i < l0.size(); i++){
       //  //l0[i] *= w[i];
-        l0[i] *= 1.07;
+        l0[i] *= 1.04;
       }
 
       //std::cout << " lt0 / lt: " << _lt0 / lt << " w: " << wl << std::endl;
-      //hepworth::block::init_helicity(*__R, constraints, 1e-0*wl, {x});
+      hepworth::block::init_helicity(*__R, constraints, 1e-0*wl, {x});
       
-      hepworth::block::init_stretch_shear(*__R, constraints, l0, 1e-1, {x, u});
-      hepworth::block::init_bend_twist(*__R, constraints, 1e-1, {u}, false);
+      hepworth::block::init_stretch_shear(*__R, constraints, l0, 6e-2, {x, u});
+      hepworth::block::init_bend_twist(*__R, constraints, 5e-2, {u}, false);
     }
 #endif
     hepworth::block::init_collisions(*__R, *__Rd, constraints, 1.0, {x, x});

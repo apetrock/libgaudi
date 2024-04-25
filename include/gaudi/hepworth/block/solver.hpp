@@ -119,7 +119,7 @@ public:
     for (int k = 0; k < ITS; k++) {
       p.setZero();
       int ii = 0;
-#pragma omp parallel for
+//#pragma omp parallel for
       for (int i = 0; i < _constraints.size(); i++) {
         auto &constraint = _constraints[i];
         constraint->project(q, p);

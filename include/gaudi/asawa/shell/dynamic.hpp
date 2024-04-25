@@ -668,7 +668,7 @@ public:
                  return {-1, -1, -1, -1};
                }
 
-               debug_line_line(M, c0A, c0B, x);
+               //debug_line_line(M, c0A, c0B, x);
                // debug_edge_normal(M, c0A, x);
                // debug_edge_normal(M, c0B, x);
 

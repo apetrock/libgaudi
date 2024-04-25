@@ -10,7 +10,7 @@
 libGaudi is a topological dynamic mesh library.  In addition to handling the common edge splits and collapses, it also handles an edge-edge merge.  Why not just use [El Topo](https://www.cs.ubc.ca/labs/imager/tr/2009/eltopo/eltopo.html)? libGaudi handles topological merges a little differently, via vertex merge and edge rotation.  Its perhaps a little more elegant than the topological operation El Topo uses... but there is also a lot of other stuff thats fun to use.  The mesh structure is completely pointerless and dataless.  Data is handled as a seperate class with custom predicates to determine what happens when the topology changes. 
 
 ### Project Features:
-* Almost completely headerless, except for a singleton visual debugging logger
+* Almost completely headerless, except for a singleton visual debugging logger... although a TODO is to move implementation to c++20 modules, since compile times are pretty bothersome
 
 #### Half-edge Mesh
 * Pointerless, dataless, half edge mesh data structure
@@ -23,8 +23,8 @@ libGaudi is a topological dynamic mesh library.  In addition to handling the com
 * Hierarchical integrator for solutions to Poisson equation / Boundary integrals
 * Fast Winding Number solver
 * Repulsive Curves/Surfaces solver example
-* Hierarchical harmonic Quadric fitting
-* Simple Continuous Collision detection based on maximum velocity manifold
+* Hierarchical harmonic Quadric fitting... actually I include quite a few routines for fitting implicite surfaces, quadrics, spheres, cyclides, cylinders...
+* Simple Continuous Collision detection based on maximum velocity manifold (experimental)
 
 #### Mesh Poisson Solver
 * Geodesic Heat Solver
@@ -46,6 +46,8 @@ libGaudi is a topological dynamic mesh library.  In addition to handling the com
 
 
 ### Future work:
+* C++ 20 Module to speed up compile times
+* explore possible herarchical domain decomposition based on projections
 * Improve predicates to properly handle face/edge data
 * No parallelism/No GPU, that stuff takes time and is tricky with graph data structures, but I want to?
 * BVH parallism, improve confusing API

@@ -2,23 +2,6 @@
 #ifndef __HEP_GENERIC_BLOCK_CONSTRAINTS__
 #define __HEP_GENERIC_BLOCK_CONSTRAINTS__
 
-#include <algorithm>
-#include <array>
-#include <cassert>
-#include <cmath>
-#include <cstddef>
-#include <cxxabi.h>
-#include <execinfo.h>
-#include <functional>
-#include <iostream>
-#include <memory.h>
-#include <numeric>
-#include <ostream>
-#include <stdio.h>
-#include <type_traits>
-#include <vector>
-#include <zlib.h>
-
 #include "Eigen/src/Geometry/AngleAxis.h"
 #include "block_constraint.hpp"
 #include "gaudi/common.h"

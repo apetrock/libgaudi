@@ -1097,6 +1097,8 @@ public:
     _frame++;
   }
 
+  void set_rotate_ball(bool rotate) { _rotate_ball = rotate; }
+
 private:
 
   struct {

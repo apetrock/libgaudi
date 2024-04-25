@@ -212,6 +212,7 @@ public:
   App(int width, int height, std::string file)
       : gg::SimpleApp(width, height, 2.0, true, "florp_drive_") {
     this->setScene(scene = Scene::create());
+    this->set_rotate_ball(false);
     this->initUI();
   }
 

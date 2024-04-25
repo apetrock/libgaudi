@@ -17,7 +17,9 @@
 #include <Eigen/Eigenvalues>
 #include <iostream>
 
-template <typename T, typename CTYPE> struct swept_triangle {
+template <typename T, typename CTYPE>
+struct swept_triangle
+{
   static const int size = 3;
   CTYPE p[3];
   CTYPE v[3];
@@ -25,7 +27,8 @@ template <typename T, typename CTYPE> struct swept_triangle {
   swept_triangle(){};
 
   swept_triangle(CTYPE p0, CTYPE p1, CTYPE p2, CTYPE v0, CTYPE v1, CTYPE v2,
-                 T Dt) {
+                 T Dt)
+  {
     p[0] = p0;
     p[1] = p1;
     p[2] = p2;
@@ -41,15 +44,19 @@ template <typename T, typename CTYPE> struct swept_triangle {
 
   CTYPE center() { return 0.33333 * (p[0] + p[1] + p[2]); }
 
-  void getExtents(CTYPE &min, CTYPE &max) {
+  void getExtents(CTYPE &min, CTYPE &max)
+  {
     min = this->center();
     max = min;
-    for (int i = 0; i < 3; i++) {
-      for (int j = 0; j < 3; j++) {
+    for (int i = 0; i < 3; i++)
+    {
+      for (int j = 0; j < 3; j++)
+      {
         min[i] = p[j][i] < min[i] ? p[j][i] : min[i];
         max[i] = p[j][i] > max[i] ? p[j][i] : max[i];
       }
-      for (int j = 0; j < 3; j++) {
+      for (int j = 0; j < 3; j++)
+      {
         min[i] =
             p[j][i] + dt * v[j][i] < min[i] ? p[j][i] + dt * v[j][i] : min[i];
         max[i] =
@@ -71,14 +78,17 @@ template <typename T, typename CTYPE> struct swept_triangle {
   */
 };
 
-template <typename T, typename CTYPE> struct bounding_box {
+template <typename T, typename CTYPE>
+struct bounding_box
+{
 public:
   CTYPE center;
   CTYPE half;
   bounding_box(){};
   bounding_box(const CTYPE &cen, const CTYPE &h) : center(cen), half(h){};
 
-  void setBounds(const CTYPE &min, const CTYPE &max) {
+  void setBounds(const CTYPE &min, const CTYPE &max)
+  {
     // should probably assert that min < max
     center = 0.5 * (min + max);
     half = 0.5 * (max - min);
@@ -88,7 +98,8 @@ public:
 
   void expandBy(const T &r) { half = va::max(half, r); }
 
-  void expandBy(const bounding_box<T, CTYPE> &other) {
+  void expandBy(const bounding_box<T, CTYPE> &other)
+  {
     CTYPE omin = other.center - other.half;
     CTYPE omax = other.center + other.half;
     CTYPE tmin = this->center - this->half;
@@ -100,7 +111,8 @@ public:
     this->setBounds(tmin, tmax);
   }
 
-  bool overlap(const bounding_box<T, CTYPE> &other) const {
+  bool overlap(const bounding_box<T, CTYPE> &other) const
+  {
     CTYPE omin = other.center - other.half;
     CTYPE omax = other.center + other.half;
 
@@ -132,13 +144,16 @@ public:
 };
 
 template <typename T, typename CTYPE>
-bounding_box<T, CTYPE> makeBoxMinMax(const CTYPE &min, const CTYPE &max) {
+bounding_box<T, CTYPE> makeBoxMinMax(const CTYPE &min, const CTYPE &max)
+{
   bounding_box<T, CTYPE> bb;
   bb.setBounds(min, max);
   return bb;
 }
 
-template <typename T, typename CTYPE> struct line {
+template <typename T, typename CTYPE>
+struct line
+{
 
 public:
   static const int size = 3;
@@ -150,7 +165,8 @@ public:
 
   line(const CTYPE &p0, const CTYPE &p1) { setP(p0, p1); };
 
-  void setP(const CTYPE &p0, const CTYPE &p1) {
+  void setP(const CTYPE &p0, const CTYPE &p1)
+  {
     p[0] = p0;
     p[1] = p1;
     update_bbox();
@@ -163,7 +179,8 @@ public:
 
   T distanceFrom(CTYPE point) { return distance_from_line(p, point); }
 
-  T avgSqdDist(const line &B) const {
+  T avgSqdDist(const line &B) const
+  {
 
     const CTYPE &ca0 = this->p[0];
     const CTYPE &ca1 = this->p[1];
@@ -175,7 +192,8 @@ public:
     return min(d0, d1);
   };
 
-  void update_bbox() {
+  void update_bbox()
+  {
     CTYPE min, max;
     this->getExtents(min, max);
     _bbox = makeBoxMinMax<T, CTYPE>(min, max);
@@ -183,13 +201,16 @@ public:
 
   const bounding_box<T, CTYPE> &bbox() const { return _bbox; }
 
-  void getExtents(CTYPE &min, CTYPE &max) {
+  void getExtents(CTYPE &min, CTYPE &max)
+  {
     min = va::min(p[0], p[1]);
     max = va::max(p[0], p[1]);
   }
 };
 
-template <typename T, typename CTYPE> struct triangle {
+template <typename T, typename CTYPE>
+struct triangle
+{
 
 public:
   static const int size = 3;
@@ -197,7 +218,8 @@ public:
 
   triangle(){};
 
-  triangle(CTYPE p0, CTYPE p1, CTYPE p2) {
+  triangle(CTYPE p0, CTYPE p1, CTYPE p2)
+  {
     p[0] = p0;
     p[1] = p1;
     p[2] = p2;
@@ -206,7 +228,8 @@ public:
   CTYPE &operator[](int i) { return p[i]; }
   CTYPE operator[](int i) const { return p[i]; }
 
-  CTYPE normal() const {
+  CTYPE normal() const
+  {
 
     CTYPE e1 = p[1] - p[0];
     CTYPE e2 = p[2] - p[0];
@@ -217,7 +240,8 @@ public:
 
   CTYPE center() const { return 0.33333 * (p[0] + p[1] + p[2]); }
 
-  T area() const {
+  T area() const
+  {
     T out = 0;
     CTYPE c0 = p[0];
     CTYPE c1 = p[1];
@@ -229,13 +253,15 @@ public:
     return out;
   }
 
-  bounding_box<T, CTYPE> bbox() {
+  bounding_box<T, CTYPE> bbox()
+  {
     CTYPE min, max;
     this->getExtents(min, max);
     return makeBoxMinMax<T, CTYPE>(min, max);
   }
 
-  void getExtents(CTYPE &min, CTYPE &max) {
+  void getExtents(CTYPE &min, CTYPE &max)
+  {
     min = p[0], max = p[0];
     min = va::min(min, p[1]);
     min = va::min(min, p[2]);
@@ -243,7 +269,8 @@ public:
     max = va::max(max, p[2]);
   }
 
-  T solidAngle(CTYPE pi) {
+  T solidAngle(CTYPE pi)
+  {
     CTYPE A = p[0] - pi;
     CTYPE B = p[1] - pi;
     CTYPE C = p[2] - pi;
@@ -264,7 +291,8 @@ public:
     return T(2) * atan2(det, divisor);
   }
 
-  T determinant(CTYPE pi) {
+  T determinant(CTYPE pi)
+  {
     CTYPE A = p[0] - pi;
     CTYPE B = p[1] - pi;
     CTYPE C = p[2] - pi;
@@ -282,18 +310,21 @@ public:
 
   T distanceFrom(CTYPE point) { return va::distance_from_triangle(p, point); }
 
-  bool rayIntersect(const CTYPE &r0, const CTYPE &r1, T &d) {
+  bool rayIntersect(const CTYPE &r0, const CTYPE &r1, T &d)
+  {
     CTYPE pi;
     return va::ray_triangle_intersect<T>(pi, r0, r1, p[0], p[1], p[2], d);
   }
 
-  T angle(const triangle &B) const {
+  T angle(const triangle &B) const
+  {
     CTYPE NA = this->normal();
     CTYPE NB = B.normal();
     return va::dot(NA, NB);
   }
 
-  T avgSqdDist(const triangle &B) const {
+  T avgSqdDist(const triangle &B) const
+  {
 
     const CTYPE &ca0 = this->p[0];
     const CTYPE &ca1 = this->p[1];
@@ -318,22 +349,27 @@ public:
   };
 };
 
-template <typename T, typename CTYPE> struct swept_point {
+template <typename T, typename CTYPE>
+struct swept_point
+{
 public:
   CTYPE p;
   CTYPE v;
   T dt;
-  swept_point(CTYPE p0, CTYPE vi) {
+  swept_point(CTYPE p0, CTYPE vi)
+  {
     p = p0;
     v = vi;
   };
 
   CTYPE center() { return 0.5 * (p + v); }
 
-  void getExtents(CTYPE &min, CTYPE &max) {
+  void getExtents(CTYPE &min, CTYPE &max)
+  {
     min = this->center();
     max = min;
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 3; i++)
+    {
       min[i] = p[i] < min[i] ? p[i] : min[i];
       max[i] = p[i] > max[i] ? p[i] : max[i];
       min[i] = p[i] + dt * v[i] < min[i] ? p[i] + dt * v[i] : min[i];
@@ -352,19 +388,24 @@ public:
 */
 };
 
-template <typename T, typename CTYPE> struct box {
+template <typename T, typename CTYPE>
+struct box
+{
   CTYPE center;
   CTYPE half;
 
   box(){};
 
-  box(CTYPE cen, CTYPE h) {
+  box(CTYPE cen, CTYPE h)
+  {
     center = cen;
     half = h;
   };
 };
 
-template <typename T, typename CTYPE> struct ls_sphere {
+template <typename T, typename CTYPE>
+struct ls_sphere
+{
   T //
       Sx = 0.0,
       Sy = 0.0, Sz = 0.0,                 //
@@ -375,7 +416,8 @@ template <typename T, typename CTYPE> struct ls_sphere {
       Sxxz = 0.0, Syyz = 0.0, Syzz = 0.0;
   T W = 0;
 
-  void add_vec(CTYPE xi, T w) {
+  void add_vec(CTYPE xi, T w)
+  {
     T x = xi[0];
     T y = xi[1];
     T z = xi[2];
@@ -388,7 +430,8 @@ template <typename T, typename CTYPE> struct ls_sphere {
     W += w;
   }
 
-  ls_sphere<T, CTYPE> &operator+=(const ls_sphere<T, CTYPE> &rhs) {
+  ls_sphere<T, CTYPE> &operator+=(const ls_sphere<T, CTYPE> &rhs)
+  {
     Sxx += rhs.Sxx, Syy += rhs.Syy, Szz += rhs.Szz;
     Sxy += rhs.Sxy, Sxz += rhs.Sxz, Syz += rhs.Syz;
 
@@ -400,7 +443,8 @@ template <typename T, typename CTYPE> struct ls_sphere {
     return *this;
   }
 
-  void calc(CTYPE &X, T &R) {
+  void calc(CTYPE &X, T &R)
+  {
     T A1 = Sxx + Syy + Szz;
     T a = 2.0 * Sx * Sx - 2.0 * W * Sxx;
     T b = 2.0 * Sx * Sy - 2.0 * W * Sxy;
@@ -429,90 +473,116 @@ template <typename T, typename CTYPE> struct ls_sphere {
   }
 };
 
-namespace gaudi {
-namespace z {
+namespace gaudi
+{
+  namespace z
+  {
 
-template <typename T> T zero() { return T(0.0); }
-template <typename T> T one() { return T(1.0); }
+    template <typename T>
+    T zero() { return T(0.0); }
+    template <typename T>
+    T one() { return T(1.0); }
 
-template <> inline double zero<double>() { return 0.0; }
-template <> inline double one<double>() { return 1.0; }
+    template <>
+    inline double zero<double>() { return 0.0; }
+    template <>
+    inline double one<double>() { return 1.0; }
 
-template <>
-inline Eigen::Matrix<double, 3, 1> zero<Eigen::Matrix<double, 3, 1>>() {
-  return Eigen::Matrix<double, 3, 1>::Zero();
-}
-template <>
-inline Eigen::Matrix<double, 4, 1> zero<Eigen::Matrix<double, 4, 1>>() {
-  return Eigen::Matrix<double, 4, 1>::Zero();
-}
+    template <>
+    inline Eigen::Matrix<double, 3, 1> zero<Eigen::Matrix<double, 3, 1>>()
+    {
+      return Eigen::Matrix<double, 3, 1>::Zero();
+    }
+    template <>
+    inline Eigen::Matrix<double, 4, 1> zero<Eigen::Matrix<double, 4, 1>>()
+    {
+      return Eigen::Matrix<double, 4, 1>::Zero();
+    }
 
-template <>
-inline Eigen::Matrix<double, 3, 1> one<Eigen::Matrix<double, 3, 1>>() {
-  return Eigen::Matrix<double, 3, 1>(1, 1, 1);
-}
+    template <>
+    inline Eigen::Matrix<double, 3, 1> one<Eigen::Matrix<double, 3, 1>>()
+    {
+      return Eigen::Matrix<double, 3, 1>(1, 1, 1);
+    }
 
-template <>
-inline Eigen::Matrix<double, 3, 3> zero<Eigen::Matrix<double, 3, 3>>() {
-  Eigen::Matrix<double, 3, 3> m = Eigen::Matrix<double, 3, 3>::Zero();
-  // m << 0, 0, 0, 0, 0, 0, 0, 0, 0;
-  return m;
-}
+    template <>
+    inline Eigen::Matrix<double, 3, 3> zero<Eigen::Matrix<double, 3, 3>>()
+    {
+      Eigen::Matrix<double, 3, 3> m = Eigen::Matrix<double, 3, 3>::Zero();
+      // m << 0, 0, 0, 0, 0, 0, 0, 0, 0;
+      return m;
+    }
 
-template <>
-inline Eigen::Matrix<double, 3, 3> one<Eigen::Matrix<double, 3, 3>>() {
-  Eigen::Matrix<double, 3, 3> m;
-  m << 1, 0, 0, 0, 1, 0, 0, 0, 1;
-  return m;
-}
+    template <>
+    inline Eigen::Matrix<double, 3, 3> one<Eigen::Matrix<double, 3, 3>>()
+    {
+      Eigen::Matrix<double, 3, 3> m;
+      m << 1, 0, 0, 0, 1, 0, 0, 0, 1;
+      return m;
+    }
 
-template <>
-inline Eigen::Matrix<double, 4, 3> zero<Eigen::Matrix<double, 4, 3>>() {
-  // Eigen::Matrix<double, 4, 3> m;
-  Eigen::Matrix<double, 4, 3> m = Eigen::Matrix<double, 4, 3>::Zero();
-  // m << 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
-  return m;
-}
-} // namespace z
+    template <>
+    inline Eigen::Matrix<double, 4, 3> zero<Eigen::Matrix<double, 4, 3>>()
+    {
+      // Eigen::Matrix<double, 4, 3> m;
+      Eigen::Matrix<double, 4, 3> m = Eigen::Matrix<double, 4, 3>::Zero();
+      // m << 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
+      return m;
+    }
+  } // namespace z
 
-namespace ext {
-typedef std::array<vec3, 2> extents_t;
+  namespace ext
+  {
 
-bool overlap(const extents_t &A, const extents_t &B) {
-  if (va::greater_than(A[0], B[1]))
-    return false;
-  if (va::less_than(A[1], B[0]))
-    return false;
+    typedef std::array<vec3, 2> extents_t;
+    const real inf_t = std::numeric_limits<real>::infinity();
+    const vec3 inf_3(inf_t, inf_t, inf_t);
 
-  return true;
-}
+    extents_t init()
+    {
+      return {inf_3, -inf_3};
+    }
 
-extents_t inflate(extents_t e, real eps) {
-  vec3 deps(eps, eps, eps);
-  e[0] -= deps;
-  e[1] += deps;
-  return e;
-}
+    bool overlap(const extents_t &A, const extents_t &B)
+    {
+      if (va::greater_than(A[0], B[1]))
+        return false;
+      if (va::less_than(A[1], B[0]))
+        return false;
 
-extents_t expand(const extents_t &e, const vec3 &x) {
-  extents_t eout;
-  eout[0] = va::min(e[0], x);
-  eout[1] = va::max(e[1], x);
-  return eout;
-}
+      return true;
+    }
 
-extents_t expand(const extents_t &eA, const extents_t &eB) {
-  extents_t eout;
-  eout = expand(eA, eB[0]);
-  eout = expand(eout, eB[1]);
-  return eout;
-}
+    extents_t inflate(extents_t e, real eps)
+    {
+      vec3 deps(eps, eps, eps);
+      e[0] -= deps;
+      e[1] += deps;
+      return e;
+    }
 
-real distance(const extents_t &e, const vec3 &x) {
-  extents_t eout;
-  vec3 c = 0.5 * (e[0] + e[1]);
-  return (x - c).norm();
-}
-} // namespace ext
+    extents_t expand(const extents_t &e, const vec3 &x)
+    {
+      extents_t eout;
+      eout[0] = va::min(e[0], x);
+      eout[1] = va::max(e[1], x);
+      return eout;
+    }
+
+    extents_t expand(const extents_t &eA, const extents_t &eB)
+    {
+      extents_t eout;
+      eout = expand(eA, eB[0]);
+      eout = expand(eout, eB[1]);
+      return eout;
+    }
+
+    real distance(const extents_t &e, const vec3 &x)
+    {
+      extents_t eout;
+      vec3 c = 0.5 * (e[0] + e[1]);
+      return (x - c).norm();
+    }
+  } // namespace ext
 } // namespace gaudi
 #endif

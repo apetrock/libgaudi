@@ -227,7 +227,7 @@ public:
       }
     }
     vec3 xB = x[vB];
-    logger::line(xA, xB, vec4(0.0, 1.0, 0.0, 1.0));
+    //logger::line(xA, xB, vec4(0.0, 1.0, 0.0, 1.0));
 
     real r = 4.0 * _eps;
     return sdf_cylinder::create(xA, xB, r);

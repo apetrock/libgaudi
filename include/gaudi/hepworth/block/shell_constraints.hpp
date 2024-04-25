@@ -254,6 +254,12 @@ public:
 };
 #endif
 
+///////////////////////////////////////////////////////////////////////////////
+vec3 get_vec3(const std::vector<vec3> x, index_t i) { return x[i]; }
+vec3 get_vec3(const vecX q, index_t i) {
+  return vec3(q(i + 0), q(i + 1), q(i + 2));
+}
+
 typedef std::function<void(const index_t &j, const real &k, const vec3 &dq,
                            const vec3 &N)>
     edge_fcn;
@@ -593,6 +599,73 @@ public:
 };
 #endif
 
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+#if 1
+class face_normal_flow : public block_constraint {
+//this will be here untested, since I'm ultimately going to do this for edges, instead
+
+public:
+  DEFINE_CREATE_FUNC(face_normal_flow)
+
+  face_normal_flow(const std::vector<index_t> &ids, const std::vector<vec3> &x, real d,
+         real w, std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _d(d) {
+        _N0 = (x[_ids[1]] - x[_ids[0]]).cross(x[_ids[2]] - x[_ids[0]]).normalized(); 
+    _cen = 1.0 / 3.0 * (x[_ids[0]] + x[_ids[1]] + x[_ids[2]]);
+      }
+
+  virtual void project(const vecX &q, vecX &p) {
+    mat32 edges, P;
+    vec3 q0 = _blocks[0]->get_vec3(_ids[0], q);
+    vec3 q1 = _blocks[0]->get_vec3(_ids[1], q);
+    vec3 q2 = _blocks[0]->get_vec3(_ids[2], q);
+    vec3 qc = 1.0 / 3.0 * (q0 + q1 + q2);
+    edges.col(0) = q1 - q0;
+    edges.col(1) = q2 - q0;
+
+
+    vec3 N = edges.col(0).cross(edges.col(1)).normalized();
+    //compute distances from initial plane defined by _N0 and _cen
+    real d0 = (q0 - _cen).dot(_N0);
+    real d1 = (q1 - _cen).dot(_N0);
+    real d2 = (q2 - _cen).dot(_N0);
+    
+    //compute the flow
+    q0 += (_d - d0) * N;
+    q1 += (_d - d1) * N;
+    q2 += (_d - d2) * N;
+
+    p.block(_id0 + 0, 0, 3, 1) = _w * edges.col(0);
+    p.block(_id0 + 3, 0, 3, 1) = _w * edges.col(1);
+    p.block(_id0 + 6, 0, 3, 1) = _w * edges.col(1);
+  }
+
+  ///////////////////////////////////////////////////////////////////////////////
+  virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
+    _id0 = id0;
+    int n = 2;
+    index_t i0 = _blocks[0]->get_offset_idx(this->_ids[0]);
+    index_t i1 = _blocks[0]->get_offset_idx(this->_ids[1]);
+    index_t i2 = _blocks[0]->get_offset_idx(this->_ids[2]);
+
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 0 + ax, i0 + ax, -_w));
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 3 + ax, i1 + ax, _w));
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 6 + ax, i2 + ax, _w));
+
+    id0 += 9;
+  }
+  vec3 _N0;
+  vec3 _cen;
+  real _d;
+};
+#endif
+
+
 class edge_willmore : public block_constraint {
 public:
   DEFINE_CREATE_FUNC(edge_willmore)
@@ -707,6 +780,84 @@ public:
   vec3 _N_align; // Goal N
   bool _align = false;
   bool _debugged = false;
+};
+
+
+class edge_normal_flow : public block_constraint {
+public:
+  DEFINE_CREATE_FUNC(edge_normal_flow)
+
+  edge_normal_flow(const std::vector<index_t> &ids, const vector<vec3> & x, real d, const real &w,
+                std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _d(d) {
+
+    vec3 pi0 = x[_ids[0]];
+    vec3 pi1 = x[_ids[1]];
+    vec3 pj0 = x[_ids[2]];
+    vec3 pj1 = x[_ids[3]];
+    vec3 e0 = pi0 - pj0;
+    vec3 N0 = (pi1 - pi0).cross(e0).normalized();
+    vec3 N1 = -(pj1 - pj0).cross(e0).normalized();
+    _N0 = (N0 + N1).normalized();
+    _cen = 0.5 * (pi0 + pj0);
+  }
+
+
+  virtual void project(const vecX &q, vecX &p) {
+    // d00   i0   j1 d11
+    //       /|1/
+    // d01  /0|/     d10
+    // i1    j0
+
+    vec3 qi0 = _blocks[0]->get_vec3(_ids[0], q);
+    vec3 qi1 = _blocks[0]->get_vec3(_ids[1], q);
+    vec3 qj0 = _blocks[0]->get_vec3(_ids[2], q);
+    vec3 qj1 = _blocks[0]->get_vec3(_ids[3], q);
+
+    vec3 c0 = 0.333 * (qi0 + qi1 + qj0);
+    vec3 c1 = 0.333 * (qj0 + qj1 + qi0);
+
+    vec3 e0 = (qi0 - qj0).normalized();
+
+    vec3 d00 = qi1 - qi0;
+    vec3 d01 = qi1 - qj0;
+
+    vec3 d10 = qj1 - qi0;
+    vec3 d11 = qj1 - qj0;
+
+    vec3 N0 = (qi1 - qi0).cross(e0).normalized();
+    vec3 N1 = -(qj1 - qj0).cross(e0).normalized();
+    vec3 N = (N0 + N1).normalized();
+
+    real di = (qi0 - _cen).dot(_N0);
+    real dj = (qj0 - _cen).dot(_N0);
+    vec3 qi0p = qi0 + (_d - di) * N;
+    vec3 qj0p = qj0 + (_d - dj) * N;
+    //logger::line(qi0, qi0p, vec4(0.0, 1.0, 0.5, 1.0));
+    //logger::line(qj0, qj0p, vec4(0.0, 1.0, 0.5, 1.0));
+    
+    p.block(_id0 + 0, 0, 3, 1) = _w * qi0p;
+    p.block(_id0 + 3, 0, 3, 1) = _w * qj0p;
+  }
+
+  virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
+    _id0 = id0;
+
+    index_t i0 = _blocks[0]->get_offset_idx(this->_ids[0]);
+    index_t i1 = _blocks[0]->get_offset_idx(this->_ids[1]);
+    index_t j0 = _blocks[0]->get_offset_idx(this->_ids[2]);
+    index_t j1 = _blocks[0]->get_offset_idx(this->_ids[3]);
+
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 0 + ax, i0 + ax, _w));
+    for (int ax = 0; ax < 3; ax++)
+      triplets.push_back(trip(_id0 + 3 + ax, j0 + ax, _w));
+
+    id0 += 6;
+  }
+  vec3 _N0; // Goal N
+  vec3 _cen;
+  real _d;
 };
 
 } // namespace block

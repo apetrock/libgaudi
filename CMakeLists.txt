@@ -238,7 +238,8 @@ add_subdirectory(src)
 
 add_subdirectory(projects/blank_template)
 #add_subdirectory(projects/dynamic_shell_test)
-add_subdirectory(projects/rod_constraints_test)
+add_subdirectory(projects/aabb_test)
+#add_subdirectory(projects/rod_constraints_test)
 #add_subdirectory(projects/rod_constraints_coupled_test)
 add_subdirectory(projects/gravitys_rainbow)
 
@@ -252,7 +253,7 @@ add_subdirectory(projects/rod_guided_deformation)
 #add_subdirectory(projects/growth_study)
 
 #add_subdirectory(projects/reaction_diffusion_test)
-add_subdirectory(projects/vortex_test)
+#add_subdirectory(projects/vortex_test)
 #add_subdirectory(projects/tangent_point_test)
 
 #add_subdirectory(projects/shell_walk_test)
