@@ -614,6 +614,13 @@ public:
     mPointPositions.clear();
   }
 
+  // Public accessors for line data (for WASM integration)
+  const std::vector<Vec4>& getLineColors() const { return mLineColors; }
+  const std::vector<nanogui::MatrixXf>& getLinePositions() const { return mLinePositions; }
+  const std::vector<nanogui::MatrixXu>& getLineIndices() const { return mLineIndices; }
+  const std::vector<Vec4>& getPointColors() const { return mPointColors; }
+  const std::vector<Vec4>& getPointPositions() const { return mPointPositions; }
+
 private:
   LineBufferPtr _lines;
   PointBufferPtr _points;

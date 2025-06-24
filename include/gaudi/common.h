@@ -1,7 +1,6 @@
 #ifndef __LIBGAUDI_COMMON_TYPEDEFS__
 #define __LIBGAUDI_COMMON_TYPEDEFS__
 
-#include "Eigen/src/Geometry/Quaternion.h"
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 #include <Eigen/Sparse>
@@ -50,7 +49,7 @@ template <int S, typename VEC> const VEC from(const vecX &vals, size_t i) {
 
 // these will be function pointers with a default
 // these should be non-const
-template <int S, typename VEC> vecX to(const std::vector<VEC> &x) {
+template <int S, typename VEC> inline vecX to(const std::vector<VEC> &x) {
   std::vector<VEC> tmp(x);
   vecX out = Eigen::Map<vecX, Eigen::Unaligned>(
       reinterpret_cast<real *>(tmp.data()), S * x.size());
@@ -58,38 +57,38 @@ template <int S, typename VEC> vecX to(const std::vector<VEC> &x) {
 }
 
 template <int S, typename VEC>
-void from(std::vector<VEC> &positions, const vecX &x) {
+inline void from(std::vector<VEC> &positions, const vecX &x) {
   for (int i = 0; i < positions.size(); i++)
     positions[i] = from<S, VEC>(x, i);
 }
 
-vecX to(const std::vector<vec3> &positions) { return to<3, vec3>(positions); }
-void from(std::vector<vec3> &positions, const vecX &x) {
+inline vecX to(const std::vector<vec3> &positions) { return to<3, vec3>(positions); }
+inline void from(std::vector<vec3> &positions, const vecX &x) {
   from<3, vec3>(positions, x);
 }
 
-vecX to(const std::vector<vec4> &positions) { return to<4, vec4>(positions); }
-void from(std::vector<vec4> &positions, const vecX &x) {
+inline vecX to(const std::vector<vec4> &positions) { return to<4, vec4>(positions); }
+inline void from(std::vector<vec4> &positions, const vecX &x) {
   from<4, vec4>(positions, x);
 }
 
-vecX to(const std::vector<quat> &positions) { return to<4, quat>(positions); }
-void from(std::vector<quat> &positions, const vecX &x) {
+inline vecX to(const std::vector<quat> &positions) { return to<4, quat>(positions); }
+inline void from(std::vector<quat> &positions, const vecX &x) {
   from<4, quat>(positions, x);
 }
 
-vecX to(const std::vector<real> &U) {
+inline vecX to(const std::vector<real> &U) {
   vecX Ue = Eigen::Map<const vecX, Eigen::Unaligned>(U.data(), U.size());
   return Ue;
 }
 
-vecX concat(const vecX &x, const vecX &u) {
+inline vecX concat(const vecX &x, const vecX &u) {
   vecX q(x.size() + u.size());
   q << x, u;
   return q;
 }
 
-void split(const vecX &q, vecX &s, vecX &u) {
+inline void split(const vecX &q, vecX &s, vecX &u) {
   int Ns = s.size();
   int Nu = u.size();
   s = q.block(0, 0, Ns, 1);
@@ -112,7 +111,7 @@ void split(const vecX &q, std::vector<vec3> &sv, std::vector<quat> &uv) {
 }
 */
 
-std::vector<real> from(vecX U) {
+inline std::vector<real> from(vecX U) {
   return std::vector<real>(U.data(), U.data() + U.rows() * U.cols());
 }
 
