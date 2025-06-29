@@ -130,11 +130,13 @@ public:
         calder::tangent_point_gradient(*__R, x, l, T, 1.0 * eps, 6.0);
     
     // Log tangent point gradients
+  #if 0
     for (size_t i = 0; i < g0.size(); i++) {
       if (g0[i].norm() > 1e-6) {
         logger::line(xc[i], xc[i] + 0.1 * g0[i], vec4(1, 0.5, 0, 0.8));
       }
     }
+    #endif
     
     return g0;
   }
@@ -275,7 +277,7 @@ public:
       }
 
       //std::cout << " lt0 / lt: " << _lt0 / lt << " w: " << wl << std::endl;
-      hepworth::block::init_helicity(*__R, constraints, 1e-0*wl, {x});
+      //hepworth::block::init_helicity(*__R, constraints, 1e-0*wl, {x});
       
       hepworth::block::init_stretch_shear(*__R, constraints, l0, 6e-2, {x, u});
       hepworth::block::init_bend_twist(*__R, constraints, 5e-2, {u}, false);
@@ -289,7 +291,7 @@ public:
     solver.step(blocks, h,1);
     
     // Log constraint forces
-    log_constraint_forces(x, u);
+    //log_constraint_forces(x, u);
   }
 
   void step(int frame) {
@@ -300,12 +302,12 @@ public:
     logger::clear();
     
     // Log coordinate axes
-    logger::line(vec3(0, 0, 0), vec3(2, 0, 0), vec4(1, 0, 0, 1)); // X axis
-    logger::line(vec3(0, 0, 0), vec3(0, 2, 0), vec4(0, 1, 0, 1)); // Y axis
-    logger::line(vec3(0, 0, 0), vec3(0, 0, 2), vec4(0, 0, 1, 1)); // Z axis
+    //logger::line(vec3(0, 0, 0), vec3(2, 0, 0), vec4(1, 0, 0, 1)); // X axis
+    //logger::line(vec3(0, 0, 0), vec3(0, 2, 0), vec4(0, 1, 0, 1)); // Y axis
+    //logger::line(vec3(0, 0, 0), vec3(0, 0, 2), vec4(0, 0, 1, 1)); // Z axis
 
     step_dynamics(frame);
-    //__Rd->step();
+    __Rd->step();
     
     // Log final rod geometry
     log_rod_geometry(vec4(0.8, 0.8, 0.8, 1.0));
@@ -319,14 +321,8 @@ public:
   void log_rod_geometry(const vec4& color) {
     if (!__R) return;
     
-    const std::vector<vec3>& positions = __R->x();
-    for (size_t i = 0; i < positions.size() - 1; i++) {
-      logger::line(positions[i], positions[i + 1], color);
-    }
-    // Close the loop
-    if (positions.size() > 2) {
-      logger::line(positions.back(), positions.front(), color);
-    }
+    // Use the existing debug() method which properly handles the adjacency table
+    __R->debug();
   }
   
   // Helper function to log constraint forces
@@ -336,8 +332,12 @@ public:
     const std::vector<vec3>& positions = __R->x();
     const std::vector<vec3>& forces = x->_f;
     
-    for (size_t i = 0; i < std::min(positions.size(), forces.size()); i++) {
-      if (forces[i].norm() > 1e-6) {
+    // Log forces for valid vertices
+    for (int i = 0; i < __R->corner_count(); i++) {
+      if (__R->next(i) < 0)
+        continue;
+      
+      if (i < forces.size() && forces[i].norm() > 1e-6) {
         logger::line(positions[i], positions[i] + 0.05 * forces[i], vec4(1, 1, 0, 0.8));
       }
     }

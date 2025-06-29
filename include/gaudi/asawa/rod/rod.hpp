@@ -597,11 +597,11 @@ public:
       vec3 v = __v[i];
       // std::cout << i << " " << __l0[i] << " " << (c1 - c0).norm() <<
       // std::endl;
-      logger::point(c0, vec4(0.0, 1.0, 0.0, 1.0));
+      //logger::point(c0, vec4(0.0, 1.0, 0.0, 1.0));
       logger::line(c0, c1, vec4(0.0, 0.7, 1.0, 1.0));
-      logger::line(c0, c0 + v, vec4(0.8, 0.3, 0.0, 1.0));
+      //logger::line(c0, c0 + v, vec4(0.8, 0.3, 0.0, 1.0));
       quat u = __u[i];
-#if 1
+#if 0
       vec3 d0 = u * vec3(1, 0, 0);
       vec3 d1 = u * vec3(0, 1, 0);
       vec3 d2 = u * vec3(0, 0, 1);
