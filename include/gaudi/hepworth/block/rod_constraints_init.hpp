@@ -7,7 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cxxabi.h>
-#include <execinfo.h>
+#include <random>
 #include <iostream>
 #include <memory.h>
 #include <numeric>
@@ -15,7 +15,6 @@
 #include <stdio.h>
 #include <type_traits>
 #include <vector>
-#include <zlib.h>
 
 #include "gaudi/common.h"
 #include "rod_collision_constraint.hpp"
@@ -141,7 +140,7 @@ void init_collisions(asawa::rod::rod &R, asawa::rod::dynamic &dynamic,
   vector<std::array<index_t, 4>> collisions =
       dynamic.get_internal_collisions(K);
   // randomize the collision order
-  std::random_shuffle(collisions.begin(), collisions.end());
+  std::shuffle(collisions.begin(), collisions.end(), std::mt19937{std::random_device{}()});
 
   for (auto &c : collisions) {
     if (c[0] > -1) {

@@ -20,7 +20,6 @@
 #include <memory>
 #include <set>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __WALKY_TALKY__
 #define __WALKY_TALKY__

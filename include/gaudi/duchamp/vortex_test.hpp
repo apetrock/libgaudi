@@ -33,7 +33,6 @@
 #include <memory>
 #include <set>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __VORTEX_TEST__
 #define __VORTEX_TEST__

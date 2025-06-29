@@ -2,13 +2,11 @@
 #include <cstddef>
 #include <cxxabi.h>
 
-#include <execinfo.h>
 #include <iostream>
 #include <memory.h>
 #include <ostream>
 #include <stdio.h>
 #include <vector>
-#include <zlib.h>
 
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"

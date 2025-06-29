@@ -10,7 +10,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cxxabi.h>
-#include <execinfo.h>
+
 #include <iostream>
 #include <memory.h>
 #include <numeric>
@@ -18,7 +18,6 @@
 #include <stdio.h>
 #include <type_traits>
 #include <vector>
-#include <zlib.h>
 
 #include "block_constraint.hpp"
 #include "gaudi/common.h"

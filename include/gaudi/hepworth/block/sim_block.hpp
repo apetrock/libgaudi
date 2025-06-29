@@ -1,4 +1,3 @@
-
 #ifndef __HEP_SIM_BLOCKS__
 #define __HEP_SIM_BLOCKS__
 
@@ -8,15 +7,14 @@
 #include <cmath>
 #include <cstddef>
 #include <cxxabi.h>
-#include <execinfo.h>
+
 #include <iostream>
-#include <memory.h>
+#include <memory>
 #include <numeric>
 #include <ostream>
 #include <stdio.h>
 #include <type_traits>
 #include <vector>
-#include <zlib.h>
 
 #include "gaudi/common.h"
 

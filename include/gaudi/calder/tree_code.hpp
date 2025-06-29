@@ -13,6 +13,7 @@
 #include "datums.hpp"
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
+#include "gaudi/logger.hpp"
 #include <vector>
 
 namespace gaudi {
@@ -24,7 +25,7 @@ template <typename TREE> void test_extents(const TREE &tree) {
       arp::build_extents(tree, tree.indices(), tree.verts());
   for (const auto &ext : extents) {
     vec4 c(0.5, 0.5, 0.1, 1.0);
-    gg::geometry_logger::ext(ext[0], ext[1], c);
+    logger::ext(ext[0], ext[1], c);
   }
 }
 
@@ -44,7 +45,7 @@ void test_pyramid(const TREE &tree,                      //
     vec3 cen = tree.nodes[i].center();
     vec3 N = x_datum->__tree_data[i];
     vec4 c(0.0, 0.5, 0.8, 1.0);
-    gg::geometry_logger::line(cen, cen + N, c);
+    logger::line(cen, cen + N, c);
   }
 }
 
@@ -130,7 +131,7 @@ public:
         vec4 c(0.5, 0.5, 0.1, 1.0);
         // std::cout << ext[0].transpose() << " " << ext[1].transpose() <<
         // std::endl;
-        gg::geometry_logger::ext(ext[0], ext[1], c);
+        logger::ext(ext[0], ext[1], c);
       }
     }
 #endif
@@ -198,11 +199,11 @@ public:
         }
 #if 0
         if (i == 500 && true) {
-          gg::geometry_logger::line(pi, pj, c);
-          // gg::geometry_logger::ext(pj - vec3(sc, sc, sc), pj + vec3(sc, sc,
+          logger::line(pi, pj, c);
+          // logger::ext(pj - vec3(sc, sc, sc), pj + vec3(sc, sc,
           // sc),
           //                          vec4(0.8, 0.0, 0.6, 0.5));
-          gg::geometry_logger::ext(ext[0], ext[1], c);
+          logger::ext(ext[0], ext[1], c);
           std::cout << " u[" << i << "]: " << u[i] << std::endl;
         }
 #endif

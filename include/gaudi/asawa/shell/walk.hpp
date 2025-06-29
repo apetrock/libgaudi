@@ -6,7 +6,6 @@
 #include <cxxabi.h>
 
 #include <deque>
-#include <execinfo.h>
 #include <functional>
 #include <iostream>
 #include <iterator>
@@ -21,7 +20,6 @@
 #include <stack>
 #include <stdio.h>
 #include <vector>
-#include <zlib.h>
 
 #include "gaudi/geometry_types.hpp"
 #include "gaudi/vec_addendum.h"

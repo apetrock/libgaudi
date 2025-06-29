@@ -35,7 +35,6 @@
 #include <memory>
 #include <set>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __ROD_GUIDED__
 #define __ROD_GUIDED__

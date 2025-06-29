@@ -7,7 +7,7 @@
 //
 // includes files that are required for the data structure only, not derived
 // files that USE the data structure
-#ifndef __CALDER_WEIGHT_FUNCTIONS__
+#ifndef __CALDER_WEIGHT_FUNCTIONS___
 #define __CALDER_WEIGHT_FUNCTIONS___
 
 #include <gaudi/common.h>

@@ -41,7 +41,6 @@
 #include <memory>
 #include <set>
 #include <vector>
-#include <zlib.h>
 
 namespace gaudi
 {

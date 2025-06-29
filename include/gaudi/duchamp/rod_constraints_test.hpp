@@ -1,49 +1,26 @@
-#include "Eigen/src/Geometry/Scaling.h"
+#include <iostream>
+#include <cstdlib>
+#include <cmath>
+#include <random>
+#include <memory>
+#include <vector>
+
 #include "gaudi/common.h"
-
-#include <Eigen/Dense>
-#include <Eigen/Eigenvalues>
-
 #include "gaudi/geometry_types.hpp"
 #include "gaudi/vec_addendum.h"
+#include "gaudi/logger.hpp"
 
-#include "GaudiGraphics/geometry_logger.h"
-
-#include "gaudi/arp/arp.h"
-
-#include "gaudi/calder/integrators.hpp"
-
-#include "gaudi/bontecou/laplacian.hpp"
-
-#include "gaudi/asawa/rod/dynamic.hpp"
 #include "gaudi/asawa/rod/rod.hpp"
-#include "gaudi/asawa/shell/dynamic.hpp"
-#include "gaudi/asawa/shell/operations.hpp"
-#include "gaudi/asawa/shell/shell.hpp"
+#include "gaudi/asawa/rod/dynamic.hpp"
+
+#include "gaudi/calder/tangent_point_integrators.hpp"
 
 #include "gaudi/hepworth/block/rod_constraints.hpp"
 #include "gaudi/hepworth/block/rod_constraints_init.hpp"
 #include "gaudi/hepworth/block/sim_block.hpp"
 #include "gaudi/hepworth/block/solver.hpp"
 
-#include "gaudi/asawa/primitive_objects.hpp"
-
-#include "gaudi/asawa/shell/asset_loader.hpp"
-
-#include "gaudi/calder/rod_integrators.hpp"
-#include "gaudi/calder/tangent_point_integrators.hpp"
-
 #include "utils/sdf.hpp"
-
-#include <array>
-
-#include <math.h>
-#include <random>
-
-#include <cmath>
-#include <memory>
-#include <vector>
-#include <zlib.h>
 
 #ifndef __M2REFACTOR_TEST__
 #define __M2REFACTOR_TEST__
@@ -72,6 +49,12 @@ public:
     __sdf0 = sdf_sphere::create(vec3(0.0, 0.0, 0.0), r0);
     __sdf1 = sdf_multi_sphere::create(get_fib(r1, 13), r11);
     // load_sdf();
+    
+    // Log initial setup
+    logger::clear();
+    logger::line(vec3(0, 0, 0), vec3(2, 0, 0), vec4(1, 0, 0, 1)); // X axis
+    logger::line(vec3(0, 0, 0), vec3(0, 2, 0), vec4(0, 1, 0, 1)); // Y axis
+    logger::line(vec3(0, 0, 0), vec3(0, 0, 2), vec4(0, 0, 1, 1)); // Z axis
   };
 
   std::vector<vec3> get_fib(real r0, int N = 13){
@@ -130,6 +113,9 @@ public:
 
     real lavg = __R->lavg();
     __Rd = rod::dynamic::create(__R, 0.25 * lavg, 2.5 * lavg, 0.25 * lavg);
+    
+    // Log initial rod geometry
+    log_rod_geometry(vec4(0.8, 0.8, 0.8, 1.0));
   }
 
 #if 1
@@ -142,6 +128,14 @@ public:
 
     std::vector<vec3> g0 =
         calder::tangent_point_gradient(*__R, x, l, T, 1.0 * eps, 6.0);
+    
+    // Log tangent point gradients
+    for (size_t i = 0; i < g0.size(); i++) {
+      if (g0[i].norm() > 1e-6) {
+        logger::line(xc[i], xc[i] + 0.1 * g0[i], vec4(1, 0.5, 0, 0.8));
+      }
+    }
+    
     return g0;
   }
 #endif
@@ -175,9 +169,9 @@ public:
           vec4 c0 = vec4(0.0, 1.0, 0.0, 1.0);
         vec4 c1 = vec4(1.0, 0.0, 0.0, 1.0);
         if(di > 0.0){
-            gg::geometry_logger::line(xi, xi + 0.1*di * Ni, c0);
+            logger::line(xi, xi + 0.1*di * Ni, c0);
         } else{
-            gg::geometry_logger::line(xi, xi + 0.1*di * Ni, c1);
+            logger::line(xi, xi + 0.1*di * Ni, c1);
         }
         #endif
         di = di < 0.0 ? -1.0 : 0.5*di;
@@ -205,13 +199,20 @@ public:
         vec4 c0 = vec4(0.0, 1.0, 0.0, 1.0);
         vec4 c1 = vec4(1.0, 0.0, 0.0, 1.0);
         if(dists[i] > 0.0){
-            gg::geometry_logger::line(xc[i], xc[i] + f[i], c0);
+            logger::line(xc[i], xc[i] + f[i], c0);
         } else{
-            gg::geometry_logger::line(xc[i], xc[i] + f[i], c1);   
+            logger::line(xc[i], xc[i] + f[i], c1);   
         }
         #endif
     }
 
+    // Log boundary gradients
+    for (size_t i = 0; i < f.size(); i++) {
+      if (f[i].norm() > 1e-6) {
+        vec4 color = dists[i] > 0.0 ? vec4(0, 1, 0, 0.8) : vec4(1, 0, 0, 0.8);
+        logger::line(xc[i], xc[i] + 0.1 * f[i], color);
+      }
+    }
     
     return std::move(f);
   }
@@ -286,18 +287,60 @@ public:
     // f[0][0] = 1.0;
     std::vector<hepworth::sim_block::ptr> blocks = {x, u};
     solver.step(blocks, h,1);
+    
+    // Log constraint forces
+    log_constraint_forces(x, u);
   }
 
   void step(int frame) {
 
     _frame = frame;
 
+    // Clear previous frame's debug lines
+    logger::clear();
+    
+    // Log coordinate axes
+    logger::line(vec3(0, 0, 0), vec3(2, 0, 0), vec4(1, 0, 0, 1)); // X axis
+    logger::line(vec3(0, 0, 0), vec3(0, 2, 0), vec4(0, 1, 0, 1)); // Y axis
+    logger::line(vec3(0, 0, 0), vec3(0, 0, 2), vec4(0, 0, 1, 1)); // Z axis
 
     step_dynamics(frame);
-    __Rd->step();
+    //__Rd->step();
+    
+    // Log final rod geometry
+    log_rod_geometry(vec4(0.8, 0.8, 0.8, 1.0));
+    
     if(frame > 3000)
     exit(0);
     //__R->debug();
+  }
+
+  // Helper function to log rod geometry
+  void log_rod_geometry(const vec4& color) {
+    if (!__R) return;
+    
+    const std::vector<vec3>& positions = __R->x();
+    for (size_t i = 0; i < positions.size() - 1; i++) {
+      logger::line(positions[i], positions[i + 1], color);
+    }
+    // Close the loop
+    if (positions.size() > 2) {
+      logger::line(positions.back(), positions.front(), color);
+    }
+  }
+  
+  // Helper function to log constraint forces
+  void log_constraint_forces(hepworth::vec3_block::ptr x, hepworth::quat_block::ptr u) {
+    if (!x || !__R) return;
+    
+    const std::vector<vec3>& positions = __R->x();
+    const std::vector<vec3>& forces = x->_f;
+    
+    for (size_t i = 0; i < std::min(positions.size(), forces.size()); i++) {
+      if (forces[i].norm() > 1e-6) {
+        logger::line(positions[i], positions[i] + 0.05 * forces[i], vec4(1, 1, 0, 0.8));
+      }
+    }
   }
 
   int _frame;

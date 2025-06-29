@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <cxxabi.h>
 
-#include <execinfo.h>
 #include <iostream>
 #include <map>
 #include <memory.h>
@@ -13,11 +12,10 @@
 #include <stack>
 #include <stdio.h>
 #include <vector>
-#include <zlib.h>
 
 #include "gaudi/geometry_types.hpp"
 #include "gaudi/vec_addendum.h"
-
+#include "gaudi/logger.hpp"
 #include "gaudi/common.h"
 #include "shell.hpp"
 
@@ -608,14 +606,14 @@ std::vector<vec3> gradient(shell &M, const std::vector<real> &u,
     if (M.face(c0) == 100) {
       vec3 e = edge_center(M, c0, x);
       std::cout << " A0: " << A0 << std::endl;
-      gg::geometry_logger::line(e, e + M0, vec4(0.8, 1.0, 0.35, 1.0));
-      gg::geometry_logger::line(e, e + N0, vec4(0.2, 1.0, 0.65, 1.0));
+      logger::line(e, e + M0, vec4(0.8, 1.0, 0.35, 1.0));
+      logger::line(e, e + N0, vec4(0.2, 1.0, 0.65, 1.0));
     }
     if (M.face(c1) == 100) {
       vec3 e = edge_center(M, c1, x);
       std::cout << " A1: " << A1 << std::endl;
-      gg::geometry_logger::line(e, e + M1, vec4(0.8, 1.0, 0.35, 1.0));
-      gg::geometry_logger::line(e, e + N1, vec4(0.2, 1.0, 0.65, 1.0));
+      logger::line(e, e + M1, vec4(0.8, 1.0, 0.35, 1.0));
+      logger::line(e, e + N1, vec4(0.2, 1.0, 0.65, 1.0));
     }
 #endif
 

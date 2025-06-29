@@ -49,7 +49,6 @@
 #include <cmath>
 #include <memory>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __GRAVITYS_RAINBOW__
 #define __GRAVITYS_RAINBOW__

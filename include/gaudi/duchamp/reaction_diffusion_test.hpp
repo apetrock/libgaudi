@@ -30,7 +30,6 @@
 #include <memory>
 #include <set>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __VORTEX_STUDY__
 #define __VORTEX_STUDY__

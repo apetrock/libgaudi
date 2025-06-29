@@ -1,4 +1,3 @@
-
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 
@@ -7,7 +6,7 @@
 #include "gaudi/common.h"
 #include "gaudi/vec_addendum.h"
 
-#include "GaudiGraphics/geometry_logger.h"
+//#include "GaudiGraphics/geometry_logger.h"
 
 #include "../datums.hpp"
 
@@ -25,7 +24,6 @@
 #include <memory>
 #include <type_traits>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __ASAWA_DYNAMIC_SHELL__
 #define __ASAWA_DYNAMIC_SHELL__
@@ -91,7 +89,7 @@ void debug_line(shell &M,           //
   const vec3 &ca1 = x[vA1];
 
   vec4 c(unif(rng), unif(rng), unif(rng), 1.0);
-  gg::geometry_logger::line(ca0, ca1, c);
+  logger::line(ca0, ca1, c);
 };
 
 void debug_line_line(shell &M,           //
@@ -112,10 +110,10 @@ void debug_line_line(shell &M,           //
   const vec3 &cb1 = x[vB1];
 
   vec4 c(unif(rng), unif(rng), unif(rng), 1.0);
-  gg::geometry_logger::line(ca0, ca1, c);
-  gg::geometry_logger::line(cb0, cb1, c);
+  logger::line(ca0, ca1, c);
+  logger::line(cb0, cb1, c);
 
-  gg::geometry_logger::line(0.5 * (ca0 + ca1), 0.5 * (cb0 + cb1), c);
+  logger::line(0.5 * (ca0 + ca1), 0.5 * (cb0 + cb1), c);
 };
 
 void debug_edge_normal(shell &M,          //
@@ -125,7 +123,7 @@ void debug_edge_normal(shell &M,          //
   vec3 N = edge_normal(M, c0, x);
   vec3 cen = edge_center(M, c0, x);
   vec4 col(unif(rng), unif(rng), unif(rng), 1.0);
-  gg::geometry_logger::line(cen, cen + 0.1 * N, col);
+  logger::line(cen, cen + 0.1 * N, col);
 };
 
 template <int OP, int C_ALLOC, int V_ALLOC, int F_ALLOC, int MSIZE>
@@ -447,10 +445,10 @@ public:
             if (M.vsize(i) > 16) {
               vec3 N = vert_normal(M, i, x);
               vec4 cola(0.0, 1.0, 1.0, 0.0);
-              gg::geometry_logger::line(x[i], x[i] + 0.1 * N, cola);
+              logger::line(x[i], x[i] + 0.1 * N, cola);
               M.for_each_vertex(i, [&x, &i, cola](index_t cid, shell &m) {
                 index_t j = m.vert(m.next(cid));
-                gg::geometry_logger::line(x[i], x[j], cola);
+                logger::line(x[i], x[j], cola);
               });
 
             }
@@ -460,7 +458,7 @@ public:
 
       vec3 N = vert_normal(M, i, x);
       // vec4 cola(0.2, 0.5, 1.0, 0.0);
-      // gg::geometry_logger::line(x[i], x[i] + 0.1 * N, cola);
+      // logger::line(x[i], x[i] + 0.1 * N, cola);
       remove_vertex(M, i);
     }
   }
@@ -645,8 +643,9 @@ public:
     trim_edge_edge_collected(M, x, collected);
 
     if (_merge_pred)
-      std::remove_if(collected.begin(), collected.end(),
-                     [this](auto c) { return _merge_pred(*__M, c[0], c[1]); });
+      collected.erase(std::remove_if(collected.begin(), collected.end(),
+                                     [this](auto c) { return _merge_pred(*__M, c[0], c[1]); }),
+                      collected.end());
 
     std::vector<index_t> f_collect(2 * collected.size());
     for (int i = 0; i < collected.size(); i++) {
@@ -706,8 +705,9 @@ public:
     }
 
     if (_merge_pred)
-      std::remove_if(collected.begin(), collected.end(),
-                     [this](auto c) { return _merge_pred(*__M, c[0], c[1]); });
+      collected.erase(std::remove_if(collected.begin(), collected.end(),
+                                     [this](auto c) { return _merge_pred(*__M, c[0], c[1]); }),
+                      collected.end());
 
     std::vector<index_t> f_collect(2 * collected.size());
     for (int i = 0; i < collected.size(); i++) {
@@ -765,8 +765,8 @@ public:
     }
 
     if (_flip_pred)
-      std::remove_if(edges.begin(), edges.end(),
-                     [this](index_t c) { return _flip_pred(*__M, c); });
+      edges.erase(std::remove_if(edges.begin(), edges.end(),
+                     [this](index_t c) { return _flip_pred(*__M, c); }), edges.end());
 
     for (int i = 0; i < edges.size(); i++) {
       // std::cout << "A" << std::endl;
@@ -876,8 +876,8 @@ public:
     std::vector<index_t> edges_to_divide = gather_edges<comp_less>(*__M, cmp);
 
     if (_collapse_pred)
-      std::remove_if(edges_to_divide.begin(), edges_to_divide.end(),
-                     [this](index_t c) { return _collapse_pred(*__M, c); });
+      edges_to_divide.erase(std::remove_if(edges_to_divide.begin(), edges_to_divide.end(),
+                     [this](index_t c) { return _collapse_pred(*__M, c); }), edges_to_divide.end());
 
     std::vector<real> S(edges_to_divide.size(), 0.5);
     collapse_op(*__M, edges_to_divide, S, x,

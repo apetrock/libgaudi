@@ -1,7 +1,6 @@
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 
-#include "GaudiGraphics/geometry_logger.h"
 #include "gaudi/geometry_types.hpp"
 #include "gaudi/logger.hpp"
 #include "gaudi/vec_addendum.h"
@@ -14,7 +13,6 @@
 #include <queue>
 #include <stack>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __AAABBB__
 #define __AAABBB__
@@ -296,7 +294,7 @@ public:
     }
     dc /= real(S * this->size);
     c += dc;
-    // gg::geometry_logger::line(c, c + N, vec4(1.0, 0.0, 0.0, 0.0));
+    // logger::line(c, c + N, vec4(1.0, 0.0, 0.0, 0.0));
     half.set(c, N);
 #else
     mat3 U = mat3::Zero();
@@ -322,7 +320,7 @@ public:
         mx = std::max(mx, dp.norm());
       }
     }
-    //gg::geometry_logger::line(c, c + mx * N, vec4(1.0, 0.0, 0.0, 0.0));
+    //logger::line(c, c + mx * N, vec4(1.0, 0.0, 0.0, 0.0));
     half.set(c, mx * N);
 #endif
   }
@@ -346,9 +344,9 @@ public:
       prim_cen /= real(S);
       // vec3 hc = half.d * half.N;
 
-      gg::geometry_logger::line(h_cen, prim_cen, c);
+      logger::line(h_cen, prim_cen, c);
     }
-    gg::geometry_logger::line(h_cen, h_cen + half.mag * half.N, c);
+    logger::line(h_cen, h_cen + half.mag * half.N, c);
   }
 
   void debug_half() {
@@ -356,7 +354,7 @@ public:
     vec3 N = half.N;
     real t = level / 10;
     vec4 c(cos(t), cos(t + M_PI / 3.0), cos(t + M_PI / 6.0), 1.0);
-    gg::geometry_logger::line(half.cen, half.cen + half.mag * half.N, c);
+    logger::line(half.cen, half.cen + half.mag * half.N, c);
   }
 };
 
@@ -506,11 +504,11 @@ public:
 
       if (n.children[0] > 0) {
         node &n0 = nodes[n.children[0]];
-        gg::geometry_logger::line(n.half.cen, n0.half.cen, c);
+        logger::line(n.half.cen, n0.half.cen, c);
       }
       if (n.children[1] > 0) {
         node &n1 = nodes[n.children[1]];
-        gg::geometry_logger::line(n.half.cen, n1.half.cen, c);
+        logger::line(n.half.cen, n1.half.cen, c);
       }
     }
   }
@@ -569,8 +567,8 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
 
         std::cout << "d/tol: " << d << " " << tol << std::endl;
         vec3 cT = 0.5 * (extT[0] + extT[1]);
-        gg::geometry_logger::line(cT, cnode.half.cen, vec4(0.0, 1.0, 0.0, 1.0));
-        gg::geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
+        logger::line(cT, cnode.half.cen, vec4(0.0, 1.0, 0.0, 1.0));
+        logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
       }
 #endif
     }
@@ -593,9 +591,9 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
           std::cout << "idS: " << idS << std::endl;
           vec3 cT = 0.5 * (extT[0] + extT[1]);
           vec3 cS = 0.5 * (extS[0] + extS[1]);
-          gg::geometry_logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
-          gg::geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
-          gg::geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
+          logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
+          logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
+          logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
         }
 #endif
         real dist = testAB(idT, t_inds, t_verts, //

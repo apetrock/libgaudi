@@ -1,5 +1,3 @@
-
-
 #ifndef __LIBGAUDI_SPARSE_SOLVER__
 #define __LIBGAUDI_SPARSE_SOLVER__
 
@@ -26,6 +24,12 @@ public:
 
   void compute(matS &A) {
     _decomposed = false;
+    _use_iterative = false;
+    
+    // Store matrix for potential iterative solver use
+    _matrix = A;
+    
+    // Try direct factorization first
     __solver.compute(A);
 
 #if USE_CHOLMOD
@@ -36,15 +40,32 @@ public:
       _decomposed = true;
     } else {
       std::cout << ".....decomposition error! " << std::endl;
+      // Fallback to iterative solver for WebAssembly
+      _use_iterative = true;
+      _decomposed = true; // Mark as successful so we can use iterative solver
     }
   }
+  
   vecX solve(vecX &b) {
-    vecX x = __solver.solve(b);
-    if (__solver.info() != Eigen::Success) {
-      // solving failed
-      std::cout << ".....solve error! " << std::endl;
+    if (_use_iterative) {
+      // Use iterative solver as fallback
+      Eigen::ConjugateGradient<matS, Eigen::Lower | Eigen::Upper> cg;
+      cg.compute(_matrix);
+      cg.setMaxIterations(1000);
+      cg.setTolerance(1e-6);
+      vecX x = cg.solve(b);
+      if (cg.info() != Eigen::Success) {
+        std::cout << ".....iterative solve error! " << std::endl;
+      }
+      return x;
+    } else {
+      vecX x = __solver.solve(b);
+      if (__solver.info() != Eigen::Success) {
+        // solving failed
+        std::cout << ".....solve error! " << std::endl;
+      }
+      return x;
     }
-    return x;
   }
 
   bool success() { return _decomposed; }
@@ -53,17 +74,18 @@ public:
 #if USE_CHOLMOD
   Eigen::CholmodSupernodalLLT<matS> __solver;
 #else
-  Eigen::SimplicialLDLT<matS> __solver;
+  Eigen::SimplicialLDLT<matS, Eigen::Lower, Eigen::NaturalOrdering<int>> __solver;
 #endif
 
   bool _decomposed = false;
+  bool _use_iterative = false;
+  matS _matrix; // Store matrix for iterative solver
 };
 
 vecX solve(matS &A, vecX &b) {
 
   // Eigen::ConjugateGradient<matS, Eigen::Upper> solver;
   Eigen::SimplicialLDLT<matS> solver;
-  solver;
 
   solver.compute(A);
 

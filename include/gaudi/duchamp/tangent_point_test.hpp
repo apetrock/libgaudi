@@ -30,7 +30,6 @@
 #include <memory>
 #include <set>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __TEST_TEMPLATE__
 #define __TEST_TEMPLATE__

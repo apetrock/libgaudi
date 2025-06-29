@@ -1,4 +1,3 @@
-
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 
@@ -6,8 +5,6 @@
 
 #include "gaudi/common.h"
 #include "gaudi/vec_addendum.h"
-
-#include "GaudiGraphics/geometry_logger.h"
 
 #include "rod.hpp"
 
@@ -25,7 +22,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __ASAWA_DYNAMIC_ROD__
 #define __ASAWA_DYNAMIC_ROD__
@@ -85,7 +81,7 @@ real line_line(const index_t &idT, //
   vec3 dB = (xB1 - xB0).normalized();
 
   vec3 xAB = (xB - xA).normalized();
-  // gg::geometry_logger::line(xA, xB, vec4(1.0, 1.0, 1.0, 1.0));
+  // logger::line(xA, xB, vec4(1.0, 1.0, 1.0, 1.0));
   /*
     real s = d[1];
     real t = d[2];

@@ -8,7 +8,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cxxabi.h>
-#include <execinfo.h>
+
 #include <functional>
 #include <iostream>
 #include <memory.h>

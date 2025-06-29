@@ -11,7 +11,6 @@
 #include <memory>
 #include <set>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __POINTY_WOINTY__
 #define __POINTY_WOINTY__

@@ -11,8 +11,6 @@
 #include <memory>
 #include <set>
 #include <vector>
-#include <zlib.h>
-#include <random>
 
 #ifndef __DE_COLORES__
 #define __DE_COLORES__

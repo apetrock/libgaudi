@@ -17,6 +17,7 @@
 #include <math.h>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <vector>
+#include <numeric>
 #ifndef __VECADD__
 #define __VECADD__
 

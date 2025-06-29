@@ -22,7 +22,6 @@
 #include <iostream>
 #include <memory>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __M2REFACTOR_TEST__
 #define __M2REFACTOR_TEST__

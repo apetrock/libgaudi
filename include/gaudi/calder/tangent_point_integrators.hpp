@@ -11,6 +11,7 @@
 #define __TANGENT_POINT_INTEGRATOR__
 
 #include "gaudi/logger.hpp"
+#include "gaudi/asawa/datums.hpp"
 #include "rod_integrators.hpp"
 #include "shell_integrators.hpp"
 #include <cmath>

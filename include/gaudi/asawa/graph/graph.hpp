@@ -3,7 +3,6 @@
 #include <cassert>
 #include <cstddef>
 #include <cxxabi.h>
-#include <execinfo.h>
 #include <iostream>
 #include <memory.h>
 #include <numeric>
@@ -11,7 +10,6 @@
 #include <stdio.h>
 #include <type_traits>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __ASAWA_GRAPH__
 #define __ASAWA_GRAPH__

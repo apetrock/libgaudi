@@ -3,8 +3,7 @@
 
 #include "gaudi/vec_addendum.h"
 
-#include "GaudiGraphics/geometry_logger.h"
-
+#include "gaudi/logger.hpp"
 #include "gaudi/asawa/shell/asset_loader.hpp"
 #include "gaudi/asawa/shell/dynamic.hpp"
 #include "gaudi/asawa/shell/operations.hpp"
@@ -26,7 +25,6 @@
 #include <memory>
 #include <set>
 #include <vector>
-#include <zlib.h>
 
 #ifndef __SDF_FUNCTIONS__
 #define __SDF_FUNCTIONS__
@@ -150,7 +148,15 @@ public:
     return dists;
   }
 
-  virtual std::vector<vec3> grad_distance(const std::vector<vec3> &x) const {};
+  virtual std::vector<vec3> grad_distance(const std::vector<vec3> &x) const {
+    std::vector<vec3> grads(x.size(), vec3(0.0, 0.0, 0.0));
+    for (int i = 0; i < x.size(); i++) {
+      // Simple gradient approximation for cylinder
+      vec3 closest = va::project_on_line(_x0, _x1, x[i]);
+      grads[i] = (x[i] - closest).normalized();
+    }
+    return grads;
+  };
 
   vec3 _x0, _x1;
   real _r;
