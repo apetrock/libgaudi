@@ -1,0 +1,94 @@
+{
+  "name": "@gaudi/physics-components",
+  "version": "0.1.0",
+  "description": "React Three Fiber components for physics simulation with WebAssembly",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./components": {
+      "import": "./dist/components.esm.js",
+      "require": "./dist/components.js",
+      "types": "./dist/components.d.ts"
+    },
+    "./utils": {
+      "import": "./dist/utils.esm.js",
+      "require": "./dist/utils.js",
+      "types": "./dist/utils.d.ts"
+    },
+    "./wasm/*": "./public/wasm/*"
+  },
+  "files": [
+    "dist",
+    "public/wasm"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:lib": "tsc && vite build --config vite.lib.config.ts",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "wasm:build": "node -e \"require('child_process').execSync('cd wasm && build.bat', {stdio: 'inherit'})\"",
+    "wasm:clean": "cd wasm && clean.bat",
+    "wasm:test": "node scripts/test-wasm-loading.mjs",
+    "wasm:test:logger": "tsx scripts/test-logger-interface.mts",
+    "wasm:check": "cd wasm && emcc --version",
+    "gen-demo": "tsx scripts/gen-demo.ts"
+  },
+  "keywords": [
+    "react",
+    "three-fiber",
+    "physics",
+    "simulation",
+    "webassembly",
+    "rod-dynamics",
+    "constraints",
+    "gaudi"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "peerDependencies": {
+    "@react-three/drei": "^9.0.0",
+    "@react-three/fiber": "^8.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.16",
+    "@types/node": "^24.0.4",
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25",
+    "@types/three": "^0.167.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.21",
+    "node-fetch": "^3.3.2",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vite-plugin-dts": "^4.5.4"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.2.3",
+    "@react-three/drei": "^9.0.0",
+    "@react-three/fiber": "^8.0.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.522.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-router-dom": "^6.30.1",
+    "tailwind-merge": "^3.3.1",
+    "three": "^0.160.0",
+    "zustand": "^5.0.0"
+  }
+}
