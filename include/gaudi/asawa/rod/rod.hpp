@@ -4,7 +4,6 @@
 #include <Eigen/Eigenvalues>
 
 #include "Eigen/src/Geometry/AngleAxis.h"
-#include "gaudi/arp/arp.h"
 
 #include "gaudi/common.h"
 #include "gaudi/vec_addendum.h"
@@ -22,6 +21,7 @@
 #include <memory>
 #include <type_traits>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __ASAWA_ROD__
 #define __ASAWA_ROD__
@@ -152,13 +152,30 @@ public:
 
     _lmax = 0.0;
     for (int i = 0; i < __corners_next.size(); i++) {
-      if (__corners_next[i] == -1)
-        continue;
-      real l = __l0[i];
-      _lmax += l;
+      real mass = 0.0;
       real rho = 1.0;
-      real M = M_PI * _r * _r * l;
-      real J = l * rho * M * _r * _r;
+      
+      // Calculate mass based on adjacent edge lengths
+      if (prev(i) == -1) {
+        // Start endpoint: mass = 0.5 * length_right
+        if (next(i) != -1) {
+          real l_right = __l0[i];
+          mass = 0.5 * l_right;
+        }
+      } else if (next(i) == -1) {
+        // End endpoint: mass = 0.5 * length_left
+        real l_left = __l0[prev(i)];
+        mass = 0.5 * l_left;
+      } else {
+        // Interior node: mass = 0.5 * (length_left + length_right)
+        real l_left = __l0[prev(i)];
+        real l_right = __l0[i];
+        mass = 0.5 * (l_left + l_right);
+      }
+      
+      // Convert length to mass using cylinder volume
+      real M = M_PI * _r * _r * mass;
+      real J = mass * rho * M * _r * _r;
 
       __M[i][0] = M;
       __M[i][1] = M;
@@ -168,13 +185,13 @@ public:
       __J[i][1] = 0.25 * J;
       __J[i][2] = 0.5 * J;
       __J[i][3] = 0.0;
-      /*
-      __J[i][0] = 0.0;
-      __J[i][1] = 0.0;
-      __J[i][2] = 0.0;
-      __J[i][3] = 0.0;
-*/
+      
+      // Track max length for averaging
+      if (next(i) != -1) {
+        _lmax += __l0[i];
+      }
     }
+    
     _lmax /= real(__corners_next.size());
   }
 
@@ -348,6 +365,19 @@ public:
   void link(index_t c0, index_t c1) {
     set_next(c0, c1);
     set_prev(c1, c0);
+  }
+
+  // Convenience function to get all endpoint indices (nodes with next = -1 or prev = -1)
+  std::vector<index_t> get_endpoints() const {
+    std::vector<index_t> endpoints;
+    endpoints.reserve(corner_count());
+    
+    for (index_t i = 0; i < corner_count(); i++) {
+      if (next(i) == -1 || prev(i) == -1) {
+        endpoints.push_back(i);
+      }
+    }
+    return endpoints;
   }
 
   size_t corner_count() const { return __corners_next.size(); }
@@ -597,18 +627,18 @@ public:
       vec3 v = __v[i];
       // std::cout << i << " " << __l0[i] << " " << (c1 - c0).norm() <<
       // std::endl;
-      //logger::point(c0, vec4(0.0, 1.0, 0.0, 1.0));
-      logger::line(c0, c1, vec4(0.0, 0.7, 1.0, 1.0));
-      //logger::line(c0, c0 + v, vec4(0.8, 0.3, 0.0, 1.0));
+      //geometry_logger::point(c0, vec4(0.0, 1.0, 0.0, 1.0));
+      geometry_logger::line(c0, c1, vec4(0.0, 0.7, 1.0, 1.0));
+      //geometry_logger::line(c0, c0 + v, vec4(0.8, 0.3, 0.0, 1.0));
       quat u = __u[i];
 #if 0
       vec3 d0 = u * vec3(1, 0, 0);
       vec3 d1 = u * vec3(0, 1, 0);
       vec3 d2 = u * vec3(0, 0, 1);
 
-      logger::line(c0, c0 + 0.03 * d0, vec4(1.0, 0.0, 0.0, 1.0));
-      logger::line(c0, c0 + 0.03 * d1, vec4(0.0, 1.0, 0.0, 1.0));
-      logger::line(c0, c0 + 0.03 * d2, vec4(0.0, 0.0, 1.0, 1.0));
+      geometry_logger::line(c0, c0 + 0.03 * d0, vec4(1.0, 0.0, 0.0, 1.0));
+      geometry_logger::line(c0, c0 + 0.03 * d1, vec4(0.0, 1.0, 0.0, 1.0));
+      geometry_logger::line(c0, c0 + 0.03 * d2, vec4(0.0, 0.0, 1.0, 1.0));
 #endif
     }
   }

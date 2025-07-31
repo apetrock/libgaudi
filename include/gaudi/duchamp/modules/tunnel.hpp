@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 
@@ -99,8 +100,8 @@ std::vector<std::vector<vec3>> tunnel(asawa::shell::shell &M,
         w += wj * kappa;
         Nh += wj * kappa * dp;
         // Nh += wj * kappa * (cen - pi);
-        //     logger::line(pj, pj + Ndp, vec4(0.0, 1.0, 0.5, 1.0));
-        //    logger::line(pi, pi + dp, vec4(1.0, 1.0, 0.0, 1.0));
+        //     geometry_logger::line(pj, pj + Ndp, vec4(0.0, 1.0, 0.5, 1.0));
+        //    geometry_logger::line(pi, pi + dp, vec4(1.0, 1.0, 0.0, 1.0));
         return vec3::Zero();
       };
 
@@ -157,7 +158,7 @@ std::vector<std::vector<vec3>> tunnel(asawa::shell::shell &M,
     }
     paths.push_back(path);
     for (int i = 0; i < path.size() - 1; i++) {
-      logger::line(path[i], path[i + 1], vec4(1.0, 0.0, 1.0, 1.0));
+      geometry_logger::line(path[i], path[i + 1], vec4(1.0, 0.0, 1.0, 1.0));
     }
   }
   return paths;

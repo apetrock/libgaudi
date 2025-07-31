@@ -7,6 +7,7 @@ Arp in English, was a German-French sculptor, painter, and poet. He was known as
 a Dadaist and an abstract artist.
 */
 
-#include "gaudi/arp/aabb.hpp"
+// Using ARP module exclusively
+import arp;
 
 #endif

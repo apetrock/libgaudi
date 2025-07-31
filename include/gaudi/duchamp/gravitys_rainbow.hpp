@@ -49,6 +49,7 @@
 #include <cmath>
 #include <memory>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __GRAVITYS_RAINBOW__
 #define __GRAVITYS_RAINBOW__

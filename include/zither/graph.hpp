@@ -1,9 +1,10 @@
-#include <iostream>
+#include "../gaudi/logger.hpp"
 #include <memory>
 #include <vector>
 #include <map>
 #include <bitset>
 #include <string>
+#include <array>
 
 #ifndef __NET_GRAPH__
 #define __NET_GRAPH__
@@ -43,7 +44,7 @@ public:
     mPorts.push_back(std::string("phase"));
     mPorts.push_back(std::string("output"));
   }
-  virtual void localProcess(){std::cout << "sin proc" << std::endl;};
+  virtual void localProcess(){gaudi::logger::info << "sin proc" << std::endl;};
   double freq, phase;
 };
 
@@ -55,7 +56,7 @@ public:
     mPorts.push_back("left_input"); 
     mPorts.push_back("right_input");
   }
-  virtual void localProcess(){std::cout << "out proc" << std::endl;};
+  virtual void localProcess(){gaudi::logger::info << "out proc" << std::endl;};
   
 };
 

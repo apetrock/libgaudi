@@ -20,6 +20,7 @@
 #include "gaudi/common.h"
 #include "shell_collision_constraint.hpp"
 #include "shell_constraints.hpp"
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 namespace hepworth {

@@ -5,9 +5,10 @@ import * as THREE from 'three';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Play, Pause, RotateCcw, Activity, Clock, Eye, EyeOff } from 'lucide-react';
+import { Play, Pause, RotateCcw, Activity, Clock, Eye, EyeOff, Video, Download } from 'lucide-react';
 import { useWasmModule, WasmModule } from '../utils/wasmLoader';
 import { GaudiLoggerRenderer, WasmLoggerAPI, WasmModule as LoggerWasmModule } from './GaudiLoggerRenderer';
+import { VideoRecorder } from './VideoRecorder';
 
 interface RodConstraintsTestModule extends WasmModule, LoggerWasmModule {
   RodConstraintsTest: new () => RodConstraintsTestInstance;
@@ -58,6 +59,9 @@ export function RodConstraintsTest() {
   const [frame, setFrame] = useState(0);
   const [showDebugLines, setShowDebugLines] = useState(true);
   const [showDebugPoints, setShowDebugPoints] = useState(true);
+  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
+  
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const handlePlayPause = () => {
     setIsPlaying(!isPlaying);
@@ -74,6 +78,23 @@ export function RodConstraintsTest() {
     if (instance) {
       instance.step();
       setFrame(instance.get_frame_count());
+    }
+  };
+
+  const handleRecordingComplete = (blob: Blob) => {
+    setRecordingBlob(blob);
+  };
+
+  const handleDownloadRecording = () => {
+    if (recordingBlob) {
+      const url = URL.createObjectURL(recordingBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rod-constraints-test-${Date.now()}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
   };
 
@@ -112,7 +133,7 @@ export function RodConstraintsTest() {
             Rod Constraints Test
           </CardTitle>
           <CardDescription>
-            Test rod constraints with logger visualization
+            Test rod constraints with logger visualization and video recording
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -155,6 +176,36 @@ export function RodConstraintsTest() {
               Points
             </Button>
           </div>
+
+          {/* Video Recording Controls */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            <VideoRecorder 
+              targetRef={canvasRef}
+              quality="high"
+              framerate={60}
+              onRecordingComplete={handleRecordingComplete}
+            >
+              {({ startRecording, stopRecording, isRecording }) => (
+                <>
+                  <Button 
+                    onClick={isRecording ? stopRecording : startRecording}
+                    variant={isRecording ? "destructive" : "outline"}
+                    size="sm"
+                  >
+                    <Video className="h-4 w-4 mr-1" />
+                    {isRecording ? 'Stop Recording' : 'Start Recording'}
+                  </Button>
+                </>
+              )}
+            </VideoRecorder>
+            
+            {recordingBlob && (
+              <Button onClick={handleDownloadRecording} variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-1" />
+                Download Recording
+              </Button>
+            )}
+          </div>
           
           <div className="flex gap-4 text-sm">
             <div className="flex items-center gap-1">
@@ -175,6 +226,7 @@ export function RodConstraintsTest() {
       {/* 3D Scene */}
       <div className="flex-1 relative min-h-[600px]">
         <Canvas 
+          ref={canvasRef}
           camera={{ position: [3, 3, 3], fov: 60, near: 0.01, far: 1000 }}
           className="!absolute !inset-0"
           gl={{ preserveDrawingBuffer: true }}

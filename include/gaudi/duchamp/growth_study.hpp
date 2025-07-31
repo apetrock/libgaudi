@@ -34,6 +34,7 @@
 #include <math.h>
 #include <memory>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __M2REFACTOR_TEST__
 #define __M2REFACTOR_TEST__
@@ -190,7 +191,7 @@ public:
       real e0 = pow(e.dot(f0), 2.0);
       g_edge[c0 / 2] = e0 * w;
       // if (c0 / 2 == 1000)
-      //   logger::line(xc, cen, vec4(1.0, 0.0, 0.0, 1.0));
+      //   geometry_logger::line(xc, cen, vec4(1.0, 0.0, 0.0, 1.0));
     }
     return g_edge;
   }
@@ -228,8 +229,8 @@ public:
       vec3 f0 = Fi.col(0);
       vec3 f1 = Fi.col(1);
       real cc = 0.01;
-      // logger::line(xc - cc * f0, xc + cc * f0, vec4(1.0, 0.0, 0.0, 1.0));
-      // logger::line(xc - cc * f1, xc + cc * f1, vec4(0.0, 0.0, 1.0, 1.0));
+      // geometry_logger::line(xc - cc * f0, xc + cc * f0, vec4(1.0, 0.0, 0.0, 1.0));
+      // geometry_logger::line(xc - cc * f1, xc + cc * f1, vec4(0.0, 0.0, 1.0, 1.0));
 
       real l0 = pow(f0.norm(), 1.0);
       real l1 = pow(f1.norm(), 1.0);
@@ -254,7 +255,7 @@ public:
       // real g = va::mix(C, w[1] * e0, w[0] * e1);
       real g = va::mix(C, w[0] * e0 / l0, w[1] * e1 / l1);
 
-      // logger::line(xc - g * dx, xc + g * dx, vec4(1.0, 0.0, 0.0, 1.0));
+      // geometry_logger::line(xc - g * dx, xc + g * dx, vec4(1.0, 0.0, 0.0, 1.0));
       //   real g = C * l1 * pow(e.dot(f1), 2.0);
       g_edge[c0 / 2] = g;
     }
@@ -311,9 +312,9 @@ public:
       real d0 = 1.0 - d1;
       vec2 wp = vec2(gT, gB).array() * w.array();
       real C = 0.01;
-      logger::line(xc - C * wp[0] * T, xc + C * wp[0] * T,
+      geometry_logger::line(xc - C * wp[0] * T, xc + C * wp[0] * T,
                    vec4(1.0, 0.0, 0.0, 1.0));
-      logger::line(xc - C * wp[1] * B, xc + C * wp[1] * B,
+      geometry_logger::line(xc - C * wp[1] * B, xc + C * wp[1] * B,
                    vec4(0.0, 0.0, 1.0, 1.0));
 #endif
       g_edge[c0 / 2] = 1.0 * vec2(gT, gB).dot(w);
@@ -396,10 +397,10 @@ public:
 #if 0
       real C = 0.25;
       if (g < 0.0) {
-        logger::line(xc - C * g * dx, xc + C * g * dx,
+        geometry_logger::line(xc - C * g * dx, xc + C * g * dx,
                      vec4(1.0, 0.0, 0.0, 1.0));
       } else {
-        logger::line(xc - C * g * dx, xc + C * g * dx,
+        geometry_logger::line(xc - C * g * dx, xc + C * g * dx,
                      vec4(0.0, 1.0, 0.0, 1.0));
       }
 #endif
@@ -458,11 +459,11 @@ public:
       // f[i] = 0.01 * Ni / (1.0 - s[1] / s[0]);
       //  f[i] = (w[0] * s[0] / st + w[1] * s[1] / st) * Ni;
       //   f[i] = vec3::Zero();
-      // logger::line(x[i], x[i] + 0.1 * f[i], vec4(1.0, 0.0, 1.0, 1.0));
+      // geometry_logger::line(x[i], x[i] + 0.1 * f[i], vec4(1.0, 0.0, 1.0, 1.0));
 
-      // logger::line(x[i], x[i] + 0.1 * s[0] * c0, vec4(1.0, 0.0, 0.0, 1.0));
-      // logger::line(x[i], x[i] + 0.1 * s[1] * c1, vec4(0.0, 1.0, 0.0, 1.0));
-      //  logger::line(x[i], x[i] + 1.0 * s[2] * c2, vec4(0.0, 0.0, 1.0, 1.0));
+      // geometry_logger::line(x[i], x[i] + 0.1 * s[0] * c0, vec4(1.0, 0.0, 0.0, 1.0));
+      // geometry_logger::line(x[i], x[i] + 0.1 * s[1] * c1, vec4(0.0, 1.0, 0.0, 1.0));
+      //  geometry_logger::line(x[i], x[i] + 1.0 * s[2] * c2, vec4(0.0, 0.0, 1.0, 1.0));
     }
     std::vector<vec3> f_f = asawa::shell::vert_to_face<vec3>(shell, x, f);
     std::vector<vec3> f_s = calder::mls_avg<vec3>(shell, f_f, x, 4.0 * _eps);
@@ -504,7 +505,7 @@ public:
       dr = dpd - r;
 
       real di = d[i];
-      // logger::line(x[i], x[i] + 0.1 * di * f0, vec4(0.0, 1.0, 0.0, 1.0));
+      // geometry_logger::line(x[i], x[i] + 0.1 * di * f0, vec4(0.0, 1.0, 0.0, 1.0));
       f[i] = di * (w[0] * f0 - w[1] * dr * N_v[i]);
       // f[i] = d[i] * f0;
     }

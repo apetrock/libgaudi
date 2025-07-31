@@ -12,6 +12,7 @@
 #endif
 
 #include <Eigen/Sparse>
+#include "gaudi/logger.hpp"
 
 typedef double real;
 typedef Eigen::SparseMatrix<double> matS;
@@ -33,13 +34,13 @@ public:
     __solver.compute(A);
 
 #if USE_CHOLMOD
-    std::cout << "solving with cholmod" << std::endl;
+    gaudi::logger::info << "solving with cholmod" << std::endl;
 #endif
 
     if (__solver.info() == Eigen::Success) {
       _decomposed = true;
     } else {
-      std::cout << ".....decomposition error! " << std::endl;
+      gaudi::logger::error << ".....decomposition error! " << std::endl;
       // Fallback to iterative solver for WebAssembly
       _use_iterative = true;
       _decomposed = true; // Mark as successful so we can use iterative solver
@@ -55,14 +56,14 @@ public:
       cg.setTolerance(1e-6);
       vecX x = cg.solve(b);
       if (cg.info() != Eigen::Success) {
-        std::cout << ".....iterative solve error! " << std::endl;
+        gaudi::logger::error << ".....iterative solve error! " << std::endl;
       }
       return x;
     } else {
       vecX x = __solver.solve(b);
       if (__solver.info() != Eigen::Success) {
         // solving failed
-        std::cout << ".....solve error! " << std::endl;
+        gaudi::logger::error << ".....solve error! " << std::endl;
       }
       return x;
     }
@@ -91,12 +92,12 @@ vecX solve(matS &A, vecX &b) {
 
   if (solver.info() != Eigen::Success) {
     // decomposition failed
-    std::cout << ".....decomposition error! " << std::endl;
+    gaudi::logger::error << ".....decomposition error! " << std::endl;
   }
   vecX x = solver.solve(b);
   if (solver.info() != Eigen::Success) {
     // solving failed
-    std::cout << ".....solve error! " << std::endl;
+    gaudi::logger::error << ".....solve error! " << std::endl;
   }
 
   return x;

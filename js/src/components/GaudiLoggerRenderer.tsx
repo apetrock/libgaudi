@@ -14,6 +14,16 @@ export interface WasmModule {
   get_point_count(): number;
   get_point_colors_data(): Float32Array;
   get_points_data(): Float32Array;
+  
+  // Console logger functions (optional - may not be available in all modules)
+  log_info?: (message: string) => void;
+  log_warning?: (message: string) => void;
+  log_error?: (message: string) => void;
+  log_debug?: (message: string) => void;
+  set_info_callback?: (callback: (message: string) => void) => void;
+  set_warning_callback?: (callback: (message: string) => void) => void;
+  set_error_callback?: (callback: (message: string) => void) => void;
+  set_debug_callback?: (callback: (message: string) => void) => void;
 }
 
 interface GaudiLoggerRendererProps {

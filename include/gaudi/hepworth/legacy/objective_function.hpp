@@ -9,6 +9,7 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
+#include "gaudi/geometry_logger.hpp"
 
 namespace hepworth {
 template <typename SPACE> class objective_function {

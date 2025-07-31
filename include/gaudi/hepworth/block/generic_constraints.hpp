@@ -7,6 +7,7 @@
 #include "gaudi/common.h"
 #include "shell_constraints.hpp"
 #include "sim_block.hpp"
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 namespace hepworth {
@@ -21,7 +22,7 @@ public:
   pinned(const std::vector<index_t> &ids, const vec3 &p, const real &w,
          std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _p(p) {}
-  virtual std::string name() { return typeid(*this).name(); }
+  virtual std::string name() { return "pinned"; }
   virtual void project(const vecX &q, vecX &p) {
     index_t i = this->_ids[0];
     vec3 q0 = _blocks[0]->get_vec3(i, q);
@@ -44,7 +45,7 @@ public:
   pnt_pnt_weld(const std::vector<index_t> &ids, const real &w,
                std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks) {}
-  virtual std::string name() { return typeid(*this).name(); }
+  virtual std::string name() { return "pnt_pnt_weld"; }
   virtual void project(const vecX &q, vecX &p) {
     index_t i0 = this->_ids[0];
     index_t i1 = this->_ids[1];
@@ -96,7 +97,7 @@ public:
   edge_edge_weld(const std::vector<index_t> &ids, const real &w0,
                  const real &w1, std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, 0.0, blocks), _w0(w0), _w1(w1) {}
-  virtual std::string name() { return typeid(*this).name(); }
+  virtual std::string name() { return "edge_edge_weld"; }
   virtual void project(const vecX &q, vecX &p) {
     index_t iA0 = this->_ids[0];
     index_t iA1 = this->_ids[1];
@@ -136,7 +137,7 @@ public:
 
       xB0 = slide(xA0, xA1, xB0, s, _t1);
       xB1 = slide(xA0, xA1, xB1, s, _t1);
-      // logger::line(xB0, xB1, vec4(0.0, 1.0, 1.0, 1.0));
+      // geometry_logger::line(xB0, xB1, vec4(0.0, 1.0, 1.0, 1.0));
     }
 
     if (_rotate_to) {
@@ -250,7 +251,7 @@ public:
                    const real &w, std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _r(r), _Nr0(Nr0), _Nr1(Nr1), _Ns(Ns) {
   }
-  virtual std::string name() { return typeid(*this).name(); }
+  virtual std::string name() { return "point_edge_creep"; }
   virtual void project(const vecX &q, vecX &p) {
     index_t iA = this->_ids[0];
     index_t iB0 = this->_ids[1];

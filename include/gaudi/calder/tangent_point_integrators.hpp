@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <ostream>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi
 {
@@ -152,8 +153,8 @@ namespace gaudi
 
             vec3 dp = pj - pi;
             // if (i == 0) {
-            //   logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
-            //   logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
+            //   geometry_logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
+            //   geometry_logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
             // }
             Ni.normalize();
             Nj.normalize();
@@ -205,8 +206,8 @@ namespace gaudi
 
             vec3 dp = pj - pi;
             // if (i == 0) {
-            //   logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
-            //   logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
+            //   geometry_logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
+            //   geometry_logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
             // }
             Ni.normalize();
             Nj.normalize();
@@ -272,8 +273,8 @@ namespace gaudi
             }
 
             //  if (i == 0) {
-            //    logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
-            //    logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
+            //    geometry_logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
+            //    geometry_logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
             //  }
             Ni.normalize();
             Nj.normalize();

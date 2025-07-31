@@ -7,6 +7,7 @@
 #include "gaudi/common.h"
 #include "module_base_shell.hpp"
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 namespace duchamp {

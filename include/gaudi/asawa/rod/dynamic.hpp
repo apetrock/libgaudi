@@ -1,10 +1,9 @@
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 
-#include "gaudi/arp/arp.h"
-
 #include "gaudi/common.h"
 #include "gaudi/vec_addendum.h"
+#include "gaudi/arp/aabb.hpp"
 
 #include "rod.hpp"
 
@@ -22,6 +21,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __ASAWA_DYNAMIC_ROD__
 #define __ASAWA_DYNAMIC_ROD__
@@ -54,14 +54,14 @@ real line_line(const index_t &idT, //
                const std::vector<index_t> &s_inds, const vector<vec3> &s_x) {
 
   if (t_inds[2 * idT + 0] == s_inds[2 * idS + 0])
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
   if (t_inds[2 * idT + 1] == s_inds[2 * idS + 1])
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
 
   if (t_inds[2 * idT + 1] == s_inds[2 * idS + 0])
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
   if (t_inds[2 * idT + 0] == s_inds[2 * idS + 1])
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
   //  std::cout << t_inds[2 * idT + 0] << " " << t_inds[2 * idT + 1] << "-"
   //            << t_inds[2 * idS + 0] << " " << t_inds[2 * idS + 1] <<
   //            std::endl;
@@ -81,7 +81,7 @@ real line_line(const index_t &idT, //
   vec3 dB = (xB1 - xB0).normalized();
 
   vec3 xAB = (xB - xA).normalized();
-  // logger::line(xA, xB, vec4(1.0, 1.0, 1.0, 1.0));
+  // geometry_logger::line(xA, xB, vec4(1.0, 1.0, 1.0, 1.0));
   /*
     real s = d[1];
     real t = d[2];
@@ -97,9 +97,9 @@ real line_line(const index_t &idT, //
     return std::numeric_limits<real>::infinity();
    */
   if (abs(dA.dot(xAB)) > 0.35)
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
   if (abs(dB.dot(xAB)) > 0.35)
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
   return d[0];
 };
 

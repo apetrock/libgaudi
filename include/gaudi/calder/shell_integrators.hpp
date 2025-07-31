@@ -10,6 +10,7 @@
 #ifndef __SHELL_INTEGRATOR__
 #define __SHELL_INTEGRATOR__
 
+#include "gaudi/arp/aabb.hpp"
 #include "integrators.hpp"
 #include <algorithm>
 #include <cmath>
@@ -17,6 +18,7 @@
 #include <iostream>
 #include <ostream>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi
 {
@@ -186,7 +188,7 @@ namespace gaudi
 
     void log_v(vec3 pi, vec3 e)
     {
-      logger::line(pi, pi + 10.0 * e, vec4(0.0, 0.3, 1.0, 1.0));
+      geometry_logger::line(pi, pi + 10.0 * e, vec4(0.0, 0.3, 1.0, 1.0));
     }
 
     void log_v(vec3 pi, real e) {}
@@ -231,9 +233,9 @@ namespace gaudi
 
             // real kappa = computeK(dist, l0, p);
             // if (i == 1250) {
-            // logger::line(pi, pj, vec4(1.0, 0.3, 0.3, 1.0));
+            // geometry_logger::line(pi, pj, vec4(1.0, 0.3, 0.3, 1.0));
             // log_v(pj, kappa * e);
-            // logger::line(pj, pj + 0.1 * vec3(e), vec4(0.0, 0.3, 1.0, 1.0));
+            // geometry_logger::line(pj, pj + 0.1 * vec3(e), vec4(0.0, 0.3, 1.0, 1.0));
             //}
             sums[i] += w * kappa;
             return kappa * e;

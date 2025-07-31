@@ -41,6 +41,7 @@
 #include <memory>
 #include <set>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi
 {
@@ -303,13 +304,13 @@ namespace gaudi
         std::vector<vec3> x_t = rod_target(target);
 #if 0
     for (int i = 0; i < target.size() - 1; i++) {
-      logger::line(target[i], target[i + 1], vec4(0.0, 1.0, 1.0, 1.0));
+      geometry_logger::line(target[i], target[i + 1], vec4(0.0, 1.0, 1.0, 1.0));
     }
 #endif
         std::vector<vec3> dx(x_t.size(), vec3::Zero());
         for (int i = 0; i < x_t.size(); i++)
         {
-          // logger::line(x_t[i], x_r[i], vec4(0.0, 1.0, 1.0, 1.0));
+          // geometry_logger::line(x_t[i], x_r[i], vec4(0.0, 1.0, 1.0, 1.0));
           dx[i] = (x_t[i] - x_r[i]);
         }
         return dx;

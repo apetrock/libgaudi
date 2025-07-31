@@ -33,6 +33,7 @@
 #include <cmath>
 #include <memory>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __M2REFACTOR_TEST__
 #define __M2REFACTOR_TEST__

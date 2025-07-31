@@ -20,6 +20,7 @@
 #include <memory>
 #include <set>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __WALKY_TALKY__
 #define __WALKY_TALKY__

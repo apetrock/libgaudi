@@ -14,6 +14,7 @@
 #include <memory.h>
 #include <numeric>
 #include <ostream>
+#include <random>
 #include <stdio.h>
 #include <type_traits>
 #include <vector>
@@ -23,6 +24,7 @@
 #include "../projection_constraint.hpp"
 #include "block_constraint.hpp"
 #include "sim_block.hpp"
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 namespace hepworth {
@@ -82,9 +84,21 @@ public:
     return std::make_shared<stretch_shear>(ids, w, l0, blocks);
   }
 
+  // New dual-weight constructor
+  static ptr create(const std::vector<index_t> &ids, const real &w1, const real &w2,
+                    const real &l0, std::vector<sim_block::ptr> blocks) {
+    return std::make_shared<stretch_shear>(ids, w1, w2, l0, blocks);
+  }
+
   stretch_shear(const std::vector<index_t> &ids, const real &w, const real &l0,
                 std::vector<sim_block::ptr> blocks)
-      : block_constraint(ids, w, blocks), _l0(l0) {}
+      : block_constraint(ids, w, blocks), _l0(l0), _w1(w), _w2(w) {}
+  
+  // New dual-weight constructor
+  stretch_shear(const std::vector<index_t> &ids, const real &w1, const real &w2, const real &l0,
+                std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w1, blocks), _l0(l0), _w1(w1), _w2(w2) {}
+  
   virtual std::string name() { return typeid(*this).name(); }
 
   virtual void project(const vecX &q, vecX &p) {
@@ -103,7 +117,7 @@ public:
 
     vec3 d2 = u * vec3(0, 0, 1);
     // d2.normalize();
-    //logger::line(q0, q0 + 0.1 * d2, vec4(1.0, 0.0, 0.0, 1.0));
+    //geometry_logger::line(q0, q0 + 0.1 * d2, vec4(1.0, 0.0, 0.0, 1.0));
     quat du = quat::FromTwoVectors(d2, dq);
 
     u = du * u;
@@ -119,10 +133,10 @@ public:
 
     // l = std::clamp(l / _l0, 0.1, 1.5);
     // p.block(_id0, 0, 3, 1) = _w * l * d2;
-    p.block(_id0, 0, 3, 1) = _w * d2;
+    p.block(_id0, 0, 3, 1) = _w1 * d2;  // Use _w1 for stretch/shear component
 
     // p.block(k, 0, 4, 1) += _w * q.block(k, 0, 4, 1);
-    p.block(_id0 + 3, 0, 4, 1) = _w * vec4(u.coeffs().data());
+    p.block(_id0 + 3, 0, 4, 1) = _w2 * vec4(u.coeffs().data());  // Use _w2 for rotation component
   }
 
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
@@ -137,15 +151,17 @@ public:
     // std::cout << ii << " " << k << std::endl;
     // std::cout << "ii: " << ii << std::endl;
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(_id0 + ax, i + ax, -_w / _l0));
+      triplets.push_back(trip(_id0 + ax, i + ax, -_w1 / _l0));  // Use _w1
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(_id0 + ax, j + ax, _w / _l0));
+      triplets.push_back(trip(_id0 + ax, j + ax, _w1 / _l0));   // Use _w1
 
     for (int ax = 0; ax < 4; ax++)
-      triplets.push_back(trip(_id0 + 3 + ax, ii + ax, _w));
+      triplets.push_back(trip(_id0 + 3 + ax, ii + ax, _w2));  // Use _w2
     id0 += 7;
   }
   real _l0;
+  real _w1;  // Weight for stretch/shear component
+  real _w2;  // Weight for rotation component
 };
 
 class straight : public block_constraint {
@@ -296,8 +312,8 @@ public:
     // zj = uj * _z;
     // real thetp = atan2(zi.cross(zj).dot(N), zi.dot(zj));
     //  std::cout << thet << " " << thetp << std::endl;
-    //  gg::geometry_logger::line(q0, q0 + 0.05 * zi, vec4(1.5, 0.0, 0.0, 1.0));
-    //  gg::geometry_logger::line(q0, q0 + 0.05 * zj, vec4(0.0, 1.5, 0.0, 1.0));
+    //  gg::geometry_geometry_logger::line(q0, q0 + 0.05 * zi, vec4(1.5, 0.0, 0.0, 1.0));
+    //  gg::geometry_geometry_logger::line(q0, q0 + 0.05 * zj, vec4(0.0, 1.5, 0.0, 1.0));
     if (ui.coeffs().hasNaN()) {
       std::cout << __PRETTY_FUNCTION__ << " ui is nan" << std::endl;
       exit(0);
@@ -428,7 +444,7 @@ real FitCylinder(const std::vector<vec3> &points, const vec3 &W, real &rSqr,
   real error = G(X, mu, F0, F1, F2, W, C, rSqr);
   // Choose imax and jmax as desired for the level of granularity you
   // want for sampling W vectors on the hemisphere.
-  real minError = std::numeric_limits<real>::infinity();
+  real minError = std::numeric_limits<real>::max();
 
   C += avg;
   return minError;
@@ -507,7 +523,7 @@ public:
     //Eigen::AngleAxis<real> R(0.01 * dis(gen) * M_PI, T1);
 
     //T2 = R * T2;
-    //  logger::line(q0, q0 + 0.1 * T2, vec4(0.5, 0.0, 1.0, 1.0));
+    //  geometry_logger::line(q0, q0 + 0.1 * T2, vec4(0.5, 0.0, 1.0, 1.0));
     int i = 0;
     i = t0 < t1 && t0 < t2 ? 0 : i;
     i = t1 < t0 && t1 < t2 ? 1 : i;
@@ -538,7 +554,7 @@ public:
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis(-1.0, 1.0);
     vec3 qp = qc + (1.0 + dis(gen) * 0.001) * sqrt(r2) * (q0 - qc).normalized();
-    // logger::line(qc, qp, vec4(0.5, 0.0, 1.0, 1.0));
+    // geometry_logger::line(qc, qp, vec4(0.5, 0.0, 1.0, 1.0));
     p.block(_id0, 0, 3, 1) += _w * qp;
   }
 

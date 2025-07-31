@@ -35,6 +35,7 @@
 #include <memory>
 #include <set>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __ROD_GUIDED__
 #define __ROD_GUIDED__

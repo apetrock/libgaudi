@@ -80,7 +80,7 @@ Built files are placed in:
 - `CMakeLists.txt` - Main CMake configuration with shared functions
 - `build_wasm.bat` - Windows batch build script
 - `build_wasm.ps1` - PowerShell build script (recommended)
-- `wasm_logger.cpp` - Logger implementation for WASM (shared)
+- `wasm_geometry_logger.cpp` - Logger implementation for WASM (shared)
 - `gaudi_logger_test.cpp` - Test for the logger functionality
 - `main.cpp` - Main rod simulation module
 - `hello.cpp` - Simple hello world test
@@ -97,7 +97,7 @@ wasm/
 ├── CMakeLists.txt           # Root CMake configuration
 ├── build_wasm.ps1           # PowerShell build script
 ├── build_wasm.bat           # Batch build script
-├── wasm_logger.cpp          # Shared logger implementation
+├── wasm_geometry_logger.cpp          # Shared logger implementation
 ├── gaudi_logger_test.cpp    # Logger test
 ├── main.cpp                 # Rod simulation main
 ├── hello.cpp                # Hello world example

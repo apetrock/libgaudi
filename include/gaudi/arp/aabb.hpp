@@ -13,6 +13,7 @@
 #include <queue>
 #include <stack>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __AAABBB__
 #define __AAABBB__
@@ -38,11 +39,11 @@ real pnt_tri_min(const index_t &idT, //
   index_t vS1 = s_inds[3 * idS + 1];
   index_t vS2 = s_inds[3 * idS + 2];
   if (vT0 == vS0)
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
   if (vT0 == vS1)
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
   if (vT0 == vS2)
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
 
   const vec3 &x0 = t_x[vT0];
   const vec3 &xt0 = s_x[vS0];
@@ -60,7 +61,7 @@ real pnt_tri_min(const index_t &idT, //
   std::array<real, 4> cp = va::closest_point({xt0, xt1, xt2}, x0);
   vec3 xT = cp[1] * xt0 + cp[2] * xt1 + cp[3] * xt2;
   // if (idT == 0)
-  //   logger::line(x0, xT, vec4(1.0, 0.5, 0.0, 1.0));
+  //   geometry_logger::line(x0, xT, vec4(1.0, 0.5, 0.0, 1.0));
 
   return cp[0];
 #endif
@@ -79,16 +80,16 @@ real line_line_min(const index_t &idT, //
   index_t vS0 = s_inds[2 * idS + 0];
   index_t vS1 = s_inds[2 * idS + 1];
   if (idT >= idS)
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
 
   if (vT0 == vS0)
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
   if (vT1 == vS1)
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
   if (vT0 == vS1)
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
   if (vT1 == vS0)
-    return std::numeric_limits<real>::infinity();
+    return std::numeric_limits<real>::max();
 
   const vec3 &xA0 = t_x[t_inds[2 * idT + 0]];
   const vec3 &xA1 = t_x[t_inds[2 * idT + 1]];
@@ -294,7 +295,7 @@ public:
     }
     dc /= real(S * this->size);
     c += dc;
-    // logger::line(c, c + N, vec4(1.0, 0.0, 0.0, 0.0));
+    // geometry_logger::line(c, c + N, vec4(1.0, 0.0, 0.0, 0.0));
     half.set(c, N);
 #else
     mat3 U = mat3::Zero();
@@ -320,7 +321,7 @@ public:
         mx = std::max(mx, dp.norm());
       }
     }
-    //logger::line(c, c + mx * N, vec4(1.0, 0.0, 0.0, 0.0));
+    //geometry_logger::line(c, c + mx * N, vec4(1.0, 0.0, 0.0, 0.0));
     half.set(c, mx * N);
 #endif
   }
@@ -344,9 +345,9 @@ public:
       prim_cen /= real(S);
       // vec3 hc = half.d * half.N;
 
-      logger::line(h_cen, prim_cen, c);
+      geometry_logger::line(h_cen, prim_cen, c);
     }
-    logger::line(h_cen, h_cen + half.mag * half.N, c);
+    geometry_logger::line(h_cen, h_cen + half.mag * half.N, c);
   }
 
   void debug_half() {
@@ -354,7 +355,7 @@ public:
     vec3 N = half.N;
     real t = level / 10;
     vec4 c(cos(t), cos(t + M_PI / 3.0), cos(t + M_PI / 6.0), 1.0);
-    logger::line(half.cen, half.cen + half.mag * half.N, c);
+    geometry_logger::line(half.cen, half.cen + half.mag * half.N, c);
   }
 };
 
@@ -504,11 +505,11 @@ public:
 
       if (n.children[0] > 0) {
         node &n0 = nodes[n.children[0]];
-        logger::line(n.half.cen, n0.half.cen, c);
+        geometry_logger::line(n.half.cen, n0.half.cen, c);
       }
       if (n.children[1] > 0) {
         node &n1 = nodes[n.children[1]];
-        logger::line(n.half.cen, n1.half.cen, c);
+        geometry_logger::line(n.half.cen, n1.half.cen, c);
       }
     }
   }
@@ -541,7 +542,7 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
   bool expanding_rad = tol > 999.9;
 
   index_t idMin = -1;
-  real dmin = std::numeric_limits<real>::infinity();
+  real dmin = std::numeric_limits<real>::max();
 
   const Node &root = s_tree.nodes[0];
   std::stack<int> cstack;
@@ -567,8 +568,8 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
 
         std::cout << "d/tol: " << d << " " << tol << std::endl;
         vec3 cT = 0.5 * (extT[0] + extT[1]);
-        logger::line(cT, cnode.half.cen, vec4(0.0, 1.0, 0.0, 1.0));
-        logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
+        geometry_logger::line(cT, cnode.half.cen, vec4(0.0, 1.0, 0.0, 1.0));
+        geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
       }
 #endif
     }
@@ -591,9 +592,9 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
           std::cout << "idS: " << idS << std::endl;
           vec3 cT = 0.5 * (extT[0] + extT[1]);
           vec3 cS = 0.5 * (extS[0] + extS[1]);
-          logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
-          logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
-          logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
+          geometry_logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
+          geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
+          geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
         }
 #endif
         real dist = testAB(idT, t_inds, t_verts, //

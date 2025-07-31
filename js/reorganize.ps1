@@ -32,9 +32,9 @@ try {
     Write-Host "`n2. Moving WASM C++ files..." -ForegroundColor Cyan
     
     # Move logger files
-    if (Test-Path "wasm\wasm_logger.cpp") {
-        Move-Item "wasm\wasm_logger.cpp" "wasm\logger\src\" -Force
-        Write-Host "   ✓ Moved wasm_logger.cpp to logger/src/"
+    if (Test-Path "wasm\wasm_geometry_logger.cpp") {
+        Move-Item "wasm\wasm_geometry_logger.cpp" "wasm\logger\src\" -Force
+        Write-Host "   ✓ Moved wasm_geometry_logger.cpp to logger/src/"
     }
     
     # Move example files if they exist

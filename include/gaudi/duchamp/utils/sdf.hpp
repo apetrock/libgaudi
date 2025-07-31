@@ -25,6 +25,7 @@
 #include <memory>
 #include <set>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __SDF_FUNCTIONS__
 #define __SDF_FUNCTIONS__
@@ -225,7 +226,7 @@ public:
       std::vector<real> winding = calder::fast_winding(t.face_tree, x, 1.0);
 
       for (int i = 0; i < x.size(); i++) {
-        // logger::line(x[i], x[i] + 0.1 * grads_i[i], vec4(0.5,
+        // geometry_logger::line(x[i], x[i] + 0.1 * grads_i[i], vec4(0.5,
         // 0.0, 1.0, 1.0));
         if (dists_i[i] < dists[i]) {
           dists[i] = dists_i[i];
@@ -246,9 +247,9 @@ public:
         vec3 x0 = t.x[t.face_vert_ids[i + 0]];
         vec3 x1 = t.x[t.face_vert_ids[i + 1]];
         vec3 x2 = t.x[t.face_vert_ids[i + 2]];
-        logger::line(x0, x1, vec4(0.5, 0.0, 1.0, 1.0));
-        logger::line(x1, x2, vec4(0.5, 0.0, 1.0, 1.0));
-        logger::line(x2, x0, vec4(0.5, 0.0, 1.0, 1.0));
+        geometry_logger::line(x0, x1, vec4(0.5, 0.0, 1.0, 1.0));
+        geometry_logger::line(x1, x2, vec4(0.5, 0.0, 1.0, 1.0));
+        geometry_logger::line(x2, x0, vec4(0.5, 0.0, 1.0, 1.0));
       }
     }
   }

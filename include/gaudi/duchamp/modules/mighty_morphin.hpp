@@ -14,6 +14,7 @@
 #include <array>
 #include <limits>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 
@@ -82,7 +83,7 @@ public:
       vec3 xT = cp[1] * x0 + cp[2] * x1 + cp[3] * x2;
       // if (i == 0)
       dists[i] = cp[0];
-      // logger::line(xi, xT, vec4(0.0, 0.5, 1.0, 1.0));
+      // geometry_logger::line(xi, xT, vec4(0.0, 0.5, 1.0, 1.0));
     }
     return dists;
   }
@@ -119,12 +120,12 @@ public:
     for (int i = 0; i < x.size(); i++) {
       vec3 xi = x[i];
       vec3 fi = -dists[i] * Nv[i].normalized();
-      // logger::line(xi, xi + 0.1 * fi, vec4(0.0, 1.0, 0.5, 1.0));
+      // geometry_logger::line(xi, xi + 0.1 * fi, vec4(0.0, 1.0, 0.5, 1.0));
       _f[i] += fi / ih_max;
     }
     /*
     for (int i = 0; i < x.size(); i++) {
-      logger::line(x[i], x[i] + 0.1 * _f[i], vec4(1.0, 0.0, 0.5, 1.0));
+      geometry_logger::line(x[i], x[i] + 0.1 * _f[i], vec4(1.0, 0.0, 0.5, 1.0));
     }
 */
   }
@@ -137,9 +138,9 @@ public:
         vec3 x0 = t.x[t.face_vert_ids[i + 0]];
         vec3 x1 = t.x[t.face_vert_ids[i + 1]];
         vec3 x2 = t.x[t.face_vert_ids[i + 2]];
-        logger::line(x0, x1, vec4(0.5, 0.0, 1.0, 1.0));
-        logger::line(x1, x2, vec4(0.5, 0.0, 1.0, 1.0));
-        logger::line(x2, x0, vec4(0.5, 0.0, 1.0, 1.0));
+        geometry_logger::line(x0, x1, vec4(0.5, 0.0, 1.0, 1.0));
+        geometry_logger::line(x1, x2, vec4(0.5, 0.0, 1.0, 1.0));
+        geometry_logger::line(x2, x0, vec4(0.5, 0.0, 1.0, 1.0));
       }
     }
   }

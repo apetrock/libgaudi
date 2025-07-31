@@ -8,21 +8,6 @@ import { dirname } from 'path'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-// Custom plugin to handle WASM files properly
-const wasmPlugin = () => {
-  return {
-    name: 'wasm-mime-type',
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (req.url?.endsWith('.wasm')) {
-          res.setHeader('Content-Type', 'application/wasm')
-        }
-        next()
-      })
-    }
-  }
-}
-
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   if (mode === 'lib') {
@@ -60,36 +45,29 @@ export default defineConfig(({ mode }) => {
           }
         }
       }
-    }
-  }
-  
-  // Development configuration - simplified like Henson
+    }  }
+  // Development configuration  
   return {
-    plugins: [
-      react(),
-      wasmPlugin()
-    ],
+    plugins: [react()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
+        '@wasm': path.resolve(__dirname, './wasm'),
+        '@wasmbuilds': path.resolve(__dirname, './demo/wasm'),
       },
     },
+    assetsInclude: ['**/*.wasm'],
     server: {
       port: 5173,
       headers: {
         'Cross-Origin-Embedder-Policy': 'require-corp',
         'Cross-Origin-Opener-Policy': 'same-origin',
-      },
-      fs: {
-        allow: ['..']
       }
     },
+    // Enable SPA routing for React Router - fallback to index.html for client-side routes
     appType: 'spa',
-    assetsInclude: ['**/*.wasm'],
-    optimizeDeps: {
-      exclude: ['*.wasm']
-    },
-    // Ensure public directory is served correctly
-    publicDir: 'public'
+    preview: {
+      port: 5173,
+    }
   }
 })

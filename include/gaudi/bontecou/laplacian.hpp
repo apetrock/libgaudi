@@ -32,6 +32,7 @@
 #include <Eigen/Sparse>
 
 #include <math.h>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 namespace bontecou {

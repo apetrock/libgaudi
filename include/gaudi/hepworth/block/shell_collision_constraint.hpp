@@ -19,6 +19,7 @@
 #include <zlib.h>
 
 #include "block_constraint.hpp"
+#include "gaudi/geometry_logger.hpp"
 namespace gaudi {
 namespace hepworth {
 namespace block {

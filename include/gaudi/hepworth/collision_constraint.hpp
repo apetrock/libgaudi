@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "projection_constraint.hpp"
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 namespace hepworth {

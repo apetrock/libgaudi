@@ -19,6 +19,7 @@
 #include "gaudi/common.h"
 #include "rod_collision_constraint.hpp"
 #include "rod_constraints.hpp"
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 namespace hepworth {

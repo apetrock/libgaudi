@@ -24,6 +24,7 @@
 #include <gaudi/vec_addendum.h>
 
 #include <gaudi/calder/harmonic_integrators.hpp>
+#include "gaudi/geometry_logger.hpp"
 
 using namespace asawa;
 

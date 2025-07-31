@@ -49,6 +49,7 @@
 #include <cmath>
 #include <memory>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __M2REFACTOR_TEST__
 #define __M2REFACTOR_TEST__
@@ -162,9 +163,9 @@ public:
 #if 0
       vec3 x = R.__x[i];
       if (d > 0.0) {
-        logger::line(x, x - fi, vec4(0.0, 1.0, 0.0, 1.0));
+        geometry_logger::line(x, x - fi, vec4(0.0, 1.0, 0.0, 1.0));
       } else {
-        logger::line(x, x - fi, vec4(1.0, 0.0, 0.0, 1.0));
+        geometry_logger::line(x, x - fi, vec4(1.0, 0.0, 0.0, 1.0));
       }
 #endif
       if (d > 0.0) {
@@ -206,7 +207,7 @@ public:
 #if 0
     for (int i = 0; i < x0.size(); i++) {
       vec3 x = x0[i];
-      logger::line(x, x + g0[i], vec4(0.0, 1.0, 0.0, 1.0));
+      geometry_logger::line(x, x + g0[i], vec4(0.0, 1.0, 0.0, 1.0));
     }
 #endif
     return std::move(g0);

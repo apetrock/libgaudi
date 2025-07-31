@@ -21,7 +21,7 @@ public:
   rigid_coupline_constraint(const std::vector<index_t> &ids, const vec3 &p, const real &w,
          std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _p(p) {}
-  virtual std::string name() { return typeid(*this).name(); }
+  virtual std::string name() { return "rigid_coupline_constraint"; }
   virtual void project(const vecX &q, vecX &p) {
     
     index_t i = this->_ids[0];

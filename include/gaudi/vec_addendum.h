@@ -12,7 +12,7 @@
 #include <array>
 #include <cmath>
 #include <complex>
-#include <iostream>
+#include "gaudi/logger.hpp"
 #include <iterator>
 #include <math.h>
 #include <unsupported/Eigen/MatrixFunctions>
@@ -288,7 +288,7 @@ namespace va
     var /= sz - 1.0;
 
     S stddev = std::sqrt(var);
-    std::cout << "stddev: " << var << " " << stddev << std::endl;
+    gaudi::logger::info << "stddev: " << var << " " << stddev << std::endl;
     return {mean, stddev};
   }
 
@@ -361,8 +361,8 @@ namespace va
     if (!std::isfinite(cotan1))
     {
       return 4.0;
-      std::cout << cotan1 << " " << cos_alpha << std::endl;
-      std::cout << c0.transpose() << " - " << c1.transpose() << " - "
+      gaudi::logger::info << cotan1 << " " << cos_alpha << std::endl;
+      gaudi::logger::info << c0.transpose() << " - " << c1.transpose() << " - "
                 << c2.transpose() << std::endl;
       abort();
     }

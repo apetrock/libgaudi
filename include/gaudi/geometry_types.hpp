@@ -15,7 +15,6 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
-#include <iostream>
 
 template <typename T, typename CTYPE>
 struct swept_triangle
@@ -535,7 +534,7 @@ namespace gaudi
   {
 
     typedef std::array<vec3, 2> extents_t;
-    const real inf_t = std::numeric_limits<real>::infinity();
+    const real inf_t = std::numeric_limits<real>::max();
     const vec3 inf_3(inf_t, inf_t, inf_t);
 
     extents_t init()

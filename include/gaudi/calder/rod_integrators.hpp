@@ -11,6 +11,7 @@
 #define __ROD_INTEGRATOR__
 
 #include "gaudi/common.h"
+#include "gaudi/arp/aabb.hpp"
 #include "integrators.hpp"
 #include <algorithm>
 #include <cmath>

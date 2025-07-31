@@ -14,6 +14,7 @@
 #include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
+#include "gaudi/arp/aabb.hpp"
 
 #include "weight_functions.hpp"
 
@@ -23,6 +24,7 @@
 #include <cstdlib>
 #include <ostream>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 
@@ -121,7 +123,7 @@ std::vector<real> fast_dist(const arp::T3::ptr &face_tree,
   std::vector<vec3> Nc = asawa::shell::compress_to_range<vec3>(face_ids, N);
   sum.bind<vec3>(face_ids, Nc);
   std::vector<real> min_dists(pov.size(),
-                              std::numeric_limits<real>::infinity());
+                              std::numeric_limits<real>::max());
   std::vector<real> u = sum.calc<real>(
       pov,
       [l0, &min_dists](const index_t &i, const index_t &j, const vec3 &pi,
@@ -208,7 +210,7 @@ std::vector<vec3> fast_dist_gradient(const arp::T3::ptr &face_tree,
         vec3 p0 = tree.vert(3 * j + 0);
         vec3 p1 = tree.vert(3 * j + 1);
         vec3 p2 = tree.vert(3 * j + 2);
-        // logger::line(p0, p0 + 0.1 * N, vec4(0.0, 1.0, 1.0, 1.0));
+        // geometry_logger::line(p0, p0 + 0.1 * N, vec4(0.0, 1.0, 1.0, 1.0));
 
         std::array<real, 4> cp = va::closest_point({p0, p1, p2}, pi);
         vec3 pT = cp[1] * p0 + cp[2] * p1 + cp[3] * p2;
@@ -230,7 +232,7 @@ std::vector<vec3> fast_dist_gradient(const arp::T3::ptr &face_tree,
         const vec3 &N = N_datum->node_data()[j];
         real w = N.dot(N);
         vec3 pj = node.center();
-        // logger::line(pj, pj + 0.1 * N, vec4(0.5, 0.0, 1.0, 1.0));
+        // geometry_logger::line(pj, pj + 0.1 * N, vec4(0.5, 0.0, 1.0, 1.0));
         vec3 dp = pj - pi;
         // real dist = va::project_to_nullspace(dp, N);
         real dist = va::norm(dp);
@@ -452,7 +454,7 @@ std::vector<mat3> fast_frame(asawa::shell::shell &M, const std::vector<vec3> &x,
   for (int i = 0; i < p_pov.size(); i++) {
     const vec3 &Ni = p_normals[i];
     mat3 R = va::rejection_matrix(Ni);
-    // gg::geometry_logger::frame(R * u[i], x[i], 10.0);
+    // gg::geometry_geometry_logger::frame(R * u[i], x[i], 10.0);
     mat3 Ui = 1.0 / sums[i] * R * u[i];
     Eigen::JacobiSVD<mat3> svd(Ui, Eigen::ComputeFullU | Eigen::ComputeFullV);
     mat3 U = svd.matrixU();

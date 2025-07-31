@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Foo_demoModule } from '../../wasm/foo_demo/foo_demo_endpoints';
+import { Foo_demoModule } from '../../wasm/modules/foo_demo/foo_demo_endpoints';
 import { loadWasmModule } from '../utils/wasmLoader';
 
 /**

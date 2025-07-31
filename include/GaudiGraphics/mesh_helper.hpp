@@ -21,6 +21,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gg {
 using namespace gaudi;

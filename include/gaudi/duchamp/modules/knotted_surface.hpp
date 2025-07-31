@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <array>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi
 {
@@ -410,7 +411,7 @@ namespace gaudi
           vec3 cen = xr - va::sgn(Ndx) * eps * Nri;
           real d_torus = eps - (xs - cen).norm();
 
-          // logger::line(xs, cen, vec4(1.0, 0.0, 0.5, 1.0));
+          // geometry_logger::line(xs, cen, vec4(1.0, 0.0, 0.5, 1.0));
 
           if (d_torus > 0.0)
           {
@@ -420,9 +421,9 @@ namespace gaudi
             // std::cout << d  << " " << d_torus << std::endl;
 
             if (d < 0.0)
-              logger::line(xs, xs + 1.0 * d * Ns, vec4(0.0, 1.0, 0.5, 1.0));
+              geometry_logger::line(xs, xs + 1.0 * d * Ns, vec4(0.0, 1.0, 0.5, 1.0));
             if (d > 0.0)
-              logger::line(xs, xs + 1.0 * d * Ns, vec4(0.5, 0.0, 1.0, 1.0));
+              geometry_logger::line(xs, xs + 1.0 * d * Ns, vec4(0.5, 0.0, 1.0, 1.0));
 
             hepworth::block::edge_normal_flow::ptr constraint =
                 hepworth::block::edge_normal_flow::create(
@@ -554,9 +555,9 @@ namespace gaudi
             vec3 Ns = asawa::shell::edge_normal(M, c0, x1);
             /*
             if (d < 0.0)
-              logger::line(xs, xs + 1.0 * d * Ns, vec4(0.0, 1.0, 0.5, 1.0));
+              geometry_logger::line(xs, xs + 1.0 * d * Ns, vec4(0.0, 1.0, 0.5, 1.0));
             if (d > 0.0)
-              logger::line(xs, xs + 1.0 * d * Ns, vec4(0.5, 0.0, 1.0, 1.0));
+              geometry_logger::line(xs, xs + 1.0 * d * Ns, vec4(0.5, 0.0, 1.0, 1.0));
             */
             hepworth::block::edge_normal_flow::ptr constraint =
                 hepworth::block::edge_normal_flow::create(

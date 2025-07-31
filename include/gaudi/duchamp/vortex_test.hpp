@@ -33,6 +33,7 @@
 #include <memory>
 #include <set>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __VORTEX_TEST__
 #define __VORTEX_TEST__
@@ -161,7 +162,7 @@ namespace gaudi
           F.col(2) = sg * f2.normalized();
 
           wf[i] = pow(f1.norm(), 1.0) * F * vec3(0.0, 1.0, 0.0);
-          // logger::line(xf[i], xf[i] + 0.0025 * wf[i], vec4(1.0, 0.0, 0.0, 1.0));
+          // geometry_logger::line(xf[i], xf[i] + 0.0025 * wf[i], vec4(1.0, 0.0, 0.0, 1.0));
         }
         return std::move(wf);
       }

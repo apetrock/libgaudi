@@ -30,6 +30,7 @@
 #include <memory>
 #include <set>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __TEST_TEMPLATE__
 #define __TEST_TEMPLATE__
@@ -226,7 +227,7 @@ public:
       }
     }
     vec3 xB = x[vB];
-    //logger::line(xA, xB, vec4(0.0, 1.0, 0.0, 1.0));
+    //geometry_logger::line(xA, xB, vec4(0.0, 1.0, 0.0, 1.0));
 
     real r = 4.0 * _eps;
     return sdf_cylinder::create(xA, xB, r);

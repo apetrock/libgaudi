@@ -21,6 +21,7 @@
 #include "gaudi/common.h"
 
 #include "../projection_constraint.hpp"
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 namespace hepworth {
@@ -77,8 +78,18 @@ public:
     return std::make_shared<stretch_shear>(ids, w, l0);
   }
 
+  // New dual-weight constructor
+  static ptr create(const std::vector<index_t> &ids, const real &w1, const real &w2,
+                    const real &l0) {
+    return std::make_shared<stretch_shear>(ids, w1, w2, l0);
+  }
+
   stretch_shear(const std::vector<index_t> &ids, const real &w, const real &l0)
-      : projection_constraint(ids, w), _l0(l0) {}
+      : projection_constraint(ids, w), _l0(l0), _w1(w), _w2(w) {}
+
+  // New dual-weight constructor
+  stretch_shear(const std::vector<index_t> &ids, const real &w1, const real &w2, const real &l0)
+      : projection_constraint(ids, w1), _l0(l0), _w1(w1), _w2(w2) {}
 
   virtual void project(const vecX &q, vecX &p) {
     index_t i = this->_ids[0];
@@ -101,9 +112,9 @@ public:
 
     u = du * u;
     // u.normalize();
-    p.block(_id0, 0, 3, 1) = _w * d2;
+    p.block(_id0, 0, 3, 1) = _w1 * d2;  // Use _w1 for stretch component
     // p.block(k, 0, 4, 1) += _w * q.block(k, 0, 4, 1);
-    p.block(_id0 + 3, 0, 4, 1) = _w * vec4(u.coeffs().data());
+    p.block(_id0 + 3, 0, 4, 1) = _w2 * vec4(u.coeffs().data());  // Use _w2 for shear component
   }
 
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
@@ -115,15 +126,17 @@ public:
     index_t k = 3 * Nv + 4 * ii;
 
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(_id0 + ax, 3 * i + ax, -_w / _l0));
+      triplets.push_back(trip(_id0 + ax, 3 * i + ax, -_w1 / _l0));  // Use _w1
     for (int ax = 0; ax < 3; ax++)
-      triplets.push_back(trip(_id0 + ax, 3 * j + ax, _w / _l0));
+      triplets.push_back(trip(_id0 + ax, 3 * j + ax, _w1 / _l0));   // Use _w1
 
     for (int ax = 0; ax < 4; ax++)
-      triplets.push_back(trip(_id0 + 3 + ax, k + ax, _w));
+      triplets.push_back(trip(_id0 + 3 + ax, k + ax, _w2));  // Use _w2
     id0 += 7;
   }
   real _l0;
+  real _w1;  // Weight for stretch/shear component
+  real _w2;  // Weight for rotation component
 };
 
 class straight : public projection_constraint {

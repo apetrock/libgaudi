@@ -10,6 +10,7 @@
 #include "module_base_shell.hpp"
 #include <array>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 
@@ -196,8 +197,8 @@ public:
     for (int i = 0; i < dX.size(); i++) {
       vec3 gs = s_grad_s[i];
       vec3 gg = s_grad_g[i];
-      logger::line(x[i], x[i] + 1e-7 * gs, vec4(0.7, 0.2, 0.1, 0.5));
-      logger::line(x[i], x[i] + 1e-7 * gg, vec4(0.2, 0.1, 0.7, 0.5));
+      geometry_logger::line(x[i], x[i] + 1e-7 * gs, vec4(0.7, 0.2, 0.1, 0.5));
+      geometry_logger::line(x[i], x[i] + 1e-7 * gg, vec4(0.2, 0.1, 0.7, 0.5));
 
       dX[i] = s_grad_s[i] + s_grad_g[i];
       // dX[i] = s_grad_s[i];

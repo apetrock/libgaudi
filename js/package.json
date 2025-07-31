@@ -34,7 +34,7 @@
     "build:lib": "tsc && vite build --config vite.lib.config.ts",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "wasm:build": "node -e \"require('child_process').execSync('cd wasm && build.bat', {stdio: 'inherit'})\"",
+    "wasm:build": "tsx scripts/build-wasm.ts",
     "wasm:clean": "cd wasm && clean.bat",
     "wasm:test": "node scripts/test-wasm-loading.mjs",
     "wasm:test:logger": "tsx scripts/test-logger-interface.mts",

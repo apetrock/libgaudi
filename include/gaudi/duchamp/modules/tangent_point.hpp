@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 
@@ -101,8 +102,8 @@ public:
     std::vector<vec3> G(Ks.size(), vec3::Zero());
     for (int i = 0; i < G.size(); i++) {
       // G[i] = Gs[i] - Ks[i];
-      // logger::line(x[i], x[i] + 1e-8 * Gs[i], vec4(0.0, 1.0, 1.0, 1.0));
-      // logger::line(x[i], x[i] - 1e-8 * Ks[i], vec4(1.0, 0.0, 1.0, 1.0));
+      // geometry_logger::line(x[i], x[i] + 1e-8 * Gs[i], vec4(0.0, 1.0, 1.0, 1.0));
+      // geometry_logger::line(x[i], x[i] - 1e-8 * Ks[i], vec4(1.0, 0.0, 1.0, 1.0));
       G[i] = Gs[i] - Ks[i];
     }
     return G;
@@ -125,7 +126,7 @@ public:
     //  max = 16.0 * std::max(max, 50.0);
     C *= 0.05;
     for (int i = 0; i < G.size(); i++) {
-      logger::line(x[i], x[i] + 0.25 * G[i] / C, vec4(1.0, 0.0, 0.0, 1.0));
+      geometry_logger::line(x[i], x[i] + 0.25 * G[i] / C, vec4(1.0, 0.0, 0.0, 1.0));
       x[i] -= 1.0 * h * G[i] / C;
       // t += 0.001 * h;
     }

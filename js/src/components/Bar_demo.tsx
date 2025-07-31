@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bar_demoModule } from '../../wasm/bar_demo/bar_demo_endpoints';
+import { Bar_demoModule } from '../../wasm/modules/bar_demo/bar_demo_endpoints';
 import { loadWasmModule } from '../utils/wasmLoader';
 
 /**

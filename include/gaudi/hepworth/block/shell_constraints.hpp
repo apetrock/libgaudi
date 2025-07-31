@@ -17,12 +17,12 @@
 #include <stdio.h>
 #include <type_traits>
 #include <vector>
-#include <zlib.h>
 
 #include "Eigen/src/Geometry/AngleAxis.h"
 #include "block_constraint.hpp"
 #include "gaudi/common.h"
 #include "sim_block.hpp"
+#include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
 namespace hepworth {
@@ -40,7 +40,7 @@ public:
     _l = (x[_ids[1]] - x[_ids[0]]).norm();
   }
 
-  virtual std::string name() { return typeid(*this).name(); }
+  virtual std::string name() { return "edge_strain"; }
 
   virtual void set_goal_length(const real &l) {
     _limit = false;
@@ -64,7 +64,7 @@ public:
     // std::cout << "l " << l << " " << _l << " " << l / _l << std::endl;
     // real r = std::clamp(l / _l, 0.1, 2.0);
     // l = std::clamp(_l / l, 0.1, 4.0);
-    // logger::line(qc - 0.5 * l * dq, qc + 0.5 * l * dq,
+    // geometry_logger::line(qc - 0.5 * l * dq, qc + 0.5 * l * dq,
     //             vec4(0.0, 0.0, 1.0, 1.0));
     p.block(_id0, 0, 3, 1) = _w * r * dq;
   }
@@ -374,7 +374,7 @@ public:
                   [&](const index_t &j, const real &k, const vec3 &dq,
                       const vec3 &N) { _vg += k * dq; });
   }
-  virtual std::string name() { return typeid(*this).name(); }
+  virtual std::string name() { return "bending"; }
 
   virtual void project(const vecX &q, vecX &p) {
 
@@ -431,7 +431,7 @@ public:
             const std::vector<real> &edge_weights, const std::vector<vec3> &x,
             const real &w, std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {}
-  virtual std::string name() { return typeid(*this).name(); }
+  virtual std::string name() { return "laplacian"; }
 
   virtual void project(const vecX &q, vecX &p) {
     p.block(_id0, 0, 3, 1) = vec3::Zero();
@@ -456,7 +456,7 @@ public:
            const std::vector<real> &edge_weights, const std::vector<vec3> &x,
            const real &w, std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {}
-  virtual std::string name() { return typeid(*this).name(); }
+  virtual std::string name() { return "willmore"; }
 
   void set_align_normal(vec3 N) {
     _align = true;
@@ -499,14 +499,14 @@ public:
         [&](const index_t &j, const real &k, const vec3 &dq, const vec3 &N) {
           vec3 rdq = R * dq;
           p.block(_id0 + id, 0, 3, 1) = _w * k * rdq;
-          // gg::geometry_logger::line(qi, qi + 0.5 * rdq,
+          // gg::geometry_geometry_logger::line(qi, qi + 0.5 * rdq,
           //                          vec4(1.0, 0.0, 0.0, 1.0));
           id += 3;
         });
 
-    // gg::geometry_logger::line(qi, qi + 0.01 * v0, vec4(1.0, 0.0, 0.0, 1.0));
-    // gg::geometry_logger::line(qi, qi + dqr, vec4(0.7, 0.0, 1.0, 1.0));
-    // gg::geometry_logger::line(qi, qi + dqi, vec4(1.0, 0.0, 0.0, 1.0));
+    // gg::geometry_geometry_logger::line(qi, qi + 0.01 * v0, vec4(1.0, 0.0, 0.0, 1.0));
+    // gg::geometry_geometry_logger::line(qi, qi + dqr, vec4(0.7, 0.0, 1.0, 1.0));
+    // gg::geometry_geometry_logger::line(qi, qi + dqi, vec4(1.0, 0.0, 0.0, 1.0));
   }
 
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
@@ -553,8 +553,8 @@ public:
     edges.col(0) = q1 - q0;
     edges.col(1) = q2 - q0;
 
-    // gg::geometry_logger::line(q0, q0 + edges.col(0), vec4(0.0, 1.0,
-    // 0.0, 1.0)); gg::geometry_logger::line(q0, q0 + edges.col(1),
+    // gg::geometry_geometry_logger::line(q0, q0 + edges.col(0), vec4(0.0, 1.0,
+    // 0.0, 1.0)); gg::geometry_geometry_logger::line(q0, q0 + edges.col(1),
     // vec4(0.0, 1.0, 0.0, 1.0));
 
     vec3 N = edges.col(0).cross(edges.col(1)).normalized();
@@ -563,12 +563,12 @@ public:
     edges.col(0) = qN * edges.col(0);
     edges.col(1) = qN * edges.col(1);
 
-    // gg::geometry_logger::line(q0, q0 + edges.col(0), vec4(1.0, 0.0,
-    // 0.0, 1.0)); gg::geometry_logger::line(q0, q0 + edges.col(1), vec4(1.0,
+    // gg::geometry_geometry_logger::line(q0, q0 + edges.col(0), vec4(1.0, 0.0,
+    // 0.0, 1.0)); gg::geometry_geometry_logger::line(q0, q0 + edges.col(1), vec4(1.0,
     // 0.0, 0.0, 1.0));
 
-    // gg::geometry_logger::line(qc, qc + 0.025 * N, vec4(0.0, 1.0, 0.5, 1.0));
-    // gg::geometry_logger::line(qc, qc + 0.025 * _N0, vec4(1.0, 0.0,
+    // gg::geometry_geometry_logger::line(qc, qc + 0.025 * N, vec4(0.0, 1.0, 0.5, 1.0));
+    // gg::geometry_geometry_logger::line(qc, qc + 0.025 * _N0, vec4(1.0, 0.0,
     // 0.5, 1.0));
 
     p.block(_id0 + 0, 0, 3, 1) = _w * edges.col(0);
@@ -727,12 +727,12 @@ public:
 #if 0
       if (!_debugged) {
         _debugged = true;
-        gg::geometry_logger::line(c0, c0 + 0.01 * _N_align,
+        gg::geometry_geometry_logger::line(c0, c0 + 0.01 * _N_align,
                                   vec4(0.0, 1.0, 0.0, 1.0));
-        gg::geometry_logger::line(qi0, qi0 + d00p, vec4(1.0, 0.5, 0.0, 1.0));
-        gg::geometry_logger::line(qj0, qj0 + d01p, vec4(0.0, 1.0, 0.5, 1.0));
-        gg::geometry_logger::line(qi0, qi0 + d10p, vec4(0.0, 0.5, 1.0, 1.0));
-        gg::geometry_logger::line(qj0, qj0 + d11p, vec4(0.5, 1.0, 0.0, 1.0));
+        gg::geometry_geometry_logger::line(qi0, qi0 + d00p, vec4(1.0, 0.5, 0.0, 1.0));
+        gg::geometry_geometry_logger::line(qj0, qj0 + d01p, vec4(0.0, 1.0, 0.5, 1.0));
+        gg::geometry_geometry_logger::line(qi0, qi0 + d10p, vec4(0.0, 0.5, 1.0, 1.0));
+        gg::geometry_geometry_logger::line(qj0, qj0 + d11p, vec4(0.5, 1.0, 0.0, 1.0));
       }
 #endif
     }
@@ -833,8 +833,8 @@ public:
     real dj = (qj0 - _cen).dot(_N0);
     vec3 qi0p = qi0 + (_d - di) * N;
     vec3 qj0p = qj0 + (_d - dj) * N;
-    //logger::line(qi0, qi0p, vec4(0.0, 1.0, 0.5, 1.0));
-    //logger::line(qj0, qj0p, vec4(0.0, 1.0, 0.5, 1.0));
+    //geometry_logger::line(qi0, qi0p, vec4(0.0, 1.0, 0.5, 1.0));
+    //geometry_logger::line(qj0, qj0p, vec4(0.0, 1.0, 0.5, 1.0));
     
     p.block(_id0 + 0, 0, 3, 1) = _w * qi0p;
     p.block(_id0 + 3, 0, 3, 1) = _w * qj0p;

@@ -30,6 +30,7 @@
 #include <memory>
 #include <set>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #ifndef __VORTEX_STUDY__
 #define __VORTEX_STUDY__

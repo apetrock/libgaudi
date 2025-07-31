@@ -97,8 +97,12 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 
   # Optionally set things like CMAKE_CXX_STANDARD, CMAKE_POSITION_INDEPENDENT_CODE here
   set (CMAKE_ENABLE_EXPORTS TRUE)
-  # Let's ensure -std=c++xx instead of -std=g++xx
-  set(CMAKE_CXX_EXTENSIONS OFF)
+  # Let's enable the freshest C++ extensions for maximum modern goodness!
+  set(CMAKE_CXX_EXTENSIONS ON)
+  
+  # Enable C++20 for module support and all the modern sugar
+  set(CMAKE_CXX_STANDARD 20)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
   # Let's nicely support folders in IDEs
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -235,6 +239,8 @@ include_directories("${EIGEN_INCLUDE_DIR}" "${SPECTRA_INCLUDE_DIR}" "ext/AudioFi
 add_subdirectory(src)
 
 
+# Build morton_test first to ensure it's available for WASM builds
+add_subdirectory(projects/morton_test)
 
 add_subdirectory(projects/blank_template)
 #add_subdirectory(projects/dynamic_shell_test)

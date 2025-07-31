@@ -7,7 +7,7 @@ set(PROJECT_NAME wav2fft)
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 #add_executable(bending main.cpp GuadiGraphics/geometry_logger.cpp)
-target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
+setup_module_target(${PROJECT_NAME})
 target_link_libraries(${PROJECT_NAME} PRIVATE -g -ltbb)
 
 #find_package(OpenMP)

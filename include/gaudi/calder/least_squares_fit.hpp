@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
+#include "gaudi/geometry_logger.hpp"
 
 #define GENERATE_WEIGHT_FUNCS(func)                      \
   weight_func<rod_bundle> rod_##func = func<rod_bundle>; \
@@ -287,7 +288,7 @@ namespace gaudi
 
         // vec3 Ni = g.normalized();
         vec3 Ni = n_pov[i];
-        // logger::line(x, x + 0.05 * Ni, vec4(1.0, 0.0, 1.0, 1.0));
+        // geometry_logger::line(x, x + 0.05 * Ni, vec4(1.0, 0.0, 1.0, 1.0));
         mat3 P = Ni * Ni.transpose();
         mat3 R = va::rejection_matrix(Ni);
         out[i] = std::make_pair(g, albers::quadric_hessian(Q[i]));
@@ -308,7 +309,7 @@ namespace gaudi
         vec3 x = p_pov[i];
         mat3 Hi = H[i].second;
         vec3 Ni = n_pov[i];
-        // logger::line(x, x + 0.05 * Ni, vec4(1.0, 0.0, 1.0, 1.0));
+        // geometry_logger::line(x, x + 0.05 * Ni, vec4(1.0, 0.0, 1.0, 1.0));
         mat3 P = Ni * Ni.transpose();
         mat3 R = va::rejection_matrix(Ni);
 
@@ -330,9 +331,9 @@ namespace gaudi
           continue;
         }
         /*
-        logger::line(x, x + 0.01 * S.col(0), vec4(1.0, 0.0, 0.0, 1.0));
-        logger::line(x, x + 0.01 * S.col(1), vec4(0.0, 1.0, 0.0, 1.0));
-        logger::line(x, x + 0.01 * S.col(2), vec4(0.0, 0.0, 1.0, 1.0));
+        geometry_logger::line(x, x + 0.01 * S.col(0), vec4(1.0, 0.0, 0.0, 1.0));
+        geometry_logger::line(x, x + 0.01 * S.col(1), vec4(0.0, 1.0, 0.0, 1.0));
+        geometry_logger::line(x, x + 0.01 * S.col(2), vec4(0.0, 0.0, 1.0, 1.0));
     */
 
         out[i] = S;
@@ -385,7 +386,7 @@ namespace gaudi
         vec3 x = p_pov[i];
         vec3 dc = S[i].segment(0, 3);
         S[i].segment(0, 3) = x + dc;
-        //  logger::line(x, x + dc, vec4(0.0, 1.0, 0.0, 1.0));
+        //  geometry_logger::line(x, x + dc, vec4(0.0, 1.0, 0.0, 1.0));
       }
 
       return S;
@@ -537,10 +538,10 @@ namespace gaudi
         vec3 xp = va::project_on_line(cen, vec3(cen + Ni), xi);
         vec3 dpn = (xp - xi).normalized();
 #if 0
-    logger::line(xi - 0.01 * Ni, xi + 0.01 * Ni, vec4(0.0, 1.0, 1.0, 1.0));
-    // logger::line(xi, xp, vec4(1.0, 0.0, 1.0, 1.0));
-    logger::line(cen, cen - r * dpn, vec4(1.0, 0.0, 1.0, 1.0));
-    // logger::line(vec3::Zero(), vec3(z2[0], z2[1], 0.0),
+    geometry_logger::line(xi - 0.01 * Ni, xi + 0.01 * Ni, vec4(0.0, 1.0, 1.0, 1.0));
+    // geometry_logger::line(xi, xp, vec4(1.0, 0.0, 1.0, 1.0));
+    geometry_logger::line(cen, cen - r * dpn, vec4(1.0, 0.0, 1.0, 1.0));
+    // geometry_logger::line(vec3::Zero(), vec3(z2[0], z2[1], 0.0),
     //              vec4(1.0, 0.0, 1.0, 1.0));
 #endif
         out[i].segment(0, 3) = cen;
@@ -630,7 +631,7 @@ namespace gaudi
         lc = std::clamp(lc, 0.0, 8.0 * l0);
         dc = dc.normalized() * lc;
 
-        //logger::line(x, x + dc, vec4(0.0, 1.0, 0.0, 1.0));
+        //geometry_logger::line(x, x + dc, vec4(0.0, 1.0, 0.0, 1.0));
         cens[i] = p_pov[i] + dc;
       }
 #else
@@ -726,7 +727,7 @@ namespace gaudi
 
         // vec3 Ni = g.normalized();
         vec3 Ni = n_pov[i];
-        // logger::line(x, x + 0.05 * Ni, vec4(1.0, 0.0, 1.0, 1.0));
+        // geometry_logger::line(x, x + 0.05 * Ni, vec4(1.0, 0.0, 1.0, 1.0));
         mat3 P = Ni * Ni.transpose();
         mat3 R = va::rejection_matrix(Ni);
         out[i] = std::make_pair(g, albers::darboux_hessian(Q[i], vec3::Zero()));
@@ -747,7 +748,7 @@ namespace gaudi
         vec3 x = p_pov[i];
         mat3 Hi = H[i].second;
         vec3 Ni = n_pov[i];
-        // logger::line(x, x + 0.05 * Ni, vec4(1.0, 0.0, 1.0, 1.0));
+        // geometry_logger::line(x, x + 0.05 * Ni, vec4(1.0, 0.0, 1.0, 1.0));
         mat3 P = Ni * Ni.transpose();
         mat3 R = va::rejection_matrix(Ni);
 
@@ -769,9 +770,9 @@ namespace gaudi
           continue;
         }
 #if 0        
-        logger::line(x, x + 0.01 * S.col(0), vec4(1.0, 0.0, 0.0, 1.0));
-        logger::line(x, x + 0.01 * S.col(1), vec4(0.0, 1.0, 0.0, 1.0));
-        logger::line(x, x + 0.01 * S.col(2), vec4(0.0, 0.0, 1.0, 1.0));
+        geometry_logger::line(x, x + 0.01 * S.col(0), vec4(1.0, 0.0, 0.0, 1.0));
+        geometry_logger::line(x, x + 0.01 * S.col(1), vec4(0.0, 1.0, 0.0, 1.0));
+        geometry_logger::line(x, x + 0.01 * S.col(2), vec4(0.0, 0.0, 1.0, 1.0));
 #endif
         out[i] = S;
       }

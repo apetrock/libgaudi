@@ -10,12 +10,14 @@ set(HEADER_LIST
     "${Gaudi_SOURCE_DIR}/include/GaudiMath/typedefs.hpp"
     "${Gaudi_SOURCE_DIR}/include/GaudiGraphics/buffers.hpp"
     "${Gaudi_SOURCE_DIR}/include/GaudiGraphics/geometry_logger.h"
+    "${Gaudi_SOURCE_DIR}/include/gaudi/logger.hpp"
 )
 
 set(SOURCES
     "${Gaudi_SOURCE_DIR}/src/SIMPLE_PARSER.cpp"
     "${Gaudi_SOURCE_DIR}/src/TIMER.cpp"
     "${Gaudi_SOURCE_DIR}/src/GaudiGraphics/geometry_logger.cpp"
+    "${Gaudi_SOURCE_DIR}/src/terminal_logger_impl.cpp"
 )
 
 # Make an automatic library - will be static or dynamic based on user setting
@@ -30,6 +32,9 @@ target_include_directories(libGaudi PUBLIC "${Gaudi_SOURCE_DIR}/include")
 
 # All users of this library will need at least C++11
 target_compile_features(libGaudi PUBLIC cxx_std_17)
+
+# Set up module support for the library
+setup_module_library(libGaudi)
 
 # IDEs should put the headers in a nice place
 source_group(

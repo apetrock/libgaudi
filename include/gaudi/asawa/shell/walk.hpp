@@ -28,6 +28,7 @@
 #include "shell.hpp"
 
 #include "datum_x.hpp"
+#include "gaudi/geometry_logger.hpp"
 #ifndef __ASAWA_WALK__
 #define __ASAWA_WALK__
 namespace gaudi {

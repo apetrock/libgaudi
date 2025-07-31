@@ -4,13 +4,12 @@
 
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
+#include "gaudi/arp/aabb.hpp"
 #include <iostream>
 #include <memory.h>
 #include <ostream>
 #include <stdio.h>
 #include <vector>
-
-#include "gaudi/arp/aabb.hpp"
 
 #ifndef __CALDER_DATUM__
 #define __CALDER_DATUM__

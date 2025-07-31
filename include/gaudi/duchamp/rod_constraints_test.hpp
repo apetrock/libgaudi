@@ -8,7 +8,6 @@
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
 #include "gaudi/vec_addendum.h"
-#include "gaudi/logger.hpp"
 
 #include "gaudi/asawa/rod/rod.hpp"
 #include "gaudi/asawa/rod/dynamic.hpp"
@@ -49,12 +48,6 @@ public:
     __sdf0 = sdf_sphere::create(vec3(0.0, 0.0, 0.0), r0);
     __sdf1 = sdf_multi_sphere::create(get_fib(r1, 13), r11);
     // load_sdf();
-    
-    // Log initial setup
-    logger::clear();
-    logger::line(vec3(0, 0, 0), vec3(2, 0, 0), vec4(1, 0, 0, 1)); // X axis
-    logger::line(vec3(0, 0, 0), vec3(0, 2, 0), vec4(0, 1, 0, 1)); // Y axis
-    logger::line(vec3(0, 0, 0), vec3(0, 0, 2), vec4(0, 0, 1, 1)); // Z axis
   };
 
   std::vector<vec3> get_fib(real r0, int N = 13){
@@ -113,9 +106,6 @@ public:
 
     real lavg = __R->lavg();
     __Rd = rod::dynamic::create(__R, 0.25 * lavg, 2.5 * lavg, 0.25 * lavg);
-    
-    // Log initial rod geometry
-    log_rod_geometry(vec4(0.8, 0.8, 0.8, 1.0));
   }
 
 #if 1
@@ -128,16 +118,6 @@ public:
 
     std::vector<vec3> g0 =
         calder::tangent_point_gradient(*__R, x, l, T, 1.0 * eps, 6.0);
-    
-    // Log tangent point gradients
-  #if 0
-    for (size_t i = 0; i < g0.size(); i++) {
-      if (g0[i].norm() > 1e-6) {
-        logger::line(xc[i], xc[i] + 0.1 * g0[i], vec4(1, 0.5, 0, 0.8));
-      }
-    }
-    #endif
-    
     return g0;
   }
 #endif
@@ -208,13 +188,6 @@ public:
         #endif
     }
 
-    // Log boundary gradients
-    for (size_t i = 0; i < f.size(); i++) {
-      if (f[i].norm() > 1e-6) {
-        vec4 color = dists[i] > 0.0 ? vec4(0, 1, 0, 0.8) : vec4(1, 0, 0, 0.8);
-        logger::line(xc[i], xc[i] + 0.1 * f[i], color);
-      }
-    }
     
     return std::move(f);
   }
@@ -277,7 +250,7 @@ public:
       }
 
       //std::cout << " lt0 / lt: " << _lt0 / lt << " w: " << wl << std::endl;
-      //hepworth::block::init_helicity(*__R, constraints, 1e-0*wl, {x});
+      hepworth::block::init_helicity(*__R, constraints, 1e-0*wl, {x});
       
       hepworth::block::init_stretch_shear(*__R, constraints, l0, 6e-2, {x, u});
       hepworth::block::init_bend_twist(*__R, constraints, 5e-2, {u}, false);
@@ -289,58 +262,18 @@ public:
     // f[0][0] = 1.0;
     std::vector<hepworth::sim_block::ptr> blocks = {x, u};
     solver.step(blocks, h,1);
-    
-    // Log constraint forces
-    //log_constraint_forces(x, u);
   }
 
   void step(int frame) {
 
     _frame = frame;
 
-    // Clear previous frame's debug lines
-    logger::clear();
-    
-    // Log coordinate axes
-    //logger::line(vec3(0, 0, 0), vec3(2, 0, 0), vec4(1, 0, 0, 1)); // X axis
-    //logger::line(vec3(0, 0, 0), vec3(0, 2, 0), vec4(0, 1, 0, 1)); // Y axis
-    //logger::line(vec3(0, 0, 0), vec3(0, 0, 2), vec4(0, 0, 1, 1)); // Z axis
 
     step_dynamics(frame);
     __Rd->step();
-    
-    // Log final rod geometry
-    log_rod_geometry(vec4(0.8, 0.8, 0.8, 1.0));
-    
     if(frame > 3000)
     exit(0);
     //__R->debug();
-  }
-
-  // Helper function to log rod geometry
-  void log_rod_geometry(const vec4& color) {
-    if (!__R) return;
-    
-    // Use the existing debug() method which properly handles the adjacency table
-    __R->debug();
-  }
-  
-  // Helper function to log constraint forces
-  void log_constraint_forces(hepworth::vec3_block::ptr x, hepworth::quat_block::ptr u) {
-    if (!x || !__R) return;
-    
-    const std::vector<vec3>& positions = __R->x();
-    const std::vector<vec3>& forces = x->_f;
-    
-    // Log forces for valid vertices
-    for (int i = 0; i < __R->corner_count(); i++) {
-      if (__R->next(i) < 0)
-        continue;
-      
-      if (i < forces.size() && forces[i].norm() > 1e-6) {
-        logger::line(positions[i], positions[i] + 0.05 * forces[i], vec4(1, 1, 0, 0.8));
-      }
-    }
   }
 
   int _frame;

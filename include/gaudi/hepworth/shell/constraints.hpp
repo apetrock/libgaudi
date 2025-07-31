@@ -21,6 +21,7 @@
 #include "gaudi/common.h"
 
 #include "../projection_constraint.hpp"
+#include "gaudi/geometry_logger.hpp"
 namespace gaudi {
 namespace hepworth {
 namespace shell {

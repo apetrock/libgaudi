@@ -35,7 +35,7 @@ public:
   rod_collision(const std::vector<index_t> &ids, const real &w, const real &l,
                 std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _l(l) {}
-  virtual std::string name() { return typeid(*this).name(); }
+  virtual std::string name() { return "rod_collision"; }
   virtual void project(const vecX &q, vecX &p) {
     index_t iA0 = this->_ids[0];
     index_t iA1 = this->_ids[1];

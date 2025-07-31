@@ -5,6 +5,9 @@ import { ZustandLineLoggerTest } from './src/components/ZustandLineLoggerTest';
 import { WasmHelloWorld } from './src/components/WasmHelloWorld';
 import { GaudiLoggerTest } from './src/components/GaudiLoggerTest';
 import { RodConstraintsTest } from './src/components/RodConstraintsTest';
+import { StrandTest } from './src/components/StrandTest';
+import { PathTest } from './src/components/PathTest';
+import { MortonTreeTest } from './src/components/MortonTreeTest';
 import { Button } from './src/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './src/components/ui/card';
 import { Badge } from './src/components/ui/badge';
@@ -31,6 +34,9 @@ function Navigation() {
     { path: '/line-logger', label: 'Line Logger', icon: Waves, status: 'stable' },
     { path: '/gaudi-logger', label: 'Gaudi Logger', icon: Microscope, status: 'beta' },
     { path: '/rod-constraints', label: 'Rod Constraints', icon: TestTube, status: 'beta' },
+    { path: '/rod-strand', label: 'Rod Strand', icon: TestTube, status: 'beta' },
+    { path: '/path-test', label: 'Path Test', icon: TestTube, status: 'beta' },
+    { path: '/morton-tree', label: 'Morton Tree', icon: Microscope, status: 'beta' },
     { path: '/wasm-hello', label: 'WASM Hello', icon: TestTube, status: 'stable' },
     { path: '/future-test', label: 'Future', icon: Rocket, status: 'planned' },
   ];
@@ -170,6 +176,51 @@ function RodConstraintsPage() {
       <div className="container mx-auto max-w-4xl px-4" style={{ paddingTop: '5rem' }}>
         <div className="h-[calc(100vh-5rem)]">
           <RodConstraintsTest />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Rod Strand Test page - Phase 1.5 rod strand dynamics simulation
+ */
+function RodStrandPage() {
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto max-w-4xl px-4" style={{ paddingTop: '5rem' }}>
+        <div className="h-[calc(100vh-5rem)]">
+          <StrandTest />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Path Test page - Phase 1.5 path constraint testing
+ */
+function PathTestPage() {
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto max-w-4xl px-4" style={{ paddingTop: '5rem' }}>
+        <div className="h-[calc(100vh-5rem)]">
+          <PathTest />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Morton Tree Test page - Phase 1.5 Morton Tree WASM test
+ */
+function MortonTreeTestPage() {
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto max-w-4xl px-4" style={{ paddingTop: '5rem' }}>
+        <div className="h-[calc(100vh-5rem)]">
+          <MortonTreeTest />
         </div>
       </div>
     </div>
@@ -406,6 +457,9 @@ function App() {
           <Route path="/wasm-hello" element={<WasmHelloPage />} />
           <Route path="/future-test" element={<FutureTestPage />} />
           <Route path="/rod-constraints" element={<RodConstraintsPage />} />
+          <Route path="/rod-strand" element={<RodStrandPage />} />
+          <Route path="/path-test" element={<PathTestPage />} />
+          <Route path="/morton-tree" element={<MortonTreeTestPage />} />
           <Route path="/foo_demo" element={<Foo_demo />} />
           <Route path="/bar_demo" element={<Bar_demo />} />
         </Routes>

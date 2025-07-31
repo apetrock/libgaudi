@@ -50,7 +50,7 @@ EMSCRIPTEN_BINDINGS(rod_simulation) {
 ### Debug Infrastructure Requirements
 
 - **Interface-Only Logger**: Use the existing `gaudi::logger.hpp` interface (header-only, no implementation dependencies)
-- **WASM Logger Implementation**: Create `wasm_logger.cpp` in the wasm directory implementing the `gaudi::logger` interface
+- **WASM Logger Implementation**: Create `wasm_geometry_logger.cpp` in the wasm directory implementing the `gaudi::logger` interface
 - **Clean Separation**: No dependencies on `GaudiGraphics::geometry_logger` or other graphics libraries
 - **WASM Line Bridge**: Expose logger data directly to JavaScript via WASM bindings
 - **Line Rendering**: Real-time rendering of logged lines in React Three Fiber from the WASM logger implementation
@@ -329,7 +329,7 @@ js/                           # Main JS/React project
 │   ├── logger/               # Logger WASM project
 │   │   ├── CMakeLists.txt    # Logger-specific build config
 │   │   ├── src/              # C++ source for logger
-│   │   │   ├── wasm_logger.cpp
+│   │   │   ├── wasm_geometry_logger.cpp
 │   │   │   └── logger_test.cpp
 │   │   └── logger_endpoints.ts   # TypeScript API for logger
 │   │
@@ -426,7 +426,7 @@ js/                           # Main JS/React project
 **Technical Requirements**:
 
 - **Interface-Only Logger**: Use `gaudi::logger.hpp` interface with WASM-specific implementation
-- **WASM Logger Implementation**: Create `wasm_logger.cpp` implementing the logger interface in the wasm directory
+- **WASM Logger Implementation**: Create `wasm_geometry_logger.cpp` implementing the logger interface in the wasm directory
 - **Frame-based Line Generation**: C++ generates animated lines every frame via logger interface calls (rotating axes, sine waves)
 - **WASM Data Bridge**: Expose logger data directly to JavaScript via WASM bindings
 - **Three.js Real-time Renderer**: BufferGeometry with dynamic position/color attributes from WASM logger data
