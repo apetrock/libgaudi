@@ -52,6 +52,10 @@ Makefile
 *.wasm
 *.wat
 
+# WASM build output
+js/src/wasm/
+js/wasm/build/
+
 # Logs
 *.log
 logs/
