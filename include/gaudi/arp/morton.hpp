@@ -194,6 +194,20 @@ inline std::vector<mat3> calc_outers(const std::vector<vec3>& data, const std::v
   const auto default_val = mat3::Zero();
   return map<N, mat3>(data, map_fcn, default_val);
 }
+
+// Explicit instantiation declarations - controlled by CMake option
+#if defined(GAUDI_USE_EXPLICIT_INSTANTIATIONS) && GAUDI_USE_EXPLICIT_INSTANTIATIONS
+// Explicit instantiation declarations for calc_com
+extern template std::vector<MassPoint> calc_com<1>(const std::vector<vec3>&);
+extern template std::vector<MassPoint> calc_com<2>(const std::vector<vec3>&);
+extern template std::vector<MassPoint> calc_com<3>(const std::vector<vec3>&);
+
+// Explicit instantiation declarations for calc_extents
+extern template std::vector<ext::extents_t> calc_extents<1>(const std::vector<vec3>&);
+extern template std::vector<ext::extents_t> calc_extents<2>(const std::vector<vec3>&);
+extern template std::vector<ext::extents_t> calc_extents<3>(const std::vector<vec3>&);
+#endif
+
 } // namespace arp
 } // namespace gaudi
 

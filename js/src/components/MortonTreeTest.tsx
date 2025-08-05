@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { MortonTreeTestModule, MortonTreeTestClass } from '../../wasm/modules/morton_tree/morton_tree_endpoints';
@@ -9,7 +9,7 @@ import { consoleLogger } from '../stores/consoleLoggerStore';
 
 interface MortonTreeTestModuleWithLogger extends MortonTreeTestModule, LoggerWasmModule {}
 interface MortonTreeTestClassWithLogger extends MortonTreeTestClass, WasmLoggerAPI {
-  generate_grid_points?: (grid_size: number) => void;
+  // No additional properties needed - generate_grid_points is already in MortonTreeTestClass
 }
 
 export const MortonTreeTest = () => {
@@ -22,6 +22,10 @@ export const MortonTreeTest = () => {
   const [gridSize, setGridSize] = useState(5);
   const [showDebugLines, setShowDebugLines] = useState(true);
   const [showDebugPoints, setShowDebugPoints] = useState(true);
+  const currentTimeRef = useRef(0);
+  const [animationFrameId, setAnimationFrameId] = useState<number | null>(null);
+  const isAnimatingRef = useRef(false);
+  const [isAnimating, setIsAnimating] = useState(false); // Keep for UI display
 
   const loadWasm = async () => {
     try {
@@ -130,6 +134,74 @@ export const MortonTreeTest = () => {
     }
   };
 
+  const testLogNearest = () => {
+    if (!instance) return;
+    
+    try {
+      // Use current time as parameter
+      const timeParam = currentTimeRef.current;
+      instance.log_nearest(timeParam);
+      addResult(`Log nearest test called with time parameter: ${timeParam}`);
+    } catch (err) {
+      addResult(`Log nearest test failed: ${err}`);
+    }
+  };
+
+  // Animation frame callback for continuous nearest neighbor testing
+  const animationFrameCallback = () => {
+    if (!instance || !isAnimatingRef.current) return;
+    
+    try {
+      instance.log_nearest(currentTimeRef.current);
+      currentTimeRef.current += 1; // Increment time for smooth animation
+      
+      // Schedule next frame
+      const nextFrameId = requestAnimationFrame(animationFrameCallback);
+      setAnimationFrameId(nextFrameId);
+    } catch (err) {
+      addResult(`Animation frame callback failed: ${err}`);
+      stopAnimation();
+    }
+  };
+
+  const startAnimation = () => {
+    if (!instance || isAnimatingRef.current) return;
+    
+    try {
+      currentTimeRef.current = 0;
+      isAnimatingRef.current = true;
+      setIsAnimating(true);
+      addResult('Starting nearest neighbor animation...');
+      
+      // Start the animation loop
+      const frameId = requestAnimationFrame(animationFrameCallback);
+      setAnimationFrameId(frameId);
+    } catch (err) {
+      addResult(`Failed to start animation: ${err}`);
+      isAnimatingRef.current = false;
+      setIsAnimating(false);
+    }
+  };
+
+  const stopAnimation = () => {
+    if (animationFrameId !== null) {
+      cancelAnimationFrame(animationFrameId);
+      setAnimationFrameId(null);
+    }
+    isAnimatingRef.current = false;
+    setIsAnimating(false);
+    addResult('Stopped nearest neighbor animation');
+  };
+
+  // Cleanup animation on unmount
+  React.useEffect(() => {
+    return () => {
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [animationFrameId]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Controls */}
@@ -217,7 +289,7 @@ export const MortonTreeTest = () => {
             {/* Visualization Controls */}
             <div className="p-4 bg-gray-50 rounded">
               <h3 className="text-lg font-semibold mb-2">Visualizations</h3>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <button
                   onClick={logZorder}
                   className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
@@ -236,7 +308,31 @@ export const MortonTreeTest = () => {
                 >
                   Log BVH
                 </button>
-
+                <button
+                  onClick={testLogNearest}
+                  className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+                >
+                  Test Log Nearest
+                </button>
+                <button
+                  onClick={startAnimation}
+                  disabled={isAnimating}
+                  className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+                >
+                  Start Animation
+                </button>
+                <button
+                  onClick={stopAnimation}
+                  disabled={!isAnimating}
+                  className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+                >
+                  Stop Animation
+                </button>
+              </div>
+              
+              {/* Time Parameter Display */}
+              <div className="mt-3 text-sm text-gray-600">
+                Current time parameter: {currentTimeRef.current} {isAnimating && '(Animating)'}
               </div>
             </div>
 

@@ -47,6 +47,48 @@ template <int S, typename VEC> const VEC from(const vecX &vals, size_t i) {
   return VEC(vals.data() + S * i);
 };
 
+template <typename T, int STRIDE> 
+class slice {
+  T* __data;
+  size_t __offset;
+  slice(const std::vector<T>& data, size_t offset) : __data(data.data()), __offset(offset) {}
+  const T& operator[](size_t i) const { return __data[STRIDE * __offset + i]; }
+  T& operator[](size_t i) { return __data[STRIDE * __offset + i]; }
+  size_t size() const { return STRIDE; }
+  
+};
+
+template <typename T, int STRIDE> class 
+permuted_slice {
+  T* __data;
+  size_t __offset;
+  const int* __permutation;
+public:
+  permuted_slice(std::vector<T>& data, size_t offset, const std::vector<int>& permutation) : 
+  __data(data.data()), 
+  __permutation(permutation.data()),
+   __offset(offset) {}
+  const T& operator[](size_t i) const { return __data[STRIDE * __permutation[__offset] + i]; }
+  T& operator[](size_t i) { return __data[STRIDE * __permutation[__offset] + i]; }
+  size_t size() const { return STRIDE; }
+};
+
+template <typename T, int STRIDE> class 
+const_permuted_slice {
+  const T* __data;
+  size_t __offset;
+  const int* __permutation;
+public:
+  const_permuted_slice(const std::vector<T>& data, size_t offset, const std::vector<int>& permutation) : 
+  __data(data.data()), 
+  __permutation(permutation.data()),
+   __offset(offset) {}
+  const T& operator[](size_t i) const { return __data[STRIDE * __permutation[__offset] + i]; }
+  T& operator[](size_t i) { return __data[STRIDE * __permutation[__offset] + i]; }
+  size_t size() const { return STRIDE; }
+};
+
+
 // these will be function pointers with a default
 // these should be non-const
 template <int S, typename VEC> inline vecX to(const std::vector<VEC> &x) {
@@ -144,4 +186,14 @@ std::vector<T> operator*(const real &a, const std::vector<T> &b) {
 }
 
 } // namespace gaudi
+
+// Specialization for tuple_size to work with permuted_slice
+namespace std {
+template <typename T, int STRIDE>
+struct tuple_size<gaudi::permuted_slice<T, STRIDE>> : integral_constant<size_t, STRIDE> {};
+
+template <typename T, int STRIDE>
+struct tuple_size<gaudi::const_permuted_slice<T, STRIDE>> : integral_constant<size_t, STRIDE> {};
+} // namespace std
+
 #endif

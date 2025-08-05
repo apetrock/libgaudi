@@ -533,6 +533,7 @@ namespace gaudi
   namespace ext
   {
 
+    
     typedef std::array<vec3, 2> extents_t;
     const real inf_t = std::numeric_limits<real>::max();
     const vec3 inf_3(inf_t, inf_t, inf_t);
@@ -576,11 +577,56 @@ namespace gaudi
       return eout;
     }
 
-    real distance(const extents_t &e, const vec3 &x)
+
+
+    // Proper point-to-bounding-box distance calculation
+    vec3 closest_point(const extents_t &e, const vec3 &x)
     {
-      extents_t eout;
+      vec3 out = x;
+      for (int k = 0; k < 3; ++k)
+      {
+        out[k] = va::clamp(x[k], e[0][k], e[1][k]);
+      }
+      return out;
+    }
+
+    vec3 dist(const extents_t &e, const vec3 &x)
+    {
+      vec3 nearest = closest_point(e, x);
+      return x - nearest;
+    }
+
+    real dist_from_center(const extents_t &e, const vec3 &x)
+    {
       vec3 c = 0.5 * (e[0] + e[1]);
       return (x - c).norm();
+    }
+
+    vec3 center(const extents_t &e) {
+      return 0.5 * (e[0] + e[1]);
+    }
+
+    real mag(const extents_t &e) {
+      return 0.5 * (e[1] - e[0]).norm();
+    }
+
+    template <typename T>
+    concept ExtentsCalculable = requires(T t) {
+        { t[0] } -> std::convertible_to<const vec3&>;
+        { t.size() } -> std::convertible_to<size_t>;
+    };
+
+    template <ExtentsCalculable T>
+    extents_t calc_extents(const T& verts) {
+        constexpr size_t S = std::tuple_size<T>::value;
+        vec3 min = verts[0];
+        vec3 max = min;
+        for (size_t k = 0; k < S; k++) {
+            vec3 p = verts[k];
+            min = va::min(p, min);
+            max = va::max(p, max);
+        }
+        return extents_t{min, max};
     }
   } // namespace ext
 } // namespace gaudi

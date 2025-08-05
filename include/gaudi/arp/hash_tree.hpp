@@ -132,22 +132,14 @@ inline NodeResult build_tree(const std::vector<uint32_t> &hash) {
     internal_nodes[i].split = split;
 
     if (split == range.first) {
-      console_logger::debug << "Leaf node at " << range.first << " with parent "
-                            << i << std::endl;
       leaf_nodes[range.first].parent = i;
     } else {
-      console_logger::debug << "Internal node at " << split << " with parent "
-                            << i << std::endl;
       internal_nodes[split].parent = i;
     }
 
     if (split + 1 == range.second) {
-      console_logger::debug << "Leaf node at " << range.second
-                            << " with parent " << i << std::endl;
       leaf_nodes[range.second].parent = i;
     } else {
-      console_logger::debug << "Internal node at " << split + 1
-                            << " with parent " << i << std::endl;
       internal_nodes[split + 1].parent = i;
     }
   }
@@ -250,22 +242,8 @@ inline void traverse_bfs(const std::vector<radix_tree_node> &internal_nodes,
       }
     } else if (fcn(cid, -1, cnode)) { // <- KEY: conditional traversal
       // Continue traversing if callback returns true
-      console_logger::debug << "Traversing internal node " << cid << std::endl;
-      // inspect children and verify parents of children equal to cnode
       const auto &node_split = internal_nodes[cnode.split];
-      console_logger::debug << "cnode.split=" << cnode.split
-                            << ", in[split]={start:" << node_split.start
-                            << ", end:" << node_split.end
-                            << ", split:" << node_split.split
-                            << ", parent:" << node_split.parent
-                            << "}, parent=" << node_split.parent << std::endl;
       const auto &node_split1 = internal_nodes[cnode.split + 1];
-      console_logger::debug << "cnode.split+1=" << cnode.split + 1
-                            << ", in[split+1]={start:" << node_split1.start
-                            << ", end:" << node_split1.end
-                            << ", split:" << node_split1.split
-                            << ", parent:" << node_split1.parent
-                            << "}, parent=" << node_split1.parent << std::endl;
       stack.push(cnode.split);
       stack.push(cnode.split + 1);
     }
@@ -322,7 +300,6 @@ make_hash_tree(const std::vector<vec3> &data) {
 template <int N>
 inline TreeResult<ext::extents_t>
 make_bvh(const std::vector<vec3> &data, const std::vector<index_t> &indices,
-         const std::vector<uint32_t> &hashes,
          const std::vector<radix_tree_node> &internal_nodes,
          const std::vector<radix_tree_node> &leaf_nodes) {
 
@@ -338,13 +315,8 @@ make_bvh(const std::vector<vec3> &data, const std::vector<index_t> &indices,
     return ext::expand(b, a);
   };
 
-  console_logger::debug << "Building BVH with " << indices.size() << " nodes"
-                        << std::endl;
   auto internalReduce = build_pyramid<ext::extents_t>(
       exts, indices, internal_nodes, leaf_nodes, reduce_function, default_val);
-  console_logger::debug << "Built BVH with " << exts.size() << " leaf nodes, "
-                        << internalReduce.size() << " internal nodes"
-                        << std::endl;
 
   return {
       exts,
@@ -355,7 +327,6 @@ make_bvh(const std::vector<vec3> &data, const std::vector<index_t> &indices,
 template <int N>
 inline TreeResult<vec3>
 make_points(const std::vector<vec3> &data, const std::vector<index_t> &indices,
-            const std::vector<uint32_t> &hashes,
             const std::vector<radix_tree_node> &internal_nodes,
             const std::vector<radix_tree_node> &leaf_nodes) {
   using ITYPE = vec3;
@@ -395,7 +366,6 @@ make_points(const std::vector<vec3> &data, const std::vector<index_t> &indices,
 template <int N = 1>
 void log_hierarchy(const std::vector<vec3> &data,
                    const std::vector<index_t> &indices,
-                   const std::vector<uint32_t> &hashes,
                    const std::vector<radix_tree_node> &internal_nodes,
                    const std::vector<radix_tree_node> &leaf_nodes) {
   if (internal_nodes.empty() || leaf_nodes.empty()) {
@@ -404,7 +374,7 @@ void log_hierarchy(const std::vector<vec3> &data,
   }
   // Compute centerpoints for each stride group for visualization
   const auto [leaf_points, internal_points] =
-      make_points<N>(data, indices, hashes, internal_nodes, leaf_nodes);
+      make_points<N>(data, indices, internal_nodes, leaf_nodes);
   // draw the simplex for logging
   if (N > 1) {
     for (size_t i = 0; i < data.size(); i += N) {
@@ -439,12 +409,11 @@ void log_hierarchy(const std::vector<vec3> &data,
 
 template <int N>
 void log_bvh(const std::vector<vec3> &data, const std::vector<index_t> &indices,
-             const std::vector<uint32_t> &hashes,
              const std::vector<radix_tree_node> &internal_nodes,
              const std::vector<radix_tree_node> &leaf_nodes) {
 
   const auto bvh_result =
-      make_bvh<N>(data, indices, hashes, internal_nodes, leaf_nodes);
+      make_bvh<N>(data, indices, internal_nodes, leaf_nodes);
   const auto &leaf_bvh = bvh_result.leaf;
   const auto &internal_bvh = bvh_result.internal;
   for (int i = 0; i < data.size(); i++) {
@@ -453,147 +422,98 @@ void log_bvh(const std::vector<vec3> &data, const std::vector<index_t> &indices,
   }
   for (int i = 0; i < internal_bvh.size(); i++) {
     const ext::extents_t &ext = internal_bvh[i];
-    console_logger::debug << "Internal BVH extents: " << ext[0].transpose()
-                          << ", " << ext[1].transpose() << std::endl;
     geometry_logger::ext(ext[0], ext[1], vec4(0.0, 1.0, 0.0, 0.5));
   }
 }
 
-/*
-#if 1
-template <int ST, int SS> // T=test, S=set... DOH! T could equal tree...
+template<typename T>
+concept Indexable = requires(T a, size_t i)
+{   
+    { a[i] } -> std::convertible_to<const vec3&>;
+    { a.size() } -> std::convertible_to<size_t>;
+};
+
+
+// SLICE = permuted_slice<vec3, NT> || slice<vec3, NT> || array<vec3, NT>
+
+//user should'nt know that this is a slice its just an array
+template<int N>
+using near_array = const_permuted_slice<vec3, N>;
+
+template <Indexable T, int N> // T=test, S=set... DOH! T could equal tree...
 std::vector<index_t>
-getNearest(index_t &idT, const std::vector<index_t> &t_inds,
-           const vector<vec3> &t_verts, //
-           const std::vector<vec3> &data,
-            const std::vector<index_t> &indices,
-            const std::vector<uint32_t> &hashes,
-            const std::vector<radix_tree_node> &internal_nodes,
-            const std::vector<radix_tree_node> &leaf_nodes
-              const aabb_tree<SS> &s_tree, real tol,
-           std::function<real(const index_t &idT, //
-                              const std::vector<index_t> &t_inds,
-                              const vector<vec3> &t_verts, //
-                              const index_t &idS,          //
-                              const std::vector<index_t> &s_inds,
-                              const std::vector<vec3> &s_verts)>
-               testAB)
-{
+getNearest(T &prim, const std::vector<vec3> &data,
+           const std::vector<index_t> &indices,
+           const std::vector<radix_tree_node> &internal_nodes,
+           const std::vector<radix_tree_node> &leaf_nodes,
+               const TreeResult<ext::extents_t> &bvh_result,
+           real tol,
+           std::function<real(const T &t_verts, // pass array slices into
+                              const near_array<N> &s_verts)>
+               testAB) {
 
-  // TIMER function//TIMER(__FUNCTION__);
-  typedef aabb_tree<SS> tree_type;
-  typedef typename tree_type::node Node;
-
-  bool expanding_rad = tol > 999.9;
-
+  bool contracting_rad = tol > 999.9;
+  ext::extents_t ext_t = ext::calc_extents(prim);
+  ext_t = ext::inflate(ext_t, tol);
+  const vec3 cen_t = ext::center(ext_t);
   index_t idMin = -1;
-  real dmin = std::numeric_limits<real>::max();
-
-  const Node &root = s_tree.nodes[0];
-  std::stack<int> cstack;
-  cstack.push(0);
-  bool hit = false;
-  // T tol = 0.05;
-  ext::extents_t extT = calc_extents<ST>(idT, t_inds, t_verts);
-  extT = ext::inflate(extT, tol);
+  real mMin = std::numeric_limits<real>::max();
   std::vector<index_t> collisions;
-  while (cstack.size() > 0)
-  {
-    int cId = cstack.top();
-    cstack.pop();
-    const Node &cnode = s_tree.nodes[cId];
 
-    if (expanding_rad && cnode.size > 0)
-    {
-      real d = ext::distance(extT, cnode.half.cen);
-      tol = std::min(tol, d);
-      tol = std::max(tol, cnode.half.mag);
-      extT = calc_extents<ST>(idT, t_inds, t_verts);
-      extT = ext::inflate(extT, tol);
-#if 0
-  if (idT == 17260) {
+  auto calc_tol = [&](const real &tol, const ext::extents_t &ext_s,
+                      const vec3 &cen_t) {
+    //closest point on the box surface is too conservative
+    const real d = ext::dist_from_center(ext_s, cen_t);
+    return std::min(d, tol);
+  };
 
-    std::cout << "d/tol: " << d << " " << tol << std::endl;
-    vec3 cT = 0.5 * (extT[0] + extT[1]);
-    geometry_logger::line(cT, cnode.half.cen, vec4(0.0, 1.0, 0.0, 1.0));
-    geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
-  }
-#endif
-    }
+  traverse_bfs(
+      internal_nodes, leaf_nodes,
+      [&](index_t node_id, index_t leaf_id, const radix_tree_node &node) {
+        if (leaf_id != -1 && node.parent != UNULL) {
+          // if contracting_rad
+          const near_array<N> datum(data, leaf_id, indices);
+          const ext::extents_t &ext_s = ext::calc_extents(datum);
+          
+          geometry_logger::ext(ext_s[0], ext_s[1], vec4(0.0, 1.0, 0.0, 0.5)); 
+          //geometry_logger::ext(ext_t[0], ext_t[1], vec4(1.0, 0.0, 0.0, 0.5)); 
+          if(contracting_rad){
+            real dist = testAB(prim, datum);
+            if (dist < mMin) {
+              mMin = dist;
+              idMin = leaf_id;
+            }
+            ext_t = ext::inflate(ext::calc_extents(prim), mMin);
+          } else if (ext::overlap(ext_t, ext_s)) {
+            real dist = testAB(prim, datum);
+            if (dist < tol) {
+              collisions.push_back(indices[leaf_id]);
+            }
+          }
 
-    if (cnode.children[0] == -1 && cnode.children[1] == -1)
-    {
 
-      for (int k = cnode.begin; k < cnode.begin + cnode.size; k++)
-      {
+          return false;
+        } else if (node.parent != UNULL) {
+          const ext::extents_t &ext_s = bvh_result.internal[node_id];
+          tol = contracting_rad ? calc_tol(tol, ext_s, cen_t) : tol;
+          geometry_logger::ext(ext_t[0], ext_t[1], vec4(1.0, 0.0, 0.0, 0.5)); 
 
-        const index_t &idS = s_tree.permutation[k];
-
-        ext::extents_t extS =
-            calc_extents<SS>(idS, s_tree.indices(), s_tree.verts());
-
-        if (!ext::overlap(extT, extS))
-        {
-
-          continue;
+          //reset the extents to the original
+          ext_t = ext::inflate(ext::calc_extents(prim), tol);
+          return ext::overlap(ext_t, ext_s);
         }
-#if 0
-    if (idT == 15978 && 0) {
-      std::cout << "idS: " << idS << std::endl;
-      vec3 cT = 0.5 * (extT[0] + extT[1]);
-      vec3 cS = 0.5 * (extS[0] + extS[1]);
-      geometry_logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
-      geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
-      geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
-    }
-#endif
-        real dist = testAB(idT, t_inds, t_verts, //
-                           idS, s_tree.indices(), s_tree.verts());
+        return true;
+      });
 
-        if (dist < dmin)
-        {
-          dmin = dist;
-          idMin = idS;
-        }
-        if (dist < tol && !expanding_rad)
-        {
-          collisions.push_back(idS);
-        }
-      }
-    }
-
-    index_t itx = cnode.half.intersect(extT);
-
-    if (itx <= 0 && cnode.children[0] > 0)
-    {
-      cstack.push(cnode.children[0]);
-    }
-
-    if (itx >= 0 && cnode.children[1] > 0)
-    {
-      cstack.push(cnode.children[1]);
-    }
+  if (contracting_rad) {
+    collisions.push_back(indices[idMin]); // mintol always in the back
   }
-
-  if (dmin < tol)
-  {
-    collisions.push_back(idMin);
-  }
-  else
-  {
+  else{
     collisions.push_back(-1);
-#if 0
-if (expanding_rad) {
-  std::cout << "no collisions:" << idT << std::endl;
-  // exit(0);
-}
-#endif
   }
-
   return collisions;
 };
-#endif
-*/
+
 template <int N>
 inline std::tuple<std::vector<uint32_t>, std::vector<index_t>,
                   std::vector<radix_tree_node>, std::vector<radix_tree_node>>
@@ -607,6 +527,50 @@ make_hash_N(const std::vector<vec3> &data) {
   }
   return make_hash_tree(averaged);
 }
+
+// Explicit instantiation declarations - controlled by CMake option
+#if defined(GAUDI_USE_EXPLICIT_INSTANTIATIONS) &&                              \
+    GAUDI_USE_EXPLICIT_INSTANTIATIONS
+extern template TreeResult<vec3>
+make_points<1>(const std::vector<vec3> &, const std::vector<index_t> &,
+               const std::vector<uint32_t> &,
+               const std::vector<radix_tree_node> &,
+               const std::vector<radix_tree_node> &);
+extern template TreeResult<vec3>
+make_points<2>(const std::vector<vec3> &, const std::vector<index_t> &,
+               const std::vector<uint32_t> &,
+               const std::vector<radix_tree_node> &,
+               const std::vector<radix_tree_node> &);
+extern template TreeResult<vec3>
+make_points<3>(const std::vector<vec3> &, const std::vector<index_t> &,
+               const std::vector<uint32_t> &,
+               const std::vector<radix_tree_node> &,
+               const std::vector<radix_tree_node> &);
+
+extern template TreeResult<ext::extents_t>
+make_bvh<1>(const std::vector<vec3> &, const std::vector<index_t> &,
+            const std::vector<uint32_t> &, const std::vector<radix_tree_node> &,
+            const std::vector<radix_tree_node> &);
+extern template TreeResult<ext::extents_t>
+make_bvh<2>(const std::vector<vec3> &, const std::vector<index_t> &,
+            const std::vector<uint32_t> &, const std::vector<radix_tree_node> &,
+            const std::vector<radix_tree_node> &);
+extern template TreeResult<ext::extents_t>
+make_bvh<3>(const std::vector<vec3> &, const std::vector<index_t> &,
+            const std::vector<uint32_t> &, const std::vector<radix_tree_node> &,
+            const std::vector<radix_tree_node> &);
+
+extern template std::vector<MassPoint> calc_com<1>(const std::vector<vec3> &);
+extern template std::vector<MassPoint> calc_com<2>(const std::vector<vec3> &);
+extern template std::vector<MassPoint> calc_com<3>(const std::vector<vec3> &);
+
+extern template std::vector<ext::extents_t>
+calc_extents<1>(const std::vector<vec3> &);
+extern template std::vector<ext::extents_t>
+calc_extents<2>(const std::vector<vec3> &);
+extern template std::vector<ext::extents_t>
+calc_extents<3>(const std::vector<vec3> &);
+#endif
 
 } // namespace arp
 

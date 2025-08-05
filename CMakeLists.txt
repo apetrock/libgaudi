@@ -7,7 +7,7 @@ project(
   VERSION 0.1
   LANGUAGES CXX)
 
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.16)
 
 # FetchContent added in CMake 3.11, downloads during the configure step
 include(FetchContent)
@@ -24,6 +24,9 @@ message(STATUS "WITH_CUDA: ${WITH_CUDA}")
 set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}
     CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel tsan asan lsan msan ubsan"
     FORCE)
+
+# Explicit instantiations option for header-only library performance
+option(GAUDI_USE_EXPLICIT_INSTANTIATIONS "Use explicit template instantiations for faster compilation" ON)
 
 # ThreadSanitizer
 set(CMAKE_C_FLAGS_TSAN
@@ -236,6 +239,30 @@ add_definitions("${NANOGUI_EXTRA_DEFS}")
 #add_subdirectory(ext/spectra)
 
 include_directories("${EIGEN_INCLUDE_DIR}" "${SPECTRA_INCLUDE_DIR}" "ext/AudioFile")
+
+# Create gaudi_library with explicit instantiations if enabled
+if(GAUDI_USE_EXPLICIT_INSTANTIATIONS)
+    add_library(gaudi_library STATIC
+        "src/gaudi_arp_instantiations.cpp"
+    )
+    
+    # Set include directories for the library
+    target_include_directories(gaudi_library PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen-3.4.0/eigen-3.4.0"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ext/spectra/include"
+    )
+    
+    # Set compile definitions to enable explicit instantiations
+    target_compile_definitions(gaudi_library PUBLIC
+        GAUDI_USE_EXPLICIT_INSTANTIATIONS=1
+    )
+    
+    message(STATUS "Created gaudi_library with explicit instantiations")
+else()
+    message(STATUS "Explicit instantiations disabled - templates will be instantiated inline")
+endif()
+
 add_subdirectory(src)
 
 

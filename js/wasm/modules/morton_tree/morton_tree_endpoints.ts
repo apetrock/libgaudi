@@ -17,12 +17,18 @@ export interface MortonTreeTestClass {
   clear_points(): void;
   get_point_count(): number;
   generate_random_points(count: number): void;
+  generate_grid_points(grid_size: number): void;
   mk_hash_tree(): boolean;
   log_hierarchy(): void;
   log_bvh(): void;
+  log_nearest(t: number): void;
   get_point_x(index: number): number;
   get_point_y(index: number): number;
   get_point_z(index: number): number;
+  get_leaf_point_x(index: number): number;
+  get_leaf_point_y(index: number): number;
+  get_leaf_point_z(index: number): number;
+  get_leaf_count(): number;
   
   // Visualization controls
   set_auto_visualize(enable: boolean): void;
