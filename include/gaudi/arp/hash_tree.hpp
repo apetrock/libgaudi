@@ -495,7 +495,16 @@ getNearest(T &prim, const std::vector<vec3> &data,
           return false;
         } else if (node.parent != UNULL) {
           const ext::extents_t &ext_s = bvh_result.internal[node_id];
-          tol = contracting_rad ? calc_tol(tol, ext_s, cen_t) : tol;
+
+          if(contracting_rad){
+            const real d = ext::dist_from_center(ext_s, cen_t);
+            if(tol > d){
+              return false;
+            }
+            tol = d;
+            ext_t = ext::inflate(ext::calc_extents(prim), tol);
+          }
+
           geometry_logger::ext(ext_t[0], ext_t[1], vec4(1.0, 0.0, 0.0, 0.5)); 
 
           //reset the extents to the original
@@ -570,6 +579,22 @@ extern template std::vector<ext::extents_t>
 calc_extents<2>(const std::vector<vec3> &);
 extern template std::vector<ext::extents_t>
 calc_extents<3>(const std::vector<vec3> &);
+
+extern template std::vector<index_t>
+getNearest<2>(const std::array<vec3, 1> &, const std::vector<vec3> &,
+              const std::vector<index_t> &,
+              const std::vector<radix_tree_node> &,
+              const std::vector<radix_tree_node> &,
+              const TreeResult<ext::extents_t> &, real, std::function<real(const std::vector<vec3> &, const near_array<1> &)>);
+
+extern template std::vector<index_t>
+getNearest<2>(const std::array<vec3, 2> &, const std::vector<vec3> &,
+              const std::vector<index_t> &,
+              const std::vector<radix_tree_node> &,
+              const std::vector<radix_tree_node> &,
+              const TreeResult<ext::extents_t> &, real, std::function<real(const std::vector<vec3> &, const near_array<1> &)>);
+
+
 #endif
 
 } // namespace arp
