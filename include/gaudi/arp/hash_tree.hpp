@@ -498,11 +498,12 @@ getNearest(T &prim, const std::vector<vec3> &data,
 
           if(contracting_rad){
             const real d = ext::dist_from_center(ext_s, cen_t);
-            if(tol > d){
+            if(d > tol){
               return false;
             }
             tol = d;
             ext_t = ext::inflate(ext::calc_extents(prim), tol);
+            return true;
           }
 
           geometry_logger::ext(ext_t[0], ext_t[1], vec4(1.0, 0.0, 0.0, 0.5)); 
