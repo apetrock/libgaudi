@@ -207,55 +207,27 @@ public:
     // std::vector<vec3> fr = compute_null_coulomb_gradient();
     std::vector<vec3> fr = compute_tangent_point_gradient();
     std::vector<vec3> fb = compute_boundary_gradients(frame);
-    real fwave = 0.5 + 0.5*cos(M_PI * real(frame)/250.0);
     //f = 16.0 * fb - 1e-6*fwave* fr;
-    f = 8.0 * fb;
+    f = 8.0 * fb + 1e-7 * fr;
 
     hepworth::vec3_block::ptr x =
         hepworth::vec3_block::create(__R->__M, __R->__x, __R->__v, f);
     hepworth::quat_block::ptr u =
         hepworth::quat_block::create(__R->__J, __R->__u, __R->__o);
 
-
-
-    // hepworth::rod::init_smooth(*__R, constraints, 0.2);
-
-
-    //  hepworth::rod::init_smooth_bend(*__R, constraints, 0.01);
-#if 1
-    if(real(frame % 500) / 500.0 > 0.5 && 0){
-      for(int i = 0; i < l0.size(); i++){
-        l0[i] *= 1.25;
-      }
-      hepworth::block::init_stretch_shear(*__R, constraints, l0, 1e-1, {x, u});
-      hepworth::block::init_bend_twist(*__R, constraints, 1e-1, {u}, true);
-      hepworth::block::init_angle(*__R, constraints, vec3(1.0, 0.0, 0.0),
-                                  0.28 * M_PI, 0.1, {u});
-      //  hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.1, 0.0),
-      hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
-                                  0.25 * M_PI, 0.1, {u});
-    }
-    else{
-      //real th = (1000.0 - real(frame))/1000.0;
-      std::vector<real> w = compute_growth_weights(frame);
-      real lt = 0.0;
-      for(int i = 0; i < w.size(); i++){
-        lt += l0[i];
-      }
-      real wl = pow(_lt0 / lt, 0.25);
-      
       for(int i = 0; i < l0.size(); i++){
       //  //l0[i] *= w[i];
         l0[i] *= 1.04;
       }
 
       //std::cout << " lt0 / lt: " << _lt0 / lt << " w: " << wl << std::endl;
-      hepworth::block::init_helicity(*__R, constraints, 1e-0*wl, {x});
+      //hepworth::block::init_helicity(*__R, constraints, 1e-0*wl, {x});
+      //hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
+      //                            0.25 * M_PI, 0.1, {u});
       
-      hepworth::block::init_stretch_shear(*__R, constraints, l0, 6e-2, {x, u});
-      hepworth::block::init_bend_twist(*__R, constraints, 5e-2, {u}, false);
-    }
-#endif
+      hepworth::block::init_stretch_shear(*__R, constraints, l0, 1e-1, {x, u});
+      hepworth::block::init_bend_twist(*__R, constraints, 1e-1, {u}, false);
+
     hepworth::block::init_collisions(*__R, *__Rd, constraints, 1.0, {x, x});
     solver.set_constraints(constraints);
 
@@ -268,12 +240,25 @@ public:
 
     _frame = frame;
 
+    geometry_logger::clear();
 
     step_dynamics(frame);
+
     __Rd->step();
+    log_rod_geometry(vec4(0.8, 0.8, 0.8, 1.0));
+
     if(frame > 3000)
     exit(0);
     //__R->debug();
+  }
+  // Helper function to log rod geometry
+  void log_rod_geometry(const vec4 &color) {
+    if (!__R)
+      return;
+
+    // Use the existing debug() method which properly handles the adjacency
+    // table
+    __R->debug();
   }
 
   int _frame;

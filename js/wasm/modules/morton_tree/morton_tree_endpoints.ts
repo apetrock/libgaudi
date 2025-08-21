@@ -18,6 +18,9 @@ export interface MortonTreeTestClass {
   get_point_count(): number;
   generate_random_points(count: number): void;
   generate_grid_points(grid_size: number): void;
+  generate_trefoil_knot(num_segments: number): void;
+  generate_knot(k: number, num_segments: number): void;
+  generate_random_knot(num_control_points: number, segments_per_chord: number): void;
   mk_hash_tree(): boolean;
   log_hierarchy(): void;
   log_bvh(): void;
@@ -66,6 +69,9 @@ export const morton_treeEndpoints = {
     { name: 'test_face_hashing', returnType: 'boolean', parameters: [] },
     { name: 'add_point', returnType: 'void', parameters: [{ name: 'x', type: 'number' }, { name: 'y', type: 'number' }, { name: 'z', type: 'number' }] },
     { name: 'clear_points', returnType: 'void', parameters: [] },
-    { name: 'get_point_count', returnType: 'number', parameters: [] }
+    { name: 'get_point_count', returnType: 'number', parameters: [] },
+    { name: 'generate_trefoil_knot', returnType: 'void', parameters: [{ name: 'num_segments', type: 'number' }] },
+    { name: 'generate_knot', returnType: 'void', parameters: [{ name: 'k', type: 'number' }, { name: 'num_segments', type: 'number' }] },
+    { name: 'generate_random_knot', returnType: 'void', parameters: [{ name: 'num_control_points', type: 'number' }, { name: 'segments_per_chord', type: 'number' }] }
   ]
 } as const; 

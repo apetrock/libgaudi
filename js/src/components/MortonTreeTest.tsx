@@ -20,6 +20,10 @@ export const MortonTreeTest = () => {
   const [results, setResults] = useState<string[]>([]);
   const [pointCount, setPointCount] = useState(1000);
   const [gridSize, setGridSize] = useState(5);
+  const [knotSegments, setKnotSegments] = useState(100);
+  const [knotType, setKnotType] = useState(2); // K=2 for cinquefoil
+  const [randomKnotControlPoints, setRandomKnotControlPoints] = useState(8);
+  const [randomKnotSegmentsPerChord, setRandomKnotSegmentsPerChord] = useState(10);
   const [showDebugLines, setShowDebugLines] = useState(true);
   const [showDebugPoints, setShowDebugPoints] = useState(true);
   const currentTimeRef = useRef(0);
@@ -98,6 +102,56 @@ export const MortonTreeTest = () => {
       }
     } catch (err) {
       addResult(`Generate grid points failed: ${err}`);
+    }
+  };
+
+  const generateTrefoilKnot = () => {
+    if (!instance) return;
+    
+    try {
+      if (instance.generate_trefoil_knot) {
+        instance.generate_trefoil_knot(knotSegments);
+        const newPointCount = instance.get_point_count();
+        addResult(`Generated trefoil knot with ${newPointCount} points (${knotSegments} segments)`);
+      } else {
+        addResult(`Trefoil knot function not available`);
+      }
+    } catch (err) {
+      addResult(`Generate trefoil knot failed: ${err}`);
+    }
+  };
+
+  const generateKnot = () => {
+    if (!instance) return;
+    
+    try {
+      if (instance.generate_knot) {
+        instance.generate_knot(knotType, knotSegments);
+        const newPointCount = instance.get_point_count();
+        const knotNames = ['', 'Trefoil', 'Cinquefoil', 'Septafoil', 'Nonafoil'];
+        const knotName = knotType < knotNames.length ? knotNames[knotType] : `K=${knotType}`;
+        addResult(`Generated ${knotName} knot with ${newPointCount} points (K=${knotType}, ${knotSegments} segments)`);
+      } else {
+        addResult(`General knot function not available`);
+      }
+    } catch (err) {
+      addResult(`Generate knot failed: ${err}`);
+    }
+  };
+
+  const generateRandomKnot = () => {
+    if (!instance) return;
+    
+    try {
+      if (instance.generate_random_knot) {
+        instance.generate_random_knot(randomKnotControlPoints, randomKnotSegmentsPerChord);
+        const newPointCount = instance.get_point_count();
+        addResult(`Generated random knot with ${newPointCount} points (${randomKnotControlPoints} control points, ${randomKnotSegmentsPerChord} segments per chord)`);
+      } else {
+        addResult(`Random knot function not available`);
+      }
+    } catch (err) {
+      addResult(`Generate random knot failed: ${err}`);
     }
   };
 
@@ -272,6 +326,91 @@ export const MortonTreeTest = () => {
                 >
                   Generate Grid Points
                 </button>
+              </div>
+              
+              {/* Trefoil Knot Row */}
+              <div className="flex items-center gap-4 mb-3">
+                <label className="text-sm font-medium">Knot Segments:</label>
+                <input
+                  type="number"
+                  min="10"
+                  max="1000"
+                  value={knotSegments}
+                  onChange={(e) => setKnotSegments(parseInt(e.target.value) || 100)}
+                  className="border rounded px-2 py-1 w-20 text-black bg-white"
+                />
+                <button
+                  onClick={generateTrefoilKnot}
+                  className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded"
+                >
+                  Generate Trefoil Knot
+                </button>
+              </div>
+              
+              {/* General Knot Row */}
+              <div className="flex items-center gap-4 mb-3">
+                <label className="text-sm font-medium">K:</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={knotType}
+                  onChange={(e) => setKnotType(parseInt(e.target.value) || 2)}
+                  className="border rounded px-2 py-1 w-16 text-black bg-white"
+                />
+                <label className="text-sm font-medium">Segments:</label>
+                <input
+                  type="number"
+                  min="10"
+                  max="1000"
+                  value={knotSegments}
+                  onChange={(e) => setKnotSegments(parseInt(e.target.value) || 100)}
+                  className="border rounded px-2 py-1 w-20 text-black bg-white"
+                />
+                <button
+                  onClick={generateKnot}
+                  className="bg-teal-500 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded"
+                >
+                  Generate Knot
+                </button>
+              </div>
+              
+              {/* Random Knot Row */}
+              <div className="flex items-center gap-4 mb-3">
+                <label className="text-sm font-medium">Control Points:</label>
+                <input
+                  type="number"
+                  min="4"
+                  max="20"
+                  value={randomKnotControlPoints}
+                  onChange={(e) => setRandomKnotControlPoints(parseInt(e.target.value) || 8)}
+                  className="border rounded px-2 py-1 w-20 text-black bg-white"
+                />
+                <label className="text-sm font-medium">Segments/Chord:</label>
+                <input
+                  type="number"
+                  min="5"
+                  max="50"
+                  value={randomKnotSegmentsPerChord}
+                  onChange={(e) => setRandomKnotSegmentsPerChord(parseInt(e.target.value) || 10)}
+                  className="border rounded px-2 py-1 w-24 text-black bg-white"
+                />
+                <button
+                  onClick={generateRandomKnot}
+                  className="bg-pink-500 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded"
+                >
+                  Generate Random Knot
+                </button>
+              </div>
+              
+              {/* Knot Type Help */}
+              <div className="text-xs text-gray-600 mb-3">
+                K=1: Trefoil, K=2: Cinquefoil, K=3: Septafoil, K=4: Nonafoil
+              </div>
+              
+              {/* Random Knot Help */}
+              <div className="text-xs text-gray-600 mb-3">
+                Random knots use Bezier splines to connect Gaussian control points
               </div>
               
               

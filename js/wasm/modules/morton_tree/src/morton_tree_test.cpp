@@ -27,9 +27,119 @@ private:
   std::array<vec3, 1> test_point; // Add missing test_point variable
   std::vector<uint32_t> hashes;
   std::vector<index_t> indices;
+  std::vector<index_t> adjacency;
   std::vector<gaudi::arp::radix_tree_node> internal_nodes;
   std::vector<gaudi::arp::radix_tree_node> leaf_nodes;
   bool auto_visualize = true;
+
+  // Helper method to generate random Gaussian points
+  std::vector<vec3> generate_random_gaussian_points(int count) {
+    std::vector<vec3> points;
+    points.reserve(count);
+    
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<double> dist(-0.5, 0.5);
+    const double scale = 1.0 / pow(double(count), 1.0 / 3.0) * 0.5;
+    
+    for (int i = 0; i < count; i++) {
+      const vec3 p0(dist(gen), dist(gen), dist(gen));
+      const vec3 p1(dist(gen), dist(gen), dist(gen));
+      const vec3 c(dist(gen), dist(gen), dist(gen));
+      const vec3 dp = scale * (p1 - p0).normalized();
+      points.push_back(c - dp);
+      points.push_back(c + dp);
+    }
+    
+    return points;
+  }
+
+  // Helper method to generate individual random Gaussian points
+  std::vector<vec3> generate_random_control_points(int count) {
+    std::vector<vec3> points;
+    points.reserve(count);
+    
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<double> dist(-0.5, 0.5);
+    const double scale = 0.8; // Scale factor to fit in [-1, 1] range
+    
+    for (int i = 0; i < count; i++) {
+      const vec3 point(scale * dist(gen), scale * dist(gen), scale * dist(gen));
+      points.push_back(point);
+    }
+    
+    return points;
+  }
+
+  // Helper method to evaluate cubic Bezier curve
+  vec3 evaluate_bezier(const vec3& p0, const vec3& p1, const vec3& p2, const vec3& p3, double t) {
+    const double t2 = t * t;
+    const double t3 = t2 * t;
+    const double mt = 1.0 - t;
+    const double mt2 = mt * mt;
+    const double mt3 = mt2 * mt;
+    
+    return mt3 * p0 + 3.0 * mt2 * t * p1 + 3.0 * mt * t2 * p2 + t3 * p3;
+  }
+
+  // Helper method to generate farthest-first permutation using stack
+  std::vector<int> generate_farthest_first_permutation(const std::vector<vec3>& points, int sample_size = 5) {
+    int num_points = static_cast<int>(points.size());
+    std::vector<int> permutation(num_points, -1);
+    
+    // Create a stack of randomly shuffled indices
+    std::vector<int> index_stack;
+    index_stack.reserve(num_points);
+    for (int i = 0; i < num_points; i++) {
+      index_stack.push_back(i);
+    }
+    
+    // Shuffle the stack
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::shuffle(index_stack.begin(), index_stack.end(), gen);
+    
+    // Lambda to find farthest point from a given point using the stack
+    auto find_farthest_point = [&](const vec3& point, const std::vector<vec3>& points, 
+                                   std::vector<int>& stack) -> int {
+      if (stack.empty()) return -1;
+      
+      double max_dist = -1.0;
+      int max_idx = -1;
+      int max_stack_pos = -1;
+      
+      // Sample up to sample_size points from the stack
+      int samples_to_take = std::min(sample_size, static_cast<int>(stack.size()));
+      
+      for (int i = 0; i < samples_to_take; i++) {
+        int stack_idx = stack.size() - 1 - i; // Take from end of stack
+        int point_idx = stack[stack_idx];
+        const vec3& candidate = points[point_idx];
+        
+        double dist = (point - candidate).squaredNorm();
+        if (dist > max_dist) {
+          max_dist = dist;
+          max_idx = point_idx;
+          max_stack_pos = stack_idx;
+        }
+      }
+      
+      // Remove the farthest point from stack
+      if (max_stack_pos >= 0) {
+        stack.erase(stack.begin() + max_stack_pos);
+      }
+      
+      return max_idx;
+    };
+    
+    // Generate permutation by finding farthest point for each position
+    for (int i = 0; i < num_points; i++) {
+      permutation[i] = find_farthest_point(points[i], points, index_stack);
+    }
+    
+    return permutation;
+  }
 
   void redraw_visualizations() {
     geometry_logger::clear();
@@ -41,21 +151,25 @@ private:
 
   void draw_points() {
     // console_logger::debug << "Drawing " << test_points.size() << " points" <<
-    // std::endl;
-    console_logger::debug << "calculating com for " << test_points.size()
-                          << " points" << std::endl;
-    auto masses = arp::calc_com<2>(test_points);
-    console_logger::debug << "Drawing " << masses.size() << " points"
-                          << std::endl;
+      // std::endl;
+    console_logger::debug << "draw_points: test_points.size(): " << test_points.size() << std::endl;
+                   
+    console_logger::debug << "adjacency: " << adjacency.size() << std::endl;
+    console_logger::debug << "indices: " << indices.size() << std::endl;
+    console_logger::debug << "building permuted points" << std::endl;
+    //auto p_test_points = permuted(test_points, permuted(adjacency, spread<2, decltype(indices)>(indices)));
+    auto p_test_points = permuted_adjacency_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
+
+    auto masses = arp::calc_com<2>(p_test_points);
+    
     for (size_t i = 0; i < masses.size(); i++) {
       const vec3 &p0 = std::get<1>(masses[i]);
       geometry_logger::point(p0, vec4(1.0, 0.1f, 0.1f, 1.0));
     }
-    console_logger::debug << "Drawing " << test_points.size() << " lines"
-                          << std::endl;
-    for (size_t i = 0; i < test_points.size(); i += 2) {
-      const vec3 &p0 = test_points[i + 0];
-      const vec3 &p1 = test_points[i + 1];
+
+    for (size_t i = 0; i < p_test_points.size(); i += 2) {
+      const vec3 &p0 = p_test_points[i + 0];
+      const vec3 &p1 = p_test_points[i + 1];
       geometry_logger::line(p0, p1, vec4(0.1, 1.0f, 0.1f, 1.0));
     }
   }
@@ -65,11 +179,14 @@ private:
       return;
 
     // Draw lines connecting points in Morton-sorted order
-    auto masses = arp::calc_com<2>(test_points);
-    for (size_t i = 0; i < indices.size() - 1; i++) {
-      const vec3 &current = std::get<1>(masses[indices[i]]);
-      const vec3 &next = std::get<1>(masses[indices[i + 1]]);
-      geometry_logger::line(current, next, vec4(0, 0, 255, 0.7f)); // Blue lines
+    console_logger::debug << "draw_sorted_order_lines: test_points.size(): " << test_points.size() << std::endl;
+    console_logger::debug << "draw_sorted_order_lines: indices.size(): " << indices.size() << std::endl;
+    auto p_test_points = permuted_adjacency_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
+    auto coms = arp::calc_com<2>(p_test_points);
+    for(size_t i = 0; i < coms.size() - 1; i++) {
+      const vec3 &p0 = std::get<1>(coms[i]);
+      const vec3 &p1 = std::get<1>(coms[i+1]);
+      geometry_logger::line(p0, p1, vec4(0, 0, 255, 0.7f));
     }
   }
 
@@ -77,15 +194,30 @@ public:
   MortonTreeTest() {
     // Initialize with some test points
     test_points = {{0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0},
-                   {0.0, 0.0, 1.0}, {1.0, 1.0, 1.0}, {0.0, 0.0, 1.0},
-                   {1.0, 0.0, 1.0}, {1.0, 1.0, 1.0}};
+                   {0.0, 0.0, 1.0}, {1.0, 1.0, 0.0}, {1.0, 0.0, 1.0},
+                   {0.0, 1.0, 1.0}, {1.0, 1.0, 1.0}};
+    adjacency = {0, 1, 2, 3, 4, 5, 6, 7};
     update_hashes();
   }
 
   void update_hashes() {
-    auto result = arp::make_hash_3d(test_points);
-    hashes = result.first;
-    indices = result.second;
+
+    console_logger::debug << "update_hashes: " << test_points.size() << std::endl;
+    auto p_test_points = adjacency_view<decltype(test_points), decltype(adjacency)>(test_points, adjacency);
+    auto [tree_hashes, tree_indices, tree_internal, tree_leaf] = arp::make_hash<2>(p_test_points);
+    console_logger::debug << "done building hash tree" << std::endl;
+    this->hashes = tree_hashes;
+    this->indices = tree_indices;
+    this->internal_nodes = tree_internal;
+    this->leaf_nodes = tree_leaf;
+    if(indices.size() < 128) {
+      //dump indices:
+      console_logger::debug << "update_hashes: indices: ";
+      for(size_t i = 0; i < indices.size(); i++) {  
+        console_logger::debug << indices[i] << " ";
+      }
+      console_logger::debug << std::endl;
+    }
     redraw_visualizations();
   }
 
@@ -132,20 +264,11 @@ public:
 
     // Clear existing points but don't trigger redraw yet
     test_points.clear();
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::normal_distribution<double> dist(-0.5, 0.5);
-    // N = l * l * l;
-    const double scale = 1.0 / pow(double(count), 1.0 / 3.0) * 0.5;
-    // Generate all points in batch without triggering redraws
-    test_points.reserve(count); // Pre-allocate for efficiency
-    for (int i = 0; i < count; i++) {
-      const vec3 p0(dist(gen), dist(gen), dist(gen));
-      const vec3 p1(dist(gen), dist(gen), dist(gen));
-      const vec3 c(dist(gen), dist(gen), dist(gen));
-      const vec3 dp = scale * (p1 - p0).normalized();
-      test_points.push_back(c - dp);
-      test_points.push_back(c + dp);
+    adjacency.clear();
+    // Use the helper method to generate random points
+    test_points = generate_random_gaussian_points(count);
+    for(size_t i = 0; i < test_points.size(); i++) {
+      adjacency.push_back(i);
     }
     // Only update tree and redraw once at the end
     console_logger::debug << "generate_random_points: Calling update_tree..."
@@ -160,7 +283,7 @@ public:
   void generate_grid_points(int grid_size) {
     // Clear existing points but don't trigger redraw yet
     test_points.clear();
-
+    adjacency.clear();
     const double spacing = 2.0 / (grid_size - 1); // Grid spans [-1, 1]
     const double segment_length =
         spacing * 0.3; // Line segment length relative to grid spacing
@@ -173,6 +296,7 @@ public:
       for (int y = 0; y < grid_size; y++) {
         for (int z = 0; z < grid_size; z++) {
           // Calculate center position in [-1, 1] range
+          const index_t idx = x * grid_size * grid_size + y * grid_size + z;
           const double cx = -1.0 + x * spacing;
           const double cy = -1.0 + y * spacing;
           const double cz = -1.0 + z * spacing;
@@ -185,6 +309,8 @@ public:
 
           test_points.push_back(center - offset);
           test_points.push_back(center + offset);
+          adjacency.push_back(idx * 2 + 0);
+          adjacency.push_back(idx * 2 + 1);
         }
       }
     }
@@ -198,14 +324,161 @@ public:
     console_logger::info << "=== generate_grid_points END ===" << std::endl;
   }
 
+  // Generate trefoil knot points
+  void generate_trefoil_knot(int num_segments) {
+    // Clear existing points but don't trigger redraw yet
+    test_points.clear();
+    adjacency.clear();
+    // Trefoil knot parametric equations
+    // x = (2 + cos(3t)) * cos(2t)
+    // y = (2 + cos(3t)) * sin(2t) 
+    // z = sin(3t)
+    // where t goes from 0 to 2π
+    
+    const double scale = 0.3; // Scale factor to fit in [-1, 1] range
+    const double t_step = 2.0 * M_PI / num_segments;
+    
+    // Generate all points in batch without triggering redraws
+    test_points.reserve(num_segments * 2); // 2 points per line segment
+    
+    for (int i = 0; i < num_segments; i++) {
+      const double t1 = i * t_step;
+      const double x1 = scale * (2.0 + cos(3.0 * t1)) * cos(2.0 * t1);
+      const double y1 = scale * (2.0 + cos(3.0 * t1)) * sin(2.0 * t1);
+      const double z1 = scale * sin(3.0 * t1);      
+      test_points.push_back(vec3(x1, y1, z1));
+      if(i > 0) {
+        int i0 = i;
+        int i1 = (i + 1) % num_segments;
+        adjacency.push_back(i0);
+        adjacency.push_back(i1);
+      }
+    }
+
+    // Only update tree and redraw once at the end
+    console_logger::debug << "generate_trefoil_knot: Calling update_tree..."
+                          << std::endl;
+    update_tree();
+    console_logger::debug << "generate_trefoil_knot: update_tree completed"
+                          << std::endl;
+    console_logger::info << "=== generate_trefoil_knot END ===" << std::endl;
+  }
+
+  // Generate general knot points
+  void generate_knot(int k, int num_segments) {
+    // Clear existing points but don't trigger redraw yet
+    test_points.clear();
+    adjacency.clear();
+    // General knot parametric equations
+    // x = cos(u) [ 2 - cos(2 u/(2 k + 1)) ]
+    // y = sin(u) [ 2 - cos(2 u/(2 k + 1)) ]
+    // z = -sin(2 u/(2 k + 1))
+    // where 0 < u < (4 k + 2) pi
+    
+    const double scale = 0.3; // Scale factor to fit in [-1, 1] range
+    const double u_max = (4.0 * k + 2.0) * M_PI;
+    const double u_step = u_max / num_segments;
+    
+    // Generate all points in batch without triggering redraws
+    test_points.reserve(num_segments * 2); // 2 points per line segment
+    
+    for (int i = 0; i < num_segments; i++) {
+      const double u1 = i * u_step;
+
+      // Calculate first point
+      const double cos_term1 = cos(2.0 * u1 / (2.0 * k + 1.0));
+      const double x1 = scale * cos(u1) * (2.0 - cos_term1);
+      const double y1 = scale * sin(u1) * (2.0 - cos_term1);
+      const double z1 = scale * (-sin(2.0 * u1 / (2.0 * k + 1.0)));
+      
+      // Calculate second point
+      
+      test_points.push_back(vec3(x1, y1, z1));
+      if(i > 0) {
+        int i0 = i;
+        int i1 = (i + 1) % num_segments;
+        adjacency.push_back(i0);
+        adjacency.push_back(i1);
+      }
+    }
+
+    // Only update tree and redraw once at the end
+    console_logger::debug << "generate_knot: Calling update_tree..."
+                          << std::endl;
+    update_tree();
+    console_logger::debug << "generate_knot: update_tree completed"
+                          << std::endl;
+    console_logger::info << "=== generate_knot END ===" << std::endl;
+  }
+
+  // Generate random knot using Bezier splines
+  void generate_random_knot(int num_control_points, int segments_per_chord) {
+    // Clear existing points but don't trigger redraw yet
+    test_points.clear();
+    adjacency.clear();
+    // Generate random control points using the helper function
+    std::vector<vec3> control_points = generate_random_control_points(num_control_points);
+    
+    // Generate farthest-first permutation
+    std::vector<int> permutation = generate_farthest_first_permutation(control_points);
+    
+    // Generate knot points by connecting control points with Bezier splines using permutation
+    test_points.reserve(num_control_points * segments_per_chord); // 2 points per line segment
+    
+    for (int i = 0; i < num_control_points; i+=2) {
+      // Get indices with wrap-around
+      int im1 = (i - 1 + num_control_points) % num_control_points;
+      int im0 = i;
+      int ip0 = (i + 1) % num_control_points;
+      int ip1 = (i + 2) % num_control_points;
+      
+      // Get control points
+      const vec3& pm1 = control_points[permutation[im1]];
+      const vec3& pm0 = control_points[permutation[im0]];
+      const vec3& pp0 = control_points[permutation[ip0]];
+      const vec3& pp1 = control_points[permutation[ip1]];
+      
+      // Calculate Bezier control points for this chord
+      const vec3 pc0 = 0.5 * (pm1 + pm0);
+      const vec3 pc1 = pm0;
+      const vec3 pc2 = pp0;
+      const vec3 pc3 = 0.5 * (pp0 + pp1);
+      
+      // Generate segments for this chord
+      for (int j = 0; j < segments_per_chord; j++) {
+        const double t1 = static_cast<double>(j) / segments_per_chord;
+        
+        // Evaluate Bezier curve at t1 and t2
+        const vec3 p1 = evaluate_bezier(pc0, pc1, pc2, pc3, t1);
+        test_points.push_back(p1);
+      }
+    }
+
+    for(size_t i = 0; i < test_points.size(); i++) {
+      int i0 = i;
+      int i1 = (i + 1) % test_points.size();
+      adjacency.push_back(i0);
+      adjacency.push_back(i1);
+    }
+
+    // Only update tree and redraw once at the end
+    console_logger::debug << "generate_random_knot: Calling update_tree..."
+                          << std::endl;
+    update_tree();
+    console_logger::debug << "generate_random_knot: update_tree completed"
+                          << std::endl;
+    console_logger::info << "=== generate_random_knot END ===" << std::endl;
+  }
+
   // Update tree structure
   void update_tree() {
     printf("=== update_tree START ===\n");
     printf("update_tree: Processing %zu points\n", test_points.size());
 
     printf("update_tree: Calling arp::make_hash_N...\n");
+    auto p_test_points = permuted(test_points, adjacency);
     auto [tree_hashes, tree_indices, internal, leaf] =
-        arp::make_hash_N<2>(test_points);
+        arp::make_hash<2>(p_test_points);
 
     printf("update_tree: arp::make_hash_tree completed - hashes: %zu, indices: "
            "%zu, internal: %zu, leaf: %zu\n",
@@ -226,18 +499,17 @@ public:
   // Public method to rebuild hash tree (for explicit API calls)
   bool mk_hash_tree() {
     try {
-      printf("=== mk_hash_tree START ===\n");
+      console_logger::debug << "=== mk_hash_tree START ===" << std::endl;
 
       if (test_points.empty()) {
-        printf("mk_hash_tree: No points available for tree construction\n");
+        console_logger::debug << "mk_hash_tree: No points available for tree construction" << std::endl;
         return false;
       }
 
-      printf("mk_hash_tree: Building tree for %zu points\n",
-             test_points.size());
+      console_logger::debug << "mk_hash_tree: Building tree for " << test_points.size() << " points" << std::endl;
 
       // Let's manually do what update_tree() does with more debugging
-      printf("mk_hash_tree: Calling arp::make_hash_tree...\n");
+      console_logger::debug << "mk_hash_tree: Calling arp::calc_com<2>(test_points)" << std::endl;
       auto coms = arp::calc_com<2>(test_points);
       auto centers = std::vector<vec3>(coms.size());
       for (size_t i = 0; i < coms.size(); i++) {
@@ -245,11 +517,13 @@ public:
       }
       auto [tree_hashes, tree_indices, internal, leaf] =
           arp::make_hash_tree(centers);
-
-      printf("mk_hash_tree: arp::make_hash_tree returned - hashes: %zu, "
-             "indices: %zu, internal: %zu, leaf: %zu\n",
-             tree_hashes.size(), tree_indices.size(), internal.size(),
-             leaf.size());
+      console_logger::debug << "mk_hash_tree: arp::make_hash_tree returned - hashes: " << tree_hashes.size() << ", indices: " << tree_indices.size() << ", internal: " << internal.size() << ", leaf: " << leaf.size() << std::endl;
+      console_logger::debug << "mk_hash_tree: centers: " << centers.size() << std::endl;
+      console_logger::debug << "mk_hash_tree: coms: " << coms.size() << std::endl;
+      console_logger::debug << "mk_hash_tree: tree_hashes: " << tree_hashes.size() << std::endl;
+      console_logger::debug << "mk_hash_tree: tree_indices: " << tree_indices.size() << std::endl;
+      console_logger::debug << "mk_hash_tree: internal: " << internal.size() << std::endl;
+      console_logger::debug << "mk_hash_tree: leaf: " << leaf.size() << std::endl;
 
       printf("mk_hash_tree: Assigning results...\n");
       hashes = tree_hashes;
@@ -278,7 +552,8 @@ public:
   void log_hierarchy() {
     try {
       geometry_logger::clear();
-      arp::log_hierarchy<2>(test_points, indices, internal_nodes, leaf_nodes);
+      auto p_test_points = permuted_adjacency_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
+      arp::log_hierarchy<2>(p_test_points, internal_nodes, leaf_nodes);
     } catch (const std::exception &e) {
       printf("log_hierarchy: Exception caught: %s\n", e.what());
       throw; // Re-throw to get stack trace in JS
@@ -309,7 +584,8 @@ public:
              leaf_nodes.size());
 
       geometry_logger::clear();
-      arp::log_bvh<2>(test_points, indices, internal_nodes, leaf_nodes);
+      auto p_test_points = permuted_adjacency_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
+      arp::log_bvh<2>(p_test_points, internal_nodes, leaf_nodes);
       printf("log_bvh: Successfully logged BVH\n");
     } catch (const std::exception &e) {
       printf("log_bvh: Exception caught: %s\n", e.what());
@@ -333,21 +609,29 @@ public:
       // Update test point with complex trajectory
       const float C = 0.1f; // Speed constant
       near_test_point = vec3(
-        sin(C * t), 
-        cos(C * t), 
-        sin(C * t) * cos(C * t)
+        sin(C* 2.0 * t), 
+        cos(C * 7.0 * t), 
+        sin(C * 11.0 * t) * cos(C * 13.0 * t)
       );
       test_point = {near_test_point};
       
       // Log the test point
       geometry_logger::point(near_test_point, vec4(1.0, 1.0, 0.0, 1.0)); // Yellow test point
+      const auto p_test_points = permuted_adjacency_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
       
+      using TTYPE = decltype(p_test_points);
+      using PTYPE = decltype(test_point);
+
       const auto bvh_result =
-          arp::make_bvh<2>(test_points, indices, internal_nodes, leaf_nodes);
-      auto result = arp::getNearest<std::array<vec3, 1>, 2>(
-          test_point, test_points, indices, internal_nodes, leaf_nodes,
+          arp::make_bvh<2, TTYPE>(p_test_points, internal_nodes, leaf_nodes);
+      
+      auto result = arp::getNearest<2, PTYPE, TTYPE>(
+          test_point, p_test_points, internal_nodes, leaf_nodes,
           bvh_result, 10000.0,
-          [](const std::array<vec3, 1> &t_verts, const arp::near_array<2> &s_verts) {
+          [](
+            const PTYPE &t_verts, 
+            const slice<2, TTYPE> &s_verts) {
+            
             const vec3 &xA = t_verts[0];
             const vec3 &xB0 = s_verts[0];
             const vec3 &xB1 = s_verts[1];
@@ -358,7 +642,7 @@ public:
       printf("log_nearest: Result: %zu\n", result.size());
       
       // Draw lines to the nearest leaf nodes
-      auto masses = arp::calc_com<2>(test_points);
+      auto masses = arp::calc_com<2>(p_test_points);
       for (size_t i = 0; i < result.size(); i++) {
         int leaf_id = result[i];
         if (leaf_id >= 0 && leaf_id < static_cast<int>(masses.size())) {
@@ -367,6 +651,12 @@ public:
           geometry_logger::line(near_test_point, leaf_point, vec4(1.0, 0.0, 1.0, 0.8f)); // Magenta lines
         }
       }
+      /*
+      for(size_t i = 0; i < test_points.size(); i++){
+        const vec3 pnt = test_points[i];
+        geometry_logger::point(pnt, vec4(0.0, 0.5, 0.25, 1.0));
+      }
+        */
     } catch (const std::exception &e) {
       printf("log_nearest: Exception caught: %s\n", e.what());
       throw; // Re-throw to get stack trace in JS
@@ -451,59 +741,10 @@ public:
     }
   }
 
-  // Get point coordinates for visualization
-  double get_point_x(int index) const {
-    if (index >= 0 && index < static_cast<int>(test_points.size())) {
-      return test_points[index][0];
-    }
-    return 0.0;
-  }
-
-  double get_point_y(int index) const {
-    if (index >= 0 && index < static_cast<int>(test_points.size())) {
-      return test_points[index][1];
-    }
-    return 0.0;
-  }
-
-  double get_point_z(int index) const {
-    if (index >= 0 && index < static_cast<int>(test_points.size())) {
-      return test_points[index][2];
-    }
-    return 0.0;
-  }
-
-  // Get leaf node point coordinates
-  double get_leaf_point_x(int index) const {
-    if (test_points.empty()) return 0.0;
-    auto masses = arp::calc_com<2>(test_points);
-    if (index >= 0 && index < static_cast<int>(masses.size())) {
-      return std::get<1>(masses[index]).x();
-    }
-    return 0.0;
-  }
-
-  double get_leaf_point_y(int index) const {
-    if (test_points.empty()) return 0.0;
-    auto masses = arp::calc_com<2>(test_points);
-    if (index >= 0 && index < static_cast<int>(masses.size())) {
-      return std::get<1>(masses[index]).y();
-    }
-    return 0.0;
-  }
-
-  double get_leaf_point_z(int index) const {
-    if (test_points.empty()) return 0.0;
-    auto masses = arp::calc_com<2>(test_points);
-    if (index >= 0 && index < static_cast<int>(masses.size())) {
-      return std::get<1>(masses[index]).z();
-    }
-    return 0.0;
-  }
-
   // Get number of leaf nodes
   int get_leaf_count() const {
     if (test_points.empty()) return 0;
+    console_logger::debug << "get_leaf_count: test_points.size(): " << test_points.size() << std::endl;
     auto masses = arp::calc_com<2>(test_points);
     return static_cast<int>(masses.size());
   }
@@ -522,16 +763,13 @@ EMSCRIPTEN_BINDINGS(morton_tree_test) {
       .function("generate_random_points",
                 &MortonTreeTest::generate_random_points)
       .function("generate_grid_points", &MortonTreeTest::generate_grid_points)
+      .function("generate_trefoil_knot", &MortonTreeTest::generate_trefoil_knot)
+      .function("generate_knot", &MortonTreeTest::generate_knot)
+      .function("generate_random_knot", &MortonTreeTest::generate_random_knot)
       .function("mk_hash_tree", &MortonTreeTest::mk_hash_tree)
       .function("log_hierarchy", &MortonTreeTest::log_hierarchy)
       .function("log_bvh", &MortonTreeTest::log_bvh)
       .function("log_nearest", &MortonTreeTest::log_nearest)
-      .function("get_point_x", &MortonTreeTest::get_point_x)
-      .function("get_point_y", &MortonTreeTest::get_point_y)
-      .function("get_point_z", &MortonTreeTest::get_point_z)
-      .function("get_leaf_point_x", &MortonTreeTest::get_leaf_point_x)
-      .function("get_leaf_point_y", &MortonTreeTest::get_leaf_point_y)
-      .function("get_leaf_point_z", &MortonTreeTest::get_leaf_point_z)
       .function("get_leaf_count", &MortonTreeTest::get_leaf_count)
       // Visualization controls
       .function("set_auto_visualize", &MortonTreeTest::set_auto_visualize)

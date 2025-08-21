@@ -89,7 +89,7 @@ void debug_line(shell &M,           //
   const vec3 &ca1 = x[vA1];
 
   vec4 c(unif(rng), unif(rng), unif(rng), 1.0);
-  logger::line(ca0, ca1, c);
+  geometry_logger::line(ca0, ca1, c);
 };
 
 void debug_line_line(shell &M,           //
@@ -110,10 +110,10 @@ void debug_line_line(shell &M,           //
   const vec3 &cb1 = x[vB1];
 
   vec4 c(unif(rng), unif(rng), unif(rng), 1.0);
-  logger::line(ca0, ca1, c);
-  logger::line(cb0, cb1, c);
+  geometry_logger::line(ca0, ca1, c);
+  geometry_logger::line(cb0, cb1, c);
 
-  logger::line(0.5 * (ca0 + ca1), 0.5 * (cb0 + cb1), c);
+  geometry_logger::line(0.5 * (ca0 + ca1), 0.5 * (cb0 + cb1), c);
 };
 
 void debug_edge_normal(shell &M,          //
@@ -123,7 +123,7 @@ void debug_edge_normal(shell &M,          //
   vec3 N = edge_normal(M, c0, x);
   vec3 cen = edge_center(M, c0, x);
   vec4 col(unif(rng), unif(rng), unif(rng), 1.0);
-  logger::line(cen, cen + 0.1 * N, col);
+  geometry_logger::line(cen, cen + 0.1 * N, col);
 };
 
 template <int OP, int C_ALLOC, int V_ALLOC, int F_ALLOC, int MSIZE>

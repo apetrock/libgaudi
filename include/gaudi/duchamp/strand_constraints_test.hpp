@@ -233,7 +233,7 @@ public:
     
     real z_threshold_high = 0.1;  // Apply torque to endpoints above this z-coordinate
     real z_threshold_low = -0.1;  // Apply opposite torque to endpoints below this z-coordinate
-    real rotation_strength = 100.0;  // Strength of the rotation force
+    real rotation_strength = 50.0;  // Strength of the rotation force
     
     // Use the new get_endpoints() convenience function
     std::vector<index_t> endpoints = __R->get_endpoints();
@@ -249,7 +249,7 @@ public:
           
           if (radius > 1e-6) {  // Avoid division by zero
             // Calculate the tangent direction for rotation around z-axis
-            vec3 tangent = vec3(-pos.y(), pos.x(), 0.0).normalized();
+            vec3 tangent = vec3(-pos.y(), pos.x(), 0.1).normalized();
             
             // Apply clockwise rotation force
             vec3 rotation_force = radius * rotation_strength * tangent;
@@ -267,7 +267,7 @@ public:
           
           if (radius > 1e-6) {  // Avoid division by zero
             // Calculate the tangent direction for rotation around z-axis (opposite direction)
-            vec3 tangent = vec3(pos.y(), -pos.x(), 0.0).normalized();
+            vec3 tangent = vec3(pos.y(), -pos.x(), -0.1).normalized();
             
             // Apply counter-clockwise rotation force
             vec3 rotation_force = radius * rotation_strength * tangent;
@@ -312,8 +312,8 @@ public:
 
 
     // Use dual-weight stretch_shear: w1 for stretch/shear, w2 for rotation
-    hepworth::block::init_stretch_shear(*__R, constraints, l0, 4e-2, 1e-5, {x, u});
-    hepworth::block::init_bend_twist(*__R, constraints, 3e-4, {u}, false);
+    hepworth::block::init_stretch_shear(*__R, constraints, l0, 1e-2, {x, u});
+    hepworth::block::init_bend_twist(*__R, constraints, 1e-2, {u}, false);
 
     hepworth::block::init_collisions(*__R, *__Rd, constraints, 1.0, {x, x});
     solver.set_constraints(constraints);

@@ -558,7 +558,7 @@ getNearest(index_t &idT, const std::vector<index_t> &t_inds,
     const Node &cnode = s_tree.nodes[cId];
 
     if (expanding_rad && cnode.size > 0) {
-      real d = ext::distance(extT, cnode.half.cen);
+      real d = ext::dist(extT, cnode.half.cen);
       tol = std::min(tol, d);
       tol = std::max(tol, cnode.half.mag);
       extT = calc_extents<ST>(idT, t_inds, t_verts);

@@ -590,10 +590,29 @@ namespace gaudi
       return out;
     }
 
-    vec3 dist(const extents_t &e, const vec3 &x)
+    vec3 farthest_point(const extents_t &e, const vec3 &x)
+    {
+      vec3 out = x;
+      for (int k = 0; k < 3; ++k)
+      {
+        real d0 = x[k] - e[0][k];
+        real d1 = e[1][k] - x[k];
+        out[k] = d0 * d0 > d1 * d1 ? e[0][k] : e[1][k];
+      }
+      return out;
+    }
+    
+    real dist_from_farthest(const extents_t &e, const vec3 &x)
+    {
+      real d = 0;
+      vec3 p = farthest_point(e, x);
+      return (x - p).norm();
+    }
+
+    real dist(const extents_t &e, const vec3 &x)
     {
       vec3 nearest = closest_point(e, x);
-      return x - nearest;
+      return (x - nearest).norm();
     }
 
     real dist_from_center(const extents_t &e, const vec3 &x)
