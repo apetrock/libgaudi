@@ -118,7 +118,7 @@ make_hash_3d(const std::vector<vec3> &data) {
   return {sorted_hashes, indices};
 }
 
-template <int N, typename O, Vec3Array TTYPE>
+template <int N, typename O, Vec3View TTYPE>
 inline std::vector<O> map(const TTYPE &data,
                           auto &&func,
                           O default_val) {
@@ -147,7 +147,7 @@ inline std::vector<O> map(const TTYPE &data,
 using MassPoint = std::tuple<real, vec3>;
 
 // Specialized mass calculations for N=1,2,3
-template <int N, Vec3Array TTYPE>
+template <int N, Vec3View TTYPE>
 inline std::vector<MassPoint> calc_com(const TTYPE &data) {
 
   if (data.size() % N != 0) {
@@ -186,7 +186,7 @@ inline std::vector<MassPoint> calc_com(const TTYPE &data) {
   return results;
 }
 
-template <int N, Vec3Array TTYPE>
+template <int N, Vec3View TTYPE>
 inline std::vector<ext::extents_t> calc_extents(const TTYPE &data) {
 
   const auto map_fcn = [&](const slice<N, TTYPE> &a, const ext::extents_t &b) {
@@ -201,7 +201,7 @@ inline std::vector<ext::extents_t> calc_extents(const TTYPE &data) {
   return map<N, ext::extents_t>(data, map_fcn, default_val);
 }
 
-template <int N, Vec3Array TTYPE>
+template <int N, Vec3View TTYPE>
 inline std::vector<mat3> calc_outers(const TTYPE &data) {
   const auto map_fcn = [&](const vec3 &a, const mat3 &b) {
     return b + a * a.transpose();

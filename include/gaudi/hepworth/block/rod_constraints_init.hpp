@@ -137,40 +137,30 @@ void init_collisions(asawa::rod::rod &R, asawa::rod::dynamic &dynamic,
                      const real &w, std::vector<sim_block::ptr> blocks,
                      real K = 1.0) {
   const std::vector<vec3> &x = R.__x;
-  vector<std::array<index_t, 4>> collisions =
+  vector<std::array<index_t, 2>> collisions =
       dynamic.get_internal_collisions(K);
-  // randomize the collision order
-  std::shuffle(collisions.begin(), collisions.end(), std::mt19937{std::random_device{}()});
 
   for (auto &c : collisions) {
-    if (c[0] > -1) {
-      vec3 xA0 = x[c[0]];
-      vec3 xA1 = x[c[1]];
-      vec3 xB0 = x[c[2]];
-      vec3 xB1 = x[c[3]];
+    if (c[0] > -1) {      
+      std::array<index_t, 4> c4 = dynamic.get_collision_ids(c);
+      vec3 xA0 = x[c4[0]];
+      vec3 xA1 = x[c4[1]];
+      vec3 xB0 = x[c4[2]];
+      vec3 xB1 = x[c4[3]];
 
       if (R.length(c[0]) < 1e-8)
         continue;
       if (R.length(c[1]) < 1e-8)
         continue;
-      if (R.length(c[2]) < 1e-8)
-        continue;
-      if (R.length(c[3]) < 1e-8)
-        continue;
 
-      if (R.prev(c[0]) == c[2])
+      if (R.prev(c4[0]) == c4[2])
         continue;
-      if (R.next(c[1]) == c[3])
+      if (R.next(c4[1]) == c4[3])
         continue;
-      if (R.prev(c[0]) == c[3])
+      if (R.prev(c4[0]) == c4[3])
         continue;
-      if (R.next(c[1]) == c[2])
+      if (R.next(c4[1]) == c4[2])
         continue;
-
-      if (rand() % 2 == 0) {
-        std::swap(c[0], c[2]);
-        std::swap(c[1], c[3]);
-      }
       constraints.push_back(
           rod_collision::create({c[0], c[1], c[2], c[3]}, w, K * R._r, blocks));
     }

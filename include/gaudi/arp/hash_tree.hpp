@@ -335,7 +335,7 @@ inline TTYPE build_pyramid(const TTYPE &data,
 }
 
 // Build complete hash tree with pyramid
-template <Vec3Array TTYPE>
+template <Vec3View TTYPE>
 inline std::tuple<std::vector<uint32_t>, std::vector<index_t>,
                   std::vector<radix_tree_node>, std::vector<radix_tree_node>>
 make_hash_tree(const TTYPE &data) {
@@ -348,7 +348,7 @@ make_hash_tree(const TTYPE &data) {
   return std::make_tuple(hashes, indices, internal_nodes, leaf_nodes);
 }
 
-template <int N, Vec3Array TTYPE>
+template <int N, Vec3View TTYPE>
 inline TreeResult<ext::extents_t>
 make_bvh(const TTYPE &data, const std::vector<radix_tree_node> &internal_nodes,
          const std::vector<radix_tree_node> &leaf_nodes) {
@@ -374,7 +374,7 @@ make_bvh(const TTYPE &data, const std::vector<radix_tree_node> &internal_nodes,
   };
 }
 
-template <int N, Vec3Array TTYPE>
+template <int N, Vec3View TTYPE>
 inline TreeResult<vec3>
 make_points(const TTYPE &data,
             const std::vector<radix_tree_node> &internal_nodes,
@@ -412,7 +412,7 @@ make_points(const TTYPE &data,
   };
 }
 
-template <int N, Vec3Array TTYPE>
+template <int N, Vec3View TTYPE>
 void log_hierarchy(const TTYPE &data,
                    const std::vector<radix_tree_node> &internal_nodes,
                    const std::vector<radix_tree_node> &leaf_nodes) {
@@ -455,7 +455,7 @@ void log_hierarchy(const TTYPE &data,
       });
 }
 
-template <int N, Vec3Array TTYPE>
+template <int N, Vec3View TTYPE>
 void log_bvh(const TTYPE &data,
              const std::vector<radix_tree_node> &internal_nodes,
              const std::vector<radix_tree_node> &leaf_nodes) {
@@ -476,8 +476,8 @@ void log_bvh(const TTYPE &data,
 // SLICE = permuted_slice<vec3, NT> || slice<vec3, NT> || array<vec3, NT>
 
 // user should'nt know that this is a slice its just an array
-template <int N, Vec3Array PTYPE,
-          Vec3Array TTYPE> // T=test, S=set... DOH! T could equal tree...
+template <int N, Vec3View PTYPE,
+          Vec3View TTYPE> // T=test, S=set... DOH! T could equal tree...
 std::vector<index_t>
 getNearest(PTYPE &prim, const TTYPE &data,
            const std::vector<radix_tree_node> &internal_nodes,
@@ -507,13 +507,13 @@ getNearest(PTYPE &prim, const TTYPE &data,
             real dist = testAB(prim, datum);
             if (dist < mMin) {
               mMin = dist;
-              idMin = leaf_id;
+              idMin = data.get_index(leaf_id);
             }
             ext_t = ext::inflate(ext::calc_extents(prim), mMin);
           } else if (ext::overlap(ext_t, ext_s)) {
             real dist = testAB(prim, datum);
             if (dist < tol) {
-              collisions.push_back(leaf_id);
+              collisions.push_back(data.get_index(leaf_id));
             }
           }
 
@@ -542,7 +542,7 @@ getNearest(PTYPE &prim, const TTYPE &data,
   return collisions;
 };
 
-template <int N, Vec3Array TTYPE>
+template <int N, Vec3View TTYPE>
 inline std::tuple<std::vector<uint32_t>, std::vector<index_t>,
                   std::vector<radix_tree_node>, std::vector<radix_tree_node>>
 make_hash(const TTYPE &data) {
@@ -556,18 +556,183 @@ make_hash(const TTYPE &data) {
   return make_hash_tree(averaged);
 }
 
-template <int N> {
-  class bvh_tree {
+// this is annoying, we have an outer product of Np and Nd (point/data
+// respectively) for testing, so now we need 6 differnt functions to test
+// each pair type and 9 functions for the input configs.
+template <Vec3View P0, Vec3View P1>
+real test_point_point(const P0 &p0, const P1 &p1) {
+  const vec3 &p00 = p0[0];
+  const vec3 &p10 = p1[0];
+  return (p00 - p10).norm();
+}
+
+template <Vec3View P0, Vec3View P1>
+real test_point_line(const P0 &pA, const P1 &pB) {
+  const vec3 &pA0 = pA[0];
+  const vec3 &pB0 = pB[0];
+  const vec3 &pB1 = pB[1];
+  return va::distance_from_line(pB0, pB1, pA0);
+}
+
+template <Vec3View P0, Vec3View P1>
+real test_point_tri(const P0 &p0, const P1 &p1) {
+  return std::numeric_limits<real>::max();
+  // not implemented
+}
+template <Vec3View P0, Vec3View P1>
+real test_line_line(const P0 &pA, const P1 &pB) {
+
+  const vec3 &pA0 = pA[0];
+  const vec3 &pA1 = pA[1];
+
+  const vec3 &pB0 = pB[0];
+  const vec3 &pB1 = pB[1];
+
+  std::array<real, 3> d = va::distance_Segment_Segment(pA0, pA1, pB0, pB1);
+  real s = d[1];
+  real t = d[2];
+
+  vec3 xA = va::mix(s, pA0, pA1);
+  vec3 xB = va::mix(t, pB0, pB1);
+  vec3 dA = (pA1 - pA0).normalized();
+  vec3 dB = (pB1 - pB0).normalized();
+
+  vec3 xAB = (xB - xA).normalized();
+  // this is a little ugly, but it's to filter
+  // out colinear cases, which filters out,
+  // adjacent edges.  So if two adjacent edges
+  //  are colinear, then the dot proudct on the
+  // the adjacencty vector on either edge
+  // will tend to 1.0
+  if (abs(dA.dot(xAB)) > 0.35)
+    return std::numeric_limits<real>::max();
+  if (abs(dB.dot(xAB)) > 0.35)
+    return std::numeric_limits<real>::max();
+
+  return d[0];
+}
+template <Vec3View P0, Vec3View P1>
+real test_line_tri(const P0 &p0, const P1 &p1) {
+  return std::numeric_limits<real>::max();
+  // not implemented
+}
+template <Vec3View P0, Vec3View P1> 
+real test_tri_tri(const P0 &p0, const P1 &p1) {
+  return std::numeric_limits<real>::max();
+  // not implemented
+}
+
+template <int N, int Np, Vec3View PTYPE, Vec3View TTYPE>
+std::vector<index_t> get_nearest(const PTYPE &points, const TTYPE &data,
+                                 const std::vector<radix_tree_node> &internal_nodes,
+                                 const std::vector<radix_tree_node> &leaf_nodes,
+                                 const TreeResult<ext::extents_t> &bvh_result, real tol) {
+  if (N == 1 && Np == 1) {
+    return getNearest<2, PTYPE, TTYPE>(
+        points, data, internal_nodes, leaf_nodes, bvh_result,
+        tol, [](const PTYPE &t_verts, const slice<N, TTYPE> &s_verts) {
+          return test_point_point(t_verts, s_verts);
+        });
+  } else if (N == 1 && Np == 2) {
+    return getNearest<2, PTYPE, TTYPE>(
+        points, data, internal_nodes, leaf_nodes, bvh_result,
+        tol, [](const PTYPE &t_verts, const slice<N, TTYPE> &s_verts) {
+          return test_point_line(t_verts, s_verts);
+        });
+  } else if (N == 1 && Np == 3) {
+    return getNearest<2, PTYPE, TTYPE>(
+        points, data, internal_nodes, leaf_nodes, bvh_result,
+        tol, [](const PTYPE &t_verts, const slice<N, TTYPE> &s_verts) {
+          return test_point_tri(t_verts, s_verts);
+        });
+  }
+  ///////////////////////////////////////
+  else if (N == 2 && Np == 1) {
+    return getNearest<2, PTYPE, TTYPE>(
+        points, data, internal_nodes, leaf_nodes, bvh_result,
+        tol, [](const PTYPE &t_verts, const slice<N, TTYPE> &s_verts) {
+          return test_line_line(t_verts, s_verts);
+        });
+  } else if (N == 2 && Np == 2) {
+    return getNearest<2, PTYPE, TTYPE>(
+        points, data, internal_nodes, leaf_nodes, bvh_result,
+        tol, [](const PTYPE &t_verts, const slice<N, TTYPE> &s_verts) {
+          return test_line_tri(t_verts, s_verts);
+        });
+  } else if (N == 2 && Np == 3) {
+    return getNearest<2, PTYPE, TTYPE>(
+        points, data, internal_nodes, leaf_nodes, bvh_result,
+        tol, [](const PTYPE &t_verts, const slice<N, TTYPE> &s_verts) {
+          return test_tri_tri(t_verts, s_verts);
+        });
+  }
+
+  ///////////////////////////////////////
+  else if (N == 3 && Np == 1) {
+    return getNearest<2, PTYPE, TTYPE>(
+        points, data, internal_nodes, leaf_nodes, bvh_result,
+        tol, [](const PTYPE &t_verts, const slice<N, TTYPE> &s_verts) {
+          return test_tri_tri(t_verts, s_verts);
+        });
+  } else if (N == 3 && Np == 2) {
+    return getNearest<2, PTYPE, TTYPE>(
+        points, data, internal_nodes, leaf_nodes, bvh_result,
+        tol, [](const PTYPE &t_verts, const slice<N, TTYPE> &s_verts) {
+          return test_tri_tri(t_verts, s_verts);
+        });
+  } else if (N == 3 && Np == 3) {
+    return getNearest<2, PTYPE, TTYPE>(
+        points, data, internal_nodes, leaf_nodes, bvh_result,
+        tol, [](const PTYPE &t_verts, const slice<N, TTYPE> &s_verts) {
+          return test_tri_tri(t_verts, s_verts);
+        });
+  }
+  return {};
+}
+
+template <int N>
+class bvh_tree {
   public:
-    using view = adjacency_view<decltype(data_), decltype(adjacency_)>;
-    using permuted_view =
-        permuted_adjacency_view<N, decltype(data), decltype(adjacency)>;
-    bvh_tree(const std::vector<vec3> &data) {
+    // Member variables first
+    std::vector<index_t> indices_;
+    std::vector<radix_tree_node> internal_nodes_;
+    std::vector<radix_tree_node> leaf_nodes_;
+    std::vector<ext::extents_t> bvh_;
+    std::vector<vec3> data_;
+    std::vector<index_t> adjacency_;
+    std::vector<vec3> coms_;
+    std::vector<uint32_t> hashes_;
+
+    // Type aliases using the member variables
+    using ptr = std::shared_ptr<bvh_tree<N>>;
+    using view = adjacency_view<std::vector<vec3>, std::vector<index_t>>;
+    using permutation_index_type = std::vector<index_t>;
+    using permuted_view = permuted_adjacency_view<N, std::vector<vec3>, std::vector<index_t>>;
+
+    // Member variables for views
+    view data_view_;
+    permuted_view permuted_data_view_;
+
+    static ptr create(const std::vector<index_t> &indices,
+                      const std::vector<vec3> &vertices, int lvl = 8) {
+      return std::make_shared<bvh_tree<N>>(indices, vertices, lvl);
+    }
+
+    bvh_tree(const std::vector<vec3> &data,
+             const std::vector<index_t> &adjacency) {
+      update(data, adjacency);
+    }
+
+    index_t get_index(size_t i) const { return indices_[i]; }
+    
+    void update(const std::vector<vec3> &data,
+                const std::vector<index_t> &adjacency) {
       data_ = data;
+      adjacency_ = adjacency;
       data_view_ = view(data, adjacency);
       auto [hashes, indices, internal_nodes, leaf_nodes] =
           make_hash_tree(data_view_);
-      permuted_data_view_ = permuted_view(data, indices);
+      permuted_data_view_ = permuted_view(data, adjacency, indices);
 
       indices_ = indices;
       internal_nodes_ = internal_nodes;
@@ -577,180 +742,37 @@ template <int N> {
       hashes_ = hashes;
     }
 
-    // this is annoying, we have an outer product of Np and Nd (point/data
-    // respectively) for testing, so now we need 6 differnt functions to test
-    // each pair type and 9 functions for the input configs.
-    template <Vec3Array P0, Vec3Array P1>
-    real test_point_point(const P0 &p0, const P1 &p1) {
-      const p00 = p0[0];
-      const p10 = p1[0];
-      return (p00 - p10).norm();
-    }
-    template <Vec3Array P0, Vec3Array P1>
-    test_point_line(const P0 &pA, const P1 &pB) {
-      const vec3 &pA0 = pA[0];
-      const vec3 &pB0 = pB[0];
-      const vec3 &pB1 = pB[1];
-      return va::distance_from_line(p10, p11, p00);
-    }
-    template <Vec3Array P0, Vec3Array P1>
-    test_point_tri(const P0 &p0, const P1 &p1) {
-      return std::numeric_limits<real>::max();
-      // not implemented
-    }    
-    template <Vec3Array P0, Vec3Array P1>
-    test_line_line(const P0 &pA, const P1 &pB) {
-
-      const vec3 &pA0 = pA[0];
-      const vec3 &pA1 = pA[1];
-
-      const vec3 &pB0 = pB[0];
-      const vec3 &pB1 = pB[1];
-
-      std::array<real, 3> d = va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
-      real s = d[1];
-      real t = d[2];
-
-      vec3 xA = va::mix(s, xA0, xA1);
-      vec3 xB = va::mix(t, xB0, xB1);
-      vec3 dA = (xA1 - xA0).normalized();
-      vec3 dB = (xB1 - xB0).normalized();
-
-      vec3 xAB = (xB - xA).normalized();
-      //this is a little ugly, but it's to filter
-      //out colinear cases, which filters out, 
-      //adjacent edges.  So if two adjacent edges
-      // are colinear, then the dot proudct on the
-      //the adjacencty vector on either edge
-      //will tend to 1.0
-      if (abs(dA.dot(xAB)) > 0.35)
-        return std::numeric_limits<real>::max();
-      if (abs(dB.dot(xAB)) > 0.35)
-        return std::numeric_limits<real>::max();
-
-      return d[0];
-    }
-    template <Vec3Array P0, Vec3Array P1>
-    test_line_tri(const P0 &p0, const P1 &p1) {
-      return std::numeric_limits<real>::max();
-      // not implemented
-    }    
-    template <Vec3Array P0, Vec3Array P1>
-    test_tri_tri(const P0 &p0, const P1 &p1) {
-      return std::numeric_limits<real>::max();
-      // not implemented
+    std::array<index_t, 2> get_tuple_ids(const index_t & i){
+      return permuted_data_view_.get_tuple_ids(i);
     }
 
-    template <in Np, Vec3Array PTYPE>
-    std::vector<index_t> get_nearest(const PTYPE &points, real tol) {
-      if(N == 1 && Np == 1){
-        getNearest<2, PTYPE, TTYPE>(
-          test_point, p_test_points, internal_nodes, leaf_nodes,
-          bvh_result, 10000.0,
-          [](const PTYPE &t_verts, 
-            const slice<N, TTYPE> &s_verts) {
-            return test_point_point(t_verts, s_verts);
-          });
-      } else if(N == 1 && Np == 2){
-        getNearest<2, PTYPE, TTYPE>(
-          test_point, p_test_points, internal_nodes, leaf_nodes,
-          bvh_result, 10000.0,
-          [](const PTYPE &t_verts, 
-            const slice<N, TTYPE> &s_verts) {
-            return test_point_line(t_verts, s_verts);
-          });
-      } else if(N == 1 && Np == 3){
-        getNearest<2, PTYPE, TTYPE>(
-          test_point, p_test_points, internal_nodes, leaf_nodes,
-          bvh_result, 10000.0,
-          [](const PTYPE &t_verts, 
-            const slice<N, TTYPE> &s_verts) {
-            return test_point_tri(t_verts, s_verts);
-          });
-      } 
-      ///////////////////////////////////////
-      else if(N == 2 && Np == 1){
-        getNearest<2, PTYPE, TTYPE>(
-          test_point, p_test_points, internal_nodes, leaf_nodes,
-          bvh_result, 10000.0,
-          [](const PTYPE &t_verts, 
-            const slice<N, TTYPE> &s_verts) {
-            return test_line_line(t_verts, s_verts);
-          });
-      } else if(N == 2 && Np == 2){
-        getNearest<2, PTYPE, TTYPE>(
-          test_point, p_test_points, internal_nodes, leaf_nodes,
-          bvh_result, 10000.0,
-          [](const PTYPE &t_verts, 
-            const slice<N, TTYPE> &s_verts) {
-            return test_line_tri(t_verts, s_verts);
-          });
-      } else if(N == 2 && Np == 3){
-        getNearest<2, PTYPE, TTYPE>(
-          test_point, p_test_points, internal_nodes, leaf_nodes,
-          bvh_result, 10000.0,
-          [](const PTYPE &t_verts, 
-            const slice<N, TTYPE> &s_verts) {
-            return test_tri_tri(t_verts, s_verts);
-          });
-      } 
-      ///////////////////////////////////////
-      else if(N == 3 && Np == 1){
-        getNearest<2, PTYPE, TTYPE>(
-          test_point, p_test_points, internal_nodes, leaf_nodes,
-          bvh_result, 10000.0,
-          [](const PTYPE &t_verts, 
-            const slice<N, TTYPE> &s_verts) {
-            return test_tri_tri(t_verts, s_verts);
-          });
-      } else if(N == 3 && Np == 2){
-        getNearest<2, PTYPE, TTYPE>(
-          test_point, p_test_points, internal_nodes, leaf_nodes,
-          bvh_result, 10000.0,
-          [](const PTYPE &t_verts, 
-            const slice<N, TTYPE> &s_verts) {
-            return test_tri_tri(t_verts, s_verts);
-          });
-      } else if(N == 3 && Np == 3){
-        getNearest<2, PTYPE, TTYPE>(
-          test_point, p_test_points, internal_nodes, leaf_nodes,
-          bvh_result, 10000.0,
-          [](const PTYPE &t_verts, 
-            const slice<N, TTYPE> &s_verts) {
-            return test_tri_tri(t_verts, s_verts);
-          });
-      }
-      return {};
+    template <Vec3View PTYPE>
+    std::vector<index_t> get_nearest_point_line(const PTYPE &points, real tol) {
+      auto testAB = [](const PTYPE &t_verts, const slice<1, decltype(permuted_data_view_)> &s_verts) {
+        const vec3 &xA = t_verts[0];
+        const vec3 &xB = s_verts[0];
+        gaudi::real d = va::distance_from_line(xB, xA, xA);
+        return d;
+      };
+      return getNearest<N, PTYPE, decltype(permuted_data_view_)>(points, permuted_data_view_,
+                                         internal_nodes_, leaf_nodes_, bvh_,
+                                         tol, testAB);
     }
 
-    template <Vec3Array PTYPE>
+    template <Vec3View PTYPE>
     std::vector<index_t> get_nearest_line_line(const PTYPE &points, real tol) {
-      auto testAB = [](const PTYPE &t_verts, const slice<2, TTYPE> &s_verts) {
+      auto testAB = [](const PTYPE &t_verts, const slice<2, decltype(permuted_data_view_)> &s_verts) {
         const vec3 &xA = t_verts[0];
         const vec3 &xB0 = s_verts[0];
         const vec3 &xB1 = s_verts[1];
         gaudi::real d = va::distance_from_line(xB0, xB1, xA);
         return d;
-      } auto testAB = [&](const vec3 &a, const vec3 &b) -> real {
-        return ext::dist_from_line(a, b);
       };
-      return getNearest<N>(points, permuted_data_view_, internal_nodes_,
-                           leaf_nodes_, bvh_, tol, testAB);
+      return getNearest<N, PTYPE, decltype(permuted_data_view_)>(points, permuted_data_view_,
+                                         internal_nodes_, leaf_nodes_, bvh_,
+                                         tol, testAB);
     }
-
-    std::vector<index_t> indices_;
-    std::vector<radix_tree_node> internal_nodes_;
-    std::vector<radix_tree_node> leaf_nodes_;
-    std::vector<ext::extents_t> bvh_;
-    std::vector<vec3> data_;
-
-    view data_view_;
-    permuted_view permuted_data_view_;
-
-    std::vector<vec3> coms_;
-    std::vector<uint32_t> hashes_;
   };
-}
 
 // Explicit instantiation declarations - controlled by CMake option
 #if defined(GAUDI_USE_EXPLICIT_INSTANTIATIONS) &&                              \

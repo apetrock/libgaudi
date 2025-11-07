@@ -99,20 +99,21 @@ void init_collisions(asawa::rod::rod &rod, asawa::rod::dynamic &dynamic,
                      std::vector<projection_constraint::ptr> &constraints,
                      const real &w) {
   const std::vector<vec3> &x = rod.__x;
-  vector<std::array<index_t, 4>> collisions = dynamic.get_internal_collisions();
-  for (auto &c : collisions) {
-    if (c[0] > -1) {
-      vec3 xA0 = x[c[0]];
-      vec3 xA1 = x[c[1]];
-      vec3 xB0 = x[c[2]];
-      vec3 xB1 = x[c[3]];
-      if (rod.prev(c[0]) == c[2])
+  vector<std::array<index_t, 2>> collisions = dynamic.get_internal_collisions();
+  for (auto &c2 : collisions) {
+    if (c2[0] > -1) {
+      std::array<index_t, 4> c4 = dynamic.get_collision_ids(c2);
+      vec3 xA0 = x[c4[0]];
+      vec3 xA1 = x[c4[1]];
+      vec3 xB0 = x[c4[2]];
+      vec3 xB1 = x[c4[3]];
+      if (rod.prev(c4[0]) == c4[2])
         continue;
-      if (rod.next(c[1]) == c[3])
+      if (rod.next(c4[1]) == c4[3])
         continue;
-      if (rod.prev(c[0]) == c[3])
+      if (rod.prev(c4[0]) == c4[3])
         continue;
-      if (rod.next(c[1]) == c[2])
+      if (rod.next(c4[1]) == c4[2])
         continue;
       // std::cout << c[0] << " " << c[1] << " - " << c[2] << " " << c[3]
       //           << std::endl;
@@ -132,7 +133,7 @@ void init_collisions(asawa::rod::rod &rod, asawa::rod::dynamic &dynamic,
       continue;
 */
       constraints.push_back(hepworth::edge_edge_collision::create(
-          {c[0], c[1], c[2], c[3]}, w, 1.0 * rod._r));
+          {c4[0], c4[1], c4[2], c4[3]}, w, 1.0 * rod._r));
     }
   }
 }
