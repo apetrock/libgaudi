@@ -9,7 +9,7 @@
 	url = https://github.com/yixuan/spectra.git
 [submodule "ext/eigen"]
 	path = ext/eigen
-	url = https://github.com/PX4/eigen.git
+	url = https://gitlab.com/libeigen/eigen.git
 [submodule "ext/SuiteSparse"]
 	path = ext/SuiteSparse
 	url = https://github.com/sergiud/SuiteSparse.git
