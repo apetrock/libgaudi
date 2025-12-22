@@ -11,4 +11,7 @@ add_wasm_target(strand_test
     USE_LOGGER
     EXPORT_NAME "StrandTestModule"
     
-) 
+)
+
+
+

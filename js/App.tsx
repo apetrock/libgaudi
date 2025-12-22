@@ -8,6 +8,7 @@ import { RodConstraintsTest } from './src/components/RodConstraintsTest';
 import { StrandTest } from './src/components/StrandTest';
 import { PathTest } from './src/components/PathTest';
 import { MortonTreeTest } from './src/components/MortonTreeTest';
+import { BvhTest } from './src/components/BvhTest';
 import { Button } from './src/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './src/components/ui/card';
 import { Badge } from './src/components/ui/badge';
@@ -37,6 +38,7 @@ function Navigation() {
     { path: '/rod-strand', label: 'Rod Strand', icon: TestTube, status: 'beta' },
     { path: '/path-test', label: 'Path Test', icon: TestTube, status: 'beta' },
     { path: '/morton-tree', label: 'Morton Tree', icon: Microscope, status: 'beta' },
+    { path: '/bvh-test', label: 'BVH Test', icon: TestTube, status: 'beta' },
     { path: '/wasm-hello', label: 'WASM Hello', icon: TestTube, status: 'stable' },
     { path: '/future-test', label: 'Future', icon: Rocket, status: 'planned' },
   ];
@@ -221,6 +223,21 @@ function MortonTreeTestPage() {
       <div className="container mx-auto max-w-4xl px-4" style={{ paddingTop: '5rem' }}>
         <div className="h-[calc(100vh-5rem)]">
           <MortonTreeTest />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * BVH Test page - BVH vs Brute Force comparison testing
+ */
+function BvhTestPage() {
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto max-w-4xl px-4" style={{ paddingTop: '5rem' }}>
+        <div className="h-[calc(100vh-5rem)]">
+          <BvhTest />
         </div>
       </div>
     </div>
@@ -460,6 +477,7 @@ function App() {
           <Route path="/rod-strand" element={<RodStrandPage />} />
           <Route path="/path-test" element={<PathTestPage />} />
           <Route path="/morton-tree" element={<MortonTreeTestPage />} />
+          <Route path="/bvh-test" element={<BvhTestPage />} />
           <Route path="/foo_demo" element={<Foo_demo />} />
           <Route path="/bar_demo" element={<Bar_demo />} />
         </Routes>

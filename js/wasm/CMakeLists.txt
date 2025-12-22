@@ -39,4 +39,7 @@ add_custom_target(copy_all_to_public
         "${PUBLIC_WASM_DIR}/"
     DEPENDS all_wasm_targets
     COMMENT "Copying all WASM files to public directory"
-) 
+)
+
+
+

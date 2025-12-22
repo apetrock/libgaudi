@@ -11,4 +11,7 @@ add_wasm_target(rod_constraints
     USE_LOGGER
     EXPORT_NAME "RodConstraintsTestModule"
     
-) 
+)
+
+
+

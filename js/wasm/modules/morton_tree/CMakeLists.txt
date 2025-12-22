@@ -11,4 +11,7 @@ add_wasm_target(morton_tree
     USE_LOGGER
     EXPORT_NAME "MortonTreeTestModule"
     
-) 
+)
+
+
+

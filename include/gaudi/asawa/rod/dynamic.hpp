@@ -254,17 +254,17 @@ public:
     std::vector<index_t> edge_verts_A = R.get_edge_vert_ids();
     // calder::test_extents(*edge_tree, edge_verts, x);
     // edge_tree->debug();
-    std::vector<std::array<index_t, 2>> collected(edges_B.size());
+    std::vector<std::array<index_t, 2>> collected(edges_B.size() / 2);
 #pragma omp parallel for
     for (int k = 0; k < edges_B.size(); k += 2) {
-      const edge_slice edge(edges_B, k);
+      const edge_slice<PTYPE> edge(edges_B, k / 2);
       std::vector<index_t> collisions =
-          bvh_tree->get_nearest_line_line(edge, tol);
+          bvh_tree->get_nearest(edge, tol);
       if (!collisions.empty()) {
-        int kk = edges_B.get_index(k);
+        int kk = edges_B.get_index(k / 2);
         collected[kk] = {kk, collisions[0]};
       } else {
-        collected[k] = {-1, -1};
+        collected[k / 2] = {-1, -1};
       }
     }
     return collected;
@@ -274,19 +274,18 @@ public:
 #if 1
   template <Vec3View PTYPE>
   vector<std::array<index_t, 2>> get_vert_collisions(PTYPE points_B, real tol) {
-    assert(points_B.size() == 1);
     rod &R = *__R;
     std::vector<vec3> &x_A = R.__x;
     std::vector<index_t> edge_verts_A = R.get_edge_vert_ids();
     edge_tree = arp::aabb_tree<2>::create(edge_verts_A, x_A, 16);
     // calder::test_extents(*edge_tree, edge_verts, x);
     // edge_tree->debug();
-    std::vector<std::array<index_t, 2>> collected(edges_B.size());
+    std::vector<std::array<index_t, 2>> collected(points_B.size());
 #pragma omp parallel for
     for (int k = 0; k < points_B.size(); k++) {
-      const point_slice point(points_B, k);
+      const point_slice<PTYPE> point(points_B, k);
       std::vector<index_t> collisions =
-          bvh_tree->get_nearest_point_line(point, tol);
+          bvh_tree->get_nearest(point, tol);
       if (!collisions.empty()) {
         collected[k] = {k, collisions[0]};
       } else {
@@ -309,9 +308,9 @@ public:
   }
 
   std::array<index_t, 2> get_edge_ids(const index_t &i) {
-    const std::vector<index_t> &verts = __R->get_vert_range();
+    const std::vector<vec3> &x = __R->__x;
     const std::vector<index_t> &edge_verts = __R->get_edge_vert_ids();
-    edge_view_type edges(verts, edge_verts);
+    edge_view_type edges(x, edge_verts);
     return edges.get_tuple_ids<2>(i);
   }
 
@@ -326,10 +325,8 @@ public:
   get_internal_collisions(const real &offset = 1.0) {
     rod &R = *__R;
     std::vector<vec3> &x = R.__x;
-
-    const std::vector<index_t> &verts = R.get_vert_range();
     const std::vector<index_t> &edge_verts = R.get_edge_vert_ids();
-    edge_view_type edges(verts, edge_verts);
+    edge_view_type edges(x, edge_verts);
     std::vector<std::array<index_t, 2>> collisions =
         get_collisions(edges, 0.5 * offset * R._r);
     return collisions;

@@ -109,7 +109,37 @@ concept IndexArray = requires(T t, size_t i) {
   //{ t.stride() } -> std::convertible_to<size_t>;
 };
 
-index_t get_index(const std::vector<index_t> &indices, size_t i) {
+// Stride traits - extracts compile-time stride from view types
+// Primary template: use T::stride member
+template <typename T, typename = void>
+struct view_stride {
+  static constexpr size_t value = T::stride;
+};
+
+// Specialization for std::array
+template <typename T, size_t N>
+struct view_stride<std::array<T, N>> {
+  static constexpr size_t value = N;
+};
+
+template <typename T>
+inline constexpr size_t view_stride_v = view_stride<T>::value;
+
+// Parameterized Vec3View concept with compile-time size checking
+template <typename T, int N>
+concept Vec3ViewN = Vec3View<T> && (view_stride_v<T> == N);
+
+// Convenience aliases for geometric primitives
+template <typename T>
+concept PointView = Vec3ViewN<T, 1>;
+
+template <typename T>
+concept LineView = Vec3ViewN<T, 2>;
+
+template <typename T>
+concept TriView = Vec3ViewN<T, 3>;
+
+inline index_t get_index(const std::vector<index_t> &indices, size_t i) {
   return indices[i];
 }
 
@@ -148,12 +178,19 @@ permuted(const ViewType &, const IndexType &)
     -> permuted<ViewType, IndexType>;
 
 // Spread array - templates on the array type
+//spread is a view on an index array that adapts a permutation to work on 
+//an adjacency list.
+//spread<3>([1 0 2]) = [3 4 5 0 1 2 6 7 8]
+
+
+
 template <int STRIDE, IndexArray IndexType>
   requires IndexArray<IndexType>
 class spread {
   const IndexType *indices_;
 
 public:
+  static constexpr size_t stride = STRIDE;
   using value_type = typename IndexType::value_type;
 
   spread(const IndexType &indices) : indices_(&indices) {
@@ -167,7 +204,6 @@ public:
 
   bool empty() const { return indices_->empty(); }
   size_t size() const { return STRIDE * indices_->size(); }
-  size_t stride() const { return STRIDE; }
   size_t slice(size_t i) const { return i / STRIDE; }
 };
 
@@ -184,6 +220,7 @@ class slice {
   size_t offset_;
 
 public:
+  static constexpr size_t stride = STRIDE;
   using value_type = typename ViewType::value_type;
 
   slice(const ViewType &data, size_t offset) : data_(&data), offset_(offset) {
@@ -265,47 +302,30 @@ template <ViewType ViewType, IndexArray IndexType> class adjacency_view {
 public:
   using value_type = typename ViewType::value_type;
   adjacency_view(const ViewType &data, const IndexType &permutation)
-      : data_(&data),permutation_(&permutation), p_data_(data, permutation) {
-        //assuming you'd use in same way as permuted_view
-        //however no permutation, so get_index is just i
-      }
-  //copy constructor
-  adjacency_view(const adjacency_view &other)
-      : data_(other.data_),
-        permutation_(other.permutation_),
-        p_data_(other.p_data_) {}
-  //assignment operator
-  adjacency_view &operator=(const adjacency_view &other) {
-    data_ = other.data_;
-    permutation_ = other.permutation_;
-    p_data_ = other.p_data_;
-    return *this;
-  }
-  //move constructor
-  adjacency_view(adjacency_view &&other)
-      : data_(other.data_),
-        permutation_(other.permutation_),
-        p_data_(other.p_data_) {}
-  //move assignment operator
-  adjacency_view &operator=(adjacency_view &&other) {
-    data_ = other.data_;
-    permutation_ = other.permutation_;
-    p_data_ = other.p_data_;
-    return *this;
-  }
-  //destructor
-  ~adjacency_view() {}
-  //get inde
+      : data_(&data),permutation_(&permutation), p_data_(data, permutation) {}
+  
+  // Copy/move constructors - views can be copied
+  adjacency_view(const adjacency_view &other) = default;
+  adjacency_view(adjacency_view &&other) = default;
+  
+  // Assignment operators deleted - views are immutable after construction
+  adjacency_view &operator=(const adjacency_view &other) = delete;
+  adjacency_view &operator=(adjacency_view &&other) = delete;
+  
+  ~adjacency_view() = default;
+  //get index tuple from adjacency
   template <int N>
   std::array<index_t, N> get_tuple_ids(const index_t & i){
-    const std::vector<index_t> &edge_verts = data_;
-    const std::vector<index_t> &permuted = indices_;
+
     std::array<index_t, N> tuple;
     for(int j = 0; j < N; j++){
-      tuple[j] = edge_verts[2*permuted[i]+j];
+      tuple[j] = (*permutation_)[N * i + j];
     }
     return tuple;
   }
+  
+  // get_index for unpermuted view is identity
+  index_t get_index(const size_t & i) const { return i; }
   
   const value_type &operator[](const size_t & i) const { return p_data_[i]; }
   //empty
@@ -326,6 +346,7 @@ class permuted_adjacency_view {
   const permuted<ViewType, decltype(p_adjacency_)> p_data_;
 
 public:
+  static constexpr size_t stride = STRIDE;
   using value_type = typename ViewType::value_type;
   permuted_adjacency_view(const ViewType &data,      //
                           const IndexType &adjacency, //
@@ -335,54 +356,26 @@ public:
         permutation_(&permutation),          //
         spread_(permutation),            //
         p_adjacency_(adjacency, spread_), //
-        p_data_(data, p_adjacency_) {}    //
-  //copy constructor
-  permuted_adjacency_view(const permuted_adjacency_view &other)
-      : data_(other.data_),
-        adjacency_(other.adjacency_),
-        permutation_(other.permutation_),
-        spread_(other.spread_),
-        p_adjacency_(other.p_adjacency_),
-        p_data_(other.p_data_) {}
-  //assignment operator
-  permuted_adjacency_view &operator=(const permuted_adjacency_view &other) {
-    data_ = other.data_;
-    adjacency_ = other.adjacency_;
-    permutation_ = other.permutation_;
-    spread_ = other.spread_;
-    p_adjacency_ = other.p_adjacency_;
-    p_data_ = other.p_data_;
-    return *this;
-  }
-  //move constructor
-  permuted_adjacency_view(permuted_adjacency_view &&other)
-      : data_(other.data_),
-        adjacency_(other.adjacency_),
-        permutation_(other.permutation_),
-        spread_(other.spread_),
-        p_adjacency_(other.p_adjacency_),
-        p_data_(other.p_data_) {}
-  //move assignment operator
-  permuted_adjacency_view &operator=(permuted_adjacency_view &&other) {
-    data_ = other.data_;
-    adjacency_ = other.adjacency_;
-    permutation_ = other.permutation_;
-    spread_ = other.spread_;
-    p_adjacency_ = other.p_adjacency_;
-    p_data_ = other.p_data_;
-    return *this;
-  }
-  //destructor
-  ~permuted_adjacency_view() {}
+        p_data_(data, p_adjacency_) {}
+  
+  // Copy/move constructors - views can be copied
+  permuted_adjacency_view(const permuted_adjacency_view &other) = default;
+  permuted_adjacency_view(permuted_adjacency_view &&other) = default;
+  
+  // Assignment operators deleted - views are immutable after construction
+  permuted_adjacency_view &operator=(const permuted_adjacency_view &other) = delete;
+  permuted_adjacency_view &operator=(permuted_adjacency_view &&other) = delete;
+  
+  ~permuted_adjacency_view() = default;
   //get index
   const value_type &operator[](const size_t & i) const { return p_data_[i]; }
 
   std::array<index_t, STRIDE> get_tuple_ids(const index_t & i){
-    const std::vector<index_t> &edge_verts = adjacency_;
-    const std::vector<index_t> &permuted = indices_;
+
     std::array<index_t, STRIDE> tuple;
     for(int j = 0; j < STRIDE; j++){
-      tuple[j] = edge_verts[2*permuted[i]+j];
+      const size_t p_index = (*permutation_)[i];
+      tuple[j] = (*adjacency_)[STRIDE*p_index+j];
     }
     return tuple;
   }

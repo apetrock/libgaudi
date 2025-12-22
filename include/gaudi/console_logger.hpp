@@ -6,7 +6,7 @@
 #include <sstream>
 
 #ifdef __EMSCRIPTEN__
-#include "../../../js/wasm/API/include/wasm_terminal_logger.h"
+#include "../../js/wasm/API/include/wasm_terminal_logger.h"
 #else
 #include <iostream>
 #endif

@@ -495,59 +495,6 @@ public:
     printf("update_tree: redraw_visualizations completed\n");
     printf("=== update_tree END ===\n");
   }
-
-  // Public method to rebuild hash tree (for explicit API calls)
-  bool mk_hash_tree() {
-    try {
-      console_logger::debug << "=== mk_hash_tree START ===" << std::endl;
-
-      if (test_points.empty()) {
-        console_logger::debug << "mk_hash_tree: No points available for tree construction" << std::endl;
-        return false;
-      }
-
-      console_logger::debug << "mk_hash_tree: Building tree for " << test_points.size() << " points" << std::endl;
-
-      // Let's manually do what update_tree() does with more debugging
-      console_logger::debug << "mk_hash_tree: Calling arp::calc_com<2>(test_points)" << std::endl;
-      auto coms = arp::calc_com<2>(test_points);
-      auto centers = std::vector<vec3>(coms.size());
-      for (size_t i = 0; i < coms.size(); i++) {
-        centers[i] = std::get<1>(coms[i]);
-      }
-      auto [tree_hashes, tree_indices, internal, leaf] =
-          arp::make_hash_tree(centers);
-      console_logger::debug << "mk_hash_tree: arp::make_hash_tree returned - hashes: " << tree_hashes.size() << ", indices: " << tree_indices.size() << ", internal: " << internal.size() << ", leaf: " << leaf.size() << std::endl;
-      console_logger::debug << "mk_hash_tree: centers: " << centers.size() << std::endl;
-      console_logger::debug << "mk_hash_tree: coms: " << coms.size() << std::endl;
-      console_logger::debug << "mk_hash_tree: tree_hashes: " << tree_hashes.size() << std::endl;
-      console_logger::debug << "mk_hash_tree: tree_indices: " << tree_indices.size() << std::endl;
-      console_logger::debug << "mk_hash_tree: internal: " << internal.size() << std::endl;
-      console_logger::debug << "mk_hash_tree: leaf: " << leaf.size() << std::endl;
-
-      printf("mk_hash_tree: Assigning results...\n");
-      hashes = tree_hashes;
-      indices = tree_indices;
-      internal_nodes = internal;
-      leaf_nodes = leaf;
-
-      printf("mk_hash_tree: Calling redraw_visualizations...\n");
-      redraw_visualizations();
-
-      printf("mk_hash_tree: Tree built successfully - %zu hashes, %zu internal "
-             "nodes, %zu leaf nodes\n",
-             hashes.size(), internal_nodes.size(), leaf_nodes.size());
-      printf("=== mk_hash_tree END ===\n");
-      return true;
-    } catch (const std::exception &e) {
-      printf("mk_hash_tree: Exception caught: %s\n", e.what());
-      return false;
-    } catch (...) {
-      printf("mk_hash_tree: Unknown exception caught\n");
-      return false;
-    }
-  }
-
   // Log hierarchy visualization
   void log_hierarchy() {
     try {
@@ -766,7 +713,6 @@ EMSCRIPTEN_BINDINGS(morton_tree_test) {
       .function("generate_trefoil_knot", &MortonTreeTest::generate_trefoil_knot)
       .function("generate_knot", &MortonTreeTest::generate_knot)
       .function("generate_random_knot", &MortonTreeTest::generate_random_knot)
-      .function("mk_hash_tree", &MortonTreeTest::mk_hash_tree)
       .function("log_hierarchy", &MortonTreeTest::log_hierarchy)
       .function("log_bvh", &MortonTreeTest::log_bvh)
       .function("log_nearest", &MortonTreeTest::log_nearest)
