@@ -40,9 +40,9 @@ using corner1 = std::array<index_t, 1>;
 using corner2 = std::array<index_t, 2>;
 using corner4 = std::array<int, 4>;
 
-using OpPredicateFcn = std::function<bool(shell &M, const index_t &)>;
+using OpPredicateFcn = std::function<bool(shell &M, CornerId)>;
 using MergePredicateFcn =
-    std::function<bool(shell &M, const index_t &, const index_t &)>;
+    std::function<bool(shell &M, CornerId, CornerId)>;
 
 real dist_line_line(shell &M, CornerId cA0, CornerId cB0,
                     const std::vector<vec3> &x) {
@@ -687,7 +687,7 @@ public:
 
     if (_merge_pred)
       collected.erase(std::remove_if(collected.begin(), collected.end(),
-                                     [this](auto c) { return _merge_pred(*__M, c[0], c[1]); }),
+                                     [this](auto c) { return _merge_pred(*__M, corner_id(c[0]), corner_id(c[1])); }),
                       collected.end());
 
     std::vector<index_t> f_collect(2 * collected.size());
@@ -746,7 +746,7 @@ public:
 
     if (_merge_pred)
       collected.erase(std::remove_if(collected.begin(), collected.end(),
-                                     [this](auto c) { return _merge_pred(*__M, c[0], c[1]); }),
+                                     [this](auto c) { return _merge_pred(*__M, corner_id(c[0]), corner_id(c[1])); }),
                       collected.end());
 
     std::vector<index_t> f_collect(2 * collected.size());
@@ -911,7 +911,7 @@ public:
 
     if (_collapse_pred)
       edges_to_divide.erase(std::remove_if(edges_to_divide.begin(), edges_to_divide.end(),
-                     [this](index_t c) { return _collapse_pred(*__M, c); }), edges_to_divide.end());
+                     [this](index_t c) { return _collapse_pred(*__M, corner_id(c)); }), edges_to_divide.end());
 
     std::vector<real> S(edges_to_divide.size(), 0.5);
     collapse_op(*__M, edges_to_divide, S, x,
@@ -920,7 +920,7 @@ public:
                        index_t vs, //
                        index_t fs, //
                        const std::vector<index_t> &edges, shell &m) -> corner1 {
-                  if (_collapse_pred && _collapse_pred(m, edges[i]))
+                  if (_collapse_pred && _collapse_pred(m, corner_id(edges[i])))
                     return {-1};
                   return {collapse_edge(m, corner_id(edges[i]))};
                 });

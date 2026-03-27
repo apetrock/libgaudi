@@ -178,7 +178,7 @@ void fillBuffer_ref(asawa::rod::rod &R, gg::BufferObjectPtr obj,
     //  continue;
 
     gaudi::vec3 x0 = x[i];
-    auto idx = R.consec(i);
+    auto idx = R.consec(gaudi::asawa::rod::corner_id(i));
 
     gaudi::quat qi = R.__u[i];
     // gaudi::quat dq = qi * q0;
@@ -207,9 +207,10 @@ void fillBuffer_ref(asawa::rod::rod &R, gg::BufferObjectPtr obj,
 
   std::vector<std::vector<int>> faces;
   for (int i0 = 0; i0 < R.corner_count(); i0++) {
-    if (R.next(i0) < 0)
+    auto ci0 = gaudi::asawa::rod::corner_id(i0);
+    if (R.next(ci0) < 0)
       continue;
-    int i1 = R.next(i0);
+    int i1 = R.next(ci0);
     for (int j0 = 0; j0 < Nc; j0++) {
       int j1 = (j0 + 1) % Nc;
       faces.push_back({Nc * i0 + j0, Nc * i0 + j1, Nc * i1 + j1});

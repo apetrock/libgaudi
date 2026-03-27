@@ -159,7 +159,7 @@ public:
       std::cout << "  -vol:" << r_vol << "/" << s_vol << " attenuation: " << att
                 << std::endl;
 
-      std::vector<index_t> verts = R->get_vert_range();
+      auto verts = R->get_vert_range();
       for (auto i : verts) {
         asawa::rod::consec_t c = R->consec(i);
         l0[i] *= att;

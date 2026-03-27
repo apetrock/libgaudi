@@ -67,7 +67,8 @@ namespace gaudi
 
       std::vector<index_t> edge_verts = R.get_edge_vert_ids();
       std::vector<index_t> edge_map = R.get_edge_map();
-      std::vector<index_t> edge_ids = R.get_vert_range();
+      auto rverts = R.get_vert_range();
+      std::vector<index_t> edge_ids(rverts.begin(), rverts.end());
 
       // std::cout << __PRETTY_FUNCTION__ << std::endl;
       std::cout << "summing" << std::endl;
@@ -291,10 +292,11 @@ namespace gaudi
       ue.reserve(q.size());
       for (int i = 0; i < q.size(); i++)
       {
+        auto ci = asawa::rod::corner_id(i);
         ue[i] = vec3::Zero();
-        if (R.next(i) == -1)
+        if (R.next(ci) == asawa::rod::corner_id(-1))
           continue;
-        asawa::rod::consec_t ids = R.consec(i);
+        asawa::rod::consec_t ids = R.consec(ci);
         real l = (x[ids[2]] - x[ids[1]]).norm();
         ls.push_back(l);
         vec3 ui = q[i].normalized() * (l * u0);
@@ -303,7 +305,8 @@ namespace gaudi
 
       std::vector<index_t> edge_verts = R.get_edge_vert_ids();
       std::vector<index_t> edge_map = R.get_edge_map();
-      std::vector<index_t> edge_ids = R.get_vert_range();
+      auto rverts_cov = R.get_vert_range();
+      std::vector<index_t> edge_ids(rverts_cov.begin(), rverts_cov.end());
 
       Rod_Tree_Type::ptr edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 12);
 

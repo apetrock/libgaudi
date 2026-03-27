@@ -143,7 +143,7 @@ public:
     std::vector<real> w(__R->__x.size(), 0);
     std::vector<vec3> xc = __R->xc();
     std::vector<vec3> N = __R->N0c();
-    std::vector<index_t> verts = __R->get_vert_range();
+    auto verts = __R->get_vert_range();
       for (auto i : verts) {
         asawa::rod::consec_t c = __R->consec(i);
 

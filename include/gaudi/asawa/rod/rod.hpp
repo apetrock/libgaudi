@@ -9,6 +9,8 @@
 #include "gaudi/vec_addendum.h"
 #include "gaudi/logger.hpp"
 
+#include "gaudi/asawa/rod/rod_id.hpp"
+
 // #include "subdivide.hpp"
 
 #include <algorithm>
@@ -30,7 +32,8 @@ namespace gaudi {
 namespace asawa {
 namespace rod {
 
-typedef std::array<index_t, 3> consec_t;
+using consec_t = std::array<CornerId, 3>;
+
 class rod {
 public:
   typedef std::shared_ptr<rod> ptr;
@@ -79,7 +82,7 @@ public:
     _init_params();
   }
 
-  real length(index_t i) const {
+  real length(CornerId i) const {
     if (__corners_next[i] == -1)
       return 0.0;
     index_t j = __corners_next[i];
@@ -89,7 +92,7 @@ public:
     return l;
   }
 
-  vec3 dir(index_t i) const {
+  vec3 dir(CornerId i) const {
     auto idx = consec(i);
     vec3 cp = __x[idx[0]];
     vec3 c0 = __x[idx[1]];
@@ -152,28 +155,24 @@ public:
 
     _lmax = 0.0;
     for (int i = 0; i < __corners_next.size(); i++) {
+      CornerId ci = corner_id(i);
       real mass = 0.0;
       real rho = 1.0;
       
-      // Calculate mass based on adjacent edge lengths
-      if (prev(i) == -1) {
-        // Start endpoint: mass = 0.5 * length_right
-        if (next(i) != -1) {
+      if (prev(ci) == corner_id(-1)) {
+        if (next(ci) != corner_id(-1)) {
           real l_right = __l0[i];
           mass = 0.5 * l_right;
         }
-      } else if (next(i) == -1) {
-        // End endpoint: mass = 0.5 * length_left
-        real l_left = __l0[prev(i)];
+      } else if (next(ci) == corner_id(-1)) {
+        real l_left = __l0[prev(ci)];
         mass = 0.5 * l_left;
       } else {
-        // Interior node: mass = 0.5 * (length_left + length_right)
-        real l_left = __l0[prev(i)];
+        real l_left = __l0[prev(ci)];
         real l_right = __l0[i];
         mass = 0.5 * (l_left + l_right);
       }
       
-      // Convert length to mass using cylinder volume
       real M = M_PI * _r * _r * mass;
       real J = mass * rho * M * _r * _r;
 
@@ -186,8 +185,7 @@ public:
       __J[i][2] = 0.5 * J;
       __J[i][3] = 0.0;
       
-      // Track max length for averaging
-      if (next(i) != -1) {
+      if (next(ci) != corner_id(-1)) {
         _lmax += __l0[i];
       }
     }
@@ -202,22 +200,20 @@ public:
     return v;
   }
 
-  consec_t consec(index_t i) const {
-    index_t in = next(i);
-    index_t inn = next(in);
+  consec_t consec(CornerId i) const {
+    CornerId in = next(i);
 
-    index_t ip = prev(i);
-    index_t ipp = prev(ip);
-    if (ip == -1) {
+    CornerId ip = prev(i);
+    if (ip == corner_id(-1)) {
       return {i, i, in};
-    } else if (in == -1) {
+    } else if (in == corner_id(-1)) {
       return {ip, i, i};
     }
 
     return {ip, i, in};
   };
 
-  quat get_rotation(int i) {
+  quat get_rotation(CornerId i) {
     auto idx = consec(i);
     vec3 cp = __x[idx[0]];
     vec3 c0 = __x[idx[1]];
@@ -230,7 +226,7 @@ public:
     return quat::FromTwoVectors(t0, t1);
   }
 
-  mat3 _get_frenet_mat(index_t i) {
+  mat3 _get_frenet_mat(CornerId i) {
     auto idx = consec(i);
 
     vec3 cp = __x[idx[0]];
@@ -255,9 +251,9 @@ public:
     return F;
   }
 
-  quat _get_frenet(index_t i) { return quat(_get_frenet_mat(i)).normalized(); }
+  quat _get_frenet(CornerId i) { return quat(_get_frenet_mat(i)).normalized(); }
 
-  quat _calc_frame(const index_t &i) {
+  quat _calc_frame(CornerId i) {
     auto idx = consec(i);
     vec3 cp = __x[idx[0]];
     vec3 c0 = __x[idx[1]];
@@ -278,7 +274,7 @@ public:
     for (int i = 0; i < __corners_next.size(); i++) {
       if (__corners_next[i] == -1)
         continue;
-      auto idx = consec(i);
+      auto idx = consec(corner_id(i));
 
       vec3 cp = __x[idx[0]];
       vec3 c0 = __x[idx[1]];
@@ -316,11 +312,11 @@ public:
   void _update_frames() {
     __u.resize(__corners_next.size());
     std::vector<vec3> N_vec(__corners_next.size());
-    vec3 N0 = _get_frenet_mat(0).col(1);
+    vec3 N0 = _get_frenet_mat(corner_id(0)).col(1);
     for (int i = 0; i < __corners_next.size(); i++) {
       if (__corners_next[i] == -1)
         continue;
-      auto idx = consec(i);
+      auto idx = consec(corner_id(i));
 
       vec3 cp = __x[idx[0]];
       vec3 c0 = __x[idx[1]];
@@ -345,10 +341,11 @@ public:
   real lavg() {
     real lbar = 0.0;
     for (int i = 0; i < corner_count(); i++) {
-      if (next(i) == -1)
+      CornerId ci = corner_id(i);
+      if (next(ci) == corner_id(-1))
         continue;
-      index_t j = next(i);
-      vec3 q0 = __x[i];
+      CornerId j = next(ci);
+      vec3 q0 = __x[ci];
       vec3 q1 = __x[j];
       real l = (q1 - q0).norm();
       lbar += l;
@@ -357,49 +354,54 @@ public:
     return lbar;
   }
 
-  index_t next(index_t i) const { return i < 0 ? -1 : __corners_next[i]; }
-  index_t prev(index_t i) const { return i < 0 ? -1 : __corners_prev[i]; }
+  CornerId next(CornerId i) const {
+    return i < 0 ? corner_id(-1) : corner_id(__corners_next[i]);
+  }
+  CornerId prev(CornerId i) const {
+    return i < 0 ? corner_id(-1) : corner_id(__corners_prev[i]);
+  }
 
-  void set_next(index_t id, index_t c) { __corners_next[id] = c; }
-  void set_prev(index_t id, index_t c) { __corners_prev[id] = c; }
-  void link(index_t c0, index_t c1) {
+  void set_next(CornerId id, CornerId c) { __corners_next[id] = c; }
+  void set_prev(CornerId id, CornerId c) { __corners_prev[id] = c; }
+  void link(CornerId c0, CornerId c1) {
     set_next(c0, c1);
     set_prev(c1, c0);
   }
 
-  // Convenience function to get all endpoint indices (nodes with next = -1 or prev = -1)
-  std::vector<index_t> get_endpoints() const {
-    std::vector<index_t> endpoints;
+  std::vector<CornerId> get_endpoints() const {
+    std::vector<CornerId> endpoints;
     endpoints.reserve(corner_count());
     
-    for (index_t i = 0; i < corner_count(); i++) {
-      if (next(i) == -1 || prev(i) == -1) {
-        endpoints.push_back(i);
+    for (int i = 0; i < corner_count(); i++) {
+      CornerId ci = corner_id(i);
+      if (next(ci) == corner_id(-1) || prev(ci) == corner_id(-1)) {
+        endpoints.push_back(ci);
       }
     }
     return endpoints;
   }
 
   size_t corner_count() const { return __corners_next.size(); }
-  index_t insert_edge() {
-    // returns id of new vertex
+
+  CornerId insert_edge() {
     __corners_next.push_back(-1);
     __corners_prev.push_back(-1);
-    return __corners_next.size() - 1;
+    return corner_id(static_cast<int>(__corners_next.size() - 1));
   }
 
   std::vector<vec3> &corner_verts() { return __x; }
   const std::vector<vec3> &corner_verts() const { return __x; }
 
-  std::vector<index_t> get_ordered_verts() {
-    std::vector<index_t> verts;
+  std::vector<CornerId> get_ordered_verts() {
+    std::vector<CornerId> verts;
     verts.reserve(corner_count());
     std::vector<bool> visited(corner_count(), false);
 
     for (int i = 0; i < corner_count(); i++) {
-      if (next(i) < 0 || visited[i])
+      CornerId ci = corner_id(i);
+      if (next(ci) < 0 || visited[i])
         continue;
-      index_t j = i;
+      CornerId j = ci;
       while (j > -1 && !visited[j]) {
         verts.push_back(j);
         visited[j] = true;
@@ -413,7 +415,6 @@ public:
                                      int stride) {
     std::vector<index_t> map;
     map.reserve(indices.size() / stride);
-    // replace this with some c++isms
     for (int i = 0; i < indices.size(); i += stride) {
       if (indices[i] < 0)
         continue;
@@ -430,14 +431,13 @@ public:
     return get_range_map(__corners_next, 1);
   }
 
-  std::vector<index_t> get_vert_range() const {
-    std::vector<index_t> range;
+  std::vector<CornerId> get_vert_range() const {
+    std::vector<CornerId> range;
     range.reserve(corner_count());
-    // replace this with some c++isms
     for (int i = 0; i < corner_count(); i++) {
       if (__corners_next[i] < 0)
         continue;
-      range.push_back(i);
+      range.push_back(corner_id(i));
     }
 
     return range;
@@ -457,9 +457,9 @@ public:
   std::vector<index_t> get_edge_vert_ids() {
     std::vector<index_t> range;
     range.reserve(corner_count());
-    // replace this with some c++isms
     for (int i = 0; i < corner_count(); i++) {
-      if (next(i) < 0)
+      CornerId ci = corner_id(i);
+      if (next(ci) < 0)
         continue;
       range.push_back(i);
       range.push_back(__corners_next[i]);
@@ -489,8 +489,8 @@ public:
 
   std::vector<vec3> xc() {
     std::vector<vec3> xc(__x);
-    std::vector<index_t> rverts = get_vert_range();
-    for (int i : rverts) {
+    std::vector<CornerId> rverts = get_vert_range();
+    for (CornerId i : rverts) {
       auto cons = this->consec(i);
       if (cons[2] < 0)
         continue;
@@ -501,11 +501,11 @@ public:
 
   std::vector<vec3> vert_infill(const std::vector<vec3> &x, index_t n_interp,
                                 bool normalize = true) const {
-    std::vector<index_t> rverts = get_vert_range();
+    std::vector<CornerId> rverts = get_vert_range();
     std::vector<vec3> xc(n_interp * x.size());
-    for (int i : rverts) {
+    for (CornerId i : rverts) {
       auto cons = this->consec(i);
-      index_t ii = cons[1];
+      int ii = cons[1];
       for (int k = 0; k < n_interp; k++) {
         if (cons[2] < 0)
           xc[n_interp * ii + k] = x[cons[1]];
@@ -524,8 +524,8 @@ public:
   std::vector<vec3> vert_val(const std::vector<vec3> &x,
                              bool normalize = true) {
     std::vector<vec3> xp(x);
-    std::vector<index_t> rverts = get_vert_range();
-    for (int i : rverts) {
+    std::vector<CornerId> rverts = get_vert_range();
+    for (CornerId i : rverts) {
       auto cons = this->consec(i);
       if (cons[0] < 0)
         continue;
@@ -539,9 +539,8 @@ public:
 
   std::vector<vec3> dirs() {
     std::vector<vec3> d(__x.size());
-    int i = 0;
-    for (auto &v : d) {
-      v = this->dir(i++);
+    for (int i = 0; i < d.size(); i++) {
+      d[i] = this->dir(corner_id(i));
     }
     return d;
   }

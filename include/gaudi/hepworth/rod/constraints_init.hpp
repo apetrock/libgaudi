@@ -27,39 +27,44 @@ namespace rod {
 void init_smooth(const asawa::rod::rod &rod,
                  std::vector<projection_constraint::ptr> &constraints,
                  const real &w) {
+  using asawa::rod::corner_id;
 
   for (int i = 0; i < rod.corner_count(); i++) {
-    index_t in = rod.next(i);
-    index_t ip = rod.prev(i);
-    constraints.push_back(smooth::create({i, ip, in}, w));
+    auto ci = corner_id(i);
+    auto in = rod.next(ci);
+    auto ip = rod.prev(ci);
+    constraints.push_back(smooth::create({ci, ip, in}, w));
   }
 }
 #if 1
 void init_helicity(const asawa::rod::rod &rod,
                    std::vector<projection_constraint::ptr> &constraints,
                    const real &w) {
+  using asawa::rod::corner_id;
+  using asawa::rod::CornerId;
 
   for (int i = 0; i < rod.corner_count(); i++) {
-    index_t ip0 = rod.prev(i);
-    if (!ip0)
+    CornerId ci = corner_id(i);
+    CornerId ip0 = rod.prev(ci);
+    if (ip0 < 0)
       continue;
-    index_t ip1 = rod.prev(ip0);
-    if (!ip1)
+    CornerId ip1 = rod.prev(ip0);
+    if (ip1 < 0)
       continue;
-    index_t ip2 = rod.prev(ip1);
-    if (!ip2)
+    CornerId ip2 = rod.prev(ip1);
+    if (ip2 < 0)
       continue;
-    index_t in0 = rod.next(i);
-    if (!in0)
+    CornerId in0 = rod.next(ci);
+    if (in0 < 0)
       continue;
-    index_t in1 = rod.next(in0);
-    if (!in1)
+    CornerId in1 = rod.next(in0);
+    if (in1 < 0)
       continue;
-    index_t in2 = rod.next(in1);
-    if (!in2)
+    CornerId in2 = rod.next(in1);
+    if (in2 < 0)
       continue;
     constraints.push_back(
-        cylinder::create({i, ip2, ip1, ip0, i, in0, in1, in2}, 1.25));
+        cylinder::create({ci, ip2, ip1, ip0, ci, in0, in1, in2}, 1.25));
   }
 }
 #endif
@@ -67,30 +72,36 @@ void init_helicity(const asawa::rod::rod &rod,
 void init_stretch_shear(const asawa::rod::rod &rod,
                         std::vector<projection_constraint::ptr> &constraints,
                         const std::vector<real> &l0, const real &w) {
+  using asawa::rod::corner_id;
   int Ni = rod.corner_count();
   for (int i = 0; i < rod.corner_count(); i++) {
-    index_t j = rod.next(i);
-    constraints.push_back(stretch_shear::create({i, j, i, Ni}, w, l0[i]));
+    auto ci = corner_id(i);
+    auto j = rod.next(ci);
+    constraints.push_back(stretch_shear::create({ci, j, ci, Ni}, w, l0[i]));
   }
 }
 
 void init_straight(const asawa::rod::rod &rod,
                      std::vector<projection_constraint::ptr> &constraints,
                      const real &w) {
+  using asawa::rod::corner_id;
   int Ni = rod.corner_count();
   for (int i = 0; i < rod.corner_count(); i++) {
-    index_t j = rod.next(i);
-    constraints.push_back(straight::create({i, j, Ni}, w));
+    auto ci = corner_id(i);
+    auto j = rod.next(ci);
+    constraints.push_back(straight::create({ci, j, Ni}, w));
   }
 }
 
 void init_angle(const asawa::rod::rod &rod,
                 std::vector<projection_constraint::ptr> &constraints,
                 const vec3 &z, const real &phi, const real &w) {
+  using asawa::rod::corner_id;
   int Ni = rod.corner_count();
   for (int i = 0; i < rod.corner_count(); i++) {
-    index_t j = rod.next(i);
-    constraints.push_back(angle::create({i, j, Ni}, z, phi, w));
+    auto ci = corner_id(i);
+    auto j = rod.next(ci);
+    constraints.push_back(angle::create({ci, j, Ni}, z, phi, w));
   }
 }
 
@@ -106,13 +117,13 @@ void init_collisions(asawa::rod::rod &rod, asawa::rod::dynamic &dynamic,
       vec3 xA1 = x[c4[1]];
       vec3 xB0 = x[c4[2]];
       vec3 xB1 = x[c4[3]];
-      if (rod.prev(c4[0]) == c4[2])
+      if (rod.prev(asawa::rod::corner_id(c4[0])) == c4[2])
         continue;
-      if (rod.next(c4[1]) == c4[3])
+      if (rod.next(asawa::rod::corner_id(c4[1])) == c4[3])
         continue;
-      if (rod.prev(c4[0]) == c4[3])
+      if (rod.prev(asawa::rod::corner_id(c4[0])) == c4[3])
         continue;
-      if (rod.next(c4[1]) == c4[2])
+      if (rod.next(asawa::rod::corner_id(c4[1])) == c4[2])
         continue;
       // std::cout << c[0] << " " << c[1] << " - " << c[2] << " " << c[3]
       //           << std::endl;

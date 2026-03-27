@@ -191,7 +191,7 @@ public:
     std::vector<real> w(__R->__x.size(), 0);
     std::vector<vec3> xc = __R->xc();
     std::vector<vec3> N = __R->N0c();
-    std::vector<index_t> verts = __R->get_vert_range();
+    auto verts = __R->get_vert_range();
     for (auto i : verts) {
       asawa::rod::consec_t c = __R->consec(i);
 
@@ -356,7 +356,7 @@ public:
 
     // Log forces for valid vertices
     for (int i = 0; i < __R->corner_count(); i++) {
-      if (__R->next(i) < 0)
+      if (__R->next(asawa::rod::corner_id(i)) < 0)
         continue;
 
       if (i < forces.size() && forces[i].norm() > 1e-6) {

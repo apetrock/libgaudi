@@ -195,7 +195,7 @@ public:
       blocks.push_back(u);
 
       std::vector<real> dists = __sdf->distance(R->__x);
-      std::vector<index_t> verts = R->get_vert_range();
+      auto verts = R->get_vert_range();
       for (auto i : verts) {
         asawa::rod::consec_t c = R->consec(i);
         // if (dists[i] > 0.0)

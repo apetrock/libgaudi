@@ -207,11 +207,11 @@ public:
     set<real>(cnew, l1n / l10 * l0, z);
   }
 
-  void split_edge(index_t c00) {
-    index_t c10 = __R->next(c00);
-    index_t c11 = __R->next(c10);
-    index_t c01 = __R->prev(c00);
-    index_t cnew = __R->insert_edge();
+  void split_edge(CornerId c00) {
+    CornerId c10 = __R->next(c00);
+    CornerId c11 = __R->next(c10);
+    CornerId c01 = __R->prev(c00);
+    CornerId cnew = __R->insert_edge();
     __R->link(c00, cnew);
     __R->link(cnew, c10);
 
@@ -226,15 +226,15 @@ public:
     interp(c00, c10, cnew, __R->__t);
   }
 
-  void collapse_edge(index_t c00) {
-    index_t c10 = __R->next(c00);
-    index_t c11 = __R->next(c10);
-    index_t c01 = __R->prev(c00);
+  void collapse_edge(CornerId c00) {
+    CornerId c10 = __R->next(c00);
+    CornerId c11 = __R->next(c10);
+    CornerId c01 = __R->prev(c00);
     if (c10 < -1)
       return;
     __R->link(c01, c10);
-    __R->set_next(c00, -1);
-    __R->set_prev(c00, -1);
+    __R->set_next(c00, corner_id(-1));
+    __R->set_prev(c00, corner_id(-1));
 
     interp(c01, c10, c10, __R->__x);
     // interp(c00, c10, cnew, __R->__x);
@@ -378,20 +378,20 @@ public:
   void step() {
 
     for (int i = 0; i < __R->corner_count(); i++) {
-      index_t jn = __R->next(i);
-      index_t jp = __R->prev(i);
+      CornerId ci = corner_id(i);
+      CornerId jn = __R->next(ci);
+      CornerId jp = __R->prev(ci);
       if (jn < 0 || jp < 0)
         continue;
       vec3 q0 = __R->__x[i];
       vec3 q1 = __R->__x[jn];
       real l = (q1 - q0).norm();
       if (l > _Cs) {
-        // std::cout << " split " << std::endl;
-        split_edge(i);
+        split_edge(ci);
       }
 
       if (l < _Cc && jp > -1) {
-        collapse_edge(i);
+        collapse_edge(ci);
       }
     }
     __R->pack();

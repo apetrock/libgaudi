@@ -44,10 +44,9 @@ namespace gaudi
           : __M(M), __surf(D), __R(R), __Rd(Rd)
       {
 
-        D->set_flip_pred([&](asawa::shell::shell &M, const index_t &c0)
+        D->set_flip_pred([&](asawa::shell::shell &M, asawa::shell::CornerId c0)
                          {
-      asawa::shell::CornerId c0i = asawa::shell::corner_id(c0);
-      asawa::shell::CornerId c1 = M.other(c0i);
+      asawa::shell::CornerId c1 = M.other(c0);
       return _adjacent.find(c0) == _adjacent.end() &&
              _adjacent.find(c1) == _adjacent.end(); });
 
@@ -104,7 +103,7 @@ namespace gaudi
         real lavg = R.lavg();
         for (auto &c : nearest)
         {
-          auto consec = R.consec(c[0] / N_spread);
+          auto consec = R.consec(asawa::rod::corner_id(c[0] / N_spread));
           if (consec[2] < 0)
             continue;
 
@@ -149,15 +148,13 @@ namespace gaudi
         };
         // sweep forward
 
-        std::vector<index_t> rverts = R.get_ordered_verts();
+        auto rverts = R.get_ordered_verts();
 
         for (int k = 0; k < 2; k++)
         {
-          // this should only need one it, why not working?
-
           for (int i = 0; i < rverts.size(); i++)
           {
-            index_t ip = R.next(rverts[i]);
+            auto ip = R.next(rverts[i]);
             index_t im = i;
             if (ip < 0)
               continue;
@@ -166,7 +163,7 @@ namespace gaudi
 
           for (int i = rverts.size() - 1; i > -1; i--)
           {
-            index_t ip = R.next(rverts[i]);
+            auto ip = R.next(rverts[i]);
             index_t im = i;
             if (ip < 0)
               continue;
@@ -216,9 +213,9 @@ namespace gaudi
         std::vector<vec3> xr = R.x();
         for (int i = 0; i < dist.size(); i++)
         {
-          auto idx = R.consec(i);
-          index_t im = idx[0];
-          index_t ip = idx[2];
+          auto idx = R.consec(asawa::rod::corner_id(i));
+          auto im = idx[0];
+          auto ip = idx[2];
           vec3 xr1 = xr[ip];
           vec3 xr0 = xr[im];
           real di = (xr1 - xr0).norm();
