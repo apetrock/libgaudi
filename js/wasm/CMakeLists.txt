@@ -23,10 +23,11 @@ file(MAKE_DIRECTORY "${PUBLIC_WASM_DIR}")
 add_subdirectory(modules/morton_tree)
 add_subdirectory(modules/rod_constraints)
 add_subdirectory(modules/strand_test)
+add_subdirectory(modules/unit_tests)
 
 # Create a combined target that builds everything
 add_custom_target(all_wasm_targets
-    DEPENDS morton_tree rod_constraints strand_test
+    DEPENDS morton_tree rod_constraints strand_test unit_tests
     COMMENT "Building all WebAssembly targets"
 )
 
@@ -36,6 +37,7 @@ add_custom_target(copy_all_to_public
         "$<TARGET_FILE:morton_tree>"
         "$<TARGET_FILE:rod_constraints>"
         "$<TARGET_FILE:strand_test>"
+        "$<TARGET_FILE:unit_tests>"
         "${PUBLIC_WASM_DIR}/"
     DEPENDS all_wasm_targets
     COMMENT "Copying all WASM files to public directory"

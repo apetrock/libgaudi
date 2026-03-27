@@ -88,17 +88,19 @@ public:
     index_t cA = -1;
     while (cA < 0) {
       index_t cAi = dis(gen);
-      if (M.next(cAi) > 0) {
+      if (M.next(asawa::shell::corner_id(cAi)) > 0) {
         cA = cAi;
       };
     }
-    vec3 cen_A = asawa::shell::edge_center(M, cA, x);
+    vec3 cen_A =
+        asawa::shell::edge_center(M, asawa::shell::corner_id(cA), x);
 
     index_t cB = -1;
     real max = 0;
     for (int i = 0; i < edge_indices.size(); i++) {
       index_t cBi = edge_indices[i];
-      vec3 cen_B = asawa::shell::edge_center(M, cBi, x);
+      vec3 cen_B =
+          asawa::shell::edge_center(M, asawa::shell::corner_id(cBi), x);
       real d = (cen_B - cen_A).norm();
       if (d > max) {
         max = d;
@@ -106,27 +108,27 @@ public:
       }
     }
 
-    index_t cA0 = cA;
-    index_t cA1 = M.other(cA0);
+    asawa::shell::CornerId cA0 = asawa::shell::corner_id(cA);
+    asawa::shell::CornerId cA1 = M.other(cA0);
 
-    index_t cA0p = M.prev(cA0);
-    index_t cA1p = M.prev(cA1);
-    index_t cA0pp = M.prev(cA0p);
-    index_t cA1pp = M.prev(cA1p);
+    asawa::shell::CornerId cA0p = M.prev(cA0);
+    asawa::shell::CornerId cA1p = M.prev(cA1);
+    asawa::shell::CornerId cA0pp = M.prev(cA0p);
+    asawa::shell::CornerId cA1pp = M.prev(cA1p);
 
-    index_t cB0 = cB;
-    index_t cB1 = M.other(cB0);
+    asawa::shell::CornerId cB0 = asawa::shell::corner_id(cB);
+    asawa::shell::CornerId cB1 = M.other(cB0);
 
-    index_t cB0p = M.prev(cB0);
-    index_t cB1p = M.prev(cB1);
-    index_t cB0pp = M.prev(cB0p);
-    index_t cB1pp = M.prev(cB1p);
+    asawa::shell::CornerId cB0p = M.prev(cB0);
+    asawa::shell::CornerId cB1p = M.prev(cB1);
+    asawa::shell::CornerId cB0pp = M.prev(cB0p);
+    asawa::shell::CornerId cB1pp = M.prev(cB1p);
 
     std::cout << " ====== " << std::endl;
-    std::cout << cA0 << " " << cA1 << " " << cA0p << " " << cA1p << " " << cA0pp
-              << " " << cA1pp << std::endl;
-    std::cout << cB0 << " " << cB1 << " " << cB0p << " " << cB1p << " " << cB0pp
-              << " " << cB1pp << std::endl;
+    std::cout << cA0 << " " << cA1 << " " << cA0p << " "
+              << cA1p << " " << cA0pp << " " << cA1pp              << std::endl;
+    std::cout << cB0 << " " << cB1 << " " << cB0p << " "
+              << cB1p << " " << cB0pp << " " << cB1pp              << std::endl;
     vec3 xA0 = x[M.vert(cA0)];
     vec3 xA1 = x[M.vert(cA1)];
     vec3 xA0p = x[M.vert(cA0p)];

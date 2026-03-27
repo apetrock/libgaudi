@@ -46,7 +46,8 @@ namespace gaudi
 
         D->set_flip_pred([&](asawa::shell::shell &M, const index_t &c0)
                          {
-      index_t c1 = M.other(c0);
+      asawa::shell::CornerId c0i = asawa::shell::corner_id(c0);
+      asawa::shell::CornerId c1 = M.other(c0i);
       return _adjacent.find(c0) == _adjacent.end() &&
              _adjacent.find(c1) == _adjacent.end(); });
 
@@ -262,7 +263,6 @@ namespace gaudi
         std::vector<index_t> edge_map_R = R.get_edge_map();
 
 #if 1
-        std::vector<index_t> edges = M.get_edge_range();
         std::vector<index_t> edge_verts_M = M.get_edge_vert_ids();
         std::vector<index_t> edge_map_M = M.get_edge_map();
 
@@ -314,8 +314,10 @@ namespace gaudi
           vec3 xs = va::mix(d[2], xs0, xs1);
           vec3 dr = xr1 - xr0;
           vec3 dx = xr - xs;
-          vec3 Ns0 = asawa::shell::vert_normal(M, vs0, x1);
-          vec3 Ns1 = asawa::shell::vert_normal(M, vs1, x1);
+          vec3 Ns0 =
+              asawa::shell::vert_normal(M, asawa::shell::vert_id(vs0), x1);
+          vec3 Ns1 =
+              asawa::shell::vert_normal(M, asawa::shell::vert_id(vs1), x1);
 
           vec3 Ns = va::mix(d[2], Ns0, Ns1);
 
@@ -332,7 +334,10 @@ namespace gaudi
             //                           vec4(0.5, 0.5, 1.0, 1.0));
             // gg::geometry_logger::line(xs, xs + 0.1 * g_di * Nri,
             //                          vec4(0.5, 0.5, 1.0, 1.0));
-            _adjacent.insert(M.find_edge_from_verts(vs0, vs1));
+            _adjacent.insert(
+                M.find_edge_from_verts(asawa::shell::vert_id(vs0),
+                                       asawa::shell::vert_id(vs1))
+);
             // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
 
             hepworth::block::edge_edge_weld::ptr constraint =
@@ -361,7 +366,6 @@ namespace gaudi
 
         std::vector<vec3> Nr = get_rod_normals_from_surface(R, M, eps);
         std::vector<vec3> Nr0 = R.N1();
-        std::vector<index_t> edges = M.get_edge_range();
         std::vector<index_t> edge_verts_M = M.get_edge_vert_ids();
         std::vector<index_t> edge_map_M = M.get_edge_map();
 
@@ -379,8 +383,10 @@ namespace gaudi
           index_t vr0 = c[2];
           index_t vr1 = c[3];
 
-          index_t c0 = M.find_edge_from_verts(vs0, vs1);
-          index_t c1 = M.other(c0);
+          asawa::shell::CornerId c0 =
+              M.find_edge_from_verts(asawa::shell::vert_id(vs0),
+                                     asawa::shell::vert_id(vs1));
+          asawa::shell::CornerId c1 = M.other(c0);
           index_t vs00 = M.vert(c0);
           index_t vs10 = M.vert(c1);
           index_t vs01 = M.vert(M.prev(c0));
@@ -479,7 +485,6 @@ namespace gaudi
 
         std::vector<vec3> Nr = get_rod_normals_from_surface(R, M, eps);
         std::vector<vec3> Nr0 = R.N1();
-        std::vector<index_t> edges = M.get_edge_range();
         std::vector<index_t> edge_verts_M = M.get_edge_vert_ids();
         std::vector<index_t> edge_map_M = M.get_edge_map();
 
@@ -497,8 +502,10 @@ namespace gaudi
           index_t vr0 = c[2];
           index_t vr1 = c[3];
 
-          index_t c0 = M.find_edge_from_verts(vs0, vs1);
-          index_t c1 = M.other(c0);
+          asawa::shell::CornerId c0 =
+              M.find_edge_from_verts(asawa::shell::vert_id(vs0),
+                                     asawa::shell::vert_id(vs1));
+          asawa::shell::CornerId c1 = M.other(c0);
           index_t vs00 = M.vert(c0);
           index_t vs10 = M.vert(c1);
           index_t vs01 = M.vert(M.prev(c0));
@@ -636,7 +643,8 @@ namespace gaudi
         std::vector<vec3> xf = asawa::shell::face_centers(*__M, xv);
         std::vector<vec3> Nf = asawa::shell::face_normals(*__M, xv);
         std::vector<vec3> &xr = __R->x();
-        std::vector<index_t> verts_F = M.get_face_range();
+        auto faces_typed = M.get_face_range();
+        std::vector<index_t> verts_F(faces_typed.begin(), faces_typed.end());
 
         real eps = 2.0 * __surf->_Cc;
         std::vector<real> df = get_dist_rod(verts_F, xf, *__R, *__Rd);

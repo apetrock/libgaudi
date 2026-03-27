@@ -148,14 +148,17 @@ public:
     for (int i = 0; i < pov.size(); i++) {
       vec3 pi = pov[i];
 
-      std::stack<int> stack1;
-      stack1.push(0);
+      // Manual stack: avoids std::stack's deque allocations per POV; grows if depth
+      // exceeds initial reserve (e.g. deep trees).
+      std::vector<int> stack1;
+      stack1.reserve(128);
+      stack1.push_back(0);
       vec4 c(0.5, 0.5, 0.1, 1.0);
 
-      while (stack1.size() > 0) {
+      while (!stack1.empty()) {
         total_count++;
-        int j = stack1.top();
-        stack1.pop();
+        int j = stack1.back();
+        stack1.pop_back();
         const Node &pNode = __tree.nodes[j];
         vec3 pj = pNode.center();
 
@@ -193,9 +196,9 @@ public:
         }
 
         else {
-          for (int j = 0; j < pNode.getNumChildren(); j++) {
-            if (pNode.children[j] > -1) {
-              stack1.push(pNode.children[j]);
+          for (int jc = 0; jc < pNode.getNumChildren(); jc++) {
+            if (pNode.children[jc] > -1) {
+              stack1.push_back(pNode.children[jc]);
             }
           }
         }

@@ -647,6 +647,11 @@ namespace gaudi
         }
         return extents_t{min, max};
     }
+    real min_distance_to_aabb(const vec3 &p, const extents_t &aabb) {
+      vec3 clamped = va::max(aabb[0], va::min(p, aabb[1]));
+      return (p - clamped).norm();
+    }
+
   } // namespace ext
 } // namespace gaudi
 #endif

@@ -16,7 +16,6 @@
 #include <stdio.h>
 #include <type_traits>
 #include <vector>
-#include <zlib.h>
 
 #include "gaudi/common.h"
 

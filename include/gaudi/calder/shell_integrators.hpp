@@ -65,8 +65,8 @@ namespace gaudi
       std::vector<vec3> &x = asawa::get_vec_data(M, 0);
       std::vector<index_t> face_vert_ids = M.get_face_vert_ids();
       std::vector<index_t> face_map = M.get_face_map();
-      std::vector<index_t> face_ids = M.get_face_range();
-      // std::cout << __PRETTY_FUNCTION__ << std::endl;
+      auto face_ids_typed = M.get_face_range();
+      std::vector<index_t> face_ids(face_ids_typed.begin(), face_ids_typed.end());
       std::cout << "summing" << std::endl;
       std::cout << " -n_faces: " << face_ids.size() << std::endl;
       std::cout << " -create: " << std::endl;

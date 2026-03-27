@@ -96,6 +96,51 @@ inline real test_tri_tri(const P0 &p0, const P1 &p1) {
   return std::numeric_limits<real>::max();
 }
 
+// ============================================================================
+// Tuple-based test functions for SimplexView types
+// These operate on std::array<vec3, N> directly
+// ============================================================================
+
+// Point-to-point distance (tuple version)
+inline real test_point_point_tuple(const std::array<vec3, 1> &p0,
+                                   const std::array<vec3, 1> &p1) {
+  return (p0[0] - p1[0]).norm();
+}
+
+// Point-to-line distance (tuple version)
+inline real test_point_line_tuple(const std::array<vec3, 1> &pA,
+                                  const std::array<vec3, 2> &pB) {
+  return va::distance_from_line(pB[0], pB[1], pA[0]);
+}
+
+// Point-to-triangle distance (tuple version)
+inline real test_point_tri_tuple(const std::array<vec3, 1> &pA,
+                                 const std::array<vec3, 3> &pB) {
+  auto result = va::closest_point(pB, pA[0]);
+  return result[0]; // distance is first element
+}
+
+// Line-to-line distance (tuple version)
+inline real test_line_line_tuple(const std::array<vec3, 2> &pA,
+                                 const std::array<vec3, 2> &pB) {
+  std::array<real, 3> d = va::distance_Segment_Segment(pA[0], pA[1], pB[0], pB[1]);
+  return d[0];
+}
+
+// Line-to-triangle distance (tuple version, placeholder)
+inline real test_line_tri_tuple(const std::array<vec3, 2> &p0,
+                                const std::array<vec3, 3> &p1) {
+  // TODO: Implement using ray-triangle intersection or edge-edge tests
+  return std::numeric_limits<real>::max();
+}
+
+// Triangle-to-triangle distance (tuple version, placeholder)
+inline real test_tri_tri_tuple(const std::array<vec3, 3> &p0,
+                               const std::array<vec3, 3> &p1) {
+  // TODO: Implement using separating axis theorem or GJK
+  return std::numeric_limits<real>::max();
+}
+
 } // namespace arp
 } // namespace gaudi
 

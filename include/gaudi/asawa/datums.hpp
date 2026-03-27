@@ -1,6 +1,5 @@
 #include <cassert>
 #include <cstddef>
-#include <cxxabi.h>
 
 #include <iostream>
 #include <memory.h>
@@ -122,35 +121,41 @@ public:
                          const index_t &i0, const index_t &i1,
                          const index_t &i2, const index_t &i3, //
                          const real &s, const index_t &source_corner) {
-    index_t c0 = source_corner;
-    index_t c1 = M.other(c0);
+    shell::CornerId c0 = shell::corner_id(source_corner);
+    shell::CornerId c1 = M.other(c0);
     if (__type == VERTEX) {
       index_t v0 = M.vert(c0);
       index_t v1 = M.vert(c1);
       this->__data[i0] = va::mix(s, this->__data[v0], this->__data[v1]);
     } else if (__type == EDGE) {
-      index_t f0 = M.face(c0);
-      index_t f1 = M.face(c1);
+      shell::FaceId f0 = M.face(c0);
+      shell::FaceId f1 = M.face(c1);
+      (void)f0;
+      (void)f1;
       /*not implemented*/
     } else if (__type == FACE) {
       index_t e0 = c0 / 2;
+      (void)e0;
       /*not implemented*/
     }
   };
 
   virtual void collapse(const shell::shell &M, const index_t &i) {
-    index_t c0 = i;
-    index_t c1 = M.other(c0);
+    shell::CornerId c0 = shell::corner_id(i);
+    shell::CornerId c1 = M.other(c0);
     if (__type == VERTEX) {
       index_t v0 = M.vert(c0);
       index_t v1 = M.vert(c1);
       this->__data[v0] = va::mix(0.5, this->__data[v0], this->__data[v1]);
     } else if (__type == EDGE) {
-      index_t f0 = M.face(c0);
-      index_t f1 = M.face(c1);
+      shell::FaceId f0 = M.face(c0);
+      shell::FaceId f1 = M.face(c1);
+      (void)f0;
+      (void)f1;
       /*not implemented*/
     } else if (__type == FACE) {
       index_t e0 = c0 / 2;
+      (void)e0;
       /*not implemented*/
     }
   };

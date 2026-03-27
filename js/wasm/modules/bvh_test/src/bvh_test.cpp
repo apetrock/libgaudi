@@ -6,6 +6,8 @@
 #include "gaudi/console_logger.hpp"
 #include "gaudi/geometry_logger.hpp"
 #include "gaudi/geometry_types.hpp"
+#include "gaudi/test/bvh_tests.hpp"
+#include "gaudi/test/test.hpp"
 #include "gaudi/vec_addendum.h"
 #include <emscripten/bind.h>
 #include <random>
@@ -33,6 +35,8 @@ private:
   index_t last_bvh_result_ = -1;
   index_t last_brute_result_ = -1;
   bool last_test_passed_ = false;
+  int last_suite_total_ = 0;
+  int last_suite_failed_ = 0;
 
   // Helper to extract unique edges from faces
   void extractEdges() {
@@ -305,6 +309,24 @@ public:
 
   void clearVisualization() { geometry_logger::clear(); }
 
+  // Test harness helpers
+  void setSphereObjData(const std::string &objContent) {
+    gaudi::test::assets::set_sphere_obj_data(objContent);
+  }
+
+  bool runAllTests() {
+    auto result = gaudi::test::Registry::run_all();
+    last_suite_total_ = result.total;
+    last_suite_failed_ = result.failed;
+    last_test_passed_ = (result.failed == 0);
+    console_logger::info << "TEST SUMMARY: total=" << result.total
+                         << " failed=" << result.failed << std::endl;
+    return last_test_passed_;
+  }
+
+  int getLastSuiteTotal() const { return last_suite_total_; }
+  int getLastSuiteFailed() const { return last_suite_failed_; }
+
   // Logger API for GaudiLoggerRenderer compatibility
   int get_line_count() const {
     return static_cast<int>(geometry_logger::get_lines().size() / 2);
@@ -370,6 +392,10 @@ EMSCRIPTEN_BINDINGS(bvh_test) {
       .function("getLastBvhResult", &BvhTest::getLastBvhResult)
       .function("getLastBruteResult", &BvhTest::getLastBruteResult)
       .function("getLastTestPassed", &BvhTest::getLastTestPassed)
+      .function("setSphereObjData", &BvhTest::setSphereObjData)
+      .function("runAllTests", &BvhTest::runAllTests)
+      .function("getLastSuiteTotal", &BvhTest::getLastSuiteTotal)
+      .function("getLastSuiteFailed", &BvhTest::getLastSuiteFailed)
       .function("visualizeResults", &BvhTest::visualizeResults)
       .function("clearVisualization", &BvhTest::clearVisualization)
       .function("get_line_count", &BvhTest::get_line_count)

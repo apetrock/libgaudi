@@ -32,8 +32,8 @@ public:
                          const index_t &i0, const index_t &i1,
                          const index_t &i2, const index_t &i3, //
                          const real &s, const index_t &source_corner) {
-    index_t c0 = source_corner;
-    index_t c1 = M.other(c0);
+    asawa::shell::CornerId c0 = asawa::shell::corner_id(source_corner);
+    asawa::shell::CornerId c1 = M.other(c0);
     if (__type != asawa::EDGE)
       return;
     // std::cout << this->__data.size() << std::endl;
@@ -48,10 +48,11 @@ public:
     if (__type != asawa::EDGE)
       return;
     const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
-    index_t c1 = M.other(c0);
-    index_t c0p = M.prev(c0);
-    index_t c1p = M.prev(c1);
-    vec3 e0 = x[M.vert(c1)] - x[M.vert(c0)];
+    asawa::shell::CornerId c0i = asawa::shell::corner_id(c0);
+    asawa::shell::CornerId c1 = M.other(c0i);
+    asawa::shell::CornerId c0p = M.prev(c0i);
+    asawa::shell::CornerId c1p = M.prev(c1);
+    vec3 e0 = x[M.vert(c1)] - x[M.vert(c0i)];
     vec3 e1 = x[M.vert(c1p)] - x[M.vert(c0p)];
 
     real val = this->__data[c0 / 2];
@@ -96,7 +97,7 @@ public:
 
     for (auto f : face_range) {
       vec3 N = Nf[f];
-      real A = asawa::shell::face_area(M, f, x);
+      real A = asawa::shell::face_area(M, asawa::shell::face_id(f), x);
       vec3 w = alpha * A * N.cross(gravity);
 #if 0
       vec3 xi = asawa::shell::face_center(M, f, x);
@@ -117,22 +118,22 @@ public:
     std::vector<real> g(M.corner_count() / 2, 0.0);
 
     for (auto c0 : edge_range) {
-      // std::cout << c0 << std::endl;
-      index_t c1 = M.other(c0);
-      index_t c0p = M.prev(c0);
-      index_t c1p = M.prev(c1);
+      asawa::shell::CornerId c0i = asawa::shell::corner_id(c0);
+      asawa::shell::CornerId c1 = M.other(c0i);
+      asawa::shell::CornerId c0p = M.prev(c0i);
+      asawa::shell::CornerId c1p = M.prev(c1);
 
-      index_t c0n = M.next(c0);
-      index_t c1n = M.next(c1);
+      asawa::shell::CornerId c0n = M.next(c0i);
+      asawa::shell::CornerId c1n = M.next(c1);
 
-      index_t f0 = M.face(c0);
-      index_t f1 = M.face(c1);
+      asawa::shell::FaceId f0 = M.face(c0i);
+      asawa::shell::FaceId f1 = M.face(c1);
       index_t i_e = c0 / 2;
       mat6 E = mat6::Zero();
       vec6 wi = vec6::Zero();
       wi.segment(0, 3) = dw[f0];
       wi.segment(3, 3) = dw[f1];
-      vec3 e0 = asawa::shell::g_edge_tangent(M, c0, x);
+      vec3 e0 = asawa::shell::g_edge_tangent(M, c0i, x);
       vec3 e1 = asawa::shell::g_edge_tangent(M, c1, x);
       vec3 e0p = asawa::shell::g_edge_tangent(M, c0p, x);
       vec3 e1p = asawa::shell::g_edge_tangent(M, c1p, x);
@@ -183,9 +184,10 @@ public:
     std::vector<vec3> &x = asawa::get_vec_data(M, 0);
     std::vector<real> g(M.corner_count() / 2, 0.0);
     for (auto f : face_range) {
-      index_t c0 = M.fbegin(f);
-      index_t c0n = M.next(c0);
-      index_t c0p = M.prev(c0);
+      asawa::shell::FaceId fid = asawa::shell::face_id(f);
+      asawa::shell::CornerId c0 = M.fbegin(fid);
+      asawa::shell::CornerId c0n = M.next(c0);
+      asawa::shell::CornerId c0p = M.prev(c0);
       vec3 w = dw[f];
       vec4 w4(w[0], w[1], w[2], 0.0);
       mat4 E = mat4::Zero();

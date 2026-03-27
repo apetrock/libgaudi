@@ -89,24 +89,22 @@ vec3 align_walk(const vec3 x0, const vec3 &d0, const vec3 &N0, real li,
   return dir;
 }
 
-vec3 rotate_walk(const shell::shell &M, const index_t &ci, const vec3 &d0,
+vec3 rotate_walk(const shell::shell &M, shell::CornerId ci, const vec3 &d0,
                  const vec3 &N0, real li, vec2 C) {
-  // dumb little test to see if I can align the walk to neighboring lines...
-  // we'll do this N^2 for fun
-
   const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
   real a = asawa::shell::angle(M, ci, x);
   return Eigen::AngleAxis<real>(C[0] * cos(C[1] * a) * li * M_PI, N0) * d0;
 }
 
 std::vector<vec3> walk(const shell::shell &M, const real &thet = 0.0,
-                       const index_t i0 = 0, const index_t &N_steps = 4000,
+                       shell::CornerId c0 = shell::corner_id(0),
+                       const index_t &N_steps = 4000,
                        real eps = 1.0e-8) {
   const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
   const std::vector<vec3> &v = asawa::const_get_vec_data(M, 1);
 
-  vec3 N = asawa::shell::edge_normal(M, i0, x);
-  vec3 T = asawa::shell::edge_tangent(M, i0, x).normalized();
+  vec3 N = asawa::shell::edge_normal(M, c0, x);
+  vec3 T = asawa::shell::edge_tangent(M, c0, x).normalized();
   vec3 B = N.cross(T).normalized();
 
   vec3 dir = std::cos(thet) * T + std::sin(thet) * B;
@@ -116,16 +114,16 @@ std::vector<vec3> walk(const shell::shell &M, const real &thet = 0.0,
   std::vector<vec3> normals;
   real l = 0.0;
 
-  asawa::shell::walk(M, x, i0, dir, 0.5, N_steps, eps,
+  asawa::shell::walk(M, x, c0, dir, 0.5, N_steps, eps,
                      [&](const asawa::shell::shell &M,
-                         const std::vector<vec3> &x, const index_t &corner,
+                         const std::vector<vec3> &x,
+                         const asawa::shell::CornerId &ci,
                          const real &s, const real &accumulated_length,
                          vec3 &dir) {
-                       asawa::shell::index_t ci = corner;
                        S.push_back(s);
-                       corners.push_back(corner);
+                       corners.push_back(ci);
                        vec3 pt = asawa::shell::edge_vert(M, ci, s, x);
-                       vec3 Ni = asawa::shell::edge_normal(M, corner, x);
+                       vec3 Ni = asawa::shell::edge_normal(M, ci, x);
                        real li = 0.0;
                        if (points.size() > 0)
                          li = (pt - points.back()).norm();
@@ -138,7 +136,7 @@ std::vector<vec3> walk(const shell::shell &M, const real &thet = 0.0,
 }
 
 std::vector<vec3> silly_walk(const shell::shell &M, const real &thet = 0.0,
-                             const index_t i0 = 0,
+                             shell::CornerId c0 = shell::corner_id(0),
                              const index_t &N_steps = 4000,               //
                              bool rotate = false, vec2 cr = vec2::Zero(), //
                              bool align = false, vec4 ca = vec4::Zero(),  //
@@ -146,8 +144,8 @@ std::vector<vec3> silly_walk(const shell::shell &M, const real &thet = 0.0,
   const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
   const std::vector<vec3> &v = asawa::const_get_vec_data(M, 1);
 
-  vec3 N = asawa::shell::edge_normal(M, i0, x);
-  vec3 T = asawa::shell::edge_tangent(M, i0, x).normalized();
+  vec3 N = asawa::shell::edge_normal(M, c0, x);
+  vec3 T = asawa::shell::edge_tangent(M, c0, x).normalized();
   vec3 B = N.cross(T).normalized();
 
   vec3 dir = std::cos(thet) * T + std::sin(thet) * B;
@@ -158,20 +156,19 @@ std::vector<vec3> silly_walk(const shell::shell &M, const real &thet = 0.0,
   real l = 0.0;
 
   asawa::shell::walk(
-      M, x, i0, dir, 0.5, N_steps, 1e-8,
+      M, x, c0, dir, 0.5, N_steps, 1e-8,
       [&](const asawa::shell::shell &M, const std::vector<vec3> &x,
-          const index_t &corner, const real &s, const real &accumulated_length,
-          vec3 &dir) {
-        asawa::shell::index_t ci = corner;
+          const asawa::shell::CornerId &ci, const real &s,
+          const real &accumulated_length, vec3 &dir) {
         S.push_back(s);
-        corners.push_back(corner);
+        corners.push_back(ci);
         vec3 pt = asawa::shell::edge_vert(M, ci, s, x);
-        vec3 Ni = asawa::shell::edge_normal(M, corner, x);
+        vec3 Ni = asawa::shell::edge_normal(M, ci, x);
         real li = 0.0;
         if (points.size() > 0)
           li = (pt - points.back()).norm();
         if (rotate)
-          dir = rotate_walk(M, corner, dir, Ni, li, cr);
+          dir = rotate_walk(M, ci, dir, Ni, li, cr);
         if (align)
           dir = align_walk(pt, dir, Ni, li, points, normals, eps, ca);
 

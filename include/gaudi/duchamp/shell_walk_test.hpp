@@ -114,9 +114,9 @@ public:
     __surf->step(false);
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     std::vector<vec3> &v = asawa::get_vec_data(*__M, 1);
-    index_t test = 1000;
+    asawa::shell::CornerId test = asawa::shell::corner_id(1000);
     while (__M->next(test) < 0)
-      test++;
+      test = asawa::shell::corner_id(test + 1);
     vec3 N = asawa::shell::edge_normal(*__M, test, x);
     vec3 T = asawa::shell::edge_tangent(*__M, test, x).normalized();
     vec3 B = N.cross(T).normalized();
@@ -128,10 +128,11 @@ public:
     vec3 N0 = asawa::shell::edge_normal(*__M, test, x);
     asawa::shell::walk(*__M, x, test, dir, 0.5, 5000, 1e-2,
                        [&](const asawa::shell::shell &M,
-                           const std::vector<vec3> &x, const index_t &corner,
+                           const std::vector<vec3> &x,
+                           const asawa::shell::CornerId &corner,
                            const real &s, const real &accumulated_length,
                            vec3 &dir) {
-                         asawa::shell::index_t ci = corner;
+                         asawa::shell::CornerId ci = corner;
                          real si = s;
                          vec3 xi = asawa::shell::edge_vert(M, ci, si, x);
                          real d = (xi - x0).norm();

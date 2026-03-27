@@ -25,7 +25,7 @@ private:
   vec3 near_test_point;
   std::vector<vec3> test_points;
   std::array<vec3, 1> test_point; // Add missing test_point variable
-  std::vector<uint32_t> hashes;
+  std::vector<arp::morton_t> hashes;
   std::vector<index_t> indices;
   std::vector<index_t> adjacency;
   std::vector<gaudi::arp::radix_tree_node> internal_nodes;
@@ -157,20 +157,22 @@ private:
     console_logger::debug << "adjacency: " << adjacency.size() << std::endl;
     console_logger::debug << "indices: " << indices.size() << std::endl;
     console_logger::debug << "building permuted points" << std::endl;
-    //auto p_test_points = permuted(test_points, permuted(adjacency, spread<2, decltype(indices)>(indices)));
-    auto p_test_points = permuted_adjacency_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
+    
+    // Use new permuted_simplex_view (returns tuples)
+    auto p_test_points = permuted_simplex_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
 
-    auto masses = arp::calc_com<2>(p_test_points);
+    // Use type-based calc_com (no need for <2> template parameter)
+    auto masses = arp::calc_com(p_test_points);
     
     for (size_t i = 0; i < masses.size(); i++) {
       const vec3 &p0 = std::get<1>(masses[i]);
       geometry_logger::point(p0, vec4(1.0, 0.1f, 0.1f, 1.0));
     }
 
-    for (size_t i = 0; i < p_test_points.size(); i += 2) {
-      const vec3 &p0 = p_test_points[i + 0];
-      const vec3 &p1 = p_test_points[i + 1];
-      geometry_logger::line(p0, p1, vec4(0.1, 1.0f, 0.1f, 1.0));
+    // Iterate over simplices (tuples) instead of flat data
+    for (size_t i = 0; i < p_test_points.size(); i++) {
+      auto edge = p_test_points[i];
+      geometry_logger::line(edge[0], edge[1], vec4(0.1, 1.0f, 0.1f, 1.0));
     }
   }
 
@@ -181,8 +183,12 @@ private:
     // Draw lines connecting points in Morton-sorted order
     console_logger::debug << "draw_sorted_order_lines: test_points.size(): " << test_points.size() << std::endl;
     console_logger::debug << "draw_sorted_order_lines: indices.size(): " << indices.size() << std::endl;
-    auto p_test_points = permuted_adjacency_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
-    auto coms = arp::calc_com<2>(p_test_points);
+    
+    // Use new permuted_simplex_view (returns tuples)
+    auto p_test_points = permuted_simplex_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
+    
+    // Use type-based calc_com
+    auto coms = arp::calc_com(p_test_points);
     for(size_t i = 0; i < coms.size() - 1; i++) {
       const vec3 &p0 = std::get<1>(coms[i]);
       const vec3 &p1 = std::get<1>(coms[i+1]);
@@ -222,16 +228,16 @@ public:
   }
 
   // Get binary representation for debugging
-  std::string get_binary_string(uint32_t hash) {
-    return arp::dump_binary(hash);
+  std::string get_binary_string(uint64_t hash) {
+    return arp::dump_binary(arp::morton_t::from_uint64(hash));
   }
 
   // Test hash generation for current points
   int get_hash_count() const { return static_cast<int>(hashes.size()); }
 
-  uint32_t get_hash(int index) const {
+  uint64_t get_hash(int index) const {
     if (index >= 0 && index < static_cast<int>(hashes.size())) {
-      return hashes[index];
+      return hashes[index].to_uint64();
     }
     return 0;
   }
@@ -499,8 +505,9 @@ public:
   void log_hierarchy() {
     try {
       geometry_logger::clear();
-      auto p_test_points = permuted_adjacency_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
-      arp::log_hierarchy<2>(p_test_points, internal_nodes, leaf_nodes);
+      // Use permuted_simplex_view (returns tuples)
+      auto p_test_points = permuted_simplex_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
+      arp::log_hierarchy(p_test_points, internal_nodes, leaf_nodes);
     } catch (const std::exception &e) {
       printf("log_hierarchy: Exception caught: %s\n", e.what());
       throw; // Re-throw to get stack trace in JS
@@ -531,8 +538,9 @@ public:
              leaf_nodes.size());
 
       geometry_logger::clear();
-      auto p_test_points = permuted_adjacency_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
-      arp::log_bvh<2>(p_test_points, internal_nodes, leaf_nodes);
+      // Use permuted_simplex_view (returns tuples)
+      auto p_test_points = permuted_simplex_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
+      arp::log_bvh(p_test_points, internal_nodes, leaf_nodes);
       printf("log_bvh: Successfully logged BVH\n");
     } catch (const std::exception &e) {
       printf("log_bvh: Exception caught: %s\n", e.what());
@@ -564,21 +572,21 @@ public:
       
       // Log the test point
       geometry_logger::point(near_test_point, vec4(1.0, 1.0, 0.0, 1.0)); // Yellow test point
-      const auto p_test_points = permuted_adjacency_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
+      
+      // Use permuted_simplex_view (returns tuples)
+      auto p_test_points = permuted_simplex_view<2, decltype(test_points), decltype(adjacency)>(test_points, adjacency, indices);
       
       using TTYPE = decltype(p_test_points);
-      using PTYPE = decltype(test_point);
 
-      const auto bvh_result =
-          arp::make_bvh<2, TTYPE>(p_test_points, internal_nodes, leaf_nodes);
+      const auto bvh_result = arp::make_bvh(p_test_points, internal_nodes, leaf_nodes);
       
-      auto result = arp::getNearest<2, PTYPE, TTYPE>(
-          test_point, p_test_points, internal_nodes, leaf_nodes,
+      // Query as std::array<vec3, 1>
+      std::array<vec3, 1> query_arr = {near_test_point};
+      
+      auto result = arp::getNearest<Singulus<1>, TTYPE>(
+          query_arr, p_test_points, internal_nodes, leaf_nodes,
           bvh_result, 10000.0,
-          [](
-            const PTYPE &t_verts, 
-            const slice<2, TTYPE> &s_verts) {
-            
+          [](const auto &t_verts, const auto &s_verts) {
             const vec3 &xA = t_verts[0];
             const vec3 &xB0 = s_verts[0];
             const vec3 &xB1 = s_verts[1];
@@ -588,15 +596,19 @@ public:
       
       printf("log_nearest: Result: %zu\n", result.size());
       
-      // Draw lines to the nearest leaf nodes
-      auto masses = arp::calc_com<2>(p_test_points);
-      for (size_t i = 0; i < result.size(); i++) {
-        int leaf_id = result[i];
-        if (leaf_id >= 0 && leaf_id < static_cast<int>(masses.size())) {
-          const vec3 &leaf_point = std::get<1>(masses[leaf_id]);
-          //const vec3 & leaf_point = test_points[leaf_id];
-          geometry_logger::line(near_test_point, leaf_point, vec4(1.0, 0.0, 1.0, 0.8f)); // Magenta lines
-        }
+      // Draw line to closest point on the nearest segment
+      const index_t nearest_id = result.empty() ? -1 : result.back();
+      if (nearest_id >= 0 &&
+          nearest_id < static_cast<index_t>(p_test_points.size())) {
+        // Get simplex from the permuted view
+        const auto nearest_simplex = p_test_points[nearest_id];
+        const vec3 &xB0 = nearest_simplex[0];
+        const vec3 &xB1 = nearest_simplex[1];
+        const vec3 closest_point =
+            va::project_on_line(xB0, xB1, near_test_point);
+        geometry_logger::point(closest_point, vec4(1.0, 0.0, 1.0, 1.0));
+        geometry_logger::line(near_test_point, closest_point,
+                              vec4(1.0, 0.0, 1.0, 0.8f));
       }
       /*
       for(size_t i = 0; i < test_points.size(); i++){

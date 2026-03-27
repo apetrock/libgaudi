@@ -135,13 +135,9 @@ void main(){
       R"(
   #version 330 core
   layout(location = 0) in vec3 aPos;
-  layout(location = 1) in vec2 aTexCoords;
-  layout(location = 2) in vec3 aNormal;
   layout(location = 3) in vec3 aColor;
 
   out vec3 FragPos;
-  out vec2 TexCoords;
-  out vec3 Normal;
   out vec3 Color;
   
   uniform mat4 P;
@@ -150,16 +146,9 @@ void main(){
 
   void main()
   {   
-      mat4 MVP = P * V * M;
-
       vec4 worldPos = V * M * vec4(aPos, 1.0);
       FragPos = worldPos.xyz; 
-      TexCoords = aTexCoords;
-      
-      mat3 normalMatrix = transpose(inverse(mat3(M)));
-      Normal = normalMatrix * aNormal;
       Color = aColor;
-      //gl_Position =  MVP * vec4(aPos,1);
       gl_Position = P * worldPos;
   }
 )";
@@ -171,27 +160,14 @@ void main(){
   layout (location = 1) out vec3 gNormal;
   layout (location = 2) out vec4 gAlbedoSpec;
 
-  in vec2 TexCoords;
   in vec3 FragPos;
-  in vec3 Normal;
   in vec3 Color;
-  
-  uniform sampler2D texture_diffuse1;
-  uniform sampler2D texture_specular1;
 
   void main()
   {    
-      // store the fragment position vector in the first gbuffer texture
       gPosition = FragPos;
-      // also store the per-fragment normals into the gbuffer
-      gNormal = normalize(Normal);
       gNormal = normalize(cross(dFdx(FragPos), dFdy(FragPos)));
-	
-      // and the diffuse per-fragment color
-      gAlbedoSpec.rgb = texture(texture_diffuse1, TexCoords).rgb;
-      // store specular intensity in gAlbedoSpec's alpha component
-      gAlbedoSpec.a = texture(texture_specular1, TexCoords).r;
-      gAlbedoSpec = vec4(Color,1.0);
+      gAlbedoSpec = vec4(Color, 1.0);
   }
 )";
 
@@ -205,7 +181,7 @@ out vec2 TexCoords;
 
 void main()
 {
-    TexCoords = aPos.xy * 0.5 - 0.5;
+    TexCoords = aPos.xy * 0.5 + 0.5;
     gl_Position = vec4(aPos, 1.0);
 }
 )";
@@ -257,60 +233,35 @@ uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedoSpec;
 uniform sampler2D ssao;
-uniform sampler2D bleed;
-
-uniform vec3 viewPos;
 
 void main()
 {             
-    // retrieve data from gbuffer
-
     vec3 FragPos = texture(gPosition, TexCoords).rgb;
     vec3 Normal = texture(gNormal, TexCoords).rgb;
     vec3 Diffuse = texture(gAlbedoSpec, TexCoords).rgb;
     float AmbientOcclusion = texture(ssao, TexCoords).r;
-    vec3 Bleed = texture(bleed, TexCoords).rgb;
-    
-    //fFragColor = vec4(Normal, 1.0);
-    //FragColor = vec4(vec3(AmbientOcclusion), 1.0);
-    //FragColor = vec4(Bleed, 1.0);
-    //return;
-    
+
     float Specular = 0.5;
-    // then calculate lighting as usual
 
-    vec3 ambient  =  Diffuse; // hard-coded ambient component
-    vec3 lighting  = vec3(0.0); // hard-coded ambient component
-    //FragColor = vec4(lighting, 1.0);
-    //return;
+    vec3 ambient = Diffuse;
+    vec3 lighting = vec3(0.0);
 
-    vec3 viewDir  = normalize(viewPos - FragPos);
-    //for(int i = 0; i < NR_LIGHTS; ++i)
-    for(int i = 0; i < 1; ++i)
-    
+    // FragPos is in view space, so eye is at origin
+    vec3 viewDir = normalize(-FragPos);
+
     {
-        // diffuse
-        //vec3 lpos = lights[i].Position;
-        //float llin = lights[i].Linear;
-        //float lcol = lights[i].Color;
-        
         vec3 lcol = 5.0 * vec3(1.0, 1.0, 1.0);
-        vec3 lpos = vec3(1.0, 1.0, 1.0);
-        lpos = normalize(lpos);
+        vec3 lpos = normalize(vec3(1.0, 1.0, 1.0));
         float llin = 0.05;
         float lquad = 0.8;
 
         vec3 lightDir = normalize(lpos - FragPos);
-
-
         vec3 diffuse = max(dot(Normal, lightDir), 0.0) * Diffuse * lcol;
-        // specular
+
         vec3 halfwayDir = normalize(lightDir + viewDir);  
         float spec = pow(max(dot(Normal, halfwayDir), 0.0), 16.0);
-
         vec3 specular = lcol * spec * Specular;
-        
-        // attenuation
+
         float distance = length(lpos - FragPos);
         float attenuation = 1.0 / (1.0 + llin * distance + lquad * distance * distance);
         diffuse *= attenuation;
@@ -318,11 +269,7 @@ void main()
         lighting += diffuse + specular;
     }
 
-
-    vec2 tc = 1.0 + TexCoords;
-    //FragColor = vec4(0.1 *lighting + 5.0 * Bleed, 1.0);
-    FragColor = vec4((1.0 * lighting  + 16.0 * Bleed )* AmbientOcclusion + 0.1 * ambient, 1.0);
-    
+    FragColor = vec4(lighting * AmbientOcclusion + 0.1 * ambient, 1.0);
 }
 )";
 
@@ -704,27 +651,20 @@ void main()
   std::string dbg_point_vert =
       R"(
         #version 330 core
-        layout(location = 0) in vec3 vertexPosition_modelspace;
-        layout(location = 1) in vec2 vertexUV;
-        layout(location = 3) in vec3 vertexColor_modelspace;
-        out vec2 UV;
+        layout(location = 0) in vec3 aPos;
+        layout(location = 3) in vec3 aColor;
         out vec3 Color_cameraspace;
         uniform mat4 MVP;
 
         void main() {
-
-            Color_cameraspace = vertexColor_modelspace;
-            UV = vertexUV;
-            gl_Position = MVP * vec4(vertexPosition_modelspace, 1.0);
+            Color_cameraspace = aColor;
+            gl_Position = MVP * vec4(aPos, 1.0);
         }
 )";
 
   std::string dbg_point_frag =
       R"(
-        /* Fragment shader */
-        #version 330
-        in vec2 UV;
-        in vec3 Position_worldspace;
+        #version 330 core
         in vec3 Color_cameraspace;
 
         out vec4 color;
@@ -764,8 +704,7 @@ void main()
   std::string dbg_line_geo =
       R"(
 /* geometry shader */
-#version 460 core
-#extension ARB_geometry_shader4 : enable
+#version 330 core
 layout (lines) in;
 layout (triangle_strip, max_vertices = 64) out;
 

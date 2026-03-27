@@ -58,7 +58,8 @@ export const BvhTest = () => {
         throw new Error(`Failed to fetch sphere.obj: ${response.status}`);
       }
       const objContent = await response.text();
-      
+      instance.setSphereObjData(objContent);
+
       const success = instance.loadMeshFromString(objContent);
       if (success) {
         setMeshLoaded(true);
@@ -140,6 +141,19 @@ export const BvhTest = () => {
     runEdgeToEdgeTest();
     runPointToTriTest();
     addResult('--- All tests complete ---');
+  };
+
+  const runTestSuite = () => {
+    if (!instance) return;
+
+    try {
+      const passed = instance.runAllTests();
+      const total = instance.getLastSuiteTotal();
+      const failed = instance.getLastSuiteFailed();
+      addResult(`Test Suite: total=${total}, failed=${failed}, ${passed ? '✓ PASSED' : '✗ FAILED'}`);
+    } catch (err) {
+      addResult(`Test Suite failed: ${err}`);
+    }
   };
 
   const clearVisualization = () => {
@@ -232,7 +246,7 @@ export const BvhTest = () => {
                     className="border rounded px-2 py-1 w-24 text-black bg-white"
                   />
                 </div>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                   <button
                     onClick={runPointToEdgeTest}
                     className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
@@ -256,6 +270,12 @@ export const BvhTest = () => {
                     className="bg-orange-500 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded"
                   >
                     Run All Tests
+                  </button>
+                  <button
+                    onClick={runTestSuite}
+                    className="bg-emerald-500 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded"
+                  >
+                    Run Test Suite
                   </button>
                 </div>
               </div>
@@ -346,4 +366,5 @@ export const BvhTest = () => {
     </div>
   );
 };
+
 

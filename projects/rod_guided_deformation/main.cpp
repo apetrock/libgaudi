@@ -6,17 +6,13 @@
 #include <iterator>
 #include <vector>
 #if defined(WIN32)
-#include <windows.h>
+#ifndef NOMINMAX
+#define NOMINMAX
 #endif
-
-#include <stdio.h> /* defines FILENAME_MAX */
-// #define WINDOWS  /* uncomment this line to use it for windows.*/
-#ifdef WINDOWS
-#include <direct.h>
-#define GetCurrentDir _getcwd
-#else
-#include <unistd.h>
-#define GetCurrentDir getcwd
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
 #endif
 
 #include <complex>
@@ -30,7 +26,6 @@
 #include "GaudiGraphics/viewer.hpp"
 // #include "gaudi/asawa/asawa.h"
 
-#include "gaudi/duchamp/rod_guided_deformation.hpp"
 #include "gaudi/duchamp/rod_guided_deformation_with_morph.hpp"
 
 #define TRACKBALLSIZE (0.8f)
@@ -122,9 +117,11 @@ public:
   }
 
   void initScene() {
+    std::cerr << "[rod_guided] Scene::initScene start" << std::endl;
     //_experiment = duchamp::mean_shift_experiment<growth>::create();
 
     _objs.resize(2);
+    std::cerr << "[rod_guided] allocating buffers" << std::endl;
 
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
 
@@ -135,8 +132,10 @@ public:
     _objs[1] = gg::BufferObject::create();
     _objs[1]->init();
     mSceneObjects.push_back(_objs[1]);
+    std::cerr << "[rod_guided] buffers initialized" << std::endl;
 
     __surf = gaudi::duchamp::rod_guided_deformation_with_morph::create();
+    std::cerr << "[rod_guided] surface created" << std::endl;
 
     for (int i = 0; i < 12; i++) {
       std::array<Vec3d, 2> colors = get_rand_colors();
@@ -152,6 +151,9 @@ public:
     };
   }
   virtual void onAnimate(int frame) {
+    if (frame < 3 || frame % 60 == 0) {
+      std::cerr << "[rod_guided] onAnimate frame " << frame << std::endl;
+    }
     
     __surf->step(frame);
     std::array<Vec3d, 2> colors_array = __surf->get_colors(frame);
@@ -191,13 +193,6 @@ private:
   vector<gg::colorRGB> colors;
 };
 
-std::string GetCurrentWorkingDir(void) {
-  char buff[FILENAME_MAX];
-  GetCurrentDir(buff, FILENAME_MAX);
-  std::string current_working_dir(buff);
-  return current_working_dir;
-}
-
 class App;
 using AppPtr = std::shared_ptr<App>;
 
@@ -210,10 +205,13 @@ public:
   typedef double Real;
 
   App(int width, int height, std::string file)
-      : gg::SimpleApp(width, height, 2.0, true, "florp_drive_") {
+      : gg::SimpleApp(width, height, 2.0, false, "florp_drive_") {
+    std::cerr << "[rod_guided] App ctor after SimpleApp" << std::endl;
     this->setScene(scene = Scene::create());
+    std::cerr << "[rod_guided] scene attached" << std::endl;
     this->set_rotate_ball(false);
     this->initUI();
+    std::cerr << "[rod_guided] UI initialized" << std::endl;
   }
 
   void initUI() {
@@ -230,22 +228,32 @@ public:
 
 int main(int argc, char *argv[]) {
   try {
+    std::cerr << "[rod_guided] main start" << std::endl;
     cout << "You have entered " << argc << " arguments:"
          << "\n";
 
     for (int i = 0; i < argc; ++i)
       cout << argv[i] << "\n";
 
+    std::cerr << "[rod_guided] nanogui::init" << std::endl;
     nanogui::init();
 
+    std::cerr << "[rod_guided] creating app" << std::endl;
     AppPtr app = App::create(_SW, _SH, std::string(argv[0]));
+    std::cerr << "[rod_guided] app created" << std::endl;
 
     // app->setScene(Scene::create());
+    std::cerr << "[rod_guided] drawAll" << std::endl;
     app->drawAll();
+    std::cerr << "[rod_guided] setVisible" << std::endl;
     app->setVisible(true);
+    std::cerr << "[rod_guided] entering mainloop" << std::endl;
     nanogui::mainloop();
+    std::cerr << "[rod_guided] mainloop returned" << std::endl;
     // delete app;
+    std::cerr << "[rod_guided] nanogui::shutdown" << std::endl;
     nanogui::shutdown();
+    std::cerr << "[rod_guided] shutdown complete" << std::endl;
 
   } catch (const std::runtime_error &e) {
     std::string error_msg =
@@ -258,6 +266,27 @@ int main(int argc, char *argv[]) {
 #endif
 
     return -1;
+  } catch (const std::exception &e) {
+    std::string error_msg =
+        std::string("Caught a fatal std::exception: ") + std::string(e.what());
+
+#if defined(WIN32)
+    MessageBoxA(nullptr, error_msg.c_str(), NULL, MB_ICONERROR | MB_OK);
+#else
+    std::cerr << error_msg << endl;
+#endif
+
+    return -2;
+  } catch (...) {
+    std::string error_msg = "Caught an unknown fatal error.";
+
+#if defined(WIN32)
+    MessageBoxA(nullptr, error_msg.c_str(), NULL, MB_ICONERROR | MB_OK);
+#else
+    std::cerr << error_msg << endl;
+#endif
+
+    return -3;
   }
 
   return 0;

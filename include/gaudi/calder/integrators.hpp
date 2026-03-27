@@ -345,15 +345,16 @@ std::vector<real> fast_winding(asawa::shell::shell &M,
 
   std::vector<index_t> face_vert_ids = M.get_face_vert_ids();
   std::vector<index_t> face_map = M.get_face_map();
-  std::vector<index_t> face_ids = M.get_face_range();
+  auto face_ids = M.get_face_range();
+  std::vector<index_t> face_ix(face_ids.begin(), face_ids.end());
 
   arp::T3::ptr face_tree = arp::T3::create(face_vert_ids, x, 24);
   // face_tree->debug_half();
 
   calder::fast_summation<arp::T3> sum(*face_tree);
-  std::vector<vec3> Nc = asawa::shell::compress_to_range<vec3>(face_ids, wN);
+  std::vector<vec3> Nc = asawa::shell::compress_to_range<vec3>(face_ix, wN);
 
-  sum.bind<vec3>(face_ids, Nc);
+  sum.bind<vec3>(face_ix, Nc);
   std::vector<real> u = sum.calc<real>(
       pov,
       [l0](const index_t &i, const index_t &j, const vec3 &pi,

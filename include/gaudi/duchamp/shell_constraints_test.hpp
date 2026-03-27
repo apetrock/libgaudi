@@ -95,13 +95,15 @@ public:
     for (auto c0 : range) {
       if (std::isnan(l0[c0 / 2]))
         continue;
-      l0[c0 / 2] = asawa::shell::edge_length(*__M, c0, x);
+      l0[c0 / 2] =
+          asawa::shell::edge_length(*__M, asawa::shell::corner_id(c0), x);
     }
 
     std::vector<vec3> Ns = asawa::shell::vertex_normals(*__M, x);
     std::vector<vec3> f(x.size(), vec3::Zero());
     for (int i = 0; i < x.size(); i++) {
-      vec3 N = asawa::shell::vert_normal(*__M, i, x);
+      vec3 N =
+          asawa::shell::vert_normal(*__M, asawa::shell::vert_id(i), x);
 
       // f[i] += 1e-3 * N;
       f[i] += 1e-1 * vec3::Random();

@@ -5,9 +5,19 @@
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 #include <Eigen/Sparse>
+#include <cassert>
+#include <cmath>
 #include <tuple>
 #include <type_traits>
 #include <vector>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#ifndef M_PI_2
+#define M_PI_2 1.57079632679489661923
+#endif
 #define TYPEDEF_VEC(N) typedef Eigen::Matrix<real, N, 1> vec##N;
 #define TYPEDEF_MAT(N) typedef Eigen::Matrix<real, N, N> mat##N;
 #define TYPEDEF_MAT_NM(N, M) typedef Eigen::Matrix<real, N, M> mat##N##M;
@@ -139,13 +149,54 @@ concept LineView = Vec3ViewN<T, 2>;
 template <typename T>
 concept TriView = Vec3ViewN<T, 3>;
 
+// SimplexView concept - for types that return tuples of vec3s (e.g., simplex_view)
+// Any type satisfying this concept works with bvh_tree<SimplexType>
+// This includes views (simplex_view, permuted_simplex_view) and stored data
+// (std::vector<std::array<vec3, N>>) for compile-time verification
+template <typename T>
+concept SimplexView = requires(T t, size_t i) {
+  // Must have a stride member or be extractable via tuple_size
+  { T::stride } -> std::convertible_to<size_t>;
+  // Must return array-like tuple of vec3
+  { t[i] } -> std::convertible_to<typename T::value_type>;
+  { t.size() } -> std::convertible_to<size_t>;
+} && requires {
+  // value_type must be array-like (have tuple_size)
+  typename T::value_type;
+  { std::tuple_size<typename T::value_type>::value } -> std::convertible_to<size_t>;
+};
+
+// Helper to extract stride from SimplexView types
+template <SimplexView T>
+inline constexpr size_t simplex_stride_v = T::stride;
+
+// Singulus: A single simplex that satisfies the SimplexView concept
+// From Latin "singulus" - single, one at a time
+// Used when passing a single simplex as a query to getNearest
+template <size_t N>
+struct Singulus {
+  static constexpr size_t stride = N;
+  using value_type = std::array<vec3, N>;
+  
+  const value_type* data_;
+  
+  Singulus() : data_(nullptr) {}
+  explicit Singulus(const value_type& simplex) : data_(&simplex) {}
+  
+  value_type operator[](size_t i) const { 
+    assert(i == 0 && "Singulus holds only a single simplex");
+    return *data_; 
+  }
+  size_t size() const { return 1; }
+};
+
 inline index_t get_index(const std::vector<index_t> &indices, size_t i) {
   return indices[i];
 }
 
 template <IndexArray IndexType>
 index_t get_index(const IndexType &indices, size_t i) {
-  return get_index(indices, i);
+  return static_cast<index_t>(indices[i]);
 }
 
 // Permuted array - templates on both array and index types
@@ -181,7 +232,10 @@ permuted(const ViewType &, const IndexType &)
 //spread is a view on an index array that adapts a permutation to work on 
 //an adjacency list.
 //spread<3>([1 0 2]) = [3 4 5 0 1 2 6 7 8]
-
+//size(indices) = 1/STRIDE * size(indices)
+//i_index = i_spread / STRIDE
+//indices[i_index] += i_spread % STRIDE
+//so basically we're taking a 
 
 
 template <int STRIDE, IndexArray IndexType>
@@ -233,6 +287,179 @@ public:
 
   size_t size() const { return STRIDE; }
 };
+
+template <int STRIDE, ViewType ViewType>
+inline slice<STRIDE, ViewType> make_simplex(const ViewType &data,
+                                            size_t offset) {
+  return slice<STRIDE, ViewType>(data, offset);
+}
+
+// simplex_view - groups flat vec3 data into tuples of N vec3s
+// Returns std::array<vec3, N> on access (stack-allocated, computed on-demand)
+template <int N, Vec3View ViewType>
+class simplex_view {
+  const ViewType *data_;
+
+public:
+  static constexpr size_t stride = N;
+  using value_type = std::array<vec3, N>;
+
+  simplex_view(const ViewType &data) : data_(&data) {}
+
+  // Copy/move constructors - views can be copied
+  simplex_view(const simplex_view &other) = default;
+  simplex_view(simplex_view &&other) = default;
+
+  // Assignment operators deleted - views are immutable after construction
+  simplex_view &operator=(const simplex_view &other) = delete;
+  simplex_view &operator=(simplex_view &&other) = delete;
+
+  ~simplex_view() = default;
+
+  // Returns a stack-allocated tuple of N vec3s
+  value_type operator[](size_t j) const {
+    value_type result;
+    for (int i = 0; i < N; ++i) {
+      result[i] = (*data_)[N * j + i];
+    }
+    return result;
+  }
+
+  size_t size() const { return data_->size() / N; }
+  bool empty() const { return data_->empty(); }
+  
+  // Access to underlying flat data
+  const ViewType &data() const { return *data_; }
+};
+
+// Deduction guide for simplex_view - N must be explicit
+// Usage: simplex_view<N>(data)
+
+// Forward declare for use in permuted_simplex
+template <SimplexView SimplexViewType, IndexArray IndexType>
+class permuted_simplex;
+
+// permuted_simplex - permutes a SimplexView (reorders the tuples)
+// Returns tuples in permuted order
+template <SimplexView SimplexViewType, IndexArray IndexType>
+class permuted_simplex {
+  const SimplexViewType *data_;
+  const IndexType *permutation_;
+
+public:
+  static constexpr size_t stride = SimplexViewType::stride;
+  using value_type = typename SimplexViewType::value_type;
+
+  permuted_simplex(const SimplexViewType &data, const IndexType &permutation)
+      : data_(&data), permutation_(&permutation) {}
+
+  // Copy/move constructors - views can be copied
+  permuted_simplex(const permuted_simplex &other) = default;
+  permuted_simplex(permuted_simplex &&other) = default;
+
+  // Assignment operators deleted - views are immutable after construction
+  permuted_simplex &operator=(const permuted_simplex &other) = delete;
+  permuted_simplex &operator=(permuted_simplex &&other) = delete;
+
+  ~permuted_simplex() = default;
+
+  // Returns the permutation[i]-th simplex
+  value_type operator[](size_t i) const {
+    return (*data_)[(*permutation_)[i]];
+  }
+
+  // Get the original index for a permuted index
+  index_t get_index(size_t i) const {
+    return static_cast<index_t>((*permutation_)[i]);
+  }
+
+  size_t size() const { return permutation_->size(); }
+  bool empty() const { return permutation_->empty(); }
+
+  // Access to underlying data
+  const SimplexViewType &data() const { return *data_; }
+  const IndexType &permutation() const { return *permutation_; }
+};
+
+// Deduction guide for permuted_simplex
+template <SimplexView SimplexViewType, IndexArray IndexType>
+permuted_simplex(const SimplexViewType &, const IndexType &)
+    -> permuted_simplex<SimplexViewType, IndexType>;
+
+// Free function to permute a SimplexView
+template <SimplexView SimplexViewType, IndexArray IndexType>
+inline auto permute(const SimplexViewType &data, const IndexType &permutation) {
+  return permuted_simplex<SimplexViewType, IndexType>(data, permutation);
+}
+
+// permuted_simplex_view - convenience wrapper that composes:
+//   1. permute(data, adjacency) - permute flat data by adjacency indices
+//   2. simplex_view<N> - group into tuples
+//   3. permute(simplex, permutation) - permute the tuples
+// Returns tuples (std::array<vec3, N>) on access
+// Drop-in replacement for permuted_adjacency_view (but returns tuples, not flat)
+template <int N, Vec3View ViewType, IndexArray IndexType>
+class permuted_simplex_view {
+  const ViewType *data_;
+  const IndexType *adjacency_;
+  const IndexType *permutation_;
+
+public:
+  static constexpr size_t stride = N;
+  using value_type = std::array<vec3, N>;
+
+  permuted_simplex_view(const ViewType &data,
+                        const IndexType &adjacency,
+                        const IndexType &permutation)
+      : data_(&data), adjacency_(&adjacency), permutation_(&permutation) {}
+
+  // Copy/move constructors - views can be copied
+  permuted_simplex_view(const permuted_simplex_view &other) = default;
+  permuted_simplex_view(permuted_simplex_view &&other) = default;
+
+  // Assignment operators deleted - views are immutable after construction
+  permuted_simplex_view &operator=(const permuted_simplex_view &other) = delete;
+  permuted_simplex_view &operator=(permuted_simplex_view &&other) = delete;
+
+  ~permuted_simplex_view() = default;
+
+  // Returns a stack-allocated tuple of N vec3s at permuted index i
+  // Computes: for j in 0..N: result[j] = data[adjacency[permutation[i] * N + j]]
+  value_type operator[](size_t i) const {
+    value_type result;
+    const size_t p_index = (*permutation_)[i];
+    for (int j = 0; j < N; ++j) {
+      result[j] = (*data_)[(*adjacency_)[N * p_index + j]];
+    }
+    return result;
+  }
+
+  // Get the tuple of original indices for a permuted index
+  std::array<index_t, N> get_tuple_ids(index_t i) const {
+    std::array<index_t, N> tuple;
+    const size_t p_index = (*permutation_)[i];
+    for (int j = 0; j < N; ++j) {
+      tuple[j] = static_cast<index_t>((*adjacency_)[N * p_index + j]);
+    }
+    return tuple;
+  }
+
+  // Get the original simplex index for a permuted index
+  index_t get_index(size_t i) const {
+    return static_cast<index_t>((*permutation_)[i]);
+  }
+
+  size_t size() const { return permutation_->size(); }
+  bool empty() const { return permutation_->empty(); }
+
+  // Access to underlying data
+  const ViewType &data() const { return *data_; }
+  const IndexType &adjacency() const { return *adjacency_; }
+  const IndexType &permutation() const { return *permutation_; }
+};
+
+// Deduction guide for permuted_simplex_view - N must be explicit
+// Usage: permuted_simplex_view<N>(data, adjacency, permutation)
 
 template <ViewType ViewType, IndexArray IndexType> class permuted_view {
   const ViewType *data_;
@@ -287,7 +514,7 @@ public:
   //get index
   index_t get_index(const size_t & i) const { return i; }
   //get value
-  const value_type &operator[](const size_t & i) const { return data_[i]; }
+  const value_type &operator[](const size_t & i) const { return (*data_)[i]; }
   //empty
   bool empty() const { return data_->empty(); }
   //size
@@ -315,7 +542,7 @@ public:
   ~adjacency_view() = default;
   //get index tuple from adjacency
   template <int N>
-  std::array<index_t, N> get_tuple_ids(const index_t & i){
+  std::array<index_t, N> get_tuple_ids(const index_t & i) const {
 
     std::array<index_t, N> tuple;
     for(int j = 0; j < N; j++){
@@ -335,7 +562,12 @@ public:
 };
 
 
-
+//so what this does is it takes a data which is a set of points
+//the adjacency is a flattened set of tuples of indices into the data
+//the permutation then is designed to permute the adjacency to a new order
+// DEPRECATED: Use permuted_simplex_view instead
+// This class returns flat data and has circular dependency issues with slice
+// Kept for backward compatibility - will be removed in future version
 template <int STRIDE, ViewType ViewType, IndexArray IndexType>
 class permuted_adjacency_view {
   const ViewType *data_;
@@ -382,6 +614,10 @@ public:
 
   const index_t get_index(const size_t & i) const {
      return (*permutation_)[i]; }
+
+  // NOTE: take() method removed to avoid circular dependency with slice<>
+  // Use permuted_simplex_view instead for tuple access
+  
   bool empty() const { return p_data_.empty(); }
   size_t size() const { return p_data_.size(); }
 };

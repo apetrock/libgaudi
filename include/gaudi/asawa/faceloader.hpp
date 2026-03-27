@@ -32,7 +32,7 @@ bool patch_hole(index_t i, std::vector<index_t> &face_start,
 
   bool it = true;
   int k = 0;
-  int maxk = 100;
+  int maxk = 10000;
   while (it && k < maxk) {
     it = j0 != j1;
     bool its = true;
@@ -222,7 +222,7 @@ void assemble_table(const std::vector<vec3> &vertices,
     new_corners.push_back(i);
     new_corners.push_back(ct);
     corner_allocated[i] = true;
-    if (ct > 0)
+    if (ct >= 0)
       corner_allocated[ct] = true;
   }
 
@@ -230,7 +230,6 @@ void assemble_table(const std::vector<vec3> &vertices,
   std::vector<index_t> new_corners_next(new_corners.size(), -1);
   std::vector<index_t> new_corners_vert(new_corners.size(), -1);
   std::vector<index_t> new_corners_face(new_corners.size(), -1);
-  std::cout << new_corners.size() << std::endl;
   for (int i = 0; i < new_corners.size(); i++) {
     int ii = new_corners[i];
     if (ii > -1) {
@@ -242,7 +241,7 @@ void assemble_table(const std::vector<vec3> &vertices,
   }
 
   for (int i = 0; i < new_corners_next.size(); i++) {
-    if (new_corners_next[i] > 0) {
+    if (new_corners_next[i] >= 0) {
       // std::cout << " " << new_corners_next[i] << " "
       //           << corner_map[new_corners_next[i]] << std::endl;
       new_corners_next[i] = corner_map[new_corners_next[i]];
@@ -262,9 +261,9 @@ void assemble_table(const std::vector<vec3> &vertices,
   std::vector<index_t> face_start(faces.size(), -1);
   std::vector<index_t> vert_start(vertices.size(), -1);
   for (int i = 0; i < corners_next.size(); i++) {
-    if (corners_face[i] > 0)
+    if (corners_face[i] >= 0)
       face_start[corners_face[i]] = i;
-    if (corners_vert[i] > 0)
+    if (corners_vert[i] >= 0)
       vert_start[corners_vert[i]] = i;
   }
   fill_holes(face_start, vert_start, corners_next, corners_vert, corners_face);

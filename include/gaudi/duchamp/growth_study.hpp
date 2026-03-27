@@ -7,8 +7,10 @@
 #include "gaudi/asawa/shell/dynamic.hpp"
 #include "gaudi/asawa/shell/operations.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
+#include "gaudi/asawa/shell/triangulation_debug.hpp"
 
 #include "gaudi/asawa/shell/walk.hpp"
+#include "gaudi/asawa/datums.hpp"
 
 #include "gaudi/bontecou/laplacian.hpp"
 
@@ -50,14 +52,26 @@ public:
 
   static ptr create() { return std::make_shared<growth_study>(); }
 
-  growth_study() {
-    //__M = load_cube();
-    __M = shell::load_bunny();
+  static bool should_trace_frame(index_t frame) {
+    return frame < 3 || frame % 60 == 0;
+  }
 
+  growth_study() {
+    std::cerr << "[growth_study_core] ctor start" << std::endl;
+    //__M = shell::load_cube();
+    __M = shell::load_bunny();
+    std::cerr << "[growth_study_core] mesh loaded" << std::endl;
+
+    {
+      const std::vector<vec3> &xpre = asawa::const_get_vec_data(*__M, 0);
+      asawa::shell::dump_pre_triangulation_report(*__M, std::cerr, &xpre);
+    }
     shell::triangulate(*__M);
+    std::cerr << "[growth_study_core] triangulated" << std::endl;
     for (int i = 0; i < __M->face_count(); i++) {
-      if (__M->fbegin(i) > 0) {
-        assert(__M->fsize(i) == 3);
+      asawa::shell::FaceId fi = asawa::shell::face_id(i);
+      if (__M->fbegin(fi) >= 0) {
+        assert(__M->fsize(fi) == 3);
       }
     }
 
@@ -68,13 +82,19 @@ public:
     // dynamic surface
     /////////
 
-    real l0 = 1.5 * asawa::shell::avg_length(*__M, x);
+    real l0 = 4.0 * asawa::shell::avg_length(*__M, x);
     _eps = l0;
     __surf = shell::dynamic::create(__M, 1.0 * l0, 2.5 * l0, 1.0 * l0);
+    std::cerr << "[growth_study_core] shell dynamic created" << std::endl;
 
+    std::cout << "[growth_study_core] stepping the surface for warmup: 0" << std::endl;
     __surf->step(true);
+    std::cout << "[growth_study_core] stepping the surface for warmup: 1" << std::endl;
     __surf->step(true);
+    std::cout << "[growth_study_core] stepping the surface for warmup: 2" << std::endl;
     __surf->step(true);
+    std::cout << "[growth_study_core] stepping the surface for warmup: 3" << std::endl;
+    std::cerr << "[growth_study_core] warmup steps done" << std::endl;
     // real f = 0.075, k = 0.0615;
     real f0 = 0.031, k0 = 0.0585;
     // real f = 0.04, k = 0.065;
@@ -85,6 +105,7 @@ public:
     reaction_diffusion::ptr rx0 =
         reaction_diffusion::create(__M, f0, k0, da0, db0);
     _rx0 = std::dynamic_pointer_cast<module_base>(rx0);
+    std::cerr << "[growth_study_core] reaction diffusion created" << std::endl;
     /*
     real f1 = 0.04, k1 = 0.065;
     real da1 = 2.00e-4, db1 = 0.5 * da1;
@@ -93,6 +114,7 @@ public:
     _rx1 = std::dynamic_pointer_cast<module_base>(rx1);
 */
     init_origin();
+    std::cerr << "[growth_study_core] ctor complete" << std::endl;
   };
 
   void init_origin() {
@@ -178,8 +200,9 @@ public:
     auto range = shell.get_edge_range();
 
     for (auto c0 : range) {
-      int i = shell.vert(c0);
-      int j = shell.vert(shell.other(c0));
+      asawa::shell::CornerId cid = asawa::shell::corner_id(c0);
+      int i = shell.vert(cid);
+      int j = shell.vert(shell.other(cid));
 
       vec3 xi = x[i];
       vec3 xj = x[j];
@@ -218,8 +241,9 @@ public:
     auto range = shell.get_edge_range();
 
     for (auto c0 : range) {
-      int i = shell.vert(c0);
-      int j = shell.vert(shell.other(c0));
+      asawa::shell::CornerId cid = asawa::shell::corner_id(c0);
+      int i = shell.vert(cid);
+      int j = shell.vert(shell.other(cid));
 
       vec3 xi = x[i];
       vec3 xj = x[j];
@@ -280,10 +304,11 @@ public:
     std::vector<real> g_edge(__M->edge_count(), 0.0);
 
     for (auto c0 : range) {
-      int vi = shell.vert(c0);
-      int vj = shell.vert(shell.other(c0));
-      int fi = shell.face(c0);
-      int fj = shell.face(shell.other(c0));
+      asawa::shell::CornerId cid = asawa::shell::corner_id(c0);
+      int vi = shell.vert(cid);
+      int vj = shell.vert(shell.other(cid));
+      int fi = shell.face(cid);
+      int fj = shell.face(shell.other(cid));
 
       vec3 xi = x[vi];
       vec3 xj = x[vj];
@@ -333,8 +358,9 @@ public:
         std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxb();
 
     for (auto c0 : range) {
-      int i = shell.vert(c0);
-      int j = shell.vert(shell.other(c0));
+      asawa::shell::CornerId cid = asawa::shell::corner_id(c0);
+      int i = shell.vert(cid);
+      int j = shell.vert(shell.other(cid));
 
       real ra = rxa[i] + rxa[j];
       real rb = rxb[i] + rxb[j];
@@ -379,8 +405,9 @@ public:
     std::vector<real> g_edge(__M->edge_count(), 0.0);
 
     for (auto c0 : range) {
-      int i = shell.vert(c0);
-      int j = shell.vert(shell.other(c0));
+      asawa::shell::CornerId cid = asawa::shell::corner_id(c0);
+      int i = shell.vert(cid);
+      int j = shell.vert(shell.other(cid));
       real di = d[i];
       real dj = d[j];
       real dij = 0.5 * (di + dj);
@@ -582,6 +609,10 @@ public:
   }
 
   void step_rx(int frame) {
+    if (should_trace_frame(frame)) {
+      std::cerr << "[growth_study_core] step_rx begin frame=" << frame
+                << std::endl;
+    }
 
     const std::vector<real> d = vertex_geodesic_weight(*__M);
     calc_kf(d);
@@ -593,9 +624,16 @@ public:
       //_rx0->step(20.0 * _h);
       //_rx1->step(20.0 * _h);
     }
+    if (should_trace_frame(frame)) {
+      std::cerr << "[growth_study_core] step_rx end" << std::endl;
+    }
   }
 
   void step_dynamics(int frame) {
+    if (should_trace_frame(frame)) {
+      std::cerr << "[growth_study_core] step_dynamics begin frame=" << frame
+                << std::endl;
+    }
     hepworth::block::projection_solver solver;
 
     std::vector<hepworth::projection_constraint::ptr> constraints;
@@ -612,6 +650,9 @@ public:
     std::vector<vec3> f0 = covariant_forces(*__M, vec3(1.0, 1.0, 1.0));
     std::vector<vec3> f1 = rx_forces(*__M);
     std::vector<vec3> f2 = cylinder_forces(*__M);
+    if (should_trace_frame(frame)) {
+      std::cerr << "[growth_study_core] forces ready" << std::endl;
+    }
     // std::vector<vec3> f3 = bulk_force(*__M);
 
     // add all fi to f
@@ -624,6 +665,9 @@ public:
     }
 
     std::vector<real> g = growth_weights(*__M);
+    if (should_trace_frame(frame)) {
+      std::cerr << "[growth_study_core] growth weights ready" << std::endl;
+    }
 
     for (int i = 0; i < li.size(); i++) {
       // std::cout << g[i] << " " << 1.0 / g[i] << std::endl;
@@ -631,6 +675,9 @@ public:
     }
 
     hepworth::vec3_block::ptr X = hepworth::vec3_block::create(M, x, v, f);
+    if (should_trace_frame(frame)) {
+      std::cerr << "[growth_study_core] sim block created" << std::endl;
+    }
 
     hepworth::block::init_edge_strain(*__M, constraints, x, li, 1.0e-1, {X});
     //   hepworth::block::init_edge_strain(*__M, constraints, x, 1.0e-2, {X});
@@ -643,11 +690,18 @@ public:
 
     hepworth::block::init_pnt_tri_collisions(*__M, *__surf, constraints, x,
                                              3.0 * eps, 1.0 * eps, 1.0, {X, X});
+    if (should_trace_frame(frame)) {
+      std::cerr << "[growth_study_core] constraints ready count="
+                << constraints.size() << std::endl;
+    }
 
     solver.set_constraints(constraints);
 
     std::vector<hepworth::sim_block::ptr> blocks = {X};
     solver.step(blocks, _h, 0.5, 30);
+    if (should_trace_frame(frame)) {
+      std::cerr << "[growth_study_core] step_dynamics end" << std::endl;
+    }
   }
 
   void step_f() {
@@ -679,7 +733,7 @@ public:
       for (auto xi : x) {
         if (!std::isfinite(xi.dot(xi))) {
           std::cout << xi.transpose() << std::endl;
-          __M->vprintv(i);
+          __M->vprintv(asawa::shell::vert_id(i));
           i++;
         }
       }
@@ -689,11 +743,17 @@ public:
   }
 
   void step(int frame) {
-    std::cout << "frame: " << frame << std::endl;
+    if (should_trace_frame(frame)) {
+      std::cerr << "[growth_study_core] step begin frame=" << frame
+                << std::endl;
+    }
     step_rx(frame);
     step_dynamics(frame);
     // step_f();
     __surf->step(false);
+    if (should_trace_frame(frame)) {
+      std::cerr << "[growth_study_core] shell dynamic step end" << std::endl;
+    }
   }
 
   module_base::ptr _rx0;

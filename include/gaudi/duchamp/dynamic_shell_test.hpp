@@ -36,8 +36,8 @@ void debug_shell(shell::shell &M, const std::vector<vec3> verts) {
   for (int i = 0; i < M.__corners_next.size(); i += 2) {
     if (M.__corners_next[i] < 0)
       continue;
-    int i0 = i;
-    int i1 = M.other(i0);
+    shell::CornerId i0 = shell::corner_id(i);
+    shell::CornerId i1 = M.other(i0);
     int v0 = M.vert(i0);
     int v1 = M.vert(i1);
     gg::geometry_logger::line(verts[v0], verts[v1], vec4(0.5, 0.5, 0.5, 1.0));

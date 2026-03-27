@@ -6,6 +6,10 @@
  *  Copyright 2011 __MyCompanyName__. All rights reserved.
  *
  */
+#ifdef _MSC_VER
+#define _USE_MATH_DEFINES
+#endif
+
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 #include <Eigen/QR>

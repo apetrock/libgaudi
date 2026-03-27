@@ -2,9 +2,9 @@
 #include <cassert>
 #include <cmath>
 #include <cstddef>
-#include <cxxabi.h>
 
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory.h>
 #include <ostream>
@@ -66,7 +66,7 @@ std::array<vec3, 2> extents(const std::vector<vec3> &coords) {
 
 namespace shell {
 /*TODO: these could all be namespaced...*/
-real cotan(const shell &M, index_t ci, const std::vector<vec3> &x) {
+real cotan(const shell &M, CornerId ci, const std::vector<vec3> &x) {
 
   vec3 xp = x[M.vert(M.prev(ci))];
   vec3 x0 = x[M.vert(ci)];
@@ -76,7 +76,7 @@ real cotan(const shell &M, index_t ci, const std::vector<vec3> &x) {
   // return va::cotan(x0, xp, xn);
 }
 
-real angle(const shell &M, index_t ci, const std::vector<vec3> &x) {
+real angle(const shell &M, CornerId ci, const std::vector<vec3> &x) {
 
   vec3 xp = x[M.vert(M.prev(ci))];
   vec3 x0 = x[M.vert(ci)];
@@ -90,10 +90,10 @@ real angle(const shell &M, index_t ci, const std::vector<vec3> &x) {
   return ede;
 }
 
-vec3 face_cross(const shell &M, index_t fi, const std::vector<vec3> &x) {
+vec3 face_cross(const shell &M, FaceId fi, const std::vector<vec3> &x) {
   vec3 X = vec3::Zero();
   M.const_for_each_face_tri(
-      fi, [&X, &x](index_t c0, index_t c1, index_t c2, const shell &M) {
+      fi, [&X, &x](CornerId c0, CornerId c1, CornerId c2, const shell &M) {
         vec3 x0 = x[M.vert(c0)];
         vec3 x1 = x[M.vert(c1)];
         vec3 x2 = x[M.vert(c2)];
@@ -102,40 +102,40 @@ vec3 face_cross(const shell &M, index_t fi, const std::vector<vec3> &x) {
   return X;
 }
 
-vec3 face_normal(const shell &M, index_t fi, const std::vector<vec3> &x) {
+vec3 face_normal(const shell &M, FaceId fi, const std::vector<vec3> &x) {
   vec3 N = face_cross(M, fi, x);
   return N.normalized();
 }
 
-real face_area(const shell &M, index_t fi, const std::vector<vec3> &x) {
+real face_area(const shell &M, FaceId fi, const std::vector<vec3> &x) {
   real a = 0.0;
   vec3 N = face_cross(M, fi, x);
   return 0.5 * N.norm();
 }
 
-vec3 face_center(const shell &M, index_t fi, const std::vector<vec3> &x) {
+vec3 face_center(const shell &M, FaceId fi, const std::vector<vec3> &x) {
   vec3 c = vec3::Zero();
   int N = 0;
-  M.const_for_each_face(fi, [&c, &x, &N](index_t c0, const shell &M) {
+  M.const_for_each_face(fi, [&c, &x, &N](CornerId c0, const shell &M) {
     c += x[M.vert(c0)];
     N++;
   });
   return c / real(N);
 }
-vec3 face_interp(std::array<real, 3> s, const shell &M, index_t fi,
+vec3 face_interp(std::array<real, 3> s, const shell &M, FaceId fi,
                  const std::vector<vec3> &x) {
-  index_t c0 = M.fbegin(fi);
-  index_t c1 = M.next(c0);
-  index_t c2 = M.next(c1);
+  CornerId c0 = M.fbegin(fi);
+  CornerId c1 = M.next(c0);
+  CornerId c2 = M.next(c1);
   vec3 x0 = x[M.vert(c0)];
   vec3 x1 = x[M.vert(c1)];
   vec3 x2 = x[M.vert(c2)];
   return s[0] * x0 + s[1] * x1 + s[2] * x2;
 }
-vec3 face_pnt(vec3 pt, const shell &M, index_t fi, const std::vector<vec3> &x) {
-  index_t c0 = M.fbegin(fi);
-  index_t c1 = M.next(c0);
-  index_t c2 = M.next(c1);
+vec3 face_pnt(vec3 pt, const shell &M, FaceId fi, const std::vector<vec3> &x) {
+  CornerId c0 = M.fbegin(fi);
+  CornerId c1 = M.next(c0);
+  CornerId c2 = M.next(c1);
   vec3 x0 = x[M.vert(c0)];
   vec3 x1 = x[M.vert(c1)];
   vec3 x2 = x[M.vert(c2)];
@@ -143,48 +143,48 @@ vec3 face_pnt(vec3 pt, const shell &M, index_t fi, const std::vector<vec3> &x) {
   return face_interp({dist[1], dist[2], dist[3]}, M, fi, x);
 }
 
-vec3 vert_normal(const shell &M, index_t vi, const std::vector<vec3> &x) {
+vec3 vert_normal(const shell &M, VertId vi, const std::vector<vec3> &x) {
   vec3 N = vec3::Zero();
-  M.const_for_each_vertex(vi, [&N, &x](index_t ci, const shell &M) {
+  M.const_for_each_vertex(vi, [&N, &x](CornerId ci, const shell &M) {
     real ede = angle(M, ci, x);
     N += ede * face_cross(M, M.face(ci), x);
   });
   return N.normalized();
 }
 
-real vert_area(const shell &M, index_t vi, const std::vector<vec3> &x) {
+real vert_area(const shell &M, VertId vi, const std::vector<vec3> &x) {
   real A = 0.0;
-  M.const_for_each_vertex(vi, [&A, &x](index_t ci, const shell &M) {
+  M.const_for_each_vertex(vi, [&A, &x](CornerId ci, const shell &M) {
     A += face_area(M, M.face(ci), x);
   });
   return A / 3.0;
 }
 
-real vert_cotan_weight(const shell &M, index_t vi, const std::vector<vec3> &x) {
+real vert_cotan_weight(const shell &M, VertId vi, const std::vector<vec3> &x) {
   real w = 0.0;
-  M.const_for_each_vertex(vi, [&w, &x](index_t ci, const shell &M) {
-    index_t c0p = M.prev(ci);
-    index_t c1p = M.prev(M.other(ci));
+  M.const_for_each_vertex(vi, [&w, &x](CornerId ci, const shell &M) {
+    CornerId c0p = M.prev(ci);
+    CornerId c1p = M.prev(M.other(ci));
     w += cotan(M, c0p, x) + cotan(M, c1p, x);
   });
   return w;
 }
 
-std::vector<real> vert_cotan_weights(const shell &M, index_t vi,
+std::vector<real> vert_cotan_weights(const shell &M, VertId vi,
                                      const std::vector<vec3> &x) {
   std::vector<real> w;
-  M.const_for_each_vertex(vi, [&w, &x](index_t ci, const shell &M) {
-    index_t c0p = M.prev(ci);
-    index_t c1p = M.prev(M.other(ci));
+  M.const_for_each_vertex(vi, [&w, &x](CornerId ci, const shell &M) {
+    CornerId c0p = M.prev(ci);
+    CornerId c1p = M.prev(M.other(ci));
     w.push_back(cotan(M, c0p, x) + cotan(M, c1p, x));
   });
   return w;
 }
 
-std::vector<real> vert_angle_weights(const shell &M, index_t vi,
+std::vector<real> vert_angle_weights(const shell &M, VertId vi,
                                      const std::vector<vec3> &x) {
   std::vector<real> w;
-  M.const_for_each_vertex(vi, [&w, &x](index_t ci, const shell &M) {
+  M.const_for_each_vertex(vi, [&w, &x](CornerId ci, const shell &M) {
     real thet = angle(M, ci, x);
     real A = face_area(M, M.face(ci), x);
     w.push_back(thet * A);
@@ -192,47 +192,45 @@ std::vector<real> vert_angle_weights(const shell &M, index_t vi,
   return w;
 }
 
-std::vector<real> vert_unitary_weights(const shell &M, index_t vi,
+std::vector<real> vert_unitary_weights(const shell &M, VertId vi,
                                        const std::vector<vec3> &x) {
   std::vector<real> w;
   M.const_for_each_vertex(
-      vi, [&w, &x](index_t ci, const shell &M) { w.push_back(1.0); });
+      vi, [&w, &x](CornerId ci, const shell &M) { w.push_back(1.0); });
   return w;
 }
 
-vec3 edge_tangent(const shell &M, index_t c0, const std::vector<vec3> &x) {
-  index_t c1 = M.other(c0);
+vec3 edge_tangent(const shell &M, CornerId c0, const std::vector<vec3> &x) {
   return x[M.vert(c0)] - x[M.vert(M.next(c0))];
 }
 
-vec3 g_edge_tangent(const shell &M, index_t c0, const std::vector<vec3> &x) {
-  index_t c1 = M.other(c0);
+vec3 g_edge_tangent(const shell &M, CornerId c0, const std::vector<vec3> &x) {
   real s = c0 % 2 == 0 ? 1.0 : -1.0;
   vec3 tan = x[M.vert(c0)] - x[M.vert(M.next(c0))];
   return s * tan;
 }
 
-vec3 edge_normal(const shell &M, index_t c0, const std::vector<vec3> &x) {
-  index_t c1 = M.other(c0);
+vec3 edge_normal(const shell &M, CornerId c0, const std::vector<vec3> &x) {
+  CornerId c1 = M.other(c0);
   vec3 N = face_normal(M, M.face(c0), x);
   N += face_normal(M, M.face(c1), x);
   return N.normalized();
 }
 
-vec3 edge_vert(const shell &M, index_t c0, const real &s,
+vec3 edge_vert(const shell &M, CornerId c0, const real &s,
                const std::vector<vec3> &x) {
-  index_t c1 = M.other(c0);
+  CornerId c1 = M.other(c0);
   vec3 x0 = x[M.vert(c0)];
   vec3 x1 = x[M.vert(c1)];
   return va::mix(s, x0, x1);
 }
 
-vec3 edge_center(const shell &M, index_t c0, const std::vector<vec3> &x) {
+vec3 edge_center(const shell &M, CornerId c0, const std::vector<vec3> &x) {
   return edge_vert(M, c0, 0.5, x);
 }
 
-real edge_length(const shell &M, index_t c0, const std::vector<vec3> &x) {
-  index_t c1 = M.other(c0);
+real edge_length(const shell &M, CornerId c0, const std::vector<vec3> &x) {
+  CornerId c1 = M.other(c0);
   vec3 x0 = x[M.vert(c0)];
   vec3 x1 = x[M.vert(c1)];
   return (x1 - x0).norm();
@@ -241,9 +239,8 @@ real edge_length(const shell &M, index_t c0, const std::vector<vec3> &x) {
 std::vector<vec3> face_normals(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_face_range();
   std::vector<vec3> Ns(M.face_count(), vec3::Zero());
-  int i = 0;
   for (auto vi : range) {
-    Ns[vi] = face_normal(M, vi, x);
+    Ns[vi] = face_normal(M, face_id(vi), x);
   }
   return Ns;
 }
@@ -251,9 +248,8 @@ std::vector<vec3> face_normals(const shell &M, const std::vector<vec3> &x) {
 std::vector<vec3> vertex_normals(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_vert_range();
   std::vector<vec3> Ns(M.vert_count(), vec3::Zero());
-  int i = 0;
   for (auto vi : range) {
-    Ns[vi] = vert_normal(M, vi, x);
+    Ns[vi] = vert_normal(M, vert_id(vi), x);
   }
   return Ns;
 }
@@ -261,9 +257,8 @@ std::vector<vec3> vertex_normals(const shell &M, const std::vector<vec3> &x) {
 std::vector<real> vertex_areas(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_vert_range();
   std::vector<real> Ns(M.vert_count(), 0.0);
-  int i = 0;
   for (auto vi : range) {
-    real area = vert_area(M, vi, x);
+    real area = vert_area(M, vert_id(vi), x);
     Ns[vi] = area;
   }
   return Ns;
@@ -272,9 +267,8 @@ std::vector<real> vertex_areas(const shell &M, const std::vector<vec3> &x) {
 std::vector<vec3> vertex_areas_3(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_vert_range();
   std::vector<vec3> Ns(M.vert_count(), vec3::Zero());
-  int i = 0;
   for (auto vi : range) {
-    real area = vert_area(M, vi, x);
+    real area = vert_area(M, vert_id(vi), x);
     Ns[vi] = vec3(area, area, area);
   }
   return Ns;
@@ -284,12 +278,12 @@ std::vector<real> edge_cotan_weights(const shell &M,
                                      const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
   std::vector<real> ws(M.edge_count(), 0.0);
-  int i = 0;
   for (auto ci : range) {
-    index_t c0p = M.prev(ci);
-    index_t c1p = M.prev(M.other(ci));
+    CornerId cid = corner_id(ci);
+    CornerId c0p = M.prev(cid);
+    CornerId c1p = M.prev(M.other(cid));
     real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
-    ws[ci / 2] = ct;
+    ws[cid / 2] = ct;
   }
   return ws;
 }
@@ -313,9 +307,9 @@ std::vector<real> align_edges(shell &M, const std::vector<vec3> &x) {
 std::vector<real> edge_lengths(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
   std::vector<real> l(M.edge_count());
-  int i = 0;
   for (auto ci : range) {
-    l[ci / 2] = edge_length(M, ci, x);
+    CornerId cid = corner_id(ci);
+    l[cid / 2] = edge_length(M, cid, x);
   }
   return l;
 }
@@ -323,9 +317,9 @@ std::vector<real> edge_lengths(const shell &M, const std::vector<vec3> &x) {
 std::vector<vec3> edge_centers(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
   std::vector<vec3> cens(M.edge_count(), vec3::Zero());
-  int i = 0;
   for (auto ci : range) {
-    cens[ci / 2] = edge_center(M, ci, x);
+    CornerId cid = corner_id(ci);
+    cens[cid / 2] = edge_center(M, cid, x);
   }
   return cens;
 }
@@ -333,9 +327,9 @@ std::vector<vec3> edge_centers(const shell &M, const std::vector<vec3> &x) {
 std::vector<vec3> edge_normals(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
   std::vector<vec3> Ns(M.edge_count(), vec3::Zero());
-  int i = 0;
   for (auto ci : range) {
-    Ns[ci / 2] = edge_normal(M, ci, x);
+    CornerId cid = corner_id(ci);
+    Ns[cid / 2] = edge_normal(M, cid, x);
   }
   return Ns;
 }
@@ -344,13 +338,13 @@ std::vector<real> edge_areas(const shell &M, const std::vector<vec3> &x) {
   // well this is wrong...
   auto range = M.get_edge_range();
   std::vector<real> ws(M.edge_count(), 0.0);
-  int i = 0;
   for (auto ci : range) {
-    int i0 = ci;
-    int i1 = M.other(i0);
-    int f0 = M.face(i0);
-    int f1 = M.face(i1);
-    ws[ci / 2] = (face_area(M, f0, x) + face_area(M, f1, x)) / 3.0;
+    CornerId i0 = corner_id(ci);
+    CornerId i1 = M.other(i0);
+    FaceId f0 = M.face(i0);
+    FaceId f1 = M.face(i1);
+    ws[i0 / 2] =
+        (face_area(M, f0, x) + face_area(M, f1, x)) / 3.0;
   }
   return ws;
 }
@@ -358,9 +352,9 @@ std::vector<real> edge_areas(const shell &M, const std::vector<vec3> &x) {
 std::vector<vec3> edge_tangents(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_edge_range();
   std::vector<vec3> dirs(M.edge_count(), vec3::Zero());
-  int i = 0;
   for (auto ci : range) {
-    dirs[ci / 2] = edge_tangent(M, ci, x);
+    CornerId cid = corner_id(ci);
+    dirs[cid / 2] = edge_tangent(M, cid, x);
   }
   return dirs;
 }
@@ -368,9 +362,8 @@ std::vector<vec3> edge_tangents(const shell &M, const std::vector<vec3> &x) {
 std::vector<vec3> face_centers(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_face_range();
   std::vector<vec3> xc(M.face_count(), vec3::Zero());
-  int i = 0;
   for (auto fi : range) {
-    xc[fi] = face_center(M, fi, x);
+    xc[fi] = face_center(M, face_id(fi), x);
   }
   return xc;
 }
@@ -380,7 +373,7 @@ std::vector<real> face_areas(const shell &M, const std::vector<vec3> &x) {
   std::vector<real> A(M.face_count(), 0.0);
   int i = 0;
   for (auto fi : range) {
-    A[i++] = face_area(M, fi, x);
+    A[i++] = face_area(M, face_id(fi), x);
   }
   return A;
 }
@@ -397,8 +390,8 @@ std::vector<TYPE> expand_from_vert_range(const shell &M,
   return x_exp;
 }
 
-template <typename TYPE>
-std::vector<TYPE> compress_to_range(const std::vector<index_t> &element_range,
+template <typename TYPE, typename ID>
+std::vector<TYPE> compress_to_range(const std::vector<ID> &element_range,
                                     const std::vector<TYPE> &v) {
   assert(element_range.size() == v.size());
   std::vector<TYPE> v_comp(element_range.size());
@@ -426,12 +419,9 @@ std::vector<TYPE> vert_to_face(const shell &M, const std::vector<vec3> &x,
                                const std::vector<TYPE> &v) {
   auto range = M.get_face_range();
   std::vector<TYPE> vals(M.face_count());
-  int i = 0;
   for (auto fi : range) {
     TYPE c = z::zero<TYPE>();
-    M.const_for_each_face(fi, [&c, &v](index_t c0, const shell &M) {
-      // std::cout << M.vert(c0) << " " << x_exp.size() << " " << M.vert_count()
-      //           << std::endl;
+    M.const_for_each_face(face_id(fi), [&c, &v](CornerId c0, const shell &M) {
       c += 0.33333 * v[M.vert(c0)];
     });
     vals[fi] = c;
@@ -446,7 +436,7 @@ std::vector<TYPE> face_to_vert(const shell &M, const std::vector<TYPE> &x) {
   int i = 0;
   for (auto vi : range) {
     TYPE c = z::zero<TYPE>();
-    M.const_for_each_vertex(vi, [&c, &x](index_t c0, const shell &M) {
+    M.const_for_each_vertex(vert_id(vi), [&c, &x](CornerId c0, const shell &M) {
       c += 0.33333 * x[M.face(c0)];
     });
     vals[vi] = c;
@@ -459,13 +449,13 @@ std::vector<TYPE> edge_to_face(const shell &M, const std::vector<vec3> &x,
                                const std::vector<TYPE> &v) {
   auto range = M.get_face_range();
   std::vector<TYPE> vals(M.face_count());
-  int i = 0;
   for (auto fi : range) {
     TYPE c = z::zero<TYPE>();
     real A = 0.0;
-    vec3 cen = face_center(M, fi, x);
-    M.const_for_each_face(fi, [&](index_t c0, const shell &M) {
-      index_t c1 = M.other(c0);
+    FaceId fii = face_id(fi);
+    vec3 cen = face_center(M, fii, x);
+    M.const_for_each_face(fii, [&](CornerId c0, const shell &M) {
+      CornerId c1 = M.other(c0);
       vec3 x0 = x[M.vert(c0)];
       vec3 x1 = x[M.vert(c1)];
       vec3 d0c = x0 - cen;
@@ -473,9 +463,7 @@ std::vector<TYPE> edge_to_face(const shell &M, const std::vector<vec3> &x,
       real Ai = 0.5 * d0c.cross(d1c).norm();
       A += Ai;
       c += Ai * v[c0 / 2];
-      // c += 0.33333 * x[c0 / 2];
     });
-    // vals[fi] = c;
     vals[fi] = c / A;
   }
   return vals;
@@ -483,10 +471,9 @@ std::vector<TYPE> edge_to_face(const shell &M, const std::vector<vec3> &x,
 
 real surface_area(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_face_range();
-  real A;
-  int i = 0;
+  real A = 0.0;
   for (auto vi : range) {
-    A += face_area(M, i, x);
+    A += face_area(M, face_id(vi), x);
   }
   return A;
 }
@@ -506,13 +493,11 @@ real avg_length(const shell &M, const std::vector<vec3> &x) {
 */
 real avg_length(const shell &M, const std::vector<vec3> &coords) {
   real accum = 0.0;
-  for (int i = 0; i < M.__corners_next.size(); i += 2) {
-    if (M.__corners_next[i] < 0)
+  for (int i = 0; i < static_cast<int>(M.__corners_next.size()); i += 2) {
+    if (M.__corners_next[static_cast<size_t>(i)] < 0)
       continue;
-    int i0 = i;
-    int i1 = M.other(i0);
-    int v0 = M.vert(i0);
-    int v1 = M.vert(i1);
+    CornerId i0 = corner_id(i);
+    CornerId i1 = M.other(i0);
     accum += (coords[M.vert(i0)] - coords[M.vert(i1)]).norm();
   }
   return 0.5 * accum / real(M.corner_count());
@@ -536,13 +521,13 @@ std::vector<vec3> circulation(shell &M, const std::vector<real> &u,
   // circulation
   ///////////////
 
-  std::vector<index_t> edges = M.get_edge_range();
+  auto edges = M.get_edge_range();
 
   std::vector<vec3> circU(M.face_count(), vec3::Zero());
 
-  for (int i = 0; i < edges.size(); i++) {
-    index_t c0 = edges[i];
-    index_t c1 = M.other(c0);
+  for (int i = 0; i < static_cast<int>(edges.size()); i++) {
+    CornerId c0 = corner_id(edges[static_cast<size_t>(i)]);
+    CornerId c1 = M.other(c0);
     vec3 x0 = x[M.vert(c0)];
     vec3 x1 = x[M.vert(c1)];
 
@@ -577,13 +562,13 @@ std::vector<vec3> gradient(shell &M, const std::vector<real> &u,
   // gradient
   ///////////////
 
-  std::vector<index_t> edges = M.get_edge_range();
+  auto edges = M.get_edge_range();
 
   std::vector<vec3> gradU(M.face_count(), vec3::Zero());
 
-  for (int i = 0; i < edges.size(); i++) {
-    index_t c0 = edges[i];
-    index_t c1 = M.other(c0);
+  for (int i = 0; i < static_cast<int>(edges.size()); i++) {
+    CornerId c0 = corner_id(edges[static_cast<size_t>(i)]);
+    CornerId c1 = M.other(c0);
     vec3 x0 = x[M.vert(c0)];
     vec3 x1 = x[M.vert(c1)];
     real u0 = u[M.vert(M.prev(c0))];
@@ -600,7 +585,6 @@ std::vector<vec3> gradient(shell &M, const std::vector<real> &u,
     vec3 dp0 = edge_tangent(M, c0, x);
     vec3 dp1 = edge_tangent(M, c1, x);
 
-    // real sgn = va::sgn(N0, N1, dp);
     vec3 M0 = dp0.cross(N0);
     vec3 M1 = dp1.cross(N1);
 #if 0
@@ -631,15 +615,15 @@ std::vector<real> divergence(shell &M, const std::vector<vec3> &g,
   // divergence
   ///////////////
 
-  std::vector<index_t> edges = M.get_edge_range();
+  auto edges = M.get_edge_range();
 
   std::vector<real> divu(M.vert_count(), 0.0);
 
-  for (int i = 0; i < edges.size(); i++) {
-    index_t c0 = edges[i];
-    index_t c1 = M.other(c0);
-    index_t c0p = M.prev(c0);
-    index_t c1p = M.prev(c1);
+  for (int i = 0; i < static_cast<int>(edges.size()); i++) {
+    CornerId c0 = corner_id(edges[static_cast<size_t>(i)]);
+    CornerId c1 = M.other(c0);
+    CornerId c0p = M.prev(c0);
+    CornerId c1p = M.prev(c1);
     vec3 v0 = x[M.vert(c0)];
     vec3 v1 = x[M.vert(c1)];
     vec3 g0 = g[M.face(c0)];

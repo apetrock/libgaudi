@@ -54,12 +54,12 @@ Eigen::SparseMatrix<real>
 //..etc
 build_lap(asawa::shell::shell &M,     //
           const std::vector<vec3> &x, //
-          std::function<real(asawa::shell::shell &M, index_t c,
+          std::function<real(asawa::shell::shell &M, asawa::shell::CornerId c,
                              const std::vector<vec3> &x)>
               func_ij,
           bool set_ij = true) {
 
-  std::vector<index_t> verts = M.get_vert_range();
+  auto verts = M.get_vert_range();
   std::vector<index_t> edges = M.get_edge_vert_ids();
 
   index_t vert_count = M.vert_count();
@@ -82,13 +82,14 @@ build_lap(asawa::shell::shell &M,     //
     // index_t i = i_range[v];
     index_t i = v;
 
-    if (M.vsize(v) < 4) {
+    if (M.vsize(asawa::shell::vert_id(v)) < 4) {
       for (int k = 0; k < S; k++)
         tripletList.push_back(triplet(S * i + k, S * i + k, 1.0));
       continue;
     }
 
-    M.for_each_vertex(v, [&](index_t c, asawa::shell::shell &M) {
+    M.for_each_vertex(asawa::shell::vert_id(v),
+                      [&](asawa::shell::CornerId c, asawa::shell::shell &M) {
       index_t jv = M.vert(M.next(c));
       index_t j = i_range[jv];
       real K = func_ij(M, c, x);
@@ -116,12 +117,12 @@ build_lap(asawa::shell::shell &M,     //
 
 void print_lap(asawa::shell::shell &M,     //
                const std::vector<vec3> &x, //
-               std::function<real(asawa::shell::shell &M, index_t c,
+               std::function<real(asawa::shell::shell &M, asawa::shell::CornerId c,
                                   const std::vector<vec3> &x)>
                    func_ij,
                bool set_ij = true) {
 
-  std::vector<index_t> verts = M.get_vert_range();
+  auto verts = M.get_vert_range();
   std::vector<index_t> edges = M.get_edge_vert_ids();
 
   int i = 0;
@@ -130,7 +131,9 @@ void print_lap(asawa::shell::shell &M,     //
   for (auto v : M.get_vert_range()) {
     real Km = 0.0;
     M.for_each_vertex(
-        v, [&Km, &x, &set_ij, i, func_ij](index_t c, asawa::shell::shell &M) {
+        asawa::shell::vert_id(v),
+        [&Km, &x, &set_ij, i, func_ij](asawa::shell::CornerId c,
+                                        asawa::shell::shell &M) {
           index_t j = M.vert(M.next(c));
           real K = func_ij(M, c, x);
           Km -= K;
@@ -140,7 +143,7 @@ void print_lap(asawa::shell::shell &M,     //
         });
 
     std::cout << " - " << Km << std::endl;
-    M.vprintv(v);
+    M.vprintv(asawa::shell::vert_id(v));
     Kmin = std::min(Kmin, Km);
     Kmax = std::max(Kmax, Km);
     i++;
@@ -162,9 +165,10 @@ public:
   void printC() {
     print_lap(
         *__M, __x, //
-        [](asawa::shell::shell &M, index_t c, const std::vector<vec3> &x) {
-          index_t c0p = M.prev(c);
-          index_t c1p = M.prev(M.other(c));
+        [](asawa::shell::shell &M, asawa::shell::CornerId c,
+           const std::vector<vec3> &x) {
+          asawa::shell::CornerId c0p = M.prev(c);
+          asawa::shell::CornerId c1p = M.prev(M.other(c));
 
           return cotan(M, c0p, x) + cotan(M, c1p, x);
         });
@@ -173,9 +177,10 @@ public:
   void initC() {
     _matC = build_lap<1>(
         *__M, __x, //
-        [](asawa::shell::shell &M, index_t c, const std::vector<vec3> &x) {
-          index_t c0p = M.prev(c);
-          index_t c1p = M.prev(M.other(c));
+        [](asawa::shell::shell &M, asawa::shell::CornerId c,
+           const std::vector<vec3> &x) {
+          asawa::shell::CornerId c0p = M.prev(c);
+          asawa::shell::CornerId c1p = M.prev(M.other(c));
           real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
           ct = ct < 1e-6 ? 1e-6 : ct;
           ct = max(ct, 1e-6);
@@ -186,7 +191,8 @@ public:
   void initM() {
     _matM = build_lap<1>(
         *__M, __x,
-        [](asawa::shell::shell &M, index_t c, const std::vector<vec3> &x) {
+        [](asawa::shell::shell &M, asawa::shell::CornerId c,
+           const std::vector<vec3> &x) {
           real aj = asawa::shell::face_area(M, M.face(c), x);
           aj = -max(aj, 1e-6);
           return aj;
@@ -420,9 +426,10 @@ public:
   void initC() {
     _matC = build_lap<3>(
         *__M, __x, //
-        [this](asawa::shell::shell &M, index_t c, const std::vector<vec3> &x) {
-          index_t c0p = M.prev(c);
-          index_t c1p = M.prev(M.other(c));
+        [this](asawa::shell::shell &M, asawa::shell::CornerId c,
+               const std::vector<vec3> &x) {
+          asawa::shell::CornerId c0p = M.prev(c);
+          asawa::shell::CornerId c1p = M.prev(M.other(c));
           real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
           ct = __unitary ? 1.0 : ct;
           ct = ct < 1e-1 ? 1e-1 : ct;

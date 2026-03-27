@@ -2,45 +2,35 @@
 #ifndef __ASAWA_PRIM_OPS__
 #define __ASAWA_PRIM_OPS__
 
-// #include "datums.hpp"
 #include "shell.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
+#include <numeric>
 #include <ostream>
 #include <vector>
 
 namespace gaudi {
 namespace asawa {
 namespace shell {
-typedef int index_t;
-index_t split_edge(shell &M,                       //
-                   const index_t &corner_index,    //
-                   const index_t &new_vertex = -1, //
-                   const index_t &new_corner = -1) {
-  // std::cout << __FUNCTION__ << " " << corner_index << std::endl;
 
-  // originial topology:
-  //    c1_<--c1p
-  //   /     /
-  //  c0 -->c0n
+using index_t = int;
 
-  // target topology:
-  //   c1_<--c1i<--c1p
-  //  /     /
-  // c0_-->c0i-->c0n
+CornerId split_edge(shell &M, CornerId corner_index,
+                    VertId new_vertex = vert_id(-1),
+                    CornerId new_corner = corner_id(-1)) {
+  CornerId c0 = corner_index;
+  CornerId c1 = M.other(c0);
 
-  index_t c0 = corner_index;
-  index_t c1 = M.other(c0);
+  CornerId c0n = M.next(c0);
+  CornerId c1p = M.prev(c1);
 
-  index_t c0n = M.next(c0);
-  index_t c1p = M.prev(c1);
+  VertId vn = new_vertex < 0 ? M.insert_vertex() : new_vertex;
+  VertId v1 = M.vert(c1);
 
-  index_t vn = new_vertex < 0 ? M.insert_vertex() : new_vertex;
-  index_t v1 = M.vert(c1);
-
-  index_t c0i = new_corner < 0 ? M.insert_edge_pair() : new_corner;
-  index_t c1i = M.other(c0i);
+  CornerId c0i = new_corner < 0 ? M.insert_edge_pair() : new_corner;
+  CornerId c1i = M.other(c0i);
 
   M.link(c0, c0i);
   M.link(c0i, c0n);
@@ -56,45 +46,32 @@ index_t split_edge(shell &M,                       //
   return c0i;
 }
 
-int count_cycle(shell &M, index_t corner) {
-  index_t c0 = corner;
-  index_t c1 = M.other(c0);
-  index_t v0 = M.vert(c0);
-  index_t v1 = M.vert(c1);
+int count_cycle(shell &M, CornerId corner) {
+  CornerId c0 = corner;
+  CornerId c1 = M.other(c0);
+  VertId v0 = M.vert(c0);
+  VertId v1 = M.vert(c1);
   int t = 0;
-  M.for_each_vertex(v0, [&t, v1](index_t ci, shell &M) {
-    index_t vi = M.vert(M.next(ci));
-    // std::cout << vi << " - " << v1 << std::endl;
+  M.for_each_vertex(v0, [&t, v1](CornerId ci, shell &M) {
+    VertId vi = M.vert(M.next(ci));
     t += int(vi == v1);
   });
   return t;
 }
 
-index_t merge_edge(shell &M, //
-                   const index_t &corner_index) {
-  // std::cout << __FUNCTION__ << " " << corner_index << std::endl;
-  //  originial topology:
-  //     c1_<--c1p
-  //    /     /
-  //   c0 -->c0n
+CornerId merge_edge(shell &M, CornerId corner_index) {
+  CornerId c0 = corner_index;
+  CornerId c1 = M.other(c0);
+  CornerId c0n = M.next(c0);
+  CornerId c0p = M.prev(c0);
 
-  // target topology:
-  //   c1_<--c1i<--c1p
-  //  /     /
-  // c0_-->c0i-->c0n
+  CornerId c1n = M.next(c1);
+  CornerId c1p = M.prev(c1);
 
-  index_t c0 = corner_index;
-  index_t c1 = M.other(c0);
-  index_t c0n = M.next(c0);
-  index_t c0p = M.prev(c0);
-
-  index_t c1n = M.next(c1);
-  index_t c1p = M.prev(c1);
-
-  index_t v0 = M.vert(c0);
-  index_t v1 = M.vert(c1);
-  index_t f0 = M.face(c0);
-  index_t f1 = M.face(c1);
+  VertId v0 = M.vert(c0);
+  VertId v1 = M.vert(c1);
+  FaceId f0 = M.face(c0);
+  FaceId f1 = M.face(c1);
 
   if (v0 != v1)
     M.remove_vertex(v0);
@@ -107,35 +84,31 @@ index_t merge_edge(shell &M, //
 
   M.set_face(c0n, f0);
   M.set_face(c1n, f1);
-  //  assert(M.fsize(f0) == 3);
-  //  assert(M.fsize(f1) == 3);
   M.vupdate(v1);
 
   return c1n;
 }
 
-index_t split_face(shell &M, //
-                   const index_t &c0, const index_t &c1,
-                   const index_t new_corner = -1, //
-                   const index_t new_face = -1) {
+CornerId split_face(shell &M, CornerId c0, CornerId c1,
+                    CornerId new_corner = corner_id(-1),
+                    FaceId new_face = face_id(-1)) {
 
-  index_t nf = new_face < 0 ? M.insert_face() : new_face;
-  index_t f0 = M.face(c0);
-  index_t v0 = M.vert(c0);
-  index_t v1 = M.vert(c1);
+  FaceId nf = new_face < 0 ? M.insert_face() : new_face;
+  FaceId f0 = M.face(c0);
+  VertId v0 = M.vert(c0);
+  VertId v1 = M.vert(c1);
 
-  index_t c0p = M.prev(c0);
-  index_t c1p = M.prev(c1);
+  CornerId c0p = M.prev(c0);
+  CornerId c1p = M.prev(c1);
 
-  index_t c0i = new_corner < 0 ? M.insert_edge_pair() : new_corner;
-  index_t c1i = M.other(c0i);
+  CornerId c0i = new_corner < 0 ? M.insert_edge_pair() : new_corner;
+  CornerId c1i = M.other(c0i);
 
   M.link(c0p, c0i);
   M.link(c0i, c1);
 
   M.link(c1p, c1i);
   M.link(c1i, c0);
-  // M.link(c1, c1i);
 
   M.set_face(c0, nf);
   M.set_face(c1i, nf);
@@ -151,17 +124,13 @@ index_t split_face(shell &M, //
   return c0i;
 }
 
-index_t remove_dangling(shell &M, //
-                        const index_t &c0, const index_t &c1) {
-  // std::cout << __func__ << std::endl;
-  // std::cout << __PRETTY_FUNCTION__ << std::endl;
-  index_t c0p = M.prev(c0);
-  index_t c0n = M.next(c0);
-  index_t c1p = M.prev(c1);
-  index_t c1n = M.next(c1);
-  index_t f0 = M.face(c0);
-  index_t v0 = M.vert(c0);
-  index_t v1 = M.vert(c1);
+FaceId remove_dangling(shell &M, CornerId c0, CornerId c1) {
+  CornerId c0p = M.prev(c0);
+  CornerId c0n = M.next(c0);
+  CornerId c1p = M.prev(c1);
+  FaceId f0 = M.face(c0);
+  VertId v0 = M.vert(c0);
+  VertId v1 = M.vert(c1);
 
   M.remove_vertex(v0);
   M.remove_edge_pair(c0);
@@ -171,18 +140,14 @@ index_t remove_dangling(shell &M, //
 
   M.vupdate(v1);
 
-  // M.uber_assert();
   return f0;
 }
 
-index_t remove_cruft(shell &M, //
-                     const index_t &c0, const index_t &c1) {
-  // std::cout << __PRETTY_FUNCTION__ << std::endl;
-
-  index_t f0 = M.face(c0);
-  index_t f1 = M.face(c1);
-  index_t v0 = M.vert(c0);
-  index_t v1 = M.vert(c1);
+FaceId remove_cruft(shell &M, CornerId c0, CornerId c1) {
+  FaceId f0 = M.face(c0);
+  FaceId f1 = M.face(c1);
+  VertId v0 = M.vert(c0);
+  VertId v1 = M.vert(c1);
 
   M.remove_vertex(v0);
   M.remove_vertex(v1);
@@ -190,22 +155,18 @@ index_t remove_cruft(shell &M, //
   M.remove_face(f1);
 
   M.remove_edge_pair(c0);
-  return -1;
+  return face_id(-1);
 }
 
-index_t merge_face(shell &M, //
-                   const index_t &c0, const index_t &c1) {
+FaceId merge_face(shell &M, CornerId c0, CornerId c1) {
   assert(c1 == M.other(c0));
-  index_t c0p = M.prev(c0);
-  index_t c0n = M.next(c0);
-  index_t c1p = M.prev(c1);
-  index_t c1n = M.next(c1);
+  CornerId c0p = M.prev(c0);
+  CornerId c0n = M.next(c0);
+  CornerId c1p = M.prev(c1);
+  CornerId c1n = M.next(c1);
 
-  index_t f0 = M.face(c0);
-  index_t f1 = M.face(c1);
-
-  index_t v0 = M.vert(c0);
-  index_t v1 = M.vert(c1);
+  FaceId f0 = M.face(c0);
+  FaceId f1 = M.face(c1);
 
   if (f0 == f1) {
     if (c0 == c1n && c0n == c1) {
@@ -219,9 +180,8 @@ index_t merge_face(shell &M, //
     }
   }
 
-  // index_t v0 = M.vert(c0);
-  // index_t v1 = M.vert(c1);
-
+  VertId v0 = M.vert(c0);
+  VertId v1 = M.vert(c1);
   M.remove_face(f1);
   M.remove_edge_pair(c0);
 
@@ -236,29 +196,16 @@ index_t merge_face(shell &M, //
   return f0;
 }
 
-index_t subdivide_edge(shell &M,                        //
-                       const index_t &corner_index,     //
-                       const index_t &new_vert = -1,    //
-                       const index_t &new_corner0 = -1, //
-                       const index_t &new_corner1 = -1, //
-                       const index_t &new_corner2 = -1, //
-                       const index_t &new_face0 = -1,   //
-                       const index_t &new_face1 = -1) {
+CornerId subdivide_edge(shell &M, CornerId corner_index,
+                        VertId new_vert = vert_id(-1),
+                        CornerId new_corner0 = corner_id(-1),
+                        CornerId new_corner1 = corner_id(-1),
+                        CornerId new_corner2 = corner_id(-1),
+                        FaceId new_face0 = face_id(-1),
+                        FaceId new_face1 = face_id(-1)) {
 
-  // std::cout << __FUNCTION__ << " " << corner_index << std::endl;
-  index_t c0 = corner_index;
-  index_t c1 = M.next(M.other(c0));
-
-  index_t c0p = M.prev(c0);
-  index_t c1p = M.prev(c1);
-
-  /*
-  if (M.vsize(M.vert(c0p)) > 15) {
-    return c0;
-  }
-  if (M.vsize(M.vert(c1p)) > 15)
-    return c0;
-  */
+  CornerId c0 = corner_index;
+  CornerId c1 = M.next(M.other(c0));
 
   c0 = split_edge(M, c0, new_vert, new_corner0);
   c1 = M.next(M.other(c0));
@@ -269,22 +216,14 @@ index_t subdivide_edge(shell &M,                        //
   return c0;
 }
 
-index_t collapse_edge(shell &M, //
-                      const index_t &corner_index, bool degenerate = false) {
-  // std::cout << __FUNCTION__ << " " << corner_index << std::endl;
-  // M.cprint(corner_index);
+CornerId collapse_edge(shell &M, CornerId corner_index,
+                       bool degenerate = false) {
 
-  index_t c0 = corner_index;
-  index_t c1 = M.other(c0);
+  CornerId c0 = corner_index;
+  CornerId c1 = M.other(c0);
 
-  // M.cprint(c0);
-  //  M.cprint(c1);
-
-  index_t c0p = M.prev(c0);
-  index_t c1p = M.prev(c1);
-
-  index_t v0 = M.vert(c0);
-  index_t v1 = M.vert(c1);
+  CornerId c0p = M.prev(c0);
+  CornerId c1p = M.prev(c1);
 
   if (count_cycle(M, c0) > 1 && !degenerate)
     return corner_index;
@@ -298,9 +237,6 @@ index_t collapse_edge(shell &M, //
   if (M.vsize(M.vert(c1p)) < 4)
     return c0;
 
-  // M.vprintv(v0);
-  // M.vprintv(v1);
-
   merge_face(M, c0p, M.other(c0p));
   merge_face(M, c1p, M.other(c1p));
 
@@ -308,33 +244,27 @@ index_t collapse_edge(shell &M, //
 
   assert(M.vert(c0) != M.vert(M.next(c0)));
 
-  // M.vprintv(v1);
-  // if (!degenerate)
-  //  M.uber_assert();
   return c0;
 }
 
-index_t flip_edge(shell &M, //
-                  const index_t &corner_index) {
-  // this is kind of like an edge delete/insert packaged up into a primitive
-  // function
-  index_t c0i = corner_index;
-  index_t c0p = M.prev(c0i);
-  index_t c0pp = M.prev(c0p);
-  index_t c0n = M.next(c0i);
+CornerId flip_edge(shell &M, CornerId corner_index) {
+  CornerId c0i = corner_index;
+  CornerId c0p = M.prev(c0i);
+  CornerId c0pp = M.prev(c0p);
+  CornerId c0n = M.next(c0i);
 
-  index_t c1i = M.other(c0i);
-  index_t c1p = M.prev(c1i);
-  index_t c1pp = M.prev(c1p);
-  index_t c1n = M.next(c1i);
+  CornerId c1i = M.other(c0i);
+  CornerId c1p = M.prev(c1i);
+  CornerId c1pp = M.prev(c1p);
+  CornerId c1n = M.next(c1i);
 
-  index_t f0 = M.face(c0i);
-  index_t f1 = M.face(c1i);
+  FaceId f0 = M.face(c0i);
+  FaceId f1 = M.face(c1i);
 
-  index_t v0 = M.vert(c0i);
-  index_t v1 = M.vert(c0p);
-  index_t v2 = M.vert(c1i);
-  index_t v3 = M.vert(c1p);
+  VertId v0 = M.vert(c0i);
+  VertId v1 = M.vert(c0p);
+  VertId v2 = M.vert(c1i);
+  VertId v3 = M.vert(c1p);
 
   M.link(c0pp, c0i);
   M.link(c0i, c1p);
@@ -358,55 +288,40 @@ index_t flip_edge(shell &M, //
   M.fupdate(f0);
   M.fupdate(f1);
 
-  if (M.fsize(f0) != 3) {
-    // std::cout << "fsize 0: " << c0i << " " << M.fsize(f0) << std::endl;
-    // std::cout << "fsize 1: " << c1i << " " << M.fsize(f1) << std::endl;
+  if (M.fsize(f0) != 3)
     M.fprintv(f0);
-  }
   assert(M.fsize(f0) == 3);
-  if (M.fsize(f1) != 3) {
-    // std::cout << "fsize 1: " << c1i << " " << M.fsize(f1) << std::endl;
-    // std::cout << "fsize 0: " << c0i << " " << M.fsize(f0) << std::endl;
+  if (M.fsize(f1) != 3)
     M.fprintv(f1);
-  }
   assert(M.fsize(f1) == 3);
-  // assert(M.vert(c0i) != M.vert(c1i));
-  //  M.uber_assert();
 
   return c0i;
 }
 
-index_t remove_vertex(shell &M, //
-                      const index_t &v) {
+FaceId remove_vertex(shell &M, VertId v) {
 
-  // std::cout << __FUNCTION__ << " " << v << std::endl;
-  // std::cout << "  vsize: " << M.vsize(v) << std::endl;
-
-  std::vector<index_t> corners;
-  M.for_each_vertex(v, [&corners](index_t cid, shell &m) {
-    //    std::cout << m.vert(cid) << " ";
-    // m.cprint(cid);
+  std::vector<CornerId> corners;
+  M.for_each_vertex(v, [&corners](CornerId cid, shell &m) {
     corners.push_back(cid);
   });
-  //  std::cout << std::endl;
-  index_t f = -1;
-  for (index_t c : corners)
+  FaceId f = face_id(-1);
+  for (CornerId c : corners)
     f = merge_face(M, c, M.other(c));
 
-  // M.uber_assert();
   return f;
 }
 
-void triangulate_face(shell &M, //
-                      index_t i) {
-  index_t c0 = M.fbegin(i);
+void triangulate_face(shell &M, FaceId fi) {
+  CornerId c0 = M.fbegin(fi);
+  if (c0 < 0)
+    return;
 
   bool splitting = true;
   while (splitting) {
 
-    index_t c0n = M.next(c0);
-    index_t c0nn = M.next(c0n);
-    index_t c0p = M.prev(c0);
+    CornerId c0n = M.next(c0);
+    CornerId c0nn = M.next(c0n);
+    CornerId c0p = M.prev(c0);
 
     splitting = c0nn != c0p;
     if (splitting) {
@@ -418,46 +333,44 @@ void triangulate_face(shell &M, //
 
 void triangulate(shell &M) {
   size_t Nf = M.face_count();
-  for (int i = 0; i < Nf; i++) {
-    if (M.face(i) < 0)
+  for (int i = 0; i < static_cast<int>(Nf); i++) {
+    FaceId fi = face_id(i);
+    if (M.fbegin(fi) < 0)
       continue;
-    triangulate_face(M, i);
+    triangulate_face(M, fi);
   }
 }
 
-bool has_vert(shell &M, index_t vA, index_t vB) {
+bool has_vert(shell &M, VertId vA, VertId vB) {
 
   bool hasB = false;
-  M.for_each_vertex(vA, [&hasB, vB](index_t ci, shell &M) {
-    index_t vi = M.vert(M.next(ci));
+  M.for_each_vertex(vA, [&hasB, vB](CornerId ci, shell &M) {
+    VertId vi = M.vert(M.next(ci));
     hasB |= int(vi == vB);
   });
   return hasB;
 }
 
-bool corner_in_ring(shell &M, index_t vA, index_t cB) {
+bool corner_in_ring(shell &M, VertId vA, CornerId cB) {
 
   bool hasB = false;
-  M.for_each_vertex(vA, [&hasB, cB](index_t ci, shell &M) {
-    index_t cBi = M.next(ci);
-    // std::cout << cBi << " " << cB << " - ";
+  M.for_each_vertex(vA, [&hasB, cB](CornerId ci, shell &M) {
+    CornerId cBi = M.next(ci);
     hasB |= M.edge_equal(cBi, cB);
   });
   std::cout << std::endl;
   return hasB;
 }
 
-bool adjacent0(shell &M, index_t cA0, index_t cB0) {
+bool adjacent0(shell &M, CornerId cA0, CornerId cB0) {
 
-  index_t cA1 = M.other(cA0);
-  index_t cB1 = M.other(cB0);
+  CornerId cA1 = M.other(cA0);
+  CornerId cB1 = M.other(cB0);
 
-  index_t cA0n = M.next(cA0);
-  index_t cA1n = M.next(cA1);
-  index_t cB0n = M.next(cB0);
-  index_t cB1n = M.next(cB1);
-  // std::cout << cA0n << " " << cA1n << " - " << cB0n << " " << cB1n <<
-  // std::endl;
+  CornerId cA0n = M.next(cA0);
+  CornerId cA1n = M.next(cA1);
+  CornerId cB0n = M.next(cB0);
+  CornerId cB1n = M.next(cB1);
   if (M.edge_equal(cA0n, cB0n))
     return true;
   if (M.edge_equal(cA0n, cB1n))
@@ -470,10 +383,10 @@ bool adjacent0(shell &M, index_t cA0, index_t cB0) {
   return false;
 }
 
-bool adjacent(shell &M, index_t cA0, index_t cB0) {
+bool adjacent(shell &M, CornerId cA0, CornerId cB0) {
 
-  index_t cA1 = M.other(cA0);
-  index_t cB1 = M.other(cB0);
+  CornerId cA1 = M.other(cA0);
+  CornerId cB1 = M.other(cB0);
   if (M.vert(cA0) == M.vert(cB0) && //
       M.vert(cA1) == M.vert(cB1)) {
     return false;
@@ -486,15 +399,15 @@ bool adjacent(shell &M, index_t cA0, index_t cB0) {
   return false;
 }
 
-bool share_faces(shell &M, index_t cA0, index_t cB0) {
-  index_t cA1 = M.other(cA0);
-  index_t cB1 = M.other(cB0);
+bool share_faces(shell &M, CornerId cA0, CornerId cB0) {
+  CornerId cA1 = M.other(cA0);
+  CornerId cB1 = M.other(cB0);
 
-  index_t fA0 = M.face(cA0);
-  index_t fA1 = M.face(cA1);
+  FaceId fA0 = M.face(cA0);
+  FaceId fA1 = M.face(cA1);
 
-  index_t fB0 = M.face(cB0);
-  index_t fB1 = M.face(cB1);
+  FaceId fB0 = M.face(cB0);
+  FaceId fB1 = M.face(cB1);
 
   if (fA0 == fB0)
     return true;
@@ -509,65 +422,51 @@ bool share_faces(shell &M, index_t cA0, index_t cB0) {
   return false;
 }
 
-void weld_adajacent_edges(shell &M,    //
-                          index_t cA0, //
-                          index_t cB0) {
+void weld_adajacent_edges(shell &M, CornerId cA0, CornerId cB0) {
 
-  index_t cA1 = M.other(cA0);
-  index_t cB1 = M.other(cB0);
+  CornerId cA1 = M.other(cA0);
+  CornerId cB1 = M.other(cB0);
 
-  std::vector<index_t> corners;
-  M.for_each_vertex(M.vert(cA0), [&corners, cB0, cB1](index_t ci, shell &M) {
-    index_t cBi = M.next(ci);
+  std::vector<CornerId> corners;
+  M.for_each_vertex(M.vert(cA0), [&corners, cB0, cB1](CornerId ci, shell &M) {
+    CornerId cBi = M.next(ci);
     if (M.edge_equal(cBi, cB0))
       corners.push_back(cBi);
     if (M.edge_equal(cBi, cB1))
       corners.push_back(cBi);
   });
 
-  M.for_each_vertex(M.vert(cA1), [&corners, cB0, cB1](index_t ci, shell &M) {
-    index_t cBi = M.next(ci);
+  M.for_each_vertex(M.vert(cA1), [&corners, cB0, cB1](CornerId ci, shell &M) {
+    CornerId cBi = M.next(ci);
     if (M.edge_equal(cBi, cB0))
       corners.push_back(cBi);
     if (M.edge_equal(cBi, cB1))
       corners.push_back(cBi);
   });
 
-  for (auto c : corners) {
+  for (CornerId c : corners) {
     if (M.next(c) > -1) {
       collapse_edge(M, c);
     }
   }
 }
 
-std::array<index_t, 4> merge_edge(shell &M,               //
-                                  index_t cA0,            //
-                                  index_t cB0,            //
-                                  index_t new_vert0 = -1, //
-                                  index_t new_vert1 = -1) {
-  // alignEdges(eA, eB); function of moving mesh
+std::array<int, 4> merge_edge(shell &M, CornerId cA0, CornerId cB0,
+                              VertId new_vert0 = vert_id(-1),
+                              VertId new_vert1 = vert_id(-1)) {
 
-  std::array<index_t, 4> out = {-1, -1, -1, -1};
+  std::array<int, 4> out = {-1, -1, -1, -1};
 
-  // if (share_faces(M, cA0, cB0))
-  //   return out;
-
-  index_t cA1 = M.other(cA0);
-  index_t cB1 = M.other(cB0);
-  index_t vA0 = M.vert(cA0);
-  index_t vA1 = M.vert(cA1);
-  index_t vB0 = M.vert(cB0);
-  index_t vB1 = M.vert(cB1);
+  CornerId cA1 = M.other(cA0);
+  CornerId cB1 = M.other(cB0);
+  VertId vA0 = M.vert(cA0);
+  VertId vA1 = M.vert(cA1);
+  VertId vB0 = M.vert(cB0);
+  VertId vB1 = M.vert(cB1);
 
   if (vA0 < 0 || vA1 < 0 || vB0 < 0 || vB1 < 0)
     return out;
 
-  /*
-  if (count_cycle(M, cA0) > 1)
-    return out;
-  if (count_cycle(M, cB0) > 1)
-    return out;
-*/
   if (vA0 == vA1 || vB0 == vB1)
     return out;
 
@@ -578,7 +477,6 @@ std::array<index_t, 4> merge_edge(shell &M,               //
 
   if (adjacent(M, cA0, cB0)) {
     weld_adajacent_edges(M, cA0, cB0);
-    // std::cout << "adjacent" << std::endl;
     return out;
   }
 
@@ -589,71 +487,33 @@ std::array<index_t, 4> merge_edge(shell &M,               //
   out[1] = vA1;
 
   if (vA0 == vB0) {
-    // std::cout << " A.0 " << std::endl;s
-    index_t vN0 = new_vert0 < 0 ? M.insert_vertex() : new_vert0;
+    VertId vN0 = new_vert0 < 0 ? M.insert_vertex() : new_vert0;
 
     out[2] = vN0;
     M.set_vbegin(vN0, cB0);
-    // M.set_vbegin(vN0, M.next(cA1));
 
     M.vupdate(vA0);
     M.vupdate(vN0);
-
-    // M.vprintv(vA0);
-    // M.vprintv(vN0);
-    // std::cout << "vs: " << M.vsize(vN0) << " " << M.vsize(vA0) << std::endl;
   } else {
-    // std::cout << "here A1!" << std::endl;
     M.vupdate(vA0);
-    // M.vprintv(vA0);
     M.remove_vertex(vB0);
   }
 
   if (vA1 == vB1) {
-    // std::cout << "here B0!" << std::endl;
-    index_t vN1 = new_vert1 < 0 ? M.insert_vertex() : new_vert1;
+    VertId vN1 = new_vert1 < 0 ? M.insert_vertex() : new_vert1;
 
     out[3] = vN1;
 
     M.set_vbegin(vN1, cB1);
-    // M.set_vbegin(vN1, M.next(cA0));
 
     M.vupdate(vA1);
     M.vupdate(vN1);
 
-    // M.vprintv(vA1);
-    // M.vprintv(vN1);
-    // std::cout << "vs: " << M.vsize(vN1) << " " << M.vsize(vA1) << std::endl;
-
   } else {
-    // std::cout << "here B1!" << std::endl;
     M.vupdate(vA1);
 
-    // M.vprintv(vA1);
     M.remove_vertex(vB1);
   }
-  /*
-  std::vector<index_t> corners;
-  M.for_each_vertex(vA0, [&corners](index_t c0, shell &M) {
-    index_t c1 = M.other(c0);
-    if (M.vert(c0) == M.vert(c1))
-      corners.push_back(c0);
-  });
-
-  M.for_each_vertex(vA1, [&corners](index_t c0, shell &M) {
-    index_t c1 = M.other(c0);
-    if (M.vert(c0) == M.vert(c1))
-      corners.push_back(c0);
-  });
-
-  for (index_t c : corners) {
-    if (M.next(c) < 0)
-      continue;
-    collapse_edge(M, c, true);
-  }
-
-  M.uber_assert();
-*/
   return out;
 }
 
@@ -663,16 +523,13 @@ std::vector<index_t> get_pack_permutation(std::vector<index_t> &indices) {
   std::iota(perm.begin(), perm.end(), 0);
 
   int w = 0;
-  //-----------xxxxxxx----x------
-  //           |      |
 
-  for (int r = S; r < indices.size(); r += S) {
+  for (int r = S; r < static_cast<int>(indices.size()); r += S) {
     if (indices[perm[r - S]] < 0 && indices[perm[r]] > -1 &&
         indices[perm[w]] < 0) {
       for (int i = 0; i < S; i++) {
         std::swap(perm[r + i], perm[w + i]);
       }
-      // std::swap(perm[r], perm[w]);
       w += S;
     } else if (indices[perm[w]] > -1) {
       w += S;
@@ -683,7 +540,7 @@ std::vector<index_t> get_pack_permutation(std::vector<index_t> &indices) {
 
 std::vector<index_t> inverse_permutation(const std::vector<index_t> &perm) {
   std::vector<index_t> iperm(perm.size(), -1);
-  for (int i = 0; i < perm.size(); i++) {
+  for (int i = 0; i < static_cast<int>(perm.size()); i++) {
     if (perm[i] > -1)
       iperm[perm[i]] = i;
   }
@@ -693,22 +550,21 @@ std::vector<index_t> inverse_permutation(const std::vector<index_t> &perm) {
 void apply_permutation(const std::vector<index_t> &perm,
                        std::vector<index_t> &indices) {
   std::vector<index_t> n_indices(indices);
-  for (int i = 0; i < indices.size(); i++) {
+  for (int i = 0; i < static_cast<int>(indices.size()); i++) {
     n_indices[i] = indices[perm[i]];
   }
   indices = n_indices;
 }
 
 size_t calc_new_size(std::vector<index_t> &indices) {
-  std::vector<index_t>::iterator position =
-      std::find(indices.begin(), indices.end(), -1);
-  int index = position - indices.begin();
-  return index;
+  auto position = std::find(indices.begin(), indices.end(), -1);
+  int index = static_cast<int>(position - indices.begin());
+  return static_cast<size_t>(index);
 }
 
 void apply_inverse_permutation(const std::vector<index_t> &iperm,
                                std::vector<index_t> &indices) {
-  for (int i = 0; i < indices.size(); i++) {
+  for (int i = 0; i < static_cast<int>(indices.size()); i++) {
     if (indices[i] > -1)
       indices[i] = iperm[indices[i]];
   }
@@ -718,14 +574,27 @@ void pack(shell &M) {
 
   std::cout << "*--- packing ---*" << std::endl;
 
-  auto debug = [](const std::vector<index_t> indices, index_t s = 732,
-                  index_t e = 764, std ::string txt = "") {
+  auto debug = [](const std::vector<index_t> &indices, index_t s, index_t e,
+                  const std::string &txt) {
+    const index_t n = static_cast<index_t>(indices.size());
+    if (n == 0) {
+      std::cout << txt << ": (empty)" << std::endl;
+      return;
+    }
+    if (s < 0)
+      s = 0;
+    if (e > n)
+      e = n;
+    if (s >= e) {
+      std::cout << txt << ": (skip debug window; size=" << n << ")" << std::endl;
+      return;
+    }
     std::cout << txt << ": ";
-    for (int i = s; i < e /*__corners_next.size()*/; i++) {
-      if (indices[i] < 0)
+    for (index_t i = s; i < e; i++) {
+      if (indices[static_cast<size_t>(i)] < 0)
         std::cout << -1 << " ";
       else
-        std::cout << indices[i] << " ";
+        std::cout << indices[static_cast<size_t>(i)] << " ";
     }
     std::cout << std::endl;
   };
@@ -744,9 +613,6 @@ void pack(shell &M) {
       d->resize(Nv);
     }
   }
-
-  // debug(M.vert_begin(), std::string(" after v"));
-  // debug(M.corners_vert(), std::string(" after c"));
 
   std::vector<index_t> fperm = get_pack_permutation<1>(M.face_begin());
   std::vector<index_t> fiperm = inverse_permutation(fperm);
@@ -767,17 +633,19 @@ void pack(shell &M) {
 
   std::vector<index_t> cperm = get_pack_permutation<2>(M.corners_next());
   std::vector<index_t> ciperm = inverse_permutation(cperm);
-  index_t s = 732;
-  index_t e = 764;
-  debug(cperm, s, e, "cperm: ");
-  debug(ciperm, s, e, "ciperm: ");
+  // Debug window: was hardcoded 732–764 for huge meshes; clamp to valid range.
+  const index_t ncorn = static_cast<index_t>(cperm.size());
+  const index_t dbg_lo = ncorn > 32 ? ncorn - 32 : 0;
+  const index_t dbg_hi = ncorn;
+  debug(cperm, dbg_lo, dbg_hi, "cperm: ");
+  debug(ciperm, dbg_lo, dbg_hi, "ciperm: ");
 
-  debug(M.corners_face(), s, e, "corners_f, before: ");
+  debug(M.corners_face(), dbg_lo, dbg_hi, "corners_f, before: ");
   apply_permutation(cperm, M.corners_next());
   apply_permutation(cperm, M.corners_prev());
   apply_permutation(cperm, M.corners_face());
   apply_permutation(cperm, M.corners_vert());
-  debug(M.corners_face(), s, e, "corners_f, after: ");
+  debug(M.corners_face(), dbg_lo, dbg_hi, "corners_f, after: ");
 
   apply_inverse_permutation(ciperm, M.corners_next());
   apply_inverse_permutation(ciperm, M.corners_prev());
@@ -792,10 +660,9 @@ void pack(shell &M) {
 
   std::cout << "permute corners: " << Nc << std::endl;
   std::cout << cperm.size() << " " << ciperm.size() << std::endl;
-  // cperm.resize(Nc);
   std::vector<index_t> cperm_half(cperm.size() / 2);
 
-  for (int i = 0; i < cperm.size(); i += 2) {
+  for (size_t i = 0; i < cperm.size(); i += 2) {
     cperm_half[i / 2] = cperm[i] / 2;
   }
 
@@ -816,7 +683,6 @@ void pack(shell &M) {
 #endif
 
   std::cout << "*--- done ---*" << std::endl;
-  // std::cout << std::flush;
 }
 
 } // namespace shell

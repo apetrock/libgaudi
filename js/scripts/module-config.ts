@@ -45,6 +45,15 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
     exportName: 'StrandTestModule',
     outputFiles: ['strand_test.js']
   },
+
+  'unit_tests': {
+    name: 'unit_tests',
+    description: 'Gaudi Unit Tests',
+    sources: ['src/unit_tests.cpp'],
+    useLogger: true,
+    exportName: 'UnitTests',
+    outputFiles: ['unit_tests.js']
+  },
   /*
     'path_test': {
     name: 'path_test',

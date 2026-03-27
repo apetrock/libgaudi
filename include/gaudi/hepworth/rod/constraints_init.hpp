@@ -15,7 +15,6 @@
 #include <stdio.h>
 #include <type_traits>
 #include <vector>
-#include <zlib.h>
 
 #include "../collision_constraint.hpp"
 #include "constraints.hpp"

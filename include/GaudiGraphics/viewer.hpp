@@ -10,9 +10,11 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
+#include <cstdio>
 #include <filesystem>
 #include <iomanip>
 #include <regex>
@@ -79,6 +81,27 @@ inline void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id,
 namespace gg {
 using namespace GaudiMath;
 
+namespace detail {
+inline FILE *open_pipe_write(const std::string &cmd) {
+#if defined(_WIN32)
+  return _popen(cmd.c_str(), "w");
+#else
+  return popen(cmd.c_str(), "w");
+#endif
+}
+
+inline int close_pipe(FILE *pipe) {
+  if (pipe == nullptr) {
+    return 0;
+  }
+#if defined(_WIN32)
+  return _pclose(pipe);
+#else
+  return pclose(pipe);
+#endif
+}
+} // namespace detail
+
 class Viewer;
 using ViewerPtr = std::shared_ptr<Viewer>;
 
@@ -133,9 +156,11 @@ public:
   }
 
   void init(Vec2i size) {
+    std::cerr << "[viewer] init begin size=" << size.transpose() << std::endl;
 
     mProject = this->makeProjectionMatrix(
         60.0 * M_PI / 180.0, double(size[0]) / double(size[1]), 0.1, 20);
+    std::cerr << "[viewer] projection ready" << std::endl;
     mModelView.setIdentity();
     mModelViewOld.setIdentity();
 
@@ -145,10 +170,19 @@ public:
     mDragging = false;
 
     ball = new nanogui::Arcball();
+    std::cerr << "[viewer] arcball allocated" << std::endl;
     ball->setSize(size);
+    std::cerr << "[viewer] arcball sized" << std::endl;
 
     mPosition = Vec4(0, 0, mDist, 1);
     this->updatePosition();
+    std::cerr << "[viewer] init complete" << std::endl;
+  }
+
+  void resize(Vec2i size) {
+    mProject = this->makeProjectionMatrix(
+        60.0 * M_PI / 180.0, double(size[0]) / double(size[1]), 0.1, 20);
+    ball->setSize(size);
   }
 
   void updateFrame() {
@@ -274,11 +308,14 @@ public:
                       nextFileName;
 
     // open pipe to ffmpeg's stdin in binary write mode
-    ffmpeg = popen(cmd.c_str(), "w");
+    ffmpeg = detail::open_pipe_write(cmd);
+    if (ffmpeg == nullptr) {
+      throw std::runtime_error("Could not launch ffmpeg frame grabber");
+    }
     _buffer = new int[_width * _height];
   }
 
-  ~FrameGrabber() { pclose(ffmpeg); }
+  ~FrameGrabber() { detail::close_pipe(ffmpeg); }
 
   void onFrame() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -339,6 +376,10 @@ public:
   virtual void initShader(){};
   virtual unsigned int getFBO() { return 0; };
   virtual void render(ViewerPtr view){};
+  virtual void resize(int w, int h) {
+    _width = w;
+    _height = h;
+  };
 
   void setIndinces() {
     Eigen::MatrixXi indices(3, 2);
@@ -459,6 +500,16 @@ public:
 
   ~DeferredShadingEffect() {}
 
+  virtual void resize(int w, int h) override {
+    RenderingEffect::resize(w, h);
+    glDeleteTextures(1, &gPosition);
+    glDeleteTextures(1, &gNormal);
+    glDeleteTextures(1, &gAlbedoSpec);
+    glDeleteRenderbuffers(1, &mRboDepth);
+    glDeleteFramebuffers(1, &gBuffer);
+    initFbo();
+  }
+
   virtual void initFbo() override {
 
     // configure floating point framebuffer
@@ -529,10 +580,10 @@ public:
   virtual unsigned int getPositionTexture() { return gPosition; }
   virtual unsigned int getNormalTexture() { return gNormal; }
   virtual void setSsaoTexture(unsigned int tex) { ssaoTexture = tex; }
-  virtual void setBleedTexture(unsigned int tex) { bleedTexture = tex; }
 
   virtual void render(ViewerPtr view) override {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, _width, _height);
     mShader.bind();
 
     glActiveTexture(GL_TEXTURE0);
@@ -543,20 +594,12 @@ public:
     glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, ssaoTexture);
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, bleedTexture);
 
-    // std::cout << "gs: " << gBuffer << " " << gPosition << " " << gNormal << "
-    // "
-    //           << gAlbedoSpec << std::endl;
-    //  this->mShader.setUniform("hdrBuffer", 2);
     this->mShader.setUniform("gPosition", 0);
     this->mShader.setUniform("gNormal", 1);
     this->mShader.setUniform("gAlbedoSpec", 2);
     this->mShader.setUniform("ssao", 3);
-    this->mShader.setUniform("bleed", 4);
 
-    // this->mShader.setUniform("viewPos", view->getPosition3());
     this->draw();
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
@@ -566,7 +609,7 @@ public:
   }
 
   unsigned int gBuffer;
-  unsigned int gPosition, gNormal, gAlbedoSpec, ssaoTexture, bleedTexture;
+  unsigned int gPosition, gNormal, gAlbedoSpec, ssaoTexture;
   unsigned int mRboDepth;
 };
 
@@ -589,6 +632,13 @@ public:
   }
 
   ~SsaoShadingEffect() {}
+
+  virtual void resize(int w, int h) override {
+    RenderingEffect::resize(w, h);
+    glDeleteTextures(1, &ssaoColorBuffer);
+    glDeleteFramebuffers(1, &ssaoFBO);
+    initFbo();
+  }
   void initKernel() {
     // generate sample kernel
     // ----------------------
@@ -675,10 +725,8 @@ public:
   virtual unsigned int getSsaoTexture() { return ssaoColorBuffer; }
 
   virtual void render(ViewerPtr view) override {
-
-    // 2. generate SSAO texture
-    // ------------------------
     glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
+    glViewport(0, 0, _width, _height);
     glClear(GL_COLOR_BUFFER_BIT);
 
     mShader.bind();
@@ -686,18 +734,10 @@ public:
     glBindTexture(GL_TEXTURE_2D, gPosition);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, gNormal);
-    // glActiveTexture(GL_TEXTURE2);
-    // glBindTexture(GL_TEXTURE_2D, noiseTexture);
-    /*
-        for (unsigned int i = 0; i < 64; ++i)
-          this->mShader.setUniform("samples[" + std::to_string(i) + "]",
-                                   ssaoKernel[i]);
-    */
+
     this->mShader.setUniform("projection", view->getProjection());
     this->mShader.setUniform("gPosition", 0);
     this->mShader.setUniform("gNormal", 1);
-    // this->mShader.setUniform("texNoise", 2);
-    this->mShader.setUniform("viewPos", view->getPosition3());
 
     this->draw();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -939,32 +979,51 @@ public:
     std::cout << "screen size: " << _width << " " << _height << std::endl;
     std::cout << "size: " << mSize.transpose() << std::endl;
 
+    std::cerr << "[simple_app] performLayout begin" << std::endl;
     performLayout(mNVGContext);
+    std::cerr << "[simple_app] performLayout end" << std::endl;
+    std::cerr << "[simple_app] viewer create begin" << std::endl;
     _viewer = gg::Viewer::create(mSize, d);
+    std::cerr << "[simple_app] viewer create end" << std::endl;
 
-    // During init, enable debug output
-    glEnable(GL_DEBUG_OUTPUT);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    // During init, enable GL debug output only when the driver exposes it.
+    std::cerr << "[simple_app] enabling GL debug" << std::endl;
+    if (glDebugMessageCallback != nullptr) {
+      glEnable(GL_DEBUG_OUTPUT);
+      glDebugMessageCallback(MessageCallback, 0);
+      std::cerr << "[simple_app] GL debug callback installed" << std::endl;
+    } else {
+      std::cerr << "[simple_app] GL debug callback unavailable; skipping"
+                << std::endl;
+    }
 
-    glDebugMessageCallback(MessageCallback, 0);
-
+    std::cerr << "[simple_app] enabling depth/cull" << std::endl;
     glEnable(GL_DEPTH_TEST);
     // Accept fragment if it closer to the camera than the former one
     glDepthFunc(GL_LESS);
     // Cull triangles which normal is not towards the camera
     glEnable(GL_CULL_FACE);
-    if (grab)
-      _frameGrabber =
-          FrameGrabber::create(_width, _height, frame_grabber_pattern);
+    if (grab) {
+      try {
+        _frameGrabber =
+            FrameGrabber::create(_width, _height, frame_grabber_pattern);
+      } catch (const std::exception &e) {
+        std::cerr << "Frame grabber disabled: " << e.what() << std::endl;
+      }
+    }
 
+    std::cerr << "[simple_app] building rendering effects" << std::endl;
     _renderingEffects.clear();
     _effect_ids.SSAO = _renderingEffects.size();
+    std::cerr << "[simple_app] creating SSAO effect" << std::endl;
     _renderingEffects.push_back(SsaoShadingEffect::create(_width, _height));
     
     //_renderingEffects[_effect_ids.BLEED] = ColorBleedEffect::create(_width, _height);
     //_renderingEffects[_effect_ids.BLUR] = BlurEffect::create(_width, _height);
     _effect_ids.DEFERRED = _renderingEffects.size();
+    std::cerr << "[simple_app] creating deferred effect" << std::endl;
     _renderingEffects.push_back(DeferredShadingEffect::create(_width, _height));
+    std::cerr << "[simple_app] rendering effects created" << std::endl;
 
     SsaoShadingEffectPtr ssao =
          std::dynamic_pointer_cast<SsaoShadingEffect>(_renderingEffects[_effect_ids.SSAO]);
@@ -980,6 +1039,7 @@ public:
 
     ssao->setPositionTexture(deffered->getPositionTexture());
     ssao->setNormalTexture(deffered->getNormalTexture());
+    std::cerr << "[simple_app] SSAO textures wired" << std::endl;
 
     //bleed->setPositionTexture(deffered->getPositionTexture());
     //bleed->setNormalTexture(deffered->getNormalTexture());
@@ -991,7 +1051,7 @@ public:
     //blur->setNormal(deffered->getNormalTexture());
 
     deffered->setSsaoTexture(ssao->getSsaoTexture());
-    //deffered->setBleedTexture(blur->getBlurred());
+    std::cerr << "[simple_app] SimpleApp init complete" << std::endl;
 
     //_renderingEffect = HdrEffect::create(_width, _height);
   }
@@ -1016,6 +1076,34 @@ public:
 
     _viewer->onMouseMotion(p, rel, button, modifiers);
     Screen::mouseMotionEvent(p, rel, button, modifiers);
+    return true;
+  }
+
+  virtual bool resizeEvent(const Eigen::Vector2i &size) override {
+    int fbW = mFBSize[0];
+    int fbH = mFBSize[1];
+    if (fbW <= 0 || fbH <= 0)
+      return false;
+
+    _width = fbW;
+    _height = fbH;
+
+    _viewer->resize(Eigen::Vector2i(fbW, fbH));
+
+    for (auto &effect : _renderingEffects)
+      effect->resize(fbW, fbH);
+
+    SsaoShadingEffectPtr ssao =
+        std::dynamic_pointer_cast<SsaoShadingEffect>(
+            _renderingEffects[_effect_ids.SSAO]);
+    DeferredShadingEffectPtr deffered =
+        std::dynamic_pointer_cast<DeferredShadingEffect>(
+            _renderingEffects[_effect_ids.DEFERRED]);
+
+    ssao->setPositionTexture(deffered->getPositionTexture());
+    ssao->setNormalTexture(deffered->getNormalTexture());
+    deffered->setSsaoTexture(ssao->getSsaoTexture());
+
     return true;
   }
 
@@ -1065,7 +1153,6 @@ public:
     glfwGetTime();
 
     if (this->_animate) {
-      std::cout << "animating" << std::endl;
       this->animate();
 
       if (_rotate_ball)
@@ -1073,18 +1160,18 @@ public:
     }
 
     glEnable(GL_DEPTH_TEST);
-    std::cout << "gl bind frame buffer: "  << std::endl;
-    glBindFramebuffer(GL_FRAMEBUFFER, _renderingEffects[_effect_ids.DEFERRED]->getFBO());
+    glBindFramebuffer(GL_FRAMEBUFFER,
+                      _renderingEffects[_effect_ids.DEFERRED]->getFBO());
+    glViewport(0, 0, _width, _height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-    std::cout << "draw scene" << std::endl;
     if (mScene)
       mScene->onDraw(*_viewer);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, _width, _height);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-    std::cout << "render effects" << std::endl;
     for (auto &effect : _renderingEffects)
       effect->render(_viewer);
 
@@ -1103,9 +1190,7 @@ private:
 
   struct {
     int SSAO = 0;
-    int BLEED = 1;
-    int BLUR = 2;
-    int DEFERRED = 3;
+    int DEFERRED = 1;
   } _effect_ids;
 
   bool _animate = false;

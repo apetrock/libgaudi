@@ -164,5 +164,14 @@ export async function isWasmModuleAvailable(moduleFilename: string): Promise<boo
  * @returns Array of available module names
  */
 export function getAvailableWasmModules(): string[] {
-  return ['hello_world', 'foo_demo', 'bar_demo', 'gaudi_logger_test', 'rod_constraints_test', 'test_module', 'morton_tree_test'];
-} 
+  return [
+    'hello_world',
+    'foo_demo',
+    'bar_demo',
+    'gaudi_logger_test',
+    'rod_constraints_test',
+    'test_module',
+    'morton_tree_test',
+    'bvh_test'
+  ];
+}

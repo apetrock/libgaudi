@@ -112,26 +112,26 @@ std::vector<vec2> project2(const std::vector<vec3> x, const vec3 &xc,
   return out;
 }
 
-bool has(const std::set<index_t> vis, index_t c) {
+bool has_corner(const std::set<index_t> &vis, index_t c) {
   return vis.find(c) != vis.end();
 }
 std::vector<vec2> project_set(const shell &M, const std::vector<vec3> &x,
                               const std::vector<index_t> &C, const vec3 dir,
-                              const index_t &c0) {
+                              const CornerId &c0) {
 
   vec3 xc = x[M.vert(c0)];
   std::vector<vec3> x_col(C.size());
-  for (int k = 0; k < C.size(); k++) {
-    x_col[k] = x[M.vert(C[k])];
+  for (int k = 0; k < static_cast<int>(C.size()); k++) {
+    x_col[k] = x[M.vert(corner_id(C[k]))];
   }
 
   mat3 D = mat3::Zero();
   std::set<index_t> visited;
-  M.const_for_each_vertex(M.vert(c0), [&](index_t ci, const shell &M) {
-    index_t cn0 = M.next(ci);
-    M.const_for_each_vertex(M.vert(cn0), [&](index_t ci, const shell &M) {
-      index_t cn1 = M.next(ci);
-      if (!has(visited, cn1)) {
+  M.const_for_each_vertex(M.vert(c0), [&](CornerId ci, const shell &M) {
+    CornerId cn0 = M.next(ci);
+    M.const_for_each_vertex(M.vert(cn0), [&](CornerId ci, const shell &M) {
+      CornerId cn1 = M.next(ci);
+      if (!has_corner(visited, cn1)) {
         visited.insert(cn1);
         vec3 xn = x[M.vert(cn1)];
         vec3 dx = xn - xc;
@@ -173,12 +173,12 @@ std::vector<vec2> project_set(const shell &M, const std::vector<vec3> &x,
 }
 
 std::vector<vec2> project_dihedral(const shell &M, const std::vector<vec3> &x,
-                                   const index_t &corner, const vec3 &dir,
+                                   const CornerId &corner, const vec3 &dir,
                                    const real &s) {
-  index_t c0 = corner;
-  index_t c1 = M.other(c0);
-  index_t c0p = M.prev(c0);
-  index_t c1p = M.prev(c1);
+  CornerId c0 = corner;
+  CornerId c1 = M.other(c0);
+  CornerId c0p = M.prev(c0);
+  CornerId c1p = M.prev(c1);
 
   real cot0 = cotan(M, c0, x);
   real cot1 = cotan(M, c1, x);
@@ -221,18 +221,18 @@ std::vector<vec2> project_dihedral(const shell &M, const std::vector<vec3> &x,
 
 using EdgeFcn =
     std::function<bool(const shell &, const std::vector<vec3> &,
-                       const index_t &, const real &, const real &, vec3 &)>;
+                       const CornerId &, const real &, const real &, vec3 &)>;
 
-bool walk(const shell &M, const std::vector<vec3> &x, const index_t &start,
+bool walk(const shell &M, const std::vector<vec3> &x, const CornerId &start,
           const vec3 &dir0, const real &s0, const int max_iter = 1000,
           const real &tol = 1e-2, EdgeFcn fcn = nullptr) {
 
-  auto log_seg = [&](index_t c00, index_t c01, index_t c10, index_t c11,
+  auto log_seg = [&](CornerId c00, CornerId c01, CornerId c10, CornerId c11,
                      real s0, real s1, real n_o, vec4 col) {
-    index_t v00 = M.vert(c00);
-    index_t v01 = M.vert(c01);
-    index_t v10 = M.vert(c10);
-    index_t v11 = M.vert(c11);
+    VertId v00 = M.vert(c00);
+    VertId v01 = M.vert(c01);
+    VertId v10 = M.vert(c10);
+    VertId v11 = M.vert(c11);
 
     vec3 x0 = va::mix(s0, x[v00], x[v01]);
     vec3 x1 = va::mix(s1, x[v10], x[v11]);
@@ -242,15 +242,15 @@ bool walk(const shell &M, const std::vector<vec3> &x, const index_t &start,
     gg::geometry_logger::line(x0 + n_o * N0, x1 + n_o * N1, col);
   };
 
-  auto get_one_ring = [&](index_t c) {
+  auto get_one_ring = [&](CornerId c) {
     std::vector<index_t> range;
-    M.const_for_each_vertex(M.vert(c), [&range](int ci, const shell &M) {
+    M.const_for_each_vertex(M.vert(c), [&range](CornerId ci, const shell &M) {
       range.push_back(M.next(ci));
     });
     return range;
   };
 
-  index_t corner = start;
+  CornerId corner = start;
   vec3 dir = dir0;
   real s = s0;
   real accumulated_length = 0.0;
@@ -258,10 +258,10 @@ bool walk(const shell &M, const std::vector<vec3> &x, const index_t &start,
 
   while (corner > -1 && it < max_iter) {
 
-    index_t c0 = corner;
-    index_t c1 = M.other(c0);
-    index_t c0p = M.prev(c0);
-    index_t c1p = M.prev(c1);
+    CornerId c0 = corner;
+    CornerId c1 = M.other(c0);
+    CornerId c0p = M.prev(c0);
+    CornerId c1p = M.prev(c1);
 
     vec3 x0 = x[M.vert(c0)];
     vec3 x1 = x[M.vert(c1)];
@@ -294,7 +294,7 @@ bool walk(const shell &M, const std::vector<vec3> &x, const index_t &start,
 
     // gg::geometry_logger::line(unproj(p0, xc, B, T), unproj(p1, xc, B, T),
     //                           vec4(0.0, 1.0, 1.0, 1.0));
-    corner = -1;
+    corner = corner_id(-1);
 
     for (int i = 0; i < N; i++) {
       int i0 = i;
@@ -303,8 +303,8 @@ bool walk(const shell &M, const std::vector<vec3> &x, const index_t &start,
       vec2 xi0 = X2[i0];
       vec2 xi1 = X2[i1];
 
-      index_t ci0 = C[i0];
-      index_t ci1 = C[i1];
+      CornerId ci0 = corner_id(C[i0]);
+      CornerId ci1 = corner_id(C[i1]);
 
       bool itx = LineLineIntersect(p0, p1, xi0, xi1, si, true);
       if (itx) {
@@ -329,25 +329,25 @@ bool walk(const shell &M, const std::vector<vec3> &x, const index_t &start,
 }
 
 real dist_from_line(const shell &M, const std::vector<vec3> &x,
-                    const index_t &c0, const vec3 &pt) {
-  index_t c1 = M.other(c0);
+                    const CornerId &c0, const vec3 &pt) {
+  CornerId c1 = M.other(c0);
   vec3 x0 = x[M.vert(c0)];
   vec3 x1 = x[M.vert(c1)];
   return va::distance_from_line(x0, x1, pt);
 }
 
 bool contained_in_edge(const shell &M, const std::vector<vec3> &x,
-                       const index_t &c0, const vec3 &pt) {
+                       const CornerId &c0, const vec3 &pt) {
 
-  index_t c1 = M.other(c0);
+  CornerId c1 = M.other(c0);
   vec3 x0 = x[M.vert(c0)];
   vec3 x1 = x[M.vert(c1)];
   return va::contained_in_line(x0, x1, pt);
 }
 
-real get_s(const shell &M, const std::vector<vec3> &x, const index_t &c0,
+real get_s(const shell &M, const std::vector<vec3> &x, const CornerId &c0,
            const vec3 &pt) {
-  index_t c1 = M.other(c0);
+  CornerId c1 = M.other(c0);
   vec3 x0 = x[M.vert(c0)];
   vec3 x1 = x[M.vert(c1)];
   real d0 = (pt - x0).norm();
@@ -355,10 +355,10 @@ real get_s(const shell &M, const std::vector<vec3> &x, const index_t &c0,
   return d0 / d1;
 }
 
-index_t find(const shell &M, const std::vector<vec3> &x, const index_t &c0,
+CornerId find(const shell &M, const std::vector<vec3> &x, const CornerId &c0,
              const vec3 &pt,
              std::function<bool(const shell &M, const std::vector<vec3> &x,
-                                const index_t &ci, const vec3 &pt, index_t &cn,
+                                const CornerId &ci, const vec3 &pt, CornerId &cn,
                                 real &lmin)>
                  func) {
 
@@ -378,25 +378,25 @@ index_t find(const shell &M, const std::vector<vec3> &x, const index_t &c0,
   std::make_heap(stack.begin(), stack.end(), cmp);
 
   bool searching = true;
-  index_t cn = -1;
+  CornerId cn = corner_id(-1);
   real lmin = 99999;
   index_t it = 0;
-  std::cout << " " << M.vert(c0) << " " << M.vert(M.other(c0)) << std::endl;
+  std::cout << " " << M.vert(c0) << " " << M.vert(M.other(c0))            << std::endl;
   while (stack.size() > 0 && searching && it < 200) {
 
     std::pop_heap(stack.begin(), stack.end(), cmp);
     index_t v = stack.back();
     stack.pop_back();
     std::cout << " -" << v << " " << (pt - x[v]).norm() << std::endl;
-    M.const_for_each_vertex(v, [&](int ci, const shell &M) {
-      index_t vn = M.vert(M.next(ci));
+    M.const_for_each_vertex(vert_id(v), [&](CornerId ci, const shell &M) {
+      VertId vn = M.vert(M.next(ci));
 
-      if (!has(v_visited, vn) && lmin > 1e-10) {
+      if (!has_corner(v_visited, vn) && lmin > 1e-10) {
         v_visited.insert(vn);
         stack.push_back(vn);
         std::push_heap(stack.begin(), stack.end(), cmp);
       }
-      if (!has(c_visited, ci / 2)) {
+      if (!has_corner(c_visited, ci / 2)) {
         it++;
         c_visited.insert(ci / 2);
         searching = func(M, x, ci, pt, cn, lmin);
@@ -407,13 +407,13 @@ index_t find(const shell &M, const std::vector<vec3> &x, const index_t &c0,
   return cn;
 }
 
-index_t find_edge(const shell &M, const std::vector<vec3> &x, const index_t &c0,
-                  const vec3 &pt) {
+CornerId find_edge(const shell &M, const std::vector<vec3> &x,
+                   const CornerId &c0, const vec3 &pt) {
 
-  index_t cmin =
+  CornerId cmin =
       find(M, x, c0, pt,
-           [](const shell &M, const std::vector<vec3> &x, const index_t &ci,
-              const vec3 &pt, index_t &cn, real &lmin) {
+           [](const shell &M, const std::vector<vec3> &x, const CornerId &ci,
+              const vec3 &pt, CornerId &cn, real &lmin) {
              real l = dist_from_line(M, x, ci, pt);
              bool in_edge = contained_in_edge(M, x, ci, pt);
 
@@ -429,13 +429,13 @@ index_t find_edge(const shell &M, const std::vector<vec3> &x, const index_t &c0,
   return cmin;
 }
 
-index_t find_point(const shell &M, const std::vector<vec3> &x,
-                   const index_t &c0, const vec3 &pt) {
+CornerId find_point(const shell &M, const std::vector<vec3> &x,
+                   const CornerId &c0, const vec3 &pt) {
 
-  index_t cmin =
+  CornerId cmin =
       find(M, x, c0, pt,
-           [](const shell &M, const std::vector<vec3> &x, const index_t &ci,
-              const vec3 &pt, index_t &cn, real &lmin) {
+           [](const shell &M, const std::vector<vec3> &x, const CornerId &ci,
+              const vec3 &pt, CornerId &cn, real &lmin) {
              real l = (pt - x[M.vert(ci)]).norm();
 
              if (l < lmin) {
@@ -455,16 +455,16 @@ std::vector<vec3> get_x(shell &M, const std::vector<vec3> &x,
                         std::vector<index_t> &E_in, std::vector<real> &S_in) {
 
   std::vector<vec3> x_out(E_in.size());
-  for (int i = 0; i < E_in.size(); i++) {
-    x_out[i] = edge_vert(M, E_in[i], S_in[i], x);
+  for (int i = 0; i < static_cast<int>(E_in.size()); i++) {
+    x_out[i] = edge_vert(M, corner_id(E_in[i]), S_in[i], x);
   }
   return x_out;
 }
 
-void log_adj_edges(shell &M, const std::vector<vec3> &x, index_t v) {
-  M.const_for_each_vertex(v, [&](index_t c0, const shell &M) {
-    index_t v0 = M.vert(c0);
-    index_t v1 = M.vert(M.other(c0));
+void log_adj_edges(shell &M, const std::vector<vec3> &x, VertId v) {
+  M.const_for_each_vertex(v, [&](CornerId c0, const shell &M) {
+    VertId v0 = M.vert(c0);
+    VertId v1 = M.vert(M.other(c0));
 
     vec3 x0 = x[v0];
     vec3 x1 = x[v1];
@@ -476,23 +476,23 @@ void log_adj_edges(shell &M, const std::vector<vec3> &x, index_t v) {
   });
 }
 
-bool edge_between(shell &M, index_t v0, index_t v1) {
+bool edge_between(shell &M, VertId v0, VertId v1) {
   bool has_edge = false;
-  M.const_for_each_vertex(v0, [&](index_t c0, const shell &M) {
-    index_t vn = M.vert(M.next(c0));
+  M.const_for_each_vertex(v0, [&](CornerId c0, const shell &M) {
+    VertId vn = M.vert(M.next(c0));
     has_edge = has_edge || (vn == v1);
   });
   return has_edge;
 };
 
 void walk_new_seg(shell &M, const std::vector<vec3> &x,            //
-                  index_t c0, index_t c1, std::vector<index_t> &E, //
+                  CornerId c0, CornerId c1, std::vector<index_t> &E, //
                   std::vector<real> &S, const real &tol = 1e-2) {
   vec3 gdir = (x[M.vert(c1)] - x[M.vert(c0)]).normalized();
   asawa::shell::walk(
       M, x, c0, gdir, 0.0, 20, tol,
       [&](const asawa::shell::shell &M, const std::vector<vec3> &x,
-          const index_t &ci, const real &s, const real &accumulated_length,
+          const CornerId &ci, const real &s, const real &accumulated_length,
           vec3 &dir) {
         dir = gdir;
         real si = s;
@@ -509,12 +509,12 @@ void walk_new_seg(shell &M, const std::vector<vec3> &x,            //
       });
 }
 
-inline void log_edge(shell &M, const std::vector<vec3> &x, index_t c0, real n_o,
+inline void log_edge(shell &M, const std::vector<vec3> &x, CornerId c0, real n_o,
                      vec4 col) {
-  index_t c1 = M.other(c0);
+  CornerId c1 = M.other(c0);
 
-  index_t v0 = M.vert(c0);
-  index_t v1 = M.vert(c1);
+  VertId v0 = M.vert(c0);
+  VertId v1 = M.vert(c1);
 
   vec3 x0 = x[v0];
   vec3 x1 = x[v1];
@@ -526,13 +526,13 @@ inline void log_seg_v(shell &M, const std::vector<vec3> &x, //
                       index_t v0, index_t v1, real n_o, vec4 col) {
   vec3 x0 = x[v0];
   vec3 x1 = x[v1];
-  vec3 N0 = vert_normal(M, v0, x);
-  vec3 N1 = vert_normal(M, v1, x);
+  vec3 N0 = vert_normal(M, vert_id(v0), x);
+  vec3 N1 = vert_normal(M, vert_id(v1), x);
   gg::geometry_logger::line(x0 + n_o * N0, x1 + n_o * N1, col);
 };
 
 inline void log_seg_e(shell &M, const std::vector<vec3> &x, //
-                      const index_t &c0, const index_t &c1, //
+                      const CornerId &c0, const CornerId &c1, //
                       const real &s0, const real &s1,       //
                       real n_o, vec4 col) {
   vec3 x0 = edge_vert(M, c0, s0, x);
@@ -548,26 +548,26 @@ std::vector<index_t> stitch_walk(shell &M, const std::vector<vec3> &x,
   std::vector<index_t> walk;
   std::vector<bool> has_walk(M.vert_count(), false);
 
-  for (int i = 0; i < walk_0.size() - 1; i++) {
-    index_t v0 = M.vert(walk_0[i + 0]);
-    has_walk[v0] = true;
+  for (int i = 0; i < static_cast<int>(walk_0.size()) - 1; i++) {
+    index_t v0 = M.vert(corner_id(walk_0[i + 0]));
+    has_walk[static_cast<size_t>(v0)] = true;
   }
 
-  for (int i = 0; i < walk_0.size() - 1; i++) {
-    index_t v0 = M.vert(walk_0[i + 0]);
-    index_t v1 = M.vert(walk_0[i + 1]);
+  for (int i = 0; i < static_cast<int>(walk_0.size()) - 1; i++) {
+    index_t v0 = M.vert(corner_id(walk_0[i + 0]));
+    index_t v1 = M.vert(corner_id(walk_0[i + 1]));
     log_seg_v(M, x, v0, v1, 0.0045, vec4(1.0, 1.0, 0.0, 1.0));
 
-    asawa::index_t cm = -1;
+    index_t cm = -1;
 
-    M.const_for_each_vertex(v0, [&](index_t c0, const shell &M) {
-      index_t vn = M.vert(M.next(c0));
+    M.const_for_each_vertex(vert_id(v0), [&](CornerId c0, const shell &M) {
+      VertId vn = M.vert(M.next(c0));
       if (vn == v1) {
         cm = c0;
       }
     });
 
-    vec3 dv0 = (x[v1] - x[v0]).normalized();
+    vec3 dv0 = (x[static_cast<size_t>(v1)] - x[static_cast<size_t>(v0)]).normalized();
     std::cout << v0 << " " << v1 << std::endl;
     int k = 0;
 
@@ -580,9 +580,9 @@ std::vector<index_t> stitch_walk(shell &M, const std::vector<vec3> &x,
       index_t co = -1;
       index_t vo = -1;
       real max = -1e12;
-      M.const_for_each_vertex(v0, [&](index_t c0, const shell &M) {
-        index_t vn = M.vert(M.next(c0));
-        vec3 dvn = (x[vn] - x[v0]).normalized();
+      M.const_for_each_vertex(vert_id(v0), [&](CornerId c0, const shell &M) {
+        VertId vn = M.vert(M.next(c0));
+        vec3 dvn = (x[vn] - x[static_cast<size_t>(v0)]).normalized();
         real d = dvn.dot(dv0);
         if (d > max) {
           max = d;
@@ -618,12 +618,12 @@ index_t get_seg_range(index_t t0, shell &M, const std::vector<vec3> &x,
   index_t i = t0;
   index_t t1 = t0;
 
-  while (testing && i < E.size()) {
-    real s = S[i];
-    index_t c0 = E[i];
-    index_t c1 = M.other(c0);
+  while (testing && i < static_cast<index_t>(E.size())) {
+    real s = S[static_cast<size_t>(i)];
+    CornerId c0 = corner_id(E[static_cast<size_t>(i)]);
+    CornerId c1 = M.other(c0);
 
-    vec3 xi = X[i];
+    vec3 xi = X[static_cast<size_t>(i)];
     vec3 x0 = x[M.vert(c0)];
     vec3 x1 = x[M.vert(c1)];
     bool in_line = va::contained_in_line(x0, x1, xi);
@@ -631,29 +631,28 @@ index_t get_seg_range(index_t t0, shell &M, const std::vector<vec3> &x,
     if (!in_line) {
       c0 = find_edge(M, x, c0, xi);
       c1 = M.other(c0);
-      E[i] = c0;
+      E[static_cast<size_t>(i)] = c0;
     }
 
     s = get_s(M, x, c0, xi);
-    S[i] = s;
+    S[static_cast<size_t>(i)] = s;
 
-    if (has(visited, c0 / 2) || stol(s, tol)) {
-      std::cout << " set_verts: " << i << ": " << sub_verts[i] << " " << c0
-                << std::endl;
+    if (has_corner(visited, c0 / 2) || stol(s, tol)) {
+      std::cout << " set_verts: " << i << ": " << sub_verts[static_cast<size_t>(i)] << " " << c0                << std::endl;
 
       if (s < 0.5)
-        sub_verts[i] = c0;
+        sub_verts[static_cast<size_t>(i)] = c0;
       else
-        sub_verts[i] = c1;
-      if (has(visited, c0 / 2))
+        sub_verts[static_cast<size_t>(i)] = c1;
+      if (has_corner(visited, c0 / 2))
         log_edge(M, x, c0, 0.0025, vec4(1.0, 0.5, 0.0, 1.0));
       else
         log_edge(M, x, c0, 0.0025, vec4(0.5, 0.0, 1.0, 1.0));
       testing = false;
       t1 = i;
     }
-    if (i == E.size() - 1) {
-      t1 = E.size();
+    if (i == static_cast<index_t>(E.size()) - 1) {
+      t1 = static_cast<index_t>(E.size());
       testing = false;
     }
 
@@ -675,13 +674,13 @@ std::vector<index_t> subdivide_seg(shell &M, const std::vector<vec3> &x, //
                       index_t vs, //
                       index_t fs, //
                       const std::vector<index_t> &edges, shell &m) -> corner1 {
-                     return {subdivide_edge(m, edges[i],    //
-                                            vs + i,         //
-                                            cs + 6 * i + 0, //
-                                            cs + 6 * i + 2, //
-                                            cs + 6 * i + 4, //
-                                            fs + 2 * i + 0, //
-                                            fs + 2 * i + 1  //
+                     return {subdivide_edge(m, corner_id(edges[i]),    //
+                                            vert_id(vs + i),         //
+                                            corner_id(cs + 6 * i + 0), //
+                                            corner_id(cs + 6 * i + 2), //
+                                            corner_id(cs + 6 * i + 4), //
+                                            face_id(fs + 2 * i + 0), //
+                                            face_id(fs + 2 * i + 1)  //
                                             )};
                    });
 
@@ -709,7 +708,8 @@ std::vector<index_t> crack_edges(shell &M, std::vector<index_t> &E,
                             const std::vector<index_t> &l_verts) {
     if (l_verts.size() < 2)
       return;
-    log_seg_v(M, x, M.vert(l_verts[i + 0]), M.vert(l_verts[i + 1]), n_o, col);
+    log_seg_v(M, x, M.vert(corner_id(l_verts[i + 0])),
+              M.vert(corner_id(l_verts[i + 1])), n_o, col);
   };
 
   std::vector<vec3> X = get_x(M, x, E, S);
@@ -725,16 +725,16 @@ std::vector<index_t> crack_edges(shell &M, std::vector<index_t> &E,
     std::cout << "k: " << k << std::endl;
     k++;
 
-    while (stol(S[t0], tol) && t0 < E.size()) {
-      real s = S[t0];
-      index_t c0 = E[t0];
-      index_t c1 = M.other(c0);
+    while (stol(S[t0], tol) && t0 < static_cast<index_t>(E.size())) {
+      real s = S[static_cast<size_t>(t0)];
+      CornerId c0 = corner_id(E[static_cast<size_t>(t0)]);
+      CornerId c1 = M.other(c0);
       s = round(s);
       S[t0] = s;
       if (s < 0.5)
-        sub_verts[t0] = c0;
+        sub_verts[static_cast<size_t>(t0)] = c0;
       else
-        sub_verts[t0] = c1;
+        sub_verts[static_cast<size_t>(t0)] = c1;
       t0++;
     }
 
@@ -767,11 +767,12 @@ std::vector<index_t> crack_edges(shell &M, std::vector<index_t> &E,
   }
   std::cout << std::endl;
 
-  for (int i = 0; i < sub_verts.size() - 1; i++) {
-    index_t c0 = sub_verts[i];
+  for (int i = 0; i < static_cast<int>(sub_verts.size()) - 1; i++) {
+    CornerId c0 = corner_id(sub_verts[static_cast<size_t>(i)]);
     std::cout << i << " " << c0 << std::endl;
-    if ((X[i] - x[M.vert(c0)]).norm() > 1e-8)
-      sub_verts[i] = find_point(M, x, c0, X[i]);
+    if ((X[static_cast<size_t>(i)] - x[M.vert(c0)]).norm() > 1e-8)
+      sub_verts[static_cast<size_t>(i)] =
+          find_point(M, x, c0, X[static_cast<size_t>(i)]);
   }
 
   std::vector<index_t> sub_verts_2;
@@ -782,7 +783,8 @@ std::vector<index_t> crack_edges(shell &M, std::vector<index_t> &E,
     if (t1 > sub_verts.size() - 2)
       break;
 
-    bool eb = edge_between(M, M.vert(sub_verts[t1]), M.vert(sub_verts[t1 + 1]));
+    bool eb = edge_between(M, M.vert(corner_id(sub_verts[t1])),
+                           M.vert(corner_id(sub_verts[t1 + 1])));
     if (!eb) {
       std::copy(sub_verts.begin() + t0, sub_verts.begin() + t1 + 1,
                 std::back_inserter(sub_verts_2));
@@ -790,7 +792,8 @@ std::vector<index_t> crack_edges(shell &M, std::vector<index_t> &E,
       std::vector<index_t> Ei;
       std::vector<real> Si;
 
-      walk_new_seg(M, x, sub_verts[t1], sub_verts[t1 + 1], Ei, Si);
+      walk_new_seg(M, x, corner_id(sub_verts[t1]),
+                   corner_id(sub_verts[t1 + 1]), Ei, Si);
       std::vector<vec3> Xi = get_x(M, x, Ei, Si);
       std::vector<index_t> l_verts = subdivide_seg(M, x, Ei, Si);
 
@@ -806,10 +809,11 @@ std::vector<index_t> crack_edges(shell &M, std::vector<index_t> &E,
   }
 
   // fix them again...
-  for (int i = 0; i < sub_verts_2.size() - 1; i++) {
-    index_t c0 = sub_verts_2[i];
-    if ((X2[i] - x[M.vert(c0)]).norm() > 1e-8)
-      sub_verts_2[i] = find_point(M, x, c0, X2[i]);
+  for (int i = 0; i < static_cast<int>(sub_verts_2.size()) - 1; i++) {
+    CornerId c0 = corner_id(sub_verts_2[static_cast<size_t>(i)]);
+    if ((X2[static_cast<size_t>(i)] - x[M.vert(c0)]).norm() > 1e-8)
+      sub_verts_2[static_cast<size_t>(i)] =
+          find_point(M, x, c0, X2[static_cast<size_t>(i)]);
   }
 
 #if 1

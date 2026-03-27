@@ -196,9 +196,10 @@ namespace gaudi
         shell::triangulate(*__M);
         for (int i = 0; i < __M->face_count(); i++)
         {
-          if (__M->fbegin(i) > 0)
+          auto fi = asawa::shell::face_id(i);
+          if (__M->fbegin(fi) >= 0)
           {
-            assert(__M->fsize(i) == 3);
+            assert(__M->fsize(fi) == 3);
           }
         }
 
@@ -218,15 +219,15 @@ namespace gaudi
         // Rod
         /////////////////////
         walk_config wc0 = _wc[iw0];
-        std::vector<vec3> x_w =                             //
-            silly_walk(*__M, wc0.thet, wc0.i0, wc0.N_steps, //
-                       wc0.rotate, wc0.cr,                  //
+        std::vector<vec3> x_w =                                                //
+            silly_walk(*__M, wc0.thet, asawa::shell::corner_id(wc0.i0), wc0.N_steps, //
+                       wc0.rotate, wc0.cr,                                     //
                        wc0.align, wc0.ca, _eps);
 
         walk_config wc1 = _wc[iw1];
-        _target =                                           //
-            silly_walk(*__M, wc1.thet, wc1.i0, wc1.N_steps, //
-                       wc1.rotate, wc1.cr,                  //
+        _target =                                                              //
+            silly_walk(*__M, wc1.thet, asawa::shell::corner_id(wc1.i0), wc1.N_steps, //
+                       wc1.rotate, wc1.cr,                                     //
                        wc1.align, wc1.ca, _eps);
 
         __R = rod::rod::create(x_w, false);
@@ -570,7 +571,7 @@ namespace gaudi
             if (!std::isfinite(xi.dot(xi)))
             {
               std::cout << xi.transpose() << std::endl;
-              __M->vprintv(i);
+              __M->vprintv(asawa::shell::vert_id(i));
               i++;
             }
           }

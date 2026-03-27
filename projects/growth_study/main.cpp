@@ -5,17 +5,13 @@
 #include <iterator>
 #include <vector>
 #if defined(WIN32)
-#include <windows.h>
+#ifndef NOMINMAX
+#define NOMINMAX
 #endif
-
-#include <stdio.h> /* defines FILENAME_MAX */
-// #define WINDOWS  /* uncomment this line to use it for windows.*/
-#ifdef WINDOWS
-#include <direct.h>
-#define GetCurrentDir _getcwd
-#else
-#include <unistd.h>
-#define GetCurrentDir getcwd
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
 #endif
 
 #include <complex>
@@ -30,7 +26,7 @@
 // #include "gaudi/asawa/asawa.h"
 
 #include "gaudi/duchamp/growth_study.hpp"
-
+   
 #define TRACKBALLSIZE (0.8f)
 #define RENORMCOUNT 97
 
@@ -51,6 +47,7 @@ public:
   Scene() : gg::Scene() { initScene(); }
 
   void initScene() {
+    std::cerr << "[growth_study] Scene::initScene start" << std::endl;
     //_experiment = duchamp::mean_shift_experiment<growth>::create();
 
     _objs.resize(1);
@@ -58,6 +55,7 @@ public:
     _objs[0] = gg::BufferObject::create();
     _objs[0]->init();
     mSceneObjects.push_back(_objs[0]);
+    std::cerr << "[growth_study] primary buffer initialized" << std::endl;
 
     /* //a second buffer object... for curves or...
     _objs[1] = gg::BufferObject::create();
@@ -66,6 +64,7 @@ public:
     */
 
     __surf = gaudi::duchamp::growth_study::create();
+    std::cerr << "[growth_study] surface created" << std::endl;
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
     colors = {
         gg::colorRGB(0.0, 0.8, 0.4, 1.0),
@@ -73,6 +72,9 @@ public:
     };
   }
   virtual void onAnimate(int frame) {
+    if (frame < 3 || frame % 60 == 0) {
+      std::cerr << "[growth_study] onAnimate frame " << frame << std::endl;
+    }
 
     __surf->step(frame);
     std::vector<gg::colorRGB> colors;
@@ -104,13 +106,6 @@ private:
   vector<gg::colorRGB> colors;
 };
 
-std::string GetCurrentWorkingDir(void) {
-  char buff[FILENAME_MAX];
-  GetCurrentDir(buff, FILENAME_MAX);
-  std::string current_working_dir(buff);
-  return current_working_dir;
-}
-
 class App;
 using AppPtr = std::shared_ptr<App>;
 
@@ -123,9 +118,12 @@ public:
   typedef double Real;
 
   App(int width, int height, std::string file)
-      : gg::SimpleApp(width, height, 4.0, true, "growth_study_") {
+      : gg::SimpleApp(width, height, 4.0, false, "growth_study_") {
+    std::cerr << "[growth_study] App ctor after SimpleApp" << std::endl;
     this->setScene(scene = Scene::create());
+    std::cerr << "[growth_study] scene attached" << std::endl;
     this->initUI();
+    std::cerr << "[growth_study] UI initialized" << std::endl;
   }
 
   void initUI() {
@@ -142,34 +140,59 @@ public:
 
 int main(int argc, char *argv[]) {
   try {
+    std::cerr << "[growth_study] main start" << std::endl;
     cout << "You have entered " << argc << " arguments:"
          << "\n";
 
     for (int i = 0; i < argc; ++i)
       cout << argv[i] << "\n";
 
+    std::cerr << "[growth_study] nanogui::init" << std::endl;
     nanogui::init();
 
+    std::cerr << "[growth_study] creating app" << std::endl;
     AppPtr app = App::create(1280, 740, std::string(argv[0]));
+    std::cerr << "[growth_study] app created" << std::endl;
 
     // app->setScene(Scene::create());
+    std::cerr << "[growth_study] drawAll" << std::endl;
     app->drawAll();
+    std::cerr << "[growth_study] setVisible" << std::endl;
     app->setVisible(true);
+    std::cerr << "[growth_study] entering mainloop" << std::endl;
+    std::cerr << "[growth_study] focus the window, then press W to toggle "
+                 "animation (simulation). S = single step. Q = quit.\n"
+              << std::flush;
     nanogui::mainloop();
+    std::cerr << "[growth_study] mainloop returned" << std::endl;
     // delete app;
+    std::cerr << "[growth_study] nanogui::shutdown" << std::endl;
     nanogui::shutdown();
+    std::cerr << "[growth_study] shutdown complete" << std::endl;
 
   } catch (const std::runtime_error &e) {
     std::string error_msg =
         std::string("Caught a fatal error: ") + std::string(e.what());
-
+    std::cerr << error_msg << std::endl;
 #if defined(WIN32)
     MessageBoxA(nullptr, error_msg.c_str(), NULL, MB_ICONERROR | MB_OK);
-#else
-    std::cerr << error_msg << endl;
 #endif
-
     return -1;
+  } catch (const std::exception &e) {
+    std::string error_msg =
+        std::string("Caught a fatal std::exception: ") + std::string(e.what());
+    std::cerr << error_msg << std::endl;
+#if defined(WIN32)
+    MessageBoxA(nullptr, error_msg.c_str(), NULL, MB_ICONERROR | MB_OK);
+#endif
+    return -2;
+  } catch (...) {
+    std::string error_msg = "Caught an unknown fatal error.";
+    std::cerr << error_msg << std::endl;
+#if defined(WIN32)
+    MessageBoxA(nullptr, error_msg.c_str(), NULL, MB_ICONERROR | MB_OK);
+#endif
+    return -3;
   }
 
   return 0;

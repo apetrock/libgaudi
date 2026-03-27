@@ -4,17 +4,13 @@
 #include <iterator>
 #include <vector>
 #if defined(WIN32)
-#include <windows.h>
+#ifndef NOMINMAX
+#define NOMINMAX
 #endif
-
-#include <stdio.h> /* defines FILENAME_MAX */
-// #define WINDOWS  /* uncomment this line to use it for windows.*/
-#ifdef WINDOWS
-#include <direct.h>
-#define GetCurrentDir _getcwd
-#else
-#include <unistd.h>
-#define GetCurrentDir getcwd
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
 #endif
 
 #include <complex>
@@ -90,13 +86,6 @@ private:
   gg::BufferObjectPtr _obj = NULL;
 };
 
-std::string GetCurrentWorkingDir(void) {
-  char buff[FILENAME_MAX];
-  GetCurrentDir(buff, FILENAME_MAX);
-  std::string current_working_dir(buff);
-  return current_working_dir;
-}
-
 class App;
 using AppPtr = std::shared_ptr<App>;
 
@@ -108,8 +97,7 @@ public:
 
   typedef double Real;
   App(int w, int h, std::string file)
-      : gg::SimpleApp(w, h, 4.0, true, "rod_test_single_") {
-
+      : gg::SimpleApp(w, h, 4.0, false, "rod_test_single_") {
     this->setScene(scene = Scene::create());
     this->initUI();
   }

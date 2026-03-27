@@ -38,6 +38,7 @@
     "wasm:clean": "cd wasm && clean.bat",
     "wasm:test": "node scripts/test-wasm-loading.mjs",
     "wasm:test:logger": "tsx scripts/test-logger-interface.mts",
+    "wasm:unit-test": "tsx scripts/run-unit-tests.mts",
     "wasm:check": "cd wasm && emcc --version",
     "gen-demo": "tsx scripts/gen-demo.ts"
   },

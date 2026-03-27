@@ -1,7 +1,6 @@
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 
-#include "gaudi/arp/aabb.hpp"
 #include "gaudi/common.h"
 #include "gaudi/vec_addendum.h"
 
@@ -18,6 +17,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <set>
 #include <type_traits>
 #include <utility>
@@ -111,8 +111,9 @@ public:
   using edge_index_type = std::vector<index_t>;
   using permutation_index_type = arp::bvh_tree<2>::permutation_index_type;
   using edge_view_type = adjacency_view<data_type, edge_index_type>;
+  // Use permuted_simplex_view for tuple-based access
   using permuted_edge_view_type =
-      permuted_adjacency_view<2, edge_view_type, permutation_index_type>;
+      permuted_simplex_view<2, data_type, edge_index_type>;
 
   template <typename A> using edge_slice = slice<2, A>;
   template <typename A> using point_slice = slice<1, A>;
@@ -124,8 +125,9 @@ public:
 
   dynamic(rod::ptr R, real Cc, real Cs, real Cm)
       : _Cc(Cc), _Cs(Cs), _Cm(Cm), __R(R) {
-    std::vector<index_t> edge_verts = __R->get_edge_vert_ids();
-    bvh_tree = arp::bvh_tree<2>::create(edge_verts, __R->__x);
+    edge_verts_ = __R->get_edge_vert_ids();
+    edge_set_.emplace(__R->__x, edge_verts_);
+    bvh_tree = arp::bvh_tree<2>::create(*edge_set_);
   }
 
   template <typename T>
@@ -258,26 +260,42 @@ public:
 #pragma omp parallel for
     for (int k = 0; k < edges_B.size(); k += 2) {
       const edge_slice<PTYPE> edge(edges_B, k / 2);
+      int kk = edges_B.get_index(k / 2);
       std::vector<index_t> collisions =
           bvh_tree->get_nearest(edge, tol);
-      if (!collisions.empty()) {
-        int kk = edges_B.get_index(k / 2);
-        collected[kk] = {kk, collisions[0]};
+      index_t nearest = collisions.empty() ? -1 : collisions[0];
+      if (nearest >= 0) {
+        collected[kk] = {kk, nearest};
       } else {
-        collected[k / 2] = {-1, -1};
+        collected[kk] = {-1, -1};
       }
     }
     return collected;
+  }
+
+  vector<std::array<index_t, 4>>
+  get_collisions(const std::vector<index_t> &edge_verts_B,
+                 const std::vector<vec3> &x_B, real tol) {
+    edge_view_type edge_view(const_cast<std::vector<vec3> &>(x_B),
+                             const_cast<std::vector<index_t> &>(edge_verts_B));
+    std::vector<std::array<index_t, 2>> raw = get_collisions(edge_view, tol);
+    std::vector<std::array<index_t, 4>> out(raw.size(), {-1, -1, -1, -1});
+    for (size_t i = 0; i < raw.size(); ++i) {
+      const auto &collision = raw[i];
+      if (collision[0] < 0 || collision[1] < 0) {
+        continue;
+      }
+      std::array<index_t, 2> rod_ids = get_edge_ids(collision[1]);
+      out[i] = {edge_verts_B[2 * collision[0] + 0], edge_verts_B[2 * collision[0] + 1],
+                rod_ids[0], rod_ids[1]};
+    }
+    return out;
   }
 #endif
 
 #if 1
   template <Vec3View PTYPE>
   vector<std::array<index_t, 2>> get_vert_collisions(PTYPE points_B, real tol) {
-    rod &R = *__R;
-    std::vector<vec3> &x_A = R.__x;
-    std::vector<index_t> edge_verts_A = R.get_edge_vert_ids();
-    edge_tree = arp::aabb_tree<2>::create(edge_verts_A, x_A, 16);
     // calder::test_extents(*edge_tree, edge_verts, x);
     // edge_tree->debug();
     std::vector<std::array<index_t, 2>> collected(points_B.size());
@@ -286,37 +304,60 @@ public:
       const point_slice<PTYPE> point(points_B, k);
       std::vector<index_t> collisions =
           bvh_tree->get_nearest(point, tol);
-      if (!collisions.empty()) {
-        collected[k] = {k, collisions[0]};
+      index_t nearest = collisions.empty() ? -1 : collisions[0];
+      if (nearest >= 0) {
+        collected[k] = {k, nearest};
       } else {
         collected[k] = {-1, -1};
       }
     }
     return collected;
   }
+
+  vector<std::array<index_t, 3>>
+  get_vert_collisions(const std::vector<index_t> &point_ids,
+                      const std::vector<vec3> &x_B, real tol) {
+    adjacency_view<std::vector<vec3>, std::vector<index_t>> point_view(
+        const_cast<std::vector<vec3> &>(x_B),
+        const_cast<std::vector<index_t> &>(point_ids));
+    std::vector<std::array<index_t, 2>> raw =
+        get_vert_collisions(point_view, tol);
+    std::vector<std::array<index_t, 3>> out(raw.size(), {-1, -1, -1});
+    for (size_t i = 0; i < raw.size(); ++i) {
+      const auto &collision = raw[i];
+      if (collision[0] < 0 || collision[1] < 0) {
+        continue;
+      }
+      std::array<index_t, 2> rod_ids = get_edge_ids(collision[1]);
+      out[i] = {point_ids[collision[0]], rod_ids[0], rod_ids[1]};
+    }
+    return out;
+  }
 #endif
 
   std::array<vec3, 2> get_edge_verts(index_t edge_id) {
     rod &R = *__R;
-    std::vector<index_t> edge_verts = R.get_edge_vert_ids();
-    return {R.__x[edge_verts[2 * edge_id + 0]],
-            R.__x[edge_verts[2 * edge_id + 1]]};
-  }
-
-  std::array<index_t, 2> get_permuted_edge_ids(const index_t &i) {
-    return bvh_tree->get_tuple_ids(i);
+    if (edge_verts_.empty()) {
+      edge_verts_ = R.get_edge_vert_ids();
+    }
+    return {R.__x[edge_verts_[2 * edge_id + 0]],
+            R.__x[edge_verts_[2 * edge_id + 1]]};
   }
 
   std::array<index_t, 2> get_edge_ids(const index_t &i) {
-    const std::vector<vec3> &x = __R->__x;
-    const std::vector<index_t> &edge_verts = __R->get_edge_vert_ids();
-    edge_view_type edges(x, edge_verts);
-    return edges.get_tuple_ids<2>(i);
+    if (!edge_set_) {
+      edge_verts_ = __R->get_edge_vert_ids();
+      edge_set_.emplace(__R->__x, edge_verts_);
+    }
+    return edge_set_->tuple_ids(i);
   }
 
   std::array<index_t, 4> get_collision_ids(const std::array<index_t, 2> &edge_ids) {
+    if (edge_ids[0] < 0 || edge_ids[1] < 0) {
+      return {-1, -1, -1, -1};
+    }
     const std::array<index_t, 2> &id0 = get_edge_ids(edge_ids[0]);
-    const std::array<index_t, 2> &id1 = get_permuted_edge_ids(edge_ids[1]);
+    const std::array<index_t, 2> &id1 = get_edge_ids(edge_ids[1]);
     return {id0[0], id0[1], id1[0], id1[1]};
   }
 
@@ -356,15 +397,16 @@ public:
     __R->pack();
     __R->update_mass();
     __R->update_lengths();
-    std::vector<index_t> edge_verts = __R->get_edge_vert_ids();
-    bvh_tree->update(__R->__x, edge_verts);
+    edge_verts_ = __R->get_edge_vert_ids();
+    edge_set_.emplace(__R->__x, edge_verts_);
+    bvh_tree->update(*edge_set_);
   }
 
   rod::ptr __R;
-  arp::aabb_tree<2>::ptr edge_tree;
+  std::vector<index_t> edge_verts_;
+  std::optional<arp::simplex_set<2>> edge_set_;
   arp::bvh_tree<2>::ptr bvh_tree;
   real _Cc, _Cs, _Cm; // collapse, stretch, bridge
-  // arp::aabb_tree<2>::ptr edge_tree;
 };
 } // namespace rod
 } // namespace asawa

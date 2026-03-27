@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { BoxDemo } from './src/components/BoxDemo';
 import { ZustandLineLoggerTest } from './src/components/ZustandLineLoggerTest';
@@ -25,12 +25,13 @@ import {
 } from 'lucide-react';
 import { Foo_demo } from './src/components/Foo_demo';
 import { Bar_demo } from './src/components/Bar_demo';
+import { isWasmModuleAvailable } from './src/utils/wasmLoader';
 /**
  * Navigation component for different test scenarios
  */
-function Navigation() {
+function Navigation({ bvhAvailable }: { bvhAvailable: boolean | null }) {
   const location = useLocation();
-    const navItems = [
+  const navItems = [
     { path: '/box-demo', label: 'Box Demo', icon: Box, status: 'stable' },
     { path: '/line-logger', label: 'Line Logger', icon: Waves, status: 'stable' },
     { path: '/gaudi-logger', label: 'Gaudi Logger', icon: Microscope, status: 'beta' },
@@ -38,7 +39,7 @@ function Navigation() {
     { path: '/rod-strand', label: 'Rod Strand', icon: TestTube, status: 'beta' },
     { path: '/path-test', label: 'Path Test', icon: TestTube, status: 'beta' },
     { path: '/morton-tree', label: 'Morton Tree', icon: Microscope, status: 'beta' },
-    { path: '/bvh-test', label: 'BVH Test', icon: TestTube, status: 'beta' },
+    ...(bvhAvailable ? [{ path: '/bvh-test', label: 'BVH Test', icon: TestTube, status: 'beta' }] : []),
     { path: '/wasm-hello', label: 'WASM Hello', icon: TestTube, status: 'stable' },
     { path: '/future-test', label: 'Future', icon: Rocket, status: 'planned' },
   ];
@@ -232,7 +233,21 @@ function MortonTreeTestPage() {
 /**
  * BVH Test page - BVH vs Brute Force comparison testing
  */
-function BvhTestPage() {
+function BvhTestPage({ bvhAvailable }: { bvhAvailable: boolean | null }) {
+  if (bvhAvailable === false) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto max-w-4xl px-4" style={{ paddingTop: '5rem' }}>
+          <div className="h-[calc(100vh-5rem)] flex items-center justify-center">
+            <div className="p-6 bg-yellow-50 border border-yellow-300 text-yellow-900 rounded">
+              BVH Test module is not available. Build the WASM target to enable this test.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto max-w-4xl px-4" style={{ paddingTop: '5rem' }}>
@@ -462,10 +477,30 @@ function HomePage() {
  * Demo application with React Router navigation between test scenarios
  */
 function App() {
+  const [bvhAvailable, setBvhAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    isWasmModuleAvailable('bvh_test')
+      .then((available) => {
+        if (isMounted) {
+          setBvhAvailable(available);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setBvhAvailable(false);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <Router>
       <div className="min-h-screen bg-background">
-        <Navigation />
+        <Navigation bvhAvailable={bvhAvailable} />
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/box-demo" element={<BoxDemoPage />} />
@@ -477,7 +512,7 @@ function App() {
           <Route path="/rod-strand" element={<RodStrandPage />} />
           <Route path="/path-test" element={<PathTestPage />} />
           <Route path="/morton-tree" element={<MortonTreeTestPage />} />
-          <Route path="/bvh-test" element={<BvhTestPage />} />
+          <Route path="/bvh-test" element={<BvhTestPage bvhAvailable={bvhAvailable} />} />
           <Route path="/foo_demo" element={<Foo_demo />} />
           <Route path="/bar_demo" element={<Bar_demo />} />
         </Routes>

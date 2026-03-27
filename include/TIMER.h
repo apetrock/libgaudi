@@ -6,8 +6,7 @@
 #include <string>
 #include <map>
 #include <stack>
-
-#include <sys/time.h>
+#include <chrono>
 
 // To time a function, just put:
 //
@@ -20,6 +19,8 @@
 class TIMER
 {
 public:
+  using TimePoint = std::chrono::steady_clock::time_point;
+
   // start the timer by default -- if a tick is called later,
   // it will just stomp it
   TIMER(std::string blockName); 
@@ -28,10 +29,9 @@ public:
   void stop();
   const double elapsed() { return _elapsed; };
 
-  static double timing(timeval& begin = _tick, timeval& end  = _tock) {
-    double beginTime = (double)begin.tv_sec + 1e-6 * begin.tv_usec;
-    double endTime = (double)end.tv_sec + 1e-6 * end.tv_usec;
-    return endTime - beginTime;
+  static double timing(const TimePoint &begin = _tick,
+                       const TimePoint &end = _tock) {
+    return std::chrono::duration<double>(end - begin).count();
   };
   static int hours(int seconds) { return seconds / (60 * 60); };
   static int minutes(int seconds) {
@@ -48,8 +48,8 @@ public:
 
 private:
   // begin and end of current block being timed
-  static timeval _tick;
-  static timeval _tock;
+  static TimePoint _tick;
+  static TimePoint _tock;
 
   // hash table of all timings
   static std::map<std::string, double> _timings;

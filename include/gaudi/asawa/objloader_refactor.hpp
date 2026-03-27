@@ -8,11 +8,13 @@
  */
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <list>
 #include <math.h>
 #include <sstream>
+#include <stdexcept>
 #include <vector>
 
 #include <cmath>
@@ -72,10 +74,15 @@ void loadObjfile(const std::string &s, std::vector<vec3> &vertices,
   std::ifstream myfile(fname.c_str());
 
   std::cout << "loading " << s << " from " << fname << " . . . " << std::endl;
-  if (myfile.is_open()) {
-    std::cout << ".obj file open" << std::endl;
-    loadObjStream(myfile, vertices, faces);
+  if (!myfile.is_open()) {
+    const std::filesystem::path requested(fname);
+    const std::filesystem::path absolute =
+        std::filesystem::absolute(requested);
+    throw std::runtime_error("Failed to open OBJ file '" + fname +
+                             "' (resolved to '" + absolute.string() + "')");
   }
+  std::cout << ".obj file open" << std::endl;
+  loadObjStream(myfile, vertices, faces);
   myfile.close();
 }
 

@@ -57,13 +57,13 @@ void fillBuffer_ref(asawa::shell::shell &M, gg::BufferObjectPtr obj,
   std::vector<std::vector<int>> faces;
   for (int i = 0; i < M.face_count(); i++) {
     std::vector<int> face;
-    if (M.fbegin(i) < 0)
+    asawa::shell::FaceId fi = asawa::shell::face_id(i);
+    if (M.fbegin(fi) < 0)
       continue;
-    if (M.fsize(i) != 3)
+    if (M.fsize(fi) != 3)
       continue;
-    // std::cout << i << " " << M.fsize(i) << " ";
-    M.for_each_face(i, [&face](int ci, asawa::shell::shell &M) {
-      // std::cout << ci << " " << M.vert(ci) << " ";
+    M.for_each_face(fi, [&face](asawa::shell::CornerId ci,
+                                  asawa::shell::shell &M) {
       face.push_back(M.vert(ci));
     });
     // std::cout << std::endl;
@@ -110,13 +110,13 @@ void fillBuffer_ref(asawa::shell::shell &M, gg::BufferObjectPtr obj,
   std::vector<std::vector<int>> faces;
   for (int i = 0; i < M.face_count(); i++) {
     std::vector<int> face;
-    if (M.fbegin(i) < 0)
+    asawa::shell::FaceId fi = asawa::shell::face_id(i);
+    if (M.fbegin(fi) < 0)
       continue;
-    if (M.fsize(i) != 3)
+    if (M.fsize(fi) != 3)
       continue;
-    // std::cout << i << " " << M.fsize(i) << " ";
-    M.for_each_face(i, [&face](int ci, asawa::shell::shell &M) {
-      // std::cout << ci << " " << M.vert(ci) << " ";
+    M.for_each_face(fi, [&face](asawa::shell::CornerId ci,
+                                  asawa::shell::shell &M) {
       face.push_back(M.vert(ci));
     });
     // std::cout << std::endl;

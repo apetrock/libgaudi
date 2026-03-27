@@ -1,10 +1,19 @@
 #ifndef __GAUDI_MATH_DEFS__
 #define __GAUDI_MATH_DEFS__
 
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <nanogui/glutil.h>
 #include <string>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#ifndef M_PI_2
+#define M_PI_2 1.57079632679489661923
+#endif
 
 namespace GaudiMath {
 // nano gui deals mostly with vec3s, which is annoying

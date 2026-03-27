@@ -28,6 +28,12 @@ export interface BvhTestInstance {
   getLastBvhResult(): number;
   getLastBruteResult(): number;
   getLastTestPassed(): boolean;
+
+  // Test harness
+  setSphereObjData(objContent: string): void;
+  runAllTests(): boolean;
+  getLastSuiteTotal(): number;
+  getLastSuiteFailed(): number;
   
   // Visualization
   visualizeResults(): void;
@@ -46,5 +52,6 @@ export async function loadBvhTestModule(): Promise<BvhTestModule> {
   const factory = (await import('../../../public/wasm/bvh_test.js' as any)).default;
   return await factory();
 }
+
 
 

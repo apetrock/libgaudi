@@ -3,6 +3,7 @@
 
 #include "gaudi/arp/morton.hpp"
 #include "gaudi/arp/pairwise_tests.hpp"
+#include "gaudi/arp/simplex_set.hpp"
 #include "gaudi/common.h"
 #include "gaudi/console_logger.hpp"
 #include "gaudi/geometry_logger.hpp"
@@ -15,6 +16,10 @@
 #include <stack>
 #include <tuple>
 #include <vector>
+
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
 
 namespace gaudi {
 namespace arp {
@@ -38,35 +43,23 @@ template <typename T> struct TreeResult {
 // Convenient type alias for node results
 using NodeResult = TreeResult<radix_tree_node>;
 
-// Common leading zero calculation for tree building
-inline int clz(index_t i, index_t j, const std::vector<uint32_t> &hash) {
+// Common leading zero calculation for tree building.
+template <typename MortonT>
+inline int clz(index_t i, index_t j, const std::vector<MortonT> &hash) {
   if (j < 0)
     return -1;
   if (j > static_cast<index_t>(hash.size()) - 1)
     return -1;
-  uint32_t code_i = hash[i];
-  uint32_t code_j = hash[j];
-
-// Use __builtin_clz for GCC/Clang, or implement fallback
-#if defined(__GNUC__) || defined(__clang__)
-  return __builtin_clz(code_i ^ code_j);
-#else
-  // Fallback implementation
-  uint32_t diff = code_i ^ code_j;
-  if (diff == 0)
-    return 32;
-  int leading_zeros = 0;
-  while ((diff & 0x80000000) == 0) {
-    diff <<= 1;
-    leading_zeros++;
-  }
-  return leading_zeros;
-#endif
+  MortonT diff = xor_morton(hash[i], hash[j]);
+  if (is_zero(diff))
+    return static_cast<int>(MortonT::total_bits);
+  return clz_morton(diff);
 }
 
 // Find split point in radix tree
+template <typename MortonT>
 inline index_t find_split(index_t start, index_t end,
-                          const std::vector<uint32_t> &hash) {
+                          const std::vector<MortonT> &hash) {
   int common_prefix_dist = clz(start, end, hash);
   index_t split = start;
 
@@ -86,8 +79,9 @@ inline index_t find_split(index_t start, index_t end,
 }
 
 // Find range for radix tree construction
+template <typename MortonT>
 inline std::pair<index_t, index_t>
-find_range(index_t i, const std::vector<uint32_t> &hash) {
+find_range(index_t i, const std::vector<MortonT> &hash) {
   index_t N = static_cast<index_t>(hash.size());
 
   int dir = (clz(i, i + 1, hash) - clz(i, i - 1, hash)) > 0 ? 1 : -1;
@@ -113,7 +107,8 @@ find_range(index_t i, const std::vector<uint32_t> &hash) {
 }
 
 // Build radix tree from sorted indices and hashes
-inline NodeResult build_tree(const std::vector<uint32_t> &hash) {
+template <typename MortonT>
+inline NodeResult build_tree(const std::vector<MortonT> &hash) {
   std::vector<radix_tree_node> internal_nodes(hash.size() - 1);
   std::vector<radix_tree_node> leaf_nodes(hash.size());
 
@@ -151,10 +146,11 @@ inline NodeResult build_tree(const std::vector<uint32_t> &hash) {
 }
 
 // Test tree construction and traversal
+template <typename MortonT>
 inline void test_tree(const std::vector<radix_tree_node> &internal_nodes,
                       const std::vector<radix_tree_node> &leaf_nodes,
                       const std::vector<index_t> &ids,
-                      const std::vector<uint32_t> &hash) {
+                      const std::vector<MortonT> &hash) {
   std::vector<bool> visited(ids.size(), false);
   std::stack<index_t> stack;
   stack.push(0);
@@ -202,101 +198,158 @@ inline void test_tree(const std::vector<radix_tree_node> &internal_nodes,
 
 // Unit test for tree construction
 inline void unit_test_tree() {
-  std::vector<uint32_t> hash = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+  std::vector<morton_t> hash = {
+      morton_t::from_uint64(0), morton_t::from_uint64(1), morton_t::from_uint64(2),
+      morton_t::from_uint64(3), morton_t::from_uint64(4), morton_t::from_uint64(5),
+      morton_t::from_uint64(6), morton_t::from_uint64(7), morton_t::from_uint64(8),
+      morton_t::from_uint64(9), morton_t::from_uint64(10), morton_t::from_uint64(11)};
   std::vector<index_t> ids = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
   auto [leaf_nodes, internal_nodes] = build_tree(hash);
   test_tree(internal_nodes, leaf_nodes, ids, hash);
 }
 
-template <typename F>
-inline void traverse_dfs(const std::vector<radix_tree_node> &internal_nodes,
-                         const std::vector<radix_tree_node> &leaf_nodes,
-                         F &&fcn) {
+inline bool has_leaves(const radix_tree_node &node) {
+  return node.split == node.start || node.split + 1 == node.end;
+}
+
+inline bool both_leaves(const radix_tree_node &node) {
+  return node.split == node.start && node.split + 1 == node.end;
+}
+
+inline bool left_leaf(const radix_tree_node &node) {
+  return node.split == node.start;
+}
+
+inline bool right_leaf(const radix_tree_node &node) {
+  return node.split + 1 == node.end;
+}
+
+template <typename C>
+auto next(C &c) -> decltype(auto) {
+  if constexpr (requires { c.top(); })
+    return c.top();
+  else
+    return c.front();
+}
+
+template <typename Container, typename FuncNode, typename FuncLeaf,
+          typename FuncContinue>
+inline void traverse_impl(const std::vector<radix_tree_node> &internal_nodes,
+                          const std::vector<radix_tree_node> &leaf_nodes,
+                          FuncNode &&process_node, FuncLeaf &&process_leaf,
+                          FuncContinue &&should_continue) {
   if (internal_nodes.empty())
     return;
 
-  std::stack<index_t> stack;
-  stack.push(0);
+  Container container;
+  container.push(0);
 
-  while (!stack.empty()) {
-    index_t cid = stack.top();
-    stack.pop();
+  std::vector<bool> visited(internal_nodes.size(), false);
+
+  while (!container.empty()) {
+    index_t cid = next(container);
+    container.pop();
+
 
     const auto &cnode = internal_nodes[cid];
     if (cnode.split == UNULL)
       continue;
 
-    // Handle leaf cases f
-    else if (cnode.split + 0 == cnode.start || cnode.split + 1 == cnode.end) {
-      // process node that has leaves, but process as node
-      fcn(cid, -1, cnode);
-      if (cnode.split + 0 == cnode.start && cnode.split + 1 == cnode.end) {
-        // Both children are leaves
-        fcn(cid, cnode.start, leaf_nodes[cnode.start]);
-        fcn(cid, cnode.end, leaf_nodes[cnode.end]);
-      } else if (cnode.split + 0 == cnode.start) {
-        // Left child is leaf
-        fcn(cid, cnode.start, leaf_nodes[cnode.start]);
-        stack.push(cnode.split + 1);
-      } else if (cnode.split + 1 == cnode.end) {
-        // Right child is leaf
-        fcn(cid, cnode.end, leaf_nodes[cnode.end]);
-        stack.push(cnode.split);
+    process_node(cid, cnode);
+
+    if (has_leaves(cnode)) {
+      if (both_leaves(cnode)) {
+        process_leaf(cid, cnode.start, leaf_nodes[cnode.start]);
+        process_leaf(cid, cnode.end, leaf_nodes[cnode.end]);
+      } else if (left_leaf(cnode)) {
+        process_leaf(cid, cnode.start, leaf_nodes[cnode.start]);
+        container.push(cnode.split + 1);
+      } else if (right_leaf(cnode)) {
+        process_leaf(cid, cnode.end, leaf_nodes[cnode.end]);
+        container.push(cnode.split);
       }
-    } else if (fcn(cid, -1, cnode)) { // <- KEY: conditional traversal
-      // Continue traversing if callback returns true
-      const auto &node_split = internal_nodes[cnode.split];
-      const auto &node_split1 = internal_nodes[cnode.split + 1];
-      stack.push(cnode.split);
-      stack.push(cnode.split + 1);
+    } else if(should_continue(cid, cnode)){
+      container.push(cnode.split);
+      container.push(cnode.split + 1);
     }
-    // If fcn returns false, we stop propagating down this branch
   }
 }
 
-template <typename F>
+template <typename FuncNode, typename FuncLeaf, typename FuncContinue>
+inline void traverse_dfs(const std::vector<radix_tree_node> &internal_nodes,
+                         const std::vector<radix_tree_node> &leaf_nodes,
+                         FuncNode &&process_node, FuncLeaf &&process_leaf,
+                         FuncContinue &&should_continue) {
+  traverse_impl<std::stack<index_t>>(
+      internal_nodes, leaf_nodes, std::forward<FuncNode>(process_node),
+      std::forward<FuncLeaf>(process_leaf),
+      std::forward<FuncContinue>(should_continue));
+}
+
+template <typename FuncNode, typename FuncLeaf, typename FuncContinue>
 inline void traverse_bfs(const std::vector<radix_tree_node> &internal_nodes,
                          const std::vector<radix_tree_node> &leaf_nodes,
-                         F &&fcn) {
+                         FuncNode &&process_node, FuncLeaf &&process_leaf,
+                         FuncContinue &&should_continue) {
+  traverse_impl<std::queue<index_t>>(
+      internal_nodes, leaf_nodes, std::forward<FuncNode>(process_node),
+      std::forward<FuncLeaf>(process_leaf),
+      std::forward<FuncContinue>(should_continue));
+}
+
+// Best-first traversal using a priority queue.
+// compute_priority(child_id, child_node) -> real:
+//   negative = prune, otherwise priority (lower = explored first)
+template <typename FuncNode, typename FuncLeaf, typename FuncPriority>
+inline void traverse_best(const std::vector<radix_tree_node> &internal_nodes,
+                          const std::vector<radix_tree_node> &leaf_nodes,
+                          FuncNode &&process_node, FuncLeaf &&process_leaf,
+                          FuncPriority &&compute_priority) {
   if (internal_nodes.empty())
     return;
 
-  std::queue<index_t> queue;
-  queue.push(0);
+  using pq_entry = std::pair<real, index_t>;
+  std::priority_queue<pq_entry, std::vector<pq_entry>, std::greater<pq_entry>>
+      pq;
+  pq.push({0.0, 0});
 
-  while (!queue.empty()) {
-    index_t cid = queue.front();
-    queue.pop();
+  std::vector<bool> visited(internal_nodes.size(), false);
+
+  while (!pq.empty()) {
+    auto [pri, cid] = pq.top();
+    pq.pop();
+
+    if (visited[cid])
+      continue;
+    visited[cid] = true;
 
     const auto &cnode = internal_nodes[cid];
     if (cnode.split == UNULL)
       continue;
 
-    // Handle leaf cases
-    else if (cnode.split + 0 == cnode.start || cnode.split + 1 == cnode.end) {
-      // process node that has leaves, but process as node
-      fcn(cid, -1, cnode);
-      if (cnode.split + 0 == cnode.start && cnode.split + 1 == cnode.end) {
-        // Both children are leaves
-        fcn(cid, cnode.start, leaf_nodes[cnode.start]);
-        fcn(cid, cnode.end, leaf_nodes[cnode.end]);
-      } else if (cnode.split + 0 == cnode.start) {
-        // Left child is leaf
-        fcn(cid, cnode.start, leaf_nodes[cnode.start]);
-        queue.push(cnode.split + 1);
-      } else if (cnode.split + 1 == cnode.end) {
-        // Right child is leaf
-        fcn(cid, cnode.end, leaf_nodes[cnode.end]);
-        queue.push(cnode.split);
+    process_node(cid, cnode);
+
+    auto push_child = [&](index_t child_id) {
+      real p = compute_priority(child_id, internal_nodes[child_id]);
+      if (p >= 0.0)
+        pq.push({p, child_id});
+    };
+
+    if (has_leaves(cnode)) {
+      if (both_leaves(cnode)) {
+        process_leaf(cid, cnode.start, leaf_nodes[cnode.start]);
+        process_leaf(cid, cnode.end, leaf_nodes[cnode.end]);
+      } else if (left_leaf(cnode)) {
+        process_leaf(cid, cnode.start, leaf_nodes[cnode.start]);
+        push_child(cnode.split + 1);
+      } else if (right_leaf(cnode)) {
+        process_leaf(cid, cnode.end, leaf_nodes[cnode.end]);
+        push_child(cnode.split);
       }
-    } else if (fcn(cid, -1, cnode)) { // <- KEY: conditional traversal
-      // Continue traversing if callback returns true
-      const auto &node_split = internal_nodes[cnode.split];
-      const auto &node_split1 = internal_nodes[cnode.split + 1];
-      queue.push(cnode.split);
-      queue.push(cnode.split + 1);
+    } else {
+      push_child(cnode.split);
+      push_child(cnode.split + 1);
     }
-    // If fcn returns false, we stop propagating down this branch
   }
 }
 
@@ -325,7 +378,7 @@ inline TTYPE build_pyramid(const TTYPE &data,
     const O &datai = data[i];
     index_t j = 0;
     index_t parent = leaf_nodes[i].parent;
-    while (j < 32 && parent != UNULL) {
+    while (j < 64 && parent != UNULL) {
       const O &dataj = internalReduce[parent];
       internalReduce[parent] = thread_safe_reduce(datai, dataj);
       parent = internal_nodes[parent].parent;
@@ -336,12 +389,12 @@ inline TTYPE build_pyramid(const TTYPE &data,
   return internalReduce;
 }
 
-// Build complete hash tree with pyramid
-template <Vec3View TTYPE>
-inline std::tuple<std::vector<uint32_t>, std::vector<index_t>,
+// Build complete hash tree with pyramid (Morton-key typed).
+template <typename MortonT = morton_t, Vec3View TTYPE>
+inline std::tuple<std::vector<MortonT>, std::vector<index_t>,
                   std::vector<radix_tree_node>, std::vector<radix_tree_node>>
 make_hash_tree(const TTYPE &data) {
-  auto [hashes, indices] = make_hash_3d(data);
+  auto [hashes, indices] = make_hash_3d_t<MortonT>(data);
   if (hashes.empty()) {
     return {{}, {}, {}, {}};
   }
@@ -350,6 +403,7 @@ make_hash_tree(const TTYPE &data) {
   return std::make_tuple(hashes, indices, internal_nodes, leaf_nodes);
 }
 
+// make_bvh for flat Vec3View (legacy)
 template <int N, Vec3View TTYPE>
 inline TreeResult<ext::extents_t>
 make_bvh(const TTYPE &data, const std::vector<radix_tree_node> &internal_nodes,
@@ -376,6 +430,29 @@ make_bvh(const TTYPE &data, const std::vector<radix_tree_node> &internal_nodes,
   };
 }
 
+// make_bvh for SimplexView (type-based)
+// Extracts stride from the SimplexView type automatically
+template <SimplexView STYPE>
+inline TreeResult<ext::extents_t>
+make_bvh(const STYPE &data, const std::vector<radix_tree_node> &internal_nodes,
+         const std::vector<radix_tree_node> &leaf_nodes) {
+
+  const auto exts = calc_extents(data);
+  const auto default_val = ext::init();
+  auto reduce_function = [&](const ext::extents_t &a, const ext::extents_t &b) {
+    return ext::expand(b, a);
+  };
+
+  auto internalReduce = build_pyramid(exts, internal_nodes, leaf_nodes,
+                                      reduce_function, default_val);
+
+  return {
+      exts,
+      internalReduce,
+  };
+}
+
+// make_points for flat Vec3View (legacy)
 template <int N, Vec3View TTYPE>
 inline TreeResult<vec3>
 make_points(const TTYPE &data,
@@ -414,152 +491,396 @@ make_points(const TTYPE &data,
   };
 }
 
-template <int N, Vec3View TTYPE>
-void log_hierarchy(const TTYPE &data,
+// make_points for SimplexView (type-based)
+// Extracts stride from the SimplexView type automatically
+template <SimplexView STYPE>
+inline TreeResult<vec3>
+make_points(const STYPE &data,
+            const std::vector<radix_tree_node> &internal_nodes,
+            const std::vector<radix_tree_node> &leaf_nodes) {
+  const auto default_val = MassPoint{0.0f, vec3::Zero()};
+  const auto coms = calc_com(data);
+
+  auto reduce_function = [&](const MassPoint &a,
+                             const MassPoint &b) -> MassPoint {
+    const real &ma = std::get<0>(a);
+    const real &mb = std::get<0>(b);
+    const vec3 &pa = ma * std::get<1>(a);
+    const vec3 &pb = std::get<1>(b); // accumulate point sum
+    return MassPoint{ma + mb, pa + pb};
+  };
+
+  // Build pyramid with map-reduce
+  auto internalReduce = build_pyramid(coms, internal_nodes, leaf_nodes,
+                                      reduce_function, default_val);
+
+  std::vector<vec3> leaf_points(coms.size());
+  for (size_t i = 0; i < coms.size(); i++) {
+    leaf_points[i] = std::get<1>(coms[i]); // average point
+  }
+
+  std::vector<vec3> internal_points(internalReduce.size());
+  for (size_t i = 0; i < internalReduce.size(); i++) {
+    const vec3 &p = std::get<1>(internalReduce[i]);
+    const real &m = std::get<0>(internalReduce[i]);
+    internal_points[i] = p / m; // average point
+  }
+  return {
+      leaf_points,    // leaf points ordered by indices
+      internal_points // internal points
+  };
+}
+
+// log_hierarchy for SimplexView types (tuple-based)
+template <SimplexView STYPE>
+void log_hierarchy(const STYPE &data,
                    const std::vector<radix_tree_node> &internal_nodes,
                    const std::vector<radix_tree_node> &leaf_nodes) {
+  constexpr size_t N = simplex_stride_v<STYPE>;
+  
   if (internal_nodes.empty() || leaf_nodes.empty()) {
     console_logger::debug << "No internal or leaf nodes to log" << std::endl;
     return;
   }
   // Compute centerpoints for each stride group for visualization
   const auto [leaf_points, internal_points] =
-      make_points<N>(data, internal_nodes, leaf_nodes);
-  // draw the simplex for logging
-  if (N > 1) {
-    for (size_t i = 0; i < data.size(); i += N) {
-      for (int j = 0; j < N; j++) {
-        const int j0 = i + j;
-        const int j1 = i + (j + 1) % N;
-        geometry_logger::line(data[j0], data[j1], vec4(0.2, 0.2, 0.2, 0.5f));
+      make_points(data, internal_nodes, leaf_nodes);
+  // draw the simplex for logging (SimplexView provides tuples)
+  if constexpr (N > 1) {
+    for (size_t i = 0; i < data.size(); i++) {
+      auto simplex = data[i];
+      for (size_t j = 0; j < N; j++) {
+        const size_t j1 = (j + 1) % N;
+        geometry_logger::line(simplex[j], simplex[j1], vec4(0.2, 0.2, 0.2, 0.5f));
       }
     }
   }
   // draw centerpoints
-  for (int i = 0; i < leaf_points.size(); i++) {
+  for (size_t i = 0; i < leaf_points.size(); i++) {
     geometry_logger::point(leaf_points[i], vec4(0.0, 1.0, 0.0, 1.0f));
   }
   // Continue with original logic using make_points
   traverse_bfs(
       internal_nodes, leaf_nodes,
-      [&](index_t node_id, index_t leaf_id, const radix_tree_node &node) {
-        if (leaf_id != -1 && node.parent != UNULL) {
-          const auto &ppoint = internal_points[node.parent];
-          const auto &cpoint = leaf_points[leaf_id];
-          geometry_logger::line(ppoint, cpoint, vec4(0.0, 0.0, 1.0, 1.0f));
-          geometry_logger::point(ppoint, vec4(1.0, 0.0, 1.0, 1.0f));
-        } else if (node.parent != UNULL) {
+      [&](index_t node_id, const radix_tree_node &node) {
+        if (node.parent != UNULL) {
           const auto &ppoint = internal_points[node.parent];
           const auto &cpoint = internal_points[node_id];
           geometry_logger::line(ppoint, cpoint, vec4(0.0, 1.0, 0.0, 1.0f));
         }
-        return true;
-      });
+      },
+      [&](index_t parent_id, index_t leaf_id, const radix_tree_node &node) {
+        if (node.parent != UNULL) {
+          const auto &ppoint = internal_points[node.parent];
+          const auto &cpoint = leaf_points[leaf_id];
+          geometry_logger::line(ppoint, cpoint, vec4(0.0, 0.0, 1.0, 1.0f));
+          geometry_logger::point(ppoint, vec4(1.0, 0.0, 1.0, 1.0f));
+        }
+      },
+      [&](index_t, const radix_tree_node &) { return true; });
 }
 
-template <int N, Vec3View TTYPE>
-void log_bvh(const TTYPE &data,
+// log_bvh for SimplexView types (tuple-based)
+template <SimplexView STYPE>
+void log_bvh(const STYPE &data,
              const std::vector<radix_tree_node> &internal_nodes,
              const std::vector<radix_tree_node> &leaf_nodes) {
+  constexpr size_t N = simplex_stride_v<STYPE>;
 
-  const auto bvh_result = make_bvh<N>(data, internal_nodes, leaf_nodes);
+  const auto bvh_result = make_bvh(data, internal_nodes, leaf_nodes);
   const auto &leaf_bvh = bvh_result.leaf;
   const auto &internal_bvh = bvh_result.internal;
-  for (int i = 0; i < data.size(); i++) {
-    const vec3 &point = data[i];
-    geometry_logger::point(point, vec4(1.0, 0.0, 0.0, 1.0));
+  
+  // Draw all vertices from simplices
+  for (size_t i = 0; i < data.size(); i++) {
+    auto simplex = data[i];
+    for (size_t j = 0; j < N; j++) {
+      geometry_logger::point(simplex[j], vec4(1.0, 0.0, 0.0, 1.0));
+    }
   }
-  for (int i = 0; i < internal_bvh.size(); i++) {
+  for (size_t i = 0; i < internal_bvh.size(); i++) {
     const ext::extents_t &ext = internal_bvh[i];
     geometry_logger::ext(ext[0], ext[1], vec4(0.0, 1.0, 0.0, 0.5));
   }
 }
 
-// SLICE = permuted_slice<vec3, NT> || slice<vec3, NT> || array<vec3, NT>
+template <size_t N>
+inline ext::extents_t calc_simplex_extents(const std::array<vec3, N> &simplex) {
+  auto out = ext::init();
+  for (size_t i = 0; i < N; ++i) {
+    out = ext::expand(out, simplex[i]);
+  }
+  return out;
+}
 
-// user should'nt know that this is a slice its just an array
-template <int N, Vec3View PTYPE,
-          Vec3View TTYPE> // T=test, S=set... DOH! T could equal tree...
-std::vector<index_t>
-getNearest(const PTYPE &prim, const TTYPE &data,
-           const std::vector<radix_tree_node> &internal_nodes,
-           const std::vector<radix_tree_node> &leaf_nodes,
-           const TreeResult<ext::extents_t> &bvh_result, real tol,
-           auto &&testAB) {
+// BFS contracting radius: find single closest element
+template <SimplexView PTYPE, SimplexView STYPE>
+index_t get_nearest(const typename PTYPE::value_type &prim, const STYPE &data,
+                    const std::vector<radix_tree_node> &internal_nodes,
+                    const std::vector<radix_tree_node> &leaf_nodes,
+                    const TreeResult<ext::extents_t> &bvh_result,
+                    auto &&testAB) {
 
-  bool contracting_rad = tol > 999.9;
-  ext::extents_t ext_t = ext::calc_extents(prim);
-  ext_t = ext::inflate(ext_t, tol);
-  const vec3 cen_t = ext::center(ext_t);
+  constexpr size_t Nprim = simplex_stride_v<PTYPE>;
+
   index_t idMin = -1;
   real mMin = std::numeric_limits<real>::max();
-  std::vector<index_t> collisions;
+  ext::extents_t ext_t = calc_simplex_extents<Nprim>(prim);
+  ext_t = ext::inflate(ext_t, mMin);
 
-  using T = typename TTYPE::value_type;
   traverse_bfs(
       internal_nodes, leaf_nodes,
-      [&](index_t node_id, index_t leaf_id, const radix_tree_node &node) {
-        if (leaf_id != -1 && node.parent != UNULL) {
-          // if contracting_rad
-          const slice<N, TTYPE> datum(data, leaf_id);
-          const ext::extents_t &ext_s = ext::calc_extents(datum);
-          geometry_logger::ext(ext_s[0], ext_s[1], vec4(0.0, 1.0, 0.0, 0.5));
-          // geometry_logger::ext(ext_t[0], ext_t[1], vec4(1.0, 0.0, 0.0, 0.5));
-          if (contracting_rad) {
-            real dist = testAB(prim, datum);
-            if (dist < mMin) {
-              mMin = dist;
-              idMin = data.get_index(leaf_id);
-            }
-            ext_t = ext::inflate(ext::calc_extents(prim), mMin);
-          } else if (ext::overlap(ext_t, ext_s)) {
-            real dist = testAB(prim, datum);
-            if (dist < tol) {
-              collisions.push_back(data.get_index(leaf_id));
-            }
-          }
-
-          return false;
-        } else if (node.parent != UNULL) {
-          const ext::extents_t &ext_s = bvh_result.internal[node_id];
-          if (contracting_rad) {
-            const real dist = ext::dist_from_center(ext_s, cen_t);
-            tol = std::min(dist, tol);
-            ext_t = ext::inflate(ext::calc_extents(prim), tol);
-            return ext::overlap(ext_t, ext_s);
-          }
-
-          geometry_logger::ext(ext_t[0], ext_t[1], vec4(1.0, 0.0, 0.0, 0.5));
-          // reset the extents to the original
-          return ext::overlap(ext_t, ext_s);
+      [&](index_t, const radix_tree_node &) {},
+      [&](index_t, index_t leaf_id, const radix_tree_node &) {
+        auto datum = data[leaf_id];
+        real dist = testAB(prim, datum);
+        if (dist < mMin) {
+          mMin = dist;
+          idMin = data.get_index(leaf_id);
         }
-        return true;
+        ext_t = ext::inflate(calc_simplex_extents<Nprim>(prim), mMin);
+      },
+      [&](index_t node_id, const radix_tree_node &) -> bool {
+        const ext::extents_t &ext_s = bvh_result.internal[node_id];
+        ext_t = ext::inflate(calc_simplex_extents<Nprim>(prim), mMin);
+        return ext::overlap(ext_t, ext_s);
       });
 
-  if (contracting_rad) {
-    collisions.push_back(idMin); // mintol always in the back
-  } else {
-    collisions.push_back(-1);
-  }
-  return collisions;
-};
+  return idMin;
+}
 
-template <int N, Vec3View TTYPE>
-inline std::tuple<std::vector<uint32_t>, std::vector<index_t>,
+// Best-first contracting radius: find single closest element
+template <SimplexView PTYPE, SimplexView STYPE>
+index_t get_nearest_best(const typename PTYPE::value_type &prim,
+                         const STYPE &data,
+                         const std::vector<radix_tree_node> &internal_nodes,
+                         const std::vector<radix_tree_node> &leaf_nodes,
+                         const TreeResult<ext::extents_t> &bvh_result,
+                         auto &&testAB) {
+
+  constexpr size_t Nprim = simplex_stride_v<PTYPE>;
+
+  index_t idMin = -1;
+  real mMin = std::numeric_limits<real>::max();
+  vec3 query_center = calc_simplex_extents<Nprim>(prim)[0];
+  for (size_t i = 0; i < Nprim; ++i)
+    query_center = (query_center + prim[i]) / 2.0;
+
+  traverse_best(
+      internal_nodes, leaf_nodes,
+      [&](index_t, const radix_tree_node &) {},
+      [&](index_t, index_t leaf_id, const radix_tree_node &) {
+        auto datum = data[leaf_id];
+        real dist = testAB(prim, datum);
+        if (dist < mMin) {
+          mMin = dist;
+          idMin = data.get_index(leaf_id);
+        }
+      },
+      [&](index_t child_id, const radix_tree_node &) -> real {
+        const ext::extents_t &ext_s = bvh_result.internal[child_id];
+        real d = ext::min_distance_to_aabb(query_center, ext_s);
+        return (d < mMin) ? d : -1.0;
+      });
+
+  return idMin;
+}
+
+// BFS fixed radius: collect all elements within tolerance
+template <SimplexView PTYPE, SimplexView STYPE>
+std::vector<index_t>
+get_neighbors(const typename PTYPE::value_type &prim, const STYPE &data,
+              const std::vector<radix_tree_node> &internal_nodes,
+              const std::vector<radix_tree_node> &leaf_nodes,
+              const TreeResult<ext::extents_t> &bvh_result, real tol,
+              auto &&testAB) {
+
+  constexpr size_t Nprim = simplex_stride_v<PTYPE>;
+
+  ext::extents_t ext_t = calc_simplex_extents<Nprim>(prim);
+  ext_t = ext::inflate(ext_t, tol);
+  std::vector<index_t> collisions;
+
+  traverse_bfs(
+      internal_nodes, leaf_nodes,
+      [&](index_t, const radix_tree_node &) {},
+      [&](index_t, index_t leaf_id, const radix_tree_node &) {
+        auto datum = data[leaf_id];
+        real dist = testAB(prim, datum);
+        if (dist < tol)
+          collisions.push_back(data.get_index(leaf_id));
+      },
+      [&](index_t node_id, const radix_tree_node &) -> bool {
+        const ext::extents_t &ext_s = bvh_result.internal[node_id];
+        return ext::overlap(ext_t, ext_s);
+      });
+
+  return collisions;
+}
+
+// make_hash for flat Vec3View (legacy)
+template <int N, Vec3View TTYPE, typename MortonT = morton_t>
+inline std::tuple<std::vector<MortonT>, std::vector<index_t>,
                   std::vector<radix_tree_node>, std::vector<radix_tree_node>>
 make_hash(const TTYPE &data) {
   const auto mass_points = calc_com<N>(data);
-  // Extract just the center of mass vectors from MassPoint tuples
   std::vector<vec3> averaged;
   averaged.reserve(mass_points.size());
   for (const auto &[mass, com] : mass_points) {
     averaged.push_back(com);
   }
-  return make_hash_tree(averaged);
+  return make_hash_tree<MortonT>(averaged);
 }
 
+// make_hash for SimplexView (type-based)
+template <typename MortonT = morton_t, SimplexView STYPE>
+inline std::tuple<std::vector<MortonT>, std::vector<index_t>,
+                  std::vector<radix_tree_node>, std::vector<radix_tree_node>>
+make_hash(const STYPE &data) {
+  const auto mass_points = calc_com(data);
+  std::vector<vec3> averaged;
+  averaged.reserve(mass_points.size());
+  for (const auto &[mass, com] : mass_points) {
+    averaged.push_back(com);
+  }
+  return make_hash_tree<MortonT>(averaged);
+}
+
+template <int N, typename MortonT = morton_t>
+inline std::tuple<std::vector<MortonT>, std::vector<index_t>,
+                  std::vector<radix_tree_node>, std::vector<radix_tree_node>>
+make_hash(const simplex_set<N> &set) {
+  return make_hash_tree<MortonT>(set.centroids());
+}
 
 template <int N>
+inline simplex_set<N> make_simplex_set(const std::vector<vec3> &vertices,
+                                       const std::vector<index_t> &adjacency) {
+  return simplex_set<N>(vertices, adjacency);
+}
+
+// New bvh_tree templated on SimplexType
+// This version extracts N from the SimplexType automatically
+template <SimplexView SimplexType, typename MortonT = morton_t>
+class bvh_tree_t {
+public:
+  static constexpr size_t N = simplex_stride_v<SimplexType>;
+  
+  // Member variables
+  std::vector<index_t> indices_;
+  std::vector<radix_tree_node> internal_nodes_;
+  std::vector<radix_tree_node> leaf_nodes_;
+  TreeResult<ext::extents_t> bvh_;
+  std::vector<vec3> data_;
+  std::vector<index_t> adjacency_;
+  std::vector<MassPoint> coms_;
+  std::vector<MortonT> hashes_;
+
+  // Type aliases
+  using ptr = std::shared_ptr<bvh_tree_t<SimplexType, MortonT>>;
+  using simplex_view_type = SimplexType;
+  using permutation_index_type = std::vector<index_t>;
+  using permuted_view_type = permuted_simplex_view<N, std::vector<vec3>, std::vector<index_t>>;
+
+  // Optional views - constructed after data is available
+  std::optional<permuted_view_type> permuted_data_view_;
+
+  static ptr create(const std::vector<index_t> &adjacency,
+                    const std::vector<vec3> &vertices, int lvl = 8) {
+    return std::make_shared<bvh_tree_t<SimplexType, MortonT>>(vertices, adjacency);
+  }
+
+  bvh_tree_t(const std::vector<vec3> &data,
+             const std::vector<index_t> &adjacency) {
+    update(data, adjacency);
+  }
+
+  index_t get_index(size_t i) const { return indices_[i]; }
+
+  void update(const std::vector<vec3> &data,
+              const std::vector<index_t> &adjacency) {
+    data_ = data;
+    adjacency_ = adjacency;
+    
+    // Create initial simplex view to compute hash
+    permuted_simplex_view<N, std::vector<vec3>, std::vector<index_t>> 
+        initial_view(data_, adjacency_, std::vector<index_t>{});
+    
+    // We need an unpermuted view first to compute the hash
+    // Create identity permutation
+    std::vector<index_t> identity(adjacency_.size() / N);
+    for (size_t i = 0; i < identity.size(); ++i) {
+      identity[i] = static_cast<index_t>(i);
+    }
+    
+    // Create unpermuted simplex view
+    permuted_simplex_view<N, std::vector<vec3>, std::vector<index_t>>
+        unpermuted_view(data_, adjacency_, identity);
+    
+    auto [hashes, indices, internal_nodes, leaf_nodes] = make_hash<MortonT>(unpermuted_view);
+    
+    // Copy to members FIRST so the view can reference stable storage
+    indices_ = std::move(indices);
+    internal_nodes_ = std::move(internal_nodes);
+    leaf_nodes_ = std::move(leaf_nodes);
+    hashes_ = std::move(hashes);
+
+    // Now create the permuted view pointing to member storage
+    permuted_data_view_.emplace(data_, adjacency_, indices_);
+
+    bvh_ = make_bvh(*permuted_data_view_, internal_nodes_, leaf_nodes_);
+    coms_ = calc_com(*permuted_data_view_);
+  }
+
+  std::array<index_t, N> get_tuple_ids(const index_t &i) {
+    return permuted_data_view_->get_tuple_ids(i);
+  }
+
+  // Get center of mass for a leaf node
+  vec3 get_com(index_t i) const {
+    return std::get<1>(coms_[i]);
+  }
+
+  template <SimplexView QueryType>
+  auto dispatch_test() const {
+    constexpr size_t Nq = simplex_stride_v<QueryType>;
+    if constexpr (Nq == 1 && N == 1)
+      return [](const auto &q, const auto &d) { return test_point_point_tuple(q, d); };
+    else if constexpr (Nq == 1 && N == 2)
+      return [](const auto &q, const auto &d) { return test_point_line_tuple(q, d); };
+    else if constexpr (Nq == 1 && N == 3)
+      return [](const auto &q, const auto &d) { return test_point_tri_tuple(q, d); };
+    else if constexpr (Nq == 2 && N == 1)
+      return [](const auto &q, const auto &d) { return test_point_line_tuple(d, q); };
+    else if constexpr (Nq == 2 && N == 2)
+      return [](const auto &q, const auto &d) { return test_line_line_tuple(q, d); };
+    else if constexpr (Nq == 2 && N == 3)
+      return [](const auto &q, const auto &d) { return test_line_tri_tuple(q, d); };
+    else if constexpr (Nq == 3 && N == 1)
+      return [](const auto &q, const auto &d) { return test_point_tri_tuple(d, q); };
+    else if constexpr (Nq == 3 && N == 2)
+      return [](const auto &q, const auto &d) { return test_line_tri_tuple(d, q); };
+    else if constexpr (Nq == 3 && N == 3)
+      return [](const auto &q, const auto &d) { return test_tri_tri_tuple(q, d); };
+  }
+
+  template <SimplexView QueryType>
+  index_t find_nearest(const typename QueryType::value_type &query) {
+    return arp::get_nearest<QueryType, permuted_view_type>(
+        query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_,
+        dispatch_test<QueryType>());
+  }
+
+  template <SimplexView QueryType>
+  std::vector<index_t> find_neighbors(const typename QueryType::value_type &query, real tol) {
+    return arp::get_neighbors<QueryType, permuted_view_type>(
+        query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_, tol,
+        dispatch_test<QueryType>());
+  }
+};
+
+// Legacy bvh_tree templated on N - now uses permuted_simplex_view internally
+template <int N, typename MortonT = morton_t>
 class bvh_tree {
   public:
     // Member variables first
@@ -570,21 +891,24 @@ class bvh_tree {
     std::vector<vec3> data_;
     std::vector<index_t> adjacency_;
     std::vector<MassPoint> coms_;
-    std::vector<uint32_t> hashes_;
+    std::vector<MortonT> hashes_;
 
-    // Type aliases using the member variables
-    using ptr = std::shared_ptr<bvh_tree<N>>;
-    using view = adjacency_view<std::vector<vec3>, std::vector<index_t>>;
+    // Type aliases - now using permuted_simplex_view
+    using ptr = std::shared_ptr<bvh_tree<N, MortonT>>;
     using permutation_index_type = std::vector<index_t>;
-    using permuted_view = permuted_adjacency_view<N, std::vector<vec3>, std::vector<index_t>>;
+    using permuted_view = permuted_simplex_view<N, std::vector<vec3>, std::vector<index_t>>;
+    using value_type = typename permuted_view::value_type; // std::array<vec3, N>
 
     // Member variables for views - optional because views are immutable after construction
-    std::optional<view> data_view_;
     std::optional<permuted_view> permuted_data_view_;
     
     static ptr create(const std::vector<index_t> &adjacency,
                       const std::vector<vec3> &vertices, int lvl = 8) {
-      return std::make_shared<bvh_tree<N>>(vertices, adjacency);
+      return std::make_shared<bvh_tree<N, MortonT>>(vertices, adjacency);
+    }
+
+    static ptr create(const simplex_set<N> &set, int lvl = 8) {
+      return std::make_shared<bvh_tree<N, MortonT>>(set);
     }
 
     bvh_tree(const std::vector<vec3> &data,
@@ -592,27 +916,76 @@ class bvh_tree {
       update(data, adjacency);
     }
 
+    bvh_tree(const simplex_set<N> &set) { update(set); }
+
     index_t get_index(size_t i) const { return indices_[i]; }
     
     void update(const std::vector<vec3> &data,
                 const std::vector<index_t> &adjacency) {
       data_ = data;
       adjacency_ = adjacency;
-      data_view_.emplace(data_, adjacency_);
-      auto [hashes, indices, internal_nodes, leaf_nodes] =
-          make_hash<N>(*data_view_);
-      permuted_data_view_.emplace(data_, adjacency_, indices);
+      
+      // Create identity permutation for initial hashing
+      std::vector<index_t> identity(adjacency_.size() / N);
+      for (size_t i = 0; i < identity.size(); ++i) {
+        identity[i] = static_cast<index_t>(i);
+      }
+      
+      // Create initial simplex view to compute hash
+      permuted_simplex_view<N, std::vector<vec3>, std::vector<index_t>>
+          initial_view(data_, adjacency_, identity);
+      
+      auto [hashes, indices, internal_nodes, leaf_nodes] = make_hash<MortonT>(initial_view);
+      
+      // Copy to members FIRST so the view can reference stable storage
+      indices_ = std::move(indices);
+      internal_nodes_ = std::move(internal_nodes);
+      leaf_nodes_ = std::move(leaf_nodes);
+      hashes_ = std::move(hashes);
 
-      indices_ = indices;
-      internal_nodes_ = internal_nodes;
-      leaf_nodes_ = leaf_nodes;
-      bvh_ = make_bvh<N>(*permuted_data_view_, internal_nodes_, leaf_nodes_);
-      coms_ = calc_com<N>(*permuted_data_view_);
-      hashes_ = hashes;
+      // Now create the permuted view pointing to member storage
+      permuted_data_view_.emplace(data_, adjacency_, indices_);
+
+      bvh_ = make_bvh(*permuted_data_view_, internal_nodes_, leaf_nodes_);
+      coms_ = calc_com(*permuted_data_view_);
     }
 
-    std::array<index_t, N> get_tuple_ids(const index_t & i){
+    void update(const simplex_set<N> &set) {
+      data_ = set.vertices();
+      adjacency_ = set.adjacency();
+      
+      // Create identity permutation for initial hashing
+      std::vector<index_t> identity(adjacency_.size() / N);
+      for (size_t i = 0; i < identity.size(); ++i) {
+        identity[i] = static_cast<index_t>(i);
+      }
+      
+      // Create initial simplex view to compute hash
+      permuted_simplex_view<N, std::vector<vec3>, std::vector<index_t>>
+          initial_view(data_, adjacency_, identity);
+      
+      auto [hashes, indices, internal_nodes, leaf_nodes] = make_hash<MortonT>(initial_view);
+      
+      // Copy to members FIRST so the view can reference stable storage
+      indices_ = std::move(indices);
+      internal_nodes_ = std::move(internal_nodes);
+      leaf_nodes_ = std::move(leaf_nodes);
+      hashes_ = std::move(hashes);
+
+      // Now create the permuted view pointing to member storage
+      permuted_data_view_.emplace(data_, adjacency_, indices_);
+
+      bvh_ = make_bvh(*permuted_data_view_, internal_nodes_, leaf_nodes_);
+      coms_ = calc_com(*permuted_data_view_);
+    }
+
+    std::array<index_t, N> get_tuple_ids(const index_t &i) {
       return permuted_data_view_->get_tuple_ids(i);
+    }
+
+    // Get the simplex at index i (returns std::array<vec3, N>)
+    value_type get_simplex(index_t i) const {
+      return (*permuted_data_view_)[i];
     }
 
     // Get center of mass for a leaf node
@@ -620,110 +993,71 @@ class bvh_tree {
       return std::get<1>(coms_[i]);
     }
 
-    // Templated get_nearest dispatches to appropriate test function
-    // based on query stride (deduced from PTYPE) and N (data primitive stride)
+    template <int Nq>
+    auto dispatch_test() const {
+      if constexpr (Nq == 1 && N == 1)
+        return [](const auto &q, const auto &d) { return test_point_point_tuple(q, d); };
+      else if constexpr (Nq == 1 && N == 2)
+        return [](const auto &q, const auto &d) { return test_point_line_tuple(q, d); };
+      else if constexpr (Nq == 1 && N == 3)
+        return [](const auto &q, const auto &d) { return test_point_tri_tuple(q, d); };
+      else if constexpr (Nq == 2 && N == 1)
+        return [](const auto &q, const auto &d) { return test_point_line_tuple(d, q); };
+      else if constexpr (Nq == 2 && N == 2)
+        return [](const auto &q, const auto &d) { return test_line_line_tuple(q, d); };
+      else if constexpr (Nq == 2 && N == 3)
+        return [](const auto &q, const auto &d) { return test_line_tri_tuple(q, d); };
+      else if constexpr (Nq == 3 && N == 1)
+        return [](const auto &q, const auto &d) { return test_point_tri_tuple(d, q); };
+      else if constexpr (Nq == 3 && N == 2)
+        return [](const auto &q, const auto &d) { return test_line_tri_tuple(d, q); };
+      else if constexpr (Nq == 3 && N == 3)
+        return [](const auto &q, const auto &d) { return test_tri_tri_tuple(q, d); };
+    }
+
+    template <int Nq>
+    static auto make_query(const auto &view) {
+      if constexpr (Nq == 1) return std::array<vec3, 1>{view[0]};
+      else if constexpr (Nq == 2) return std::array<vec3, 2>{view[0], view[1]};
+      else if constexpr (Nq == 3) return std::array<vec3, 3>{view[0], view[1], view[2]};
+    }
+
+    template <Vec3View PTYPE>
+    index_t find_nearest(const PTYPE &query) {
+      constexpr int Nq = view_stride_v<PTYPE>;
+      return arp::get_nearest<Singulus<Nq>, permuted_view>(
+          make_query<Nq>(query), *permuted_data_view_,
+          internal_nodes_, leaf_nodes_, bvh_, dispatch_test<Nq>());
+    }
+
+    template <Vec3View PTYPE>
+    std::vector<index_t> find_neighbors(const PTYPE &query, real tol) {
+      constexpr int Nq = view_stride_v<PTYPE>;
+      return arp::get_neighbors<Singulus<Nq>, permuted_view>(
+          make_query<Nq>(query), *permuted_data_view_,
+          internal_nodes_, leaf_nodes_, bvh_, tol, dispatch_test<Nq>());
+    }
+
+    // Legacy wrapper: returns vector with idMin as last element
     template <Vec3View PTYPE>
     std::vector<index_t> get_nearest(const PTYPE &query, real tol) {
-      constexpr int Nquery = view_stride_v<PTYPE>;
-      if constexpr (Nquery == 1 && N == 1) {
-        // point query against point data
-        return getNearest<N, PTYPE, permuted_view>(
-            query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_, tol,
-            [](const PTYPE &q, const slice<N, permuted_view> &d) {
-              return test_point_point(q, d);
-            });
-      } else if constexpr (Nquery == 1 && N == 2) {
-        // point query against line data
-        return getNearest<N, PTYPE, permuted_view>(
-            query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_, tol,
-            [](const PTYPE &q, const slice<N, permuted_view> &d) {
-              return test_point_line(q, d);
-            });
-      } else if constexpr (Nquery == 1 && N == 3) {
-        // point query against triangle data
-        return getNearest<N, PTYPE, permuted_view>(
-            query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_, tol,
-            [](const PTYPE &q, const slice<N, permuted_view> &d) {
-              return test_point_tri(q, d);
-            });
-      } else if constexpr (Nquery == 2 && N == 1) {
-        // line query against point data - use point-line with reversed args
-        return getNearest<N, PTYPE, permuted_view>(
-            query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_, tol,
-            [](const PTYPE &q, const slice<N, permuted_view> &d) {
-              return test_point_line(d, q);
-            });
-      } else if constexpr (Nquery == 2 && N == 2) {
-        // line query against line data
-        return getNearest<N, PTYPE, permuted_view>(
-            query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_, tol,
-            [](const PTYPE &q, const slice<N, permuted_view> &d) {
-              return test_line_line(q, d);
-            });
-      } else if constexpr (Nquery == 2 && N == 3) {
-        // line query against triangle data
-        return getNearest<N, PTYPE, permuted_view>(
-            query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_, tol,
-            [](const PTYPE &q, const slice<N, permuted_view> &d) {
-              return test_line_tri(q, d);
-            });
-      } else if constexpr (Nquery == 3 && N == 1) {
-        // triangle query against point data - use point-tri with reversed args
-        return getNearest<N, PTYPE, permuted_view>(
-            query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_, tol,
-            [](const PTYPE &q, const slice<N, permuted_view> &d) {
-              return test_point_tri(d, q);
-            });
-      } else if constexpr (Nquery == 3 && N == 2) {
-        // triangle query against line data - use line-tri with reversed args
-        return getNearest<N, PTYPE, permuted_view>(
-            query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_, tol,
-            [](const PTYPE &q, const slice<N, permuted_view> &d) {
-              return test_line_tri(d, q);
-            });
-      } else if constexpr (Nquery == 3 && N == 3) {
-        // triangle query against triangle data
-        return getNearest<N, PTYPE, permuted_view>(
-            query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_, tol,
-            [](const PTYPE &q, const slice<N, permuted_view> &d) {
-              return test_tri_tri(q, d);
-            });
+      std::vector<index_t> result;
+      if (tol > 999.9) {
+        result.push_back(find_nearest<PTYPE>(query));
+      } else {
+        result = find_neighbors<PTYPE>(query, tol);
+        result.push_back(-1);
       }
-      return {};
+      return result;
     }
   };
+
+template <int N>
+using BVH_T = bvh_tree<N, morton_t>;
 
 // Explicit instantiation declarations - controlled by CMake option
 #if defined(GAUDI_USE_EXPLICIT_INSTANTIATIONS) &&                              \
     GAUDI_USE_EXPLICIT_INSTANTIATIONS
-extern template TreeResult<vec3>
-make_points<1>(const std::vector<vec3> &, const std::vector<index_t> &,
-               const std::vector<uint32_t> &,
-               const std::vector<radix_tree_node> &,
-               const std::vector<radix_tree_node> &);
-extern template TreeResult<vec3>
-make_points<2>(const std::vector<vec3> &, const std::vector<index_t> &,
-               const std::vector<uint32_t> &,
-               const std::vector<radix_tree_node> &,
-               const std::vector<radix_tree_node> &);
-extern template TreeResult<vec3>
-make_points<3>(const std::vector<vec3> &, const std::vector<index_t> &,
-               const std::vector<uint32_t> &,
-               const std::vector<radix_tree_node> &,
-               const std::vector<radix_tree_node> &);
-
-extern template TreeResult<ext::extents_t>
-make_bvh<1>(const std::vector<vec3> &, const std::vector<index_t> &,
-            const std::vector<uint32_t> &, const std::vector<radix_tree_node> &,
-            const std::vector<radix_tree_node> &);
-extern template TreeResult<ext::extents_t>
-make_bvh<2>(const std::vector<vec3> &, const std::vector<index_t> &,
-            const std::vector<uint32_t> &, const std::vector<radix_tree_node> &,
-            const std::vector<radix_tree_node> &);
-extern template TreeResult<ext::extents_t>
-make_bvh<3>(const std::vector<vec3> &, const std::vector<index_t> &,
-            const std::vector<uint32_t> &, const std::vector<radix_tree_node> &,
-            const std::vector<radix_tree_node> &);
 
 extern template std::vector<MassPoint> calc_com<1>(const std::vector<vec3> &);
 extern template std::vector<MassPoint> calc_com<2>(const std::vector<vec3> &);
@@ -735,20 +1069,6 @@ extern template std::vector<ext::extents_t>
 calc_extents<2>(const std::vector<vec3> &);
 extern template std::vector<ext::extents_t>
 calc_extents<3>(const std::vector<vec3> &);
-
-extern template std::vector<index_t> getNearest<2>(
-    const std::array<vec3, 1> &, const std::vector<vec3> &,
-    const std::vector<index_t> &, const std::vector<radix_tree_node> &,
-    const std::vector<radix_tree_node> &, const TreeResult<ext::extents_t> &,
-    real,
-    std::function<real(const std::vector<vec3> &, const near_array<1> &)>);
-
-extern template std::vector<index_t> getNearest<2>(
-    const std::array<vec3, 2> &, const std::vector<vec3> &,
-    const std::vector<index_t> &, const std::vector<radix_tree_node> &,
-    const std::vector<radix_tree_node> &, const TreeResult<ext::extents_t> &,
-    real,
-    std::function<real(const std::vector<vec3> &, const near_array<1> &)>);
 
 #endif
 

@@ -25,6 +25,10 @@
 #include <type_traits>
 #include <vector>
 
+#include "gaudi/arp/aabb.hpp"
+#include "gaudi/arp/hash_tree.hpp"
+#include "gaudi/arp/simplex_set.hpp"
+
 #ifndef __ASAWA_DYNAMIC_SHELL__
 #define __ASAWA_DYNAMIC_SHELL__
 namespace gaudi {
@@ -34,20 +38,20 @@ namespace shell {
 
 using corner1 = std::array<index_t, 1>;
 using corner2 = std::array<index_t, 2>;
-using corner4 = std::array<index_t, 4>;
+using corner4 = std::array<int, 4>;
 
 using OpPredicateFcn = std::function<bool(shell &M, const index_t &)>;
 using MergePredicateFcn =
     std::function<bool(shell &M, const index_t &, const index_t &)>;
 
-real dist_line_line(shell &M, index_t cA0, index_t cB0,
+real dist_line_line(shell &M, CornerId cA0, CornerId cB0,
                     const std::vector<vec3> &x) {
-  index_t cA1 = M.other(cA0);
-  index_t cB1 = M.other(cB0);
-  index_t vA0 = M.vert(cA0);
-  index_t vA1 = M.vert(cA1);
-  index_t vB0 = M.vert(cB0);
-  index_t vB1 = M.vert(cB1);
+  CornerId cA1 = M.other(cA0);
+  CornerId cB1 = M.other(cB0);
+  VertId vA0 = M.vert(cA0);
+  VertId vA1 = M.vert(cA1);
+  VertId vB0 = M.vert(cB0);
+  VertId vB1 = M.vert(cB1);
   vec3 xA0 = x[vA0];
   vec3 xA1 = x[vA1];
   vec3 xB0 = x[vB0];
@@ -57,14 +61,14 @@ real dist_line_line(shell &M, index_t cA0, index_t cB0,
   return d0;
 };
 
-real dist_line_line_cen(shell &M, index_t cA0, index_t cB0,
+real dist_line_line_cen(shell &M, CornerId cA0, CornerId cB0,
                         const std::vector<vec3> &x) {
-  index_t cA1 = M.other(cA0);
-  index_t cB1 = M.other(cB0);
-  index_t vA0 = M.vert(cA0);
-  index_t vA1 = M.vert(cA1);
-  index_t vB0 = M.vert(cB0);
-  index_t vB1 = M.vert(cB1);
+  CornerId cA1 = M.other(cA0);
+  CornerId cB1 = M.other(cB0);
+  VertId vA0 = M.vert(cA0);
+  VertId vA1 = M.vert(cA1);
+  VertId vB0 = M.vert(cB0);
+  VertId vB1 = M.vert(cB1);
   vec3 xA0 = x[vA0];
   vec3 xA1 = x[vA1];
   vec3 xB0 = x[vB0];
@@ -78,12 +82,12 @@ std::mt19937_64 rng;
 std::uniform_real_distribution<real> unif(0.0, 1.0);
 
 void debug_line(shell &M,           //
-                const index_t &cA0, //
+                const CornerId &cA0, //
                 const vector<vec3> &x) {
 
-  index_t cA1 = M.other(cA0);
-  index_t vA0 = M.vert(cA0);
-  index_t vA1 = M.vert(cA1);
+  CornerId cA1 = M.other(cA0);
+  VertId vA0 = M.vert(cA0);
+  VertId vA1 = M.vert(cA1);
 
   const vec3 &ca0 = x[vA0];
   const vec3 &ca1 = x[vA1];
@@ -93,16 +97,16 @@ void debug_line(shell &M,           //
 };
 
 void debug_line_line(shell &M,           //
-                     const index_t &cA0, //
-                     const index_t &cB0, //
+                     const CornerId &cA0, //
+                     const CornerId &cB0, //
                      const vector<vec3> &x) {
 
-  index_t cA1 = M.other(cA0);
-  index_t cB1 = M.other(cB0);
-  index_t vA0 = M.vert(cA0);
-  index_t vA1 = M.vert(cA1);
-  index_t vB0 = M.vert(cB0);
-  index_t vB1 = M.vert(cB1);
+  CornerId cA1 = M.other(cA0);
+  CornerId cB1 = M.other(cB0);
+  VertId vA0 = M.vert(cA0);
+  VertId vA1 = M.vert(cA1);
+  VertId vB0 = M.vert(cB0);
+  VertId vB1 = M.vert(cB1);
 
   const vec3 &ca0 = x[vA0];
   const vec3 &ca1 = x[vA1];
@@ -117,7 +121,7 @@ void debug_line_line(shell &M,           //
 };
 
 void debug_edge_normal(shell &M,          //
-                       const index_t &c0, //
+                       const CornerId &c0, //
                        const vector<vec3> &x) {
 
   vec3 N = edge_normal(M, c0, x);
@@ -162,7 +166,7 @@ op_edges(shell &M,                      //
   for (index_t i = 0; i < edges_to_op.size(); i += STRIDE) {
     for (auto d : M.get_data()) {
 
-      if (M.next(edges_to_op[i]) < 0)
+      if (M.next(corner_id(edges_to_op[i])) < 0)
         continue;
 
       if (d->type() == EDGE) {
@@ -186,9 +190,10 @@ op_edges(shell &M,                      //
         real s1 = 1.0 - s0;
 
         index_t c0 = edges_to_op[i];
-        index_t c1 = M.other(c0);
-        index_t f0 = M.face(c0);
-        index_t f1 = M.face(c1);
+        CornerId c0i = corner_id(c0);
+        CornerId c1 = M.other(c0i);
+        FaceId f0 = M.face(c0i);
+        FaceId f1 = M.face(c1);
         real a0 = face_area(M, f0, x);
         real a1 = face_area(M, f1, x);
         if (OP == 0) {
@@ -212,16 +217,18 @@ op_edges(shell &M,                      //
         } else if (OP == 2) {
           // merge
           index_t cA0 = edges_to_op[i + 0];
-          index_t cA1 = M.other(cA0);
+          CornerId cA0i = corner_id(cA0);
+          CornerId cA1 = M.other(cA0i);
           index_t cB0 = edges_to_op[i + 1];
-          index_t cB1 = M.other(cB0);
+          CornerId cB0i = corner_id(cB0);
+          CornerId cB1 = M.other(cB0i);
           index_t vs0 = vstart + 2 * i + 0;
           index_t vs1 = vstart + 2 * i + 1;
           d->merge(M,                        //
-                   M.vert(cA0), M.vert(cA1), //
+                   M.vert(cA0i), M.vert(cA1), //
                    vs0, vs1,                 //
-                   M.vert(cA0), M.vert(cA1), //
-                   M.vert(cB0), M.vert(cB1));
+                   M.vert(cA0i), M.vert(cA1), //
+                   M.vert(cB0i), M.vert(cB1));
         }
       }
     }
@@ -234,7 +241,7 @@ op_edges(shell &M,                      //
   for (index_t i = 0; i < edges_to_op.size(); i += STRIDE) {
     index_t ic0 = edges_to_op[i];
     // #pragma omp critical
-    if (M.next(ic0) < 0) {
+    if (M.next(corner_id(ic0)) < 0) {
       collection[i].fill(-1);
       continue;
     }
@@ -265,7 +272,7 @@ void subdivide_edges(shell &M) {
                   index_t vs, //
                   index_t fs, //
                   const std::vector<index_t> &edges, shell &m) -> corner1 {
-                 return {subdivide_edge(m, edges[i])};
+                 return {subdivide_edge(m, corner_id(edges[i]))};
                });
 }
 
@@ -285,10 +292,12 @@ void collapse_edges(shell &M) {
                  index_t vs, //
                  index_t fs, //
                  const std::vector<index_t> &edges,
-                 shell &m) -> corner1 { return {collapse_edge(m, edges[i])}; });
+                 shell &m) -> corner1 {
+                return {collapse_edge(m, corner_id(edges[i]))};
+              });
 }
 
-real length(index_t c0, index_t c1, const shell &M,
+real length(CornerId c0, CornerId c1, const shell &M,
             const std::vector<vec3> &data) {
   vec3 v0 = data[M.vert(c0)];
   vec3 v1 = data[M.vert(c1)];
@@ -300,18 +309,17 @@ public:
   shell_data_comp(const std::vector<T> &data, real eps, const shell &M)
       : _M(M), _data(data), _eps(eps) {}
   bool operator()(index_t c0, index_t c1) const {
-    real dv = length(c0, c1, _M, _data);
+    real dv = length(corner_id(c0), corner_id(c1), _M, _data);
     // std::cout << "comp: " << dv << " " << _eps << std::endl;
     return comp{}(dv, _eps);
   }
 
-  std::vector<index_t> get_edges() const {
+  std::vector<CornerId> get_edges() const {
 
-    std::vector<index_t> edges = _M.get_edge_range();
-    // std::vector<real> lengths(_M.edge_count(), -1);
+    auto edges = _M.get_edge_range();
     std::vector<real> lengths = edge_lengths(_M, _data);
     sort(edges.begin(), edges.end(),
-         [this, &lengths](const index_t &ca, const index_t &cb) -> bool {
+         [this, &lengths](CornerId ca, CornerId cb) -> bool {
            real dva = lengths[ca / 2];
            real dvb = lengths[cb / 2];
            return comp{}(dva, dvb);
@@ -326,32 +334,32 @@ public:
 };
 
 template <typename comparator>
-std::vector<index_t> gather_edges(shell &M, const comparator &comp) {
-  std::vector<index_t> edges = comp.get_edges();
+std::vector<CornerId> gather_edges(shell &M, const comparator &comp) {
+  auto edges = comp.get_edges();
   std::vector<bool> face_flags(M.face_count(), false);
-  std::vector<index_t> edges_out;
+  std::vector<CornerId> edges_out;
   edges_out.reserve(edges.size());
 
-  for (int i = 0; i < edges.size(); i++) {
-    index_t c0 = edges[i];
-    index_t c1 = M.other(c0);
+  for (int i = 0; i < static_cast<int>(edges.size()); i++) {
+    CornerId c0 = edges[static_cast<size_t>(i)];
+    CornerId c1 = M.other(c0);
 
-    index_t f0 = M.face(c0);
-    index_t f1 = M.face(c1);
+    FaceId f0 = M.face(c0);
+    FaceId f1 = M.face(c1);
 
     if (f0 < 0 || f1 < 0)
       continue;
-    if (face_flags[f0])
+    if (face_flags[static_cast<size_t>(f0)])
       continue;
-    if (face_flags[f1])
+    if (face_flags[static_cast<size_t>(f1)])
       continue;
 
     if (comp(c0, c1)) {
       edges_out.push_back(c0);
-      face_flags[f0] = true;
-      face_flags[f1] = true;
+      face_flags[static_cast<size_t>(f0)] = true;
+      face_flags[static_cast<size_t>(f1)] = true;
     }
-  } // namespace asawa
+  }
 
   return edges_out;
 }
@@ -385,6 +393,9 @@ class dynamic {
 public:
   typedef std::shared_ptr<dynamic> ptr;
 
+  template <typename A> using edge_slice = slice<2, A>;
+  template <typename A> using point_slice = slice<1, A>;
+
   static ptr create(shell::ptr M, real Cc, real Cs, real Cm) {
     return std::make_shared<dynamic>(M, Cc, Cs, Cm);
   }
@@ -400,15 +411,38 @@ public:
     __vdatum_id = __M->insert_datum(vdata);
   };
 
+  /// Rebuild edge and face BVH trees from the current vertex positions (call
+  /// once per frame or before collision queries after geometry changes).
+  void update_trees() {
+    vec3_datum::ptr x_datum =
+        static_pointer_cast<vec3_datum>(__M->get_datum(0));
+    std::vector<vec3> &x = x_datum->data();
+    std::vector<index_t> edge_verts = __M->get_edge_vert_ids();
+    std::vector<index_t> face_verts = __M->get_face_vert_ids(true);
+    // simplex_set is only a temporary adapter; bvh_tree copies positions +
+    // adjacency into its own members.
+    arp::simplex_set<2> edge_set(x, edge_verts);
+    arp::simplex_set<3> face_set(x, face_verts);
+    if (!edge_tree_)
+      edge_tree_ = arp::bvh_tree<2>::create(edge_set);
+    else
+      edge_tree_->update(edge_set);
+    if (!face_tree_)
+      face_tree_ = arp::bvh_tree<3>::create(face_set);
+    else
+      face_tree_->update(face_set);
+  }
+
   void delete_degenerates(shell &M) {
     vec3_datum::ptr x_datum = static_pointer_cast<vec3_datum>(M.get_datum(0));
     std::vector<vec3> &x = x_datum->data();
 
-    for (int i = 0; i < M.corner_count(); i++) {
-      if (M.next(i) < 0)
+    for (int i = 0; i < static_cast<int>(M.corner_count()); i++) {
+      CornerId ci = corner_id(i);
+      if (M.next(ci) < 0)
         continue;
-      index_t c0 = i;
-      index_t c1 = M.other(i);
+      CornerId c0 = ci;
+      CornerId c1 = M.other(ci);
       if (M.vert(c0) != M.vert(c1))
         continue;
       for (auto d : M.get_data()) {
@@ -417,29 +451,28 @@ public:
       collapse_edge(M, c0, true);
     }
 
-    for (int i = 0; i < M.face_count(); i++) {
-      if (M.fbegin(i) < 0)
+    for (int i = 0; i < static_cast<int>(M.face_count()); i++) {
+      FaceId fi = face_id(i);
+      if (M.fbegin(fi) < 0)
         continue;
 
-      real a0 = face_area(M, i, x);
+      real a0 = face_area(M, fi, x);
       if (a0 < 1e-10) {
-        // std::cout << "deg face" << std::endl;
-        //         M.fprintv(i);
-        //  M.cprint(M.fbegin(i));
       }
 
-      if (M.fsize(i) > 2)
+      if (M.fsize(fi) > 2)
         continue;
-      index_t c0 = M.fbegin(i);
-      index_t c1 = M.other(c0);
+      CornerId c0 = M.fbegin(fi);
+      CornerId c1 = M.other(c0);
       for (auto d : M.get_data()) {
         d->collapse(M, c0);
       }
       merge_face(M, c0, c1);
     }
 
-    for (int i = 0; i < M.vert_count(); i++) {
-      if (M.vbegin(i) < 0)
+    for (int i = 0; i < static_cast<int>(M.vert_count()); i++) {
+      VertId vi = vert_id(i);
+      if (M.vbegin(vi) < 0)
         continue;
       /*
             if (M.vsize(i) > 16) {
@@ -453,22 +486,21 @@ public:
 
             }
       */
-      if (M.vsize(i) > 3)
+      if (M.vsize(vi) > 3)
         continue;
 
-      vec3 N = vert_normal(M, i, x);
-      // vec4 cola(0.2, 0.5, 1.0, 0.0);
-      // logger::line(x[i], x[i] + 0.1 * N, cola);
-      remove_vertex(M, i);
+      vec3 N = vert_normal(M, vi, x);
+      remove_vertex(M, vi);
     }
   }
 
   index_t align_edges(shell &M, index_t cA0, index_t cB0,
                       const std::vector<vec3> &x) {
 
-    index_t cB1 = M.other(cB0);
-    real d0 = dist_line_line(M, cA0, cB0, x);
-    real d1 = dist_line_line(M, cA0, cB1, x);
+    CornerId cB0i = corner_id(cB0);
+    CornerId cB1 = M.other(cB0i);
+    real d0 = dist_line_line(M, corner_id(cA0), cB0i, x);
+    real d1 = dist_line_line(M, corner_id(cA0), cB1, x);
 
     if (d1 < d0)
       return cB1;
@@ -488,16 +520,16 @@ public:
                                      if (p[1] < 0)
                                        return true;
 
-                                     vec3 cenA = edge_center(M, p[0], x);
-                                     vec3 cenB = edge_center(M, p[1], x);
+                                     vec3 cenA = edge_center(M, corner_id(p[0]), x);
+                                     vec3 cenB = edge_center(M, corner_id(p[1]), x);
                                      real dist = (cenA - cenB).norm();
 
                                      if (dist > tol) {
                                        return true;
                                      }
 
-                                     vec3 NA = edge_normal(M, p[0], x);
-                                     vec3 NB = edge_normal(M, p[1], x);
+                                     vec3 NA = edge_normal(M, corner_id(p[0]), x);
+                                     vec3 NB = edge_normal(M, corner_id(p[1]), x);
                                      real angle = va::dot(NA, NB);
 
                                      if (angle > -0.0) {
@@ -528,32 +560,35 @@ public:
     std::vector<index_t> edge_verts_m = __M->get_edge_vert_ids();
     std::vector<index_t> edge_map_m = __M->get_edge_map();
 
-    edge_tree = arp::aabb_tree<2>::create(edge_verts_m, x_m, 16);
+    update_trees();
 
-    std::vector<std::array<index_t, 2>> collected(edge_verts_t.size() / 2, {-1, -1});
+    adjacency_view<std::vector<vec3>, std::vector<index_t>> edge_view(
+        const_cast<std::vector<vec3> &>(x_t),
+        const_cast<std::vector<index_t> &>(edge_verts_t));
+
+    std::vector<std::array<index_t, 2>> collected(edge_verts_t.size() / 2,
+                                                  {-1, -1});
 #pragma omp parallel for
     for (int i = 0; i < edge_verts_t.size(); i += 2) {
       index_t e0 = i / 2;
-
-      std::vector<index_t> collisions =
-          arp::getNearest<2, 2>(e0, edge_verts_t, x_t, //
-                                *edge_tree,            //
-                                tol, &arp::line_line_min);
-      
-      
       index_t c0 = edge_map_t[e0];
       collected[i / 2] = {c0, -1};
 
-      for (index_t e1 : collisions) { 
-        // debug_line(M, c0, x);
-        index_t c1 = -1;
-        if (e1 > 0) {
-          // std::cout << ii << " " << nearest << std::endl;
-          c1 = edge_map_m[e1];
-        }
+      const edge_slice<decltype(edge_view)> edge(edge_view, e0);
+      std::vector<index_t> nbrs = edge_tree_->find_neighbors(edge, tol);
 
-        if(c0 < 0 || c1 < 0) continue;
-        //std::cout << "c0: " << c0 << " c1: " << c1 << std::endl;
+      index_t best_e = -1;
+      real best_d = std::numeric_limits<real>::max();
+      for (index_t e1 : nbrs) {
+        real d = arp::line_line_min(e0, edge_verts_t, x_t, e1, edge_verts_m,
+                                    x_m);
+        if (d < tol && d < best_d) {
+          best_d = d;
+          best_e = e1;
+        }
+      }
+      if (best_e >= 0 && c0 >= 0) {
+        index_t c1 = edge_map_m[best_e];
         collected[i / 2] = {c0, c1};
       }
     }
@@ -571,26 +606,33 @@ public:
     std::vector<index_t> face_verts_m = __M->get_face_vert_ids(true);
     std::vector<index_t> face_map_m = __M->get_face_map(true);
 
-    arp::aabb_tree<3>::ptr face_tree =
-        arp::aabb_tree<3>::create(face_verts_m, x_m, 16);
+    (void)M;
+    update_trees();
 
-    std::vector<std::array<index_t, 2>> collected(verts_t.size());
+    adjacency_view<std::vector<vec3>, std::vector<index_t>> point_view(
+        const_cast<std::vector<vec3> &>(x_t),
+        const_cast<std::vector<index_t> &>(verts_t));
+
+    std::vector<std::array<index_t, 2>> collected(verts_t.size(), {-1, -1});
 #pragma omp parallel for
     for (int i = 0; i < verts_t.size(); i++) {
-      std::vector<index_t> collisions =
-          arp::getNearest<1, 3>(i, verts_t, x_t, //
-                                *face_tree,      //
-                                tol, &arp::pnt_tri_min);
+      index_t iv = verts_map_t[i];
+      collected[i] = {iv, -1};
 
-      for (index_t iti : collisions) {
-        index_t iv = verts_map_t[i];
-        index_t it = -1;
+      const point_slice<decltype(point_view)> point(point_view, i);
+      std::vector<index_t> nbrs = face_tree_->find_neighbors(point, tol);
 
-        if (iti > 0) {
-          it = face_map_m[iti];
+      index_t best_f = -1;
+      real best_d = std::numeric_limits<real>::max();
+      for (index_t fi : nbrs) {
+        real d = arp::pnt_tri_min(i, verts_t, x_t, fi, face_verts_m, x_m);
+        if (d < tol && d < best_d) {
+          best_d = d;
+          best_f = fi;
         }
-
-        collected[i] = {iv, it};
+      }
+      if (best_f >= 0) {
+        collected[i] = {iv, face_map_m[best_f]};
       }
     }
 
@@ -624,7 +666,8 @@ public:
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-    std::vector<index_t> verts = __M->get_vert_range();
+    auto verts_typed = __M->get_vert_range();
+    std::vector<index_t> verts(verts_typed.begin(), verts_typed.end());
     std::vector<index_t> verts_map = __M->get_vert_map();
 
     return get_pnt_tri_collisions(verts, verts_map, x, M, tol);
@@ -637,7 +680,7 @@ public:
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-    // edge_tree->debug();
+    // edge_tree_->debug();
     real tol = 0.25 * this->_Cm * this->_Cm;
     auto collected = get_internal_edge_edge_collisions(tol);
     trim_edge_edge_collected(M, x, collected);
@@ -653,25 +696,22 @@ public:
       f_collect[2 * i + 1] = collected[i][1];
     }
     std::vector<real> S(f_collect.size(), 0.5);
-    merge_op(*__M, f_collect, S, x,
+               merge_op(*__M, f_collect, S, x,
              [&x, tol](index_t i,                         //
                        index_t cs,                        //
                        index_t vs,                        //
                        index_t fs,                        //
                        const std::vector<index_t> &edges, //
                        shell &M) -> corner4 {
-               index_t c0A = edges[i + 0];
-               index_t c0B = edges[i + 1];
+               CornerId c0A = corner_id(edges[i + 0]);
+               CornerId c0B = corner_id(edges[i + 1]);
 
                if (M.next(c0A) < 0 || M.next(c0B) < 0) {
                  return {-1, -1, -1, -1};
                }
 
-               //debug_line_line(M, c0A, c0B, x);
-               // debug_edge_normal(M, c0A, x);
-               // debug_edge_normal(M, c0B, x);
-
-               return merge_edge(M, c0A, c0B, vs + 2 * i + 0, vs + 2 * i + 1);
+               return merge_edge(M, c0A, c0B, vert_id(vs + 2 * i + 0),
+                                 vert_id(vs + 2 * i + 1));
              });
   }
 
@@ -686,17 +726,17 @@ public:
     auto edges = M.get_edge_range();
     std::vector<std::array<index_t, 2>> collected;
 
-    for (int i = 0; i < edges.size(); i++) {
-      index_t c0 = edges[i + 0];
-      index_t c1 = M.other(c0);
-      index_t v1 = M.vert(c1);
+    for (int i = 0; i < static_cast<int>(edges.size()); i++) {
+      CornerId c0 = corner_id(edges[static_cast<size_t>(i)]);
+      CornerId c1 = M.other(c0);
+      VertId v1 = M.vert(c1);
       if (count_cycle(M, c0) < 2)
         continue;
 
       std::array<index_t, 2> pair = {0, 0};
       int j = 0;
-      M.for_each_vertex(M.vert(c0), [v1, &pair, &j](index_t ci, shell &M) {
-        index_t vi = M.vert(M.next(ci));
+      M.for_each_vertex(M.vert(c0), [v1, &pair, &j](CornerId ci, shell &M) {
+        VertId vi = M.vert(M.next(ci));
         if (vi == v1 && j < 2) {
           pair[j++] = ci;
         }
@@ -723,23 +763,19 @@ public:
                   index_t fs,                        //
                   const std::vector<index_t> &edges, //
                   shell &M) -> corner4 {
-               index_t c0A = edges[i + 0];
-               index_t c0B = edges[i + 1];
+               CornerId c0A = corner_id(edges[i + 0]);
+               CornerId c0B = corner_id(edges[i + 1]);
 
-               // debug_line_line(M, c0A, c0B, x);
-               // debug_edge_normal(M, c0A, x);
-               // debug_edge_normal(M, c0B, x);
-               // std::cout << "break_cycle" << std::endl;
-               // M.cprint(c0A);
-               return merge_edge(M, c0A, c0B, vs + 2 * i + 0, vs + 2 * i + 1);
+               return merge_edge(M, c0A, c0B, vert_id(vs + 2 * i + 0),
+                                 vert_id(vs + 2 * i + 1));
              });
   }
 
-  bool skip_flip(shell &M, index_t corner) {
-    index_t c0 = corner;
-    index_t c1 = M.other(c0);
-    index_t v0 = M.vert(c0);
-    index_t v1 = M.vert(c1);
+  bool skip_flip(shell &M, CornerId corner) {
+    CornerId c0 = corner;
+    CornerId c1 = M.other(c0);
+    VertId v0 = M.vert(c0);
+    VertId v1 = M.vert(c1);
 
     if (M.vsize(v0) < 3)
       return true;
@@ -756,29 +792,25 @@ public:
 
   void flip_edges() {
 
-    std::vector<index_t> edges = __M->get_edge_range();
+    auto edges = __M->get_edge_range();
     for (int i = 0; i < edges.size(); i++) {
       int card = rand() % edges.size();
-      index_t et = edges[i];
-      edges[i] = edges[card];
-      edges[card] = et;
+      std::swap(edges[i], edges[card]);
     }
 
     if (_flip_pred)
       edges.erase(std::remove_if(edges.begin(), edges.end(),
-                     [this](index_t c) { return _flip_pred(*__M, c); }), edges.end());
+                     [this](CornerId c) { return _flip_pred(*__M, c); }), edges.end());
 
-    for (int i = 0; i < edges.size(); i++) {
-      // std::cout << "A" << std::endl;
-
-      index_t c0 = edges[i];
-      index_t c1 = __M->prev(c0);
+    for (int i = 0; i < static_cast<int>(edges.size()); i++) {
+      CornerId c0 = corner_id(edges[static_cast<size_t>(i)]);
+      CornerId c1 = __M->prev(c0);
 
       if (skip_flip(*__M, c0))
         continue;
 
-      index_t c2 = __M->other(c0);
-      index_t c3 = __M->prev(c2);
+      CornerId c2 = __M->other(c0);
+      CornerId c3 = __M->prev(c2);
 
       vec3_datum::ptr coord_datum =
           static_pointer_cast<vec3_datum>(__M->get_datum(0));
@@ -848,7 +880,8 @@ public:
     const std::vector<vec3> &x = get_vec_data(*__M, 0);
     auto cmp = comp_great(x, _Cs, *__M);
 
-    std::vector<index_t> edges_to_divide = gather_edges<comp_great>(*__M, cmp);
+    auto edges_typed = gather_edges<comp_great>(*__M, cmp);
+    std::vector<index_t> edges_to_divide(edges_typed.begin(), edges_typed.end());
 
     std::vector<real> S(edges_to_divide.size(), 0.5);
     subdivide_op(*__M, edges_to_divide, S, x,
@@ -857,13 +890,13 @@ public:
                     index_t vs, //
                     index_t fs, //
                     const std::vector<index_t> &edges, shell &m) -> corner1 {
-                   return {subdivide_edge(m, edges[i],    //
-                                          vs + i,         //
-                                          cs + 6 * i + 0, //
-                                          cs + 6 * i + 2, //
-                                          cs + 6 * i + 4, //
-                                          fs + 2 * i + 0, //
-                                          fs + 2 * i + 1  //
+                   return {subdivide_edge(m, corner_id(edges[i]),    //
+                                          vert_id(vs + i),         //
+                                          corner_id(cs + 6 * i + 0), //
+                                          corner_id(cs + 6 * i + 2), //
+                                          corner_id(cs + 6 * i + 4), //
+                                          face_id(fs + 2 * i + 0), //
+                                          face_id(fs + 2 * i + 1)  //
                                           )};
                  });
   }
@@ -873,7 +906,8 @@ public:
     const std::vector<vec3> &x = get_vec_data(*__M, 0);
     auto cmp = comp_less(x, _Cc, *__M);
 
-    std::vector<index_t> edges_to_divide = gather_edges<comp_less>(*__M, cmp);
+    auto edges_typed = gather_edges<comp_less>(*__M, cmp);
+    std::vector<index_t> edges_to_divide(edges_typed.begin(), edges_typed.end());
 
     if (_collapse_pred)
       edges_to_divide.erase(std::remove_if(edges_to_divide.begin(), edges_to_divide.end(),
@@ -888,7 +922,7 @@ public:
                        const std::vector<index_t> &edges, shell &m) -> corner1 {
                   if (_collapse_pred && _collapse_pred(m, edges[i]))
                     return {-1};
-                  return {collapse_edge(m, edges[i])};
+                  return {collapse_edge(m, corner_id(edges[i]))};
                 });
   }
 
@@ -965,8 +999,8 @@ public:
   MergePredicateFcn _merge_pred;
   OpPredicateFcn _collapse_pred;
 
-  arp::aabb_tree<2>::ptr edge_tree;
-  // arp::aabb_tree<3>::ptr face_tree;
+  arp::bvh_tree<2>::ptr edge_tree_;
+  arp::bvh_tree<3>::ptr face_tree_;
 };
 
 } // namespace shell

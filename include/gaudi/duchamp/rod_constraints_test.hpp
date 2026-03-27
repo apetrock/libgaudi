@@ -35,6 +35,10 @@ public:
 
   static ptr create() { return std::make_shared<block_test>(); }
 
+  static bool should_trace_frame(index_t frame) {
+    return frame < 3 || frame % 60 == 0;
+  }
+
   block_test() {
     //load_fib_rod();
     load_loop_rod();
@@ -193,8 +197,10 @@ public:
   }
 
   void step_dynamics(int frame) {
-    std::cout << "frame: " << frame << ", size: " << __R->__x.size()
-              << std::endl;
+    if (should_trace_frame(frame)) {
+      std::cerr << "[rod_constraints] step_dynamics begin frame=" << frame
+                << " verts=" << __R->__x.size() << std::endl;
+    }
     hepworth::block::projection_solver solver;
 
     std::vector<hepworth::projection_constraint::ptr> constraints;
@@ -206,7 +212,15 @@ public:
     // std::vector<vec3> fr = compute_coulomb_gradient();
     // std::vector<vec3> fr = compute_null_coulomb_gradient();
     std::vector<vec3> fr = compute_tangent_point_gradient();
+    if (should_trace_frame(frame)) {
+      std::cerr << "[rod_constraints] tangent gradient ready size="
+                << fr.size() << std::endl;
+    }
     std::vector<vec3> fb = compute_boundary_gradients(frame);
+    if (should_trace_frame(frame)) {
+      std::cerr << "[rod_constraints] boundary gradient ready size="
+                << fb.size() << std::endl;
+    }
     //f = 16.0 * fb - 1e-6*fwave* fr;
     f = 8.0 * fb + 1e-7 * fr;
 
@@ -214,6 +228,9 @@ public:
         hepworth::vec3_block::create(__R->__M, __R->__x, __R->__v, f);
     hepworth::quat_block::ptr u =
         hepworth::quat_block::create(__R->__J, __R->__u, __R->__o);
+    if (should_trace_frame(frame)) {
+      std::cerr << "[rod_constraints] sim blocks created" << std::endl;
+    }
 
       for(int i = 0; i < l0.size(); i++){
       //  //l0[i] *= w[i];
@@ -229,14 +246,28 @@ public:
       hepworth::block::init_bend_twist(*__R, constraints, 1e-1, {u}, false);
 
     hepworth::block::init_collisions(*__R, *__Rd, constraints, 1.0, {x, x});
+    if (should_trace_frame(frame)) {
+      std::cerr << "[rod_constraints] constraints initialized count="
+                << constraints.size() << std::endl;
+    }
     solver.set_constraints(constraints);
 
     // f[0][0] = 1.0;
     std::vector<hepworth::sim_block::ptr> blocks = {x, u};
+    if (should_trace_frame(frame)) {
+      std::cerr << "[rod_constraints] solver.step begin" << std::endl;
+    }
     solver.step(blocks, h,1);
+    if (should_trace_frame(frame)) {
+      std::cerr << "[rod_constraints] solver.step end" << std::endl;
+    }
   }
 
   void step(int frame) {
+    if (should_trace_frame(frame)) {
+      std::cerr << "[rod_constraints] step begin frame=" << frame
+                << std::endl;
+    }
 
     _frame = frame;
 
@@ -244,8 +275,17 @@ public:
 
     step_dynamics(frame);
 
+    if (should_trace_frame(frame)) {
+      std::cerr << "[rod_constraints] dynamic step begin" << std::endl;
+    }
     __Rd->step();
+    if (should_trace_frame(frame)) {
+      std::cerr << "[rod_constraints] dynamic step end" << std::endl;
+    }
     log_rod_geometry(vec4(0.8, 0.8, 0.8, 1.0));
+    if (should_trace_frame(frame)) {
+      std::cerr << "[rod_constraints] geometry logged" << std::endl;
+    }
 
     if(frame > 3000)
     exit(0);

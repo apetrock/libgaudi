@@ -75,9 +75,22 @@ public:
     matS &M = __M;
     M *= 1.0 / h / h;
     std::cout << "Nm: " << Nm << std::endl;
+    std::cerr << "[projection_solver] setFromTriplets..." << std::endl;
+    std::cerr.flush();
     A.setFromTriplets(triplets.begin(), triplets.end());
+    std::cerr << "[projection_solver] A nnz=" << A.nonZeros() << std::endl;
+    std::cerr.flush();
+    std::cerr << "[projection_solver] computing AtA = A^T * A (heavy)..."
+              << std::endl;
+    std::cerr.flush();
     matS AtA = A.transpose() * A;
+    std::cerr << "[projection_solver] AtA nnz=" << AtA.nonZeros() << std::endl;
+    std::cerr.flush();
+    std::cerr << "[projection_solver] MAtA = M + AtA..." << std::endl;
+    std::cerr.flush();
     matS MAtA = M + AtA;
+    std::cerr << "[projection_solver] MAtA nnz=" << MAtA.nonZeros() << std::endl;
+    std::cerr.flush();
 
 #if 0
     if (!MAtA.isApprox(MAtA.transpose())) {
@@ -100,8 +113,20 @@ public:
     std::cout << "AtA sum: " << AtA.sum() << std::endl;
     std::cout << "M sum: " << M.sum() << std::endl;
     std::cout << "MAtA sum: " << MAtA.sum() << std::endl;
+    std::cout << "A: " << A.rows() << "x" << A.cols()
+              << " nnz=" << A.nonZeros() << std::endl;
+    std::cout << "MAtA: " << MAtA.rows() << "x" << MAtA.cols()
+              << " nnz=" << MAtA.nonZeros() << std::endl;
+    std::cout.flush();
+    std::cerr << "[projection_solver] constructing m_solver(MAtA)..."
+              << std::endl;
+    std::cerr.flush();
 
     m_solver S(MAtA);
+
+    std::cerr << "[projection_solver] m_solver ready, success=" << S.success()
+              << std::endl;
+    std::cerr.flush();
     if (!S.success()) {
       std::cout << "Solve failed, attempting normalization" << std::endl;
       Eigen::SparseMatrix<double> I(MAtA.rows(), MAtA.cols());
@@ -116,9 +141,19 @@ public:
     vecX p = vecX::Zero(id0);
     vecX q0 = q;
     for (int k = 0; k < ITS; k++) {
+      if (k == 0 || k % 10 == 0) {
+        std::cerr << "[projection_solver] outer iter k=" << k << "/"
+                  << (ITS - 1) << std::endl;
+        std::cerr.flush();
+      }
       p.setZero();
       int ii = 0;
 //#pragma omp parallel for
+      if (k == 0) {
+        std::cerr << "[projection_solver] project: " << _constraints.size()
+                  << " constraints..." << std::endl;
+        std::cerr.flush();
+      }
       for (int i = 0; i < _constraints.size(); i++) {
         auto &constraint = _constraints[i];
         constraint->project(q, p);
@@ -138,6 +173,10 @@ public:
 #endif
         ii++;
       }
+      if (k == 0) {
+        std::cerr << "[projection_solver] project done" << std::endl;
+        std::cerr.flush();
+      }
       if (q.hasNaN()) {
         std::cout << "q has NaN" << std::endl;
       }
@@ -149,9 +188,24 @@ public:
       if (k % 10 == 0)
         std::cout << "k: " << k << " -pnorm: " << p.norm() << std::endl;
 
+      if (k == 0) {
+        std::cerr << "[projection_solver] forming rhs b = M*s + A^T*p..."
+                  << std::endl;
+        std::cerr.flush();
+      }
       vecX b = M * s + A.transpose() * p;
+      if (k == 0) {
+        std::cerr << "[projection_solver] calling S.solve (k=" << k << ")..."
+                  << std::endl;
+        std::cerr.flush();
+      }
 
       q = S.solve(b);
+
+      if (k == 0) {
+        std::cerr << "[projection_solver] S.solve returned k=" << k << std::endl;
+        std::cerr.flush();
+      }
 
       real dq = (q - q0).norm();
       if (dq < 1e-8)
@@ -165,9 +219,14 @@ public:
       // q = qi + dq.min(bnd).max(-bnd);
     }
 
+    std::cerr << "[projection_solver] outer loop finished, map_from_x..."
+              << std::endl;
+    std::cerr.flush();
     for (auto &block : blocks) {
       block->map_from_x(q, h, damping);
     }
+    std::cerr << "[projection_solver] step() complete" << std::endl;
+    std::cerr.flush();
   }
 
   void
@@ -177,7 +236,7 @@ public:
 
   matS __M;
   std::vector<projection_constraint::ptr> _constraints;
-}; // namespace block
+}; // class projection_solver
 } // namespace block
 } // namespace hepworth
 } // namespace gaudi

@@ -4,8 +4,8 @@
 
 using namespace std;
 
-timeval TIMER::_tick;
-timeval TIMER::_tock;
+TIMER::TimePoint TIMER::_tick;
+TIMER::TimePoint TIMER::_tock;
 std::map<std::string, double> TIMER::_timings;
 std::stack<std::string> TIMER::_callStack;
 
@@ -23,13 +23,13 @@ TIMER::TIMER(string blockName) : _stopped(false)
   if (_callStack.size() > 0)
   {
     string function = _callStack.top();
-    gettimeofday(&_tock, 0);
+    _tock = std::chrono::steady_clock::now();
 
     _timings[function] += timing();
   }
   
   _callStack.push(blockName);
-  gettimeofday(&_tick, 0);
+  _tick = std::chrono::steady_clock::now();
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -65,7 +65,7 @@ void TIMER::stop()
   _callStack.pop();
 
   // get the stopping time
-  gettimeofday(&_tock, 0);
+  _tock = std::chrono::steady_clock::now();
 
   // add the timing to the current global totals
   _timings[function] += timing();
@@ -73,7 +73,7 @@ void TIMER::stop()
   // store the current timer's timing, just in case
   _elapsed = timing(_tick, _tock);
   
-  gettimeofday(&_tick, 0);
+  _tick = std::chrono::steady_clock::now();
 
   // record we stopped so we don't double-stop
   _stopped = true;
@@ -83,8 +83,7 @@ void TIMER::stop()
 ///////////////////////////////////////////////////////////////////////
 void TIMER::printTimings()
 {
-  timeval now;
-  gettimeofday(&now, 0);
+  TimePoint now = std::chrono::steady_clock::now();
 
   double currentTimer = timing(_tick, now);
   string currentName;
@@ -133,8 +132,7 @@ void TIMER::printTimings()
 ///////////////////////////////////////////////////////////////////////
 void TIMER::printTimingsPerFrame(const int frames)
 {
-  timeval now;
-  gettimeofday(&now, 0);
+  TimePoint now = std::chrono::steady_clock::now();
 
   double currentTimer = timing(_tick, now);
   string currentName;

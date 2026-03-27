@@ -24,7 +24,6 @@
 #include <complex>
 #include <cstdlib>
 #include <ostream>
-#include <unistd.h>
 #include <utility>
 #include <vector>
 #include "gaudi/geometry_logger.hpp"

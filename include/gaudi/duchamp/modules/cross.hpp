@@ -37,13 +37,13 @@ public:
   // B  \ / C
   //     k
 
-  real _f(asawa::shell::shell &M, index_t c0, const std::vector<vec3> &x) {
-
-    index_t c1 = M.other(c0);
-    index_t ci = M.prev(c0);
-    index_t cj = M.next(c0);
-    index_t ck = M.prev(c1);
-    index_t cl = M.next(c1);
+  real _f(asawa::shell::shell &M, index_t c0i, const std::vector<vec3> &x) {
+    asawa::shell::CornerId c0 = asawa::shell::corner_id(c0i);
+    asawa::shell::CornerId c1 = M.other(c0);
+    asawa::shell::CornerId ci = M.prev(c0);
+    asawa::shell::CornerId cj = M.next(c0);
+    asawa::shell::CornerId ck = M.prev(c1);
+    asawa::shell::CornerId cl = M.next(c1);
     vec3 da = asawa::shell::edge_tangent(M, cj, x);
     vec3 db = asawa::shell::edge_tangent(M, cl, x);
     vec3 dc = asawa::shell::edge_tangent(M, ck, x);
@@ -57,13 +57,14 @@ public:
     return cross;
   }
 
-  std::array<vec3, 4> _dlnf(asawa::shell::shell &M, index_t c0,
+  std::array<vec3, 4> _dlnf(asawa::shell::shell &M, index_t c0i,
                             const std::vector<vec3> &x) {
-    index_t c1 = M.other(c0);
-    index_t ci = M.prev(c0);
-    index_t cj = M.next(c0);
-    index_t ck = M.prev(c1);
-    index_t cl = M.next(c1);
+    asawa::shell::CornerId c0 = asawa::shell::corner_id(c0i);
+    asawa::shell::CornerId c1 = M.other(c0);
+    asawa::shell::CornerId ci = M.prev(c0);
+    asawa::shell::CornerId cj = M.next(c0);
+    asawa::shell::CornerId ck = M.prev(c1);
+    asawa::shell::CornerId cl = M.next(c1);
     vec3 da = asawa::shell::edge_tangent(M, cj, x);
     vec3 db = asawa::shell::edge_tangent(M, cl, x);
     vec3 dc = asawa::shell::edge_tangent(M, ck, x);
@@ -84,13 +85,13 @@ public:
     return {gi, gj, gk, gl};
   }
 
-  std::array<vec3, 4> _df(asawa::shell::shell &M, index_t c0,
+  std::array<vec3, 4> _df(asawa::shell::shell &M, index_t c0i,
                           const std::vector<vec3> &x, bool invert = false) {
 
-    real f = _f(M, c0, x);
+    real f = _f(M, c0i, x);
     if (invert)
       f = -1.0 / f;
-    std::array<vec3, 4> dlnf = _dlnf(M, c0, x);
+    std::array<vec3, 4> dlnf = _dlnf(M, c0i, x);
     return {f * dlnf[0], //
             f * dlnf[1], //
             f * dlnf[2], //
@@ -118,9 +119,10 @@ public:
     std::vector<vec3> &x = asawa::get_vec_data(M, 0);
     std::vector<vec3> dX(M.vert_count(), vec3::Zero());
     for (auto c0 : edge_range) {
-      index_t c1 = M.other(c0);
-      index_t vi = M.vert(M.prev(c0));
-      index_t vj = M.vert(M.next(c0));
+      asawa::shell::CornerId c0i = asawa::shell::corner_id(c0);
+      asawa::shell::CornerId c1 = M.other(c0i);
+      index_t vi = M.vert(M.prev(c0i));
+      index_t vj = M.vert(M.next(c0i));
       index_t vk = M.vert(M.prev(c1));
       index_t vl = M.vert(M.next(c1));
       std::array<vec3, 4> df = _df(M, c0, x);
@@ -157,10 +159,10 @@ public:
     std::vector<vec3> &x = asawa::get_vec_data(M, 0);
     std::vector<vec3> dX(M.vert_count(), vec3::Zero());
     for (auto c0 : edge_range) {
-
-      index_t c1 = M.other(c0);
-      index_t vi = M.vert(M.prev(c0));
-      index_t vj = M.vert(M.next(c0));
+      asawa::shell::CornerId c0i = asawa::shell::corner_id(c0);
+      asawa::shell::CornerId c1 = M.other(c0i);
+      index_t vi = M.vert(M.prev(c0i));
+      index_t vj = M.vert(M.next(c0i));
       index_t vk = M.vert(M.prev(c1));
       index_t vl = M.vert(M.next(c1));
 
