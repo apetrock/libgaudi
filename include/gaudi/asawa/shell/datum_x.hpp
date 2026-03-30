@@ -371,9 +371,8 @@ std::vector<vec3> face_centers(const shell &M, const std::vector<vec3> &x) {
 std::vector<real> face_areas(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_face_range();
   std::vector<real> A(M.face_count(), 0.0);
-  int i = 0;
   for (auto fi : range) {
-    A[i++] = face_area(M, face_id(fi), x);
+    A[fi] = face_area(M, face_id(fi), x);
   }
   return A;
 }

@@ -1,16 +1,7 @@
-//
-//  m2Includes.h
-//  Manifold
-//
-//  Created by John Delaney on 5/22/11.
-//  Copyright 2011 __MyCompanyName__. All rights reserved.
-//
-// includes files that are required for the data structure only, not derived
-// files that USE the data structure
 #ifndef __SHELL_INTEGRATOR__
 #define __SHELL_INTEGRATOR__
 
-#include "gaudi/arp/aabb.hpp"
+#include "gaudi/arp/hash_tree.hpp"
 #include "integrators.hpp"
 #include <algorithm>
 #include <cmath>
@@ -36,24 +27,8 @@ namespace gaudi
     using Shell_Compute_Fcn =
         std::function<Q(const index_t &i, const index_t &j, const vec3 &,
                         const vec3 &, const std::vector<datum::ptr> &,
-                        Shell_Sum_Type::Node_Type &, const Shell_Tree_Type::node &,
+                        Shell_Sum_Type::Node_Type,
                         const Shell_Tree_Type &)>;
-
-    template <typename T>
-    T get_data(Shell_Sum_Type::Node_Type node_type, index_t j, index_t data_id,
-               const std::vector<calder::datum::ptr> &data)
-    {
-      const typename calder::datum_t<T>::ptr F_datum =
-          static_pointer_cast<typename calder::datum_t<T>>(data[data_id]);
-      if (node_type == Shell_Sum_Type::Node_Type::LEAF)
-      {
-        return F_datum->leaf_data()[j];
-      }
-      else
-      {
-        return F_datum->node_data()[j];
-      }
-    }
 
     template <typename T>
     std::vector<T>
@@ -77,30 +52,28 @@ namespace gaudi
       bind_fcn(face_ids, sum);
 
       std::cout << " -compute: " << std::endl;
-      std::vector<T> us = sum.calc<T>(
+      std::vector<T> us = sum.template calc<T>(
           p_pov,
           [&compute_fcn](const index_t &i, const index_t &j, const vec3 &pi,
                          const std::vector<calder::datum::ptr> &data,
                          Shell_Sum_Type::Node_Type node_type,
-                         const Shell_Sum_Type::Node &node,
                          const Shell_Sum_Type::Tree &tree) -> T
           {
-            vec3 x0 = tree.vert(3 * j + 0);
-            vec3 x1 = tree.vert(3 * j + 1);
-            vec3 x2 = tree.vert(3 * j + 2);
+            auto simplex = tree.leaf_simplex(j);
+            vec3 x0 = simplex[0], x1 = simplex[1], x2 = simplex[2];
             vec3 pj;
             real dist = va::distance_from_triangle({x0, x1, x2}, pi, pj);
             pj = 0.333 * (x0 + x1 + x2);
-            return compute_fcn(i, j, pi, pj, data, node_type, node, tree);
+            return compute_fcn(i, j, pi, pj, data, node_type, tree);
           },
           [&compute_fcn](const index_t &i, const index_t &j, const vec3 &pi,
                          const std::vector<calder::datum::ptr> &data,
                          Shell_Sum_Type::Node_Type node_type,
-                         const Shell_Sum_Type::Node &node,
                          const Shell_Sum_Type::Tree &tree) -> T
           {
-            vec3 pj = node.center();
-            return compute_fcn(i, j, pi, pj, data, node_type, node, tree);
+            const ext::extents_t &ext = tree.bvh_.internal[j];
+            vec3 pj = 0.5 * (ext[0] + ext[1]);
+            return compute_fcn(i, j, pi, pj, data, node_type, tree);
           },
           0.25, false);
       return us;
@@ -140,17 +113,15 @@ namespace gaudi
             sum.bind(calder::scalar_datum::create(face_ids, weights));
             sum.bind(calder::vec3_datum::create(face_ids, omega));
           },
-          [l0, p](const index_t i, const index_t j, //
+          [l0, p](const index_t i, const index_t j,
                   const vec3 &pi, const vec3 &pj,
                   const std::vector<calder::datum::ptr> &data,
-                  Shell_Sum_Type::Node_Type node_type, //
-                  const Shell_Sum_Type::Node &node,    //
+                  Shell_Sum_Type::Node_Type node_type,
                   const Shell_Sum_Type::Tree &tree) -> vec3
           {
             real wj = get_data<real>(node_type, j, 0, data);
             vec3 w = get_data<vec3>(node_type, j, 1, data);
             vec3 dp = pj - pi;
-            // real kappa = calc_w(dp, l0, p);
             real kappa = calc_gaussian(dp, l0);
 
             return kappa * w;
@@ -170,16 +141,14 @@ namespace gaudi
           {
             sum.bind(calder::scalar_datum::create(face_ids, omega));
           },
-          [l0, p](const index_t i, const index_t j, //
+          [l0, p](const index_t i, const index_t j,
                   const vec3 &pi, const vec3 &pj,
                   const std::vector<calder::datum::ptr> &data,
-                  Shell_Sum_Type::Node_Type node_type, //
-                  const Shell_Sum_Type::Node &node,    //
+                  Shell_Sum_Type::Node_Type node_type,
                   const Shell_Sum_Type::Tree &tree) -> vec3
           {
             real w = get_data<real>(node_type, j, 0, data);
             vec3 dp = pj - pi;
-            // vec3 dkappa = calc_dw(dp, l0, p);
             vec3 dkappa = calc_d_gaussian(dp, l0);
             return -dkappa * w;
           });
@@ -197,8 +166,6 @@ namespace gaudi
     std::vector<T> mls_avg(asawa::shell::shell &M, const std::vector<T> &v,
                            const std::vector<vec3> &p_pov, real l0, real p = 3.0)
     {
-      // takes a surface and a vector field, v defined on the faces of the surface
-      // and returns the mls average of v at the points p_pov
       const std::vector<vec3> &x = asawa::get_vec_data(M, 0);
 
       std::vector<real> sums(p_pov.size(), 0.0);
@@ -217,26 +184,18 @@ namespace gaudi
             sum.bind(calder::datum_t<T>::create(face_ids, wV));
             sum.bind(calder::datum_t<real>::create(face_ids, weights));
           },
-          [l0, &sums, p](const index_t i, const index_t j, //
+          [l0, &sums, p](const index_t i, const index_t j,
                          const vec3 &pi, const vec3 &pj,
                          const std::vector<calder::datum::ptr> &data,
-                         Shell_Sum_Type::Node_Type node_type, //
-                         const Shell_Sum_Type::Node &node,    //
+                         Shell_Sum_Type::Node_Type node_type,
                          const Shell_Sum_Type::Tree &tree) -> T
           {
             T e = get_data<T>(node_type, j, 0, data);
             real w = get_data<real>(node_type, j, 1, data);
 
-            real dist = (pj - pi).norm();
             vec3 dp = pj - pi;
             real kappa = calc_gaussian(dp, l0);
 
-            // real kappa = computeK(dist, l0, p);
-            // if (i == 1250) {
-            // geometry_logger::line(pi, pj, vec4(1.0, 0.3, 0.3, 1.0));
-            // log_v(pj, kappa * e);
-            // geometry_logger::line(pj, pj + 0.1 * vec3(e), vec4(0.0, 0.3, 1.0, 1.0));
-            //}
             sums[i] += w * kappa;
             return kappa * e;
           });
@@ -251,57 +210,6 @@ namespace gaudi
       return us;
     }
 
-#if 0
-std::vector<vec3> collision_filter(asawa::shell::shell &M,
-                                   const std::vector<vec3> &v, ,
-                                   const std::vector<vec3> &v_pov,
-                                   const std::vector<vec3> &p_pov, real l0,
-                                   real p = 3.0) {
-  const std::vector<vec3> &x = asawa::get_vec_data(M, 0);
-
-  std::vector<real> sums(p_pov.size(), 0.0);
-  std::vector<real> weights = asawa::shell::face_areas(M, x);
-  std::vector<T> wV(v);
-  for (int i = 0; i < v.size(); i++) {
-    wV[i] *= weights[i];
-  }
-
-  std::vector<vec3> us = integrate_over_shell<T>(
-      M, p_pov,
-      [&wV, &weights, &v_pov](const std::vector<index_t> &face_ids,
-                              Shell_Sum_Type &sum) {
-        sum.bind(calder::datum_t<T>::create(face_ids, wV));
-        sum.bind(calder::datum_t<real>::create(face_ids, weights));
-      },
-      [l0, &sums, p](const index_t i, const index_t j, //
-                     const vec3 &pi, const vec3 &pj,
-                     const std::vector<calder::datum::ptr> &data,
-                     Shell_Sum_Type::Node_Type node_type, //
-                     const Shell_Sum_Type::Node &node,    //
-                     const Shell_Sum_Type::Tree &tree) -> vec3 {
-        vec3 vj = get_data<T>(node_type, j, 0, data);
-        vec3 vi = v_pov[i];
-
-        real dotvjvi = vj.normalized().dot(vi.normalized());
-        real w = get_data<real>(node_type, j, 1, data);
-
-        real dist = (pj - pi).norm();
-        vec3 dp = pj - pi;
-        real kappa = calc_gaussian(dist, l0);
-        sums[i] += w * kappa;
-        return kappa * e;
-      });
-#if 1
-  for (int i = 0; i < p_pov.size(); i++) {
-    if (sums[i] < 1e-16)
-      continue;
-    us[i] /= sums[i];
-  }
-#endif
-  return us;
-}
-#endif
-
     std::vector<vec3> vortex_force(asawa::shell::shell &M,
                                    const std::vector<vec3> &p_pov,
                                    const std::vector<vec3> &omega, real l0,
@@ -314,17 +222,14 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
           {
             sum.bind(calder::vec3_datum::create(edge_ids, omega));
           },
-          [l0, p](const index_t i, const index_t j, //
+          [l0, p](const index_t i, const index_t j,
                   const vec3 &pi, const vec3 &pj,
                   const std::vector<calder::datum::ptr> &data,
-                  Shell_Sum_Type::Node_Type node_type, //
-                  const Shell_Sum_Type::Node &node,    //
+                  Shell_Sum_Type::Node_Type node_type,
                   const Shell_Sum_Type::Tree &tree) -> vec3
           {
             vec3 w = get_data<vec3>(node_type, j, 0, data);
             vec3 dp = pj - pi;
-            real dist = dp.norm();
-            // dist = std::max(dist, l0);
             real kappa = calc_mollified(dp, l0, p);
 
             return -kappa * dp.cross(w);
@@ -332,10 +237,8 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
       return us;
     }
 
-#if 1
-    // use Taubin curvature
     std::vector<mat3> covariant_frame(asawa::shell::shell &M,
-                                      const std::vector<vec3> &p_pov, //
+                                      const std::vector<vec3> &p_pov,
                                       real l0, real p = 3.0)
     {
       std::vector<vec3> x = asawa::get_vec_data(M, 0);
@@ -355,19 +258,16 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
           {
             sum.bind(calder::vec3_datum::create(face_ids, N));
           },
-          [l0, p, &N, &sums](const index_t i, const index_t j, //
+          [l0, p, &N, &sums](const index_t i, const index_t j,
                              const vec3 &pi, const vec3 &pj,
                              const std::vector<calder::datum::ptr> &data,
-                             Shell_Sum_Type::Node_Type node_type, //
-                             const Shell_Sum_Type::Node &node,    //
+                             Shell_Sum_Type::Node_Type node_type,
                              const Shell_Sum_Type::Tree &tree) -> mat3
           {
-            // vec3 Ni = N[i].normalized();
             vec3 Nj = get_data<vec3>(node_type, j, 0, data);
             real wN = Nj.norm();
             Nj /= wN;
             vec3 dp = pj - pi;
-            // real w = calc_w(dp, l0, p);
             real w = calc_inv_dist(dp, l0, p);
             sums[i] += w * wN;
             return w * wN * dp * dp.transpose();
@@ -384,7 +284,6 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
 
         Eigen::JacobiSVD<mat3> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
         mat3 U = svd.matrixU();
-        mat3 V = svd.matrixV();
         vec3 s = svd.singularValues();
 
         us[i] = U * s.asDiagonal();
@@ -392,12 +291,10 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
 
       return us;
     }
-#endif
 
-#if 1
     std::vector<mat3> normal_covariant_frame(asawa::shell::shell &M,
-                                             const std::vector<vec3> &p_pov, //
-                                             const std::vector<vec3> &N_pov, //
+                                             const std::vector<vec3> &p_pov,
+                                             const std::vector<vec3> &N_pov,
                                              real l0, real p = 3.0)
     {
       std::vector<vec3> x = asawa::get_vec_data(M, 0);
@@ -417,11 +314,10 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
           {
             sum.bind(calder::vec3_datum::create(face_ids, N));
           },
-          [l0, p, &N_pov, &sums](const index_t i, const index_t j, //
+          [l0, p, &N_pov, &sums](const index_t i, const index_t j,
                                  const vec3 &pi, const vec3 &pj,
                                  const std::vector<calder::datum::ptr> &data,
-                                 Shell_Sum_Type::Node_Type node_type, //
-                                 const Shell_Sum_Type::Node &node,    //
+                                 Shell_Sum_Type::Node_Type node_type,
                                  const Shell_Sum_Type::Tree &tree) -> mat3
           {
             vec3 Ni = N_pov[i];
@@ -437,7 +333,6 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
             real w = calc_inv_dist(dp, l0, p);
             sums[i] += w * wN;
             return w * wN * Nj * Nj.transpose();
-            // return w * wN * dp * dp.transpose();
           });
 
       for (int i = 0; i < us.size(); i++)
@@ -451,23 +346,17 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
 
         Eigen::JacobiSVD<mat3> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
         mat3 U = svd.matrixU();
-        mat3 V = svd.matrixV();
         vec3 s = svd.singularValues();
 
-        us[i] = U; // always assume U.col[2] is represents the null vector of the
-                   // subspace
-        // us[i] = U * s.asDiagonal();
+        us[i] = U;
       }
 
       return us;
     }
-#endif
 
-#if 1
-    // use Taubin curvature
     std::vector<mat3> taubin_curvature(asawa::shell::shell &M,
-                                       const std::vector<vec3> &p_pov, //
-                                       const std::vector<vec3> &N_pov, //
+                                       const std::vector<vec3> &p_pov,
+                                       const std::vector<vec3> &N_pov,
                                        real l0, real p = 3.0)
     {
       std::vector<vec3> x = asawa::get_vec_data(M, 0);
@@ -487,11 +376,10 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
           {
             sum.bind(calder::vec3_datum::create(face_ids, N));
           },
-          [l0, p, &N_pov, &sums](const index_t i, const index_t j, //
+          [l0, p, &N_pov, &sums](const index_t i, const index_t j,
                                  const vec3 &pi, const vec3 &pj,
                                  const std::vector<calder::datum::ptr> &data,
-                                 Shell_Sum_Type::Node_Type node_type, //
-                                 const Shell_Sum_Type::Node &node,    //
+                                 Shell_Sum_Type::Node_Type node_type,
                                  const Shell_Sum_Type::Tree &tree) -> mat3
           {
             vec3 Ni = N_pov[i];
@@ -499,7 +387,6 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
             real wN = Nj.norm();
             Nj /= wN;
             mat3 R = va::rejection_matrix(Ni);
-            // mat3 R = mat3::Identity() - Ni * Nj.transpose();
             real Nij = Ni.dot(Nj);
             if (Nij < 0)
               return mat3::Zero();
@@ -510,11 +397,9 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
 
             real kij = Ni.dot(dp) / dp.dot(dp);
 
-            real dist = dp.norm();
             sums[i] += wN;
 
             return wN * kij * Rdp * Rdp.transpose();
-            // return w * wN * dp * dp.transpose();
           });
 
       for (int i = 0; i < us.size(); i++)
@@ -528,7 +413,6 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
 
         Eigen::JacobiSVD<mat3> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
         mat3 U = svd.matrixU();
-        mat3 V = svd.matrixV();
         vec3 s = svd.singularValues();
 
         us[i] = U * s.asDiagonal();
@@ -537,7 +421,55 @@ std::vector<vec3> collision_filter(asawa::shell::shell &M,
       return us;
     }
 
-#endif
+    void visualize_shell_bvh(asawa::shell::shell &M,
+                             const std::vector<vec3> &queries,
+                             real eps = 0.25,
+                             const vec4 &far_color = vec4(0.5, 0.5, 0.1, 1.0),
+                             const vec4 &near_color = vec4(0.1, 0.8, 0.2, 1.0),
+                             const vec4 &morton_color = vec4(1.0, 0.5, 0.0, 1.0))
+    {
+      std::vector<vec3> &x = asawa::get_vec_data(M, 0);
+      std::vector<index_t> face_vert_ids = M.get_face_vert_ids();
+      auto face_ids_typed = M.get_face_range();
+      std::vector<index_t> face_ids(face_ids_typed.begin(), face_ids_typed.end());
+
+      Shell_Tree_Type::ptr face_tree = arp::T3::create(face_vert_ids, x, 16);
+
+      // Step 1: Morton-sorted COM polyline (iterates all leaves in sorted order)
+      const auto &coms = face_tree->coms_;
+      for (size_t i = 0; i + 1 < coms.size(); i++) {
+        const vec3 &a = std::get<1>(coms[i]);
+        const vec3 &b = std::get<1>(coms[i + 1]);
+        geometry_logger::line(a, b, morton_color);
+      }
+
+      // Step 2: BH bbox visualization via production sum.calc pathway
+      Shell_Sum_Type sum(*face_tree);
+      std::vector<real> dummy_weights(face_ids.size(), 1.0);
+      sum.bind(calder::scalar_datum::create(face_ids, dummy_weights));
+
+      sum.template calc<real>(
+          queries,
+          [&near_color](const index_t &i, const index_t &j, const vec3 &pi,
+                        const std::vector<calder::datum::ptr> &data,
+                        Shell_Sum_Type::Node_Type node_type,
+                        const Shell_Sum_Type::Tree &tree) -> real
+          {
+            const ext::extents_t &e = tree.bvh_.leaf[j];
+            geometry_logger::ext(e[0], e[1], near_color);
+            return 0.0;
+          },
+          [&far_color](const index_t &i, const index_t &j, const vec3 &pi,
+                       const std::vector<calder::datum::ptr> &data,
+                       Shell_Sum_Type::Node_Type node_type,
+                       const Shell_Sum_Type::Tree &tree) -> real
+          {
+            const ext::extents_t &e = tree.bvh_.internal[j];
+            geometry_logger::ext(e[0], e[1], far_color);
+            return 0.0;
+          },
+          eps, false);
+    }
 
   } // namespace calder
 } // namespace gaudi

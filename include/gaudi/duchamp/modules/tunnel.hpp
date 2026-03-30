@@ -70,7 +70,6 @@ std::vector<std::vector<vec3>> tunnel(asawa::shell::shell &M,
                          const vec3 &pi, const vec3 &pj,
                          const std::vector<calder::datum::ptr> &data,
                          Shell_Sum_Type::Node_Type node_type, //
-                         const Shell_Sum_Type::Node &node,    //
                          const Shell_Sum_Type::Tree &tree) -> vec3 {
         real wj = get_data<real>(node_type, j, 0, data);
         vec3 Nj = get_data<vec3>(node_type, j, 1, data);
@@ -110,33 +109,31 @@ std::vector<std::vector<vec3>> tunnel(asawa::shell::shell &M,
           [&wa, &compute](const index_t &i, const index_t &j, const vec3 &pi,
                           const std::vector<calder::datum::ptr> &data,
                           Shell_Sum_Type::Node_Type node_type,
-                          const Shell_Tree_Type::node &node,
                           const Shell_Tree_Type &tree) -> vec3 {
-            vec3 x0 = tree.vert(3 * j + 0);
-            vec3 x1 = tree.vert(3 * j + 1);
-            vec3 x2 = tree.vert(3 * j + 2);
+            auto simplex = tree.leaf_simplex(j);
+            vec3 x0 = simplex[0], x1 = simplex[1], x2 = simplex[2];
             vec3 pj;
             real dist = va::distance_from_triangle({x0, x1, x2}, pi, pj);
             pj = 0.333 * (x0 + x1 + x2);
 
             const calder::scalar_datum::ptr N_datum =
                 static_pointer_cast<calder::scalar_datum>(data[0]);
-            const real wj = N_datum->leaf_data()[j];
+            const real wj = N_datum->sorted_leaf_data()[j];
             wa += wj;
-            return compute(i, j, pi, pj, data, node_type, node, tree);
+            return compute(i, j, pi, pj, data, node_type, tree);
           },
           [&wa, &compute](const index_t &i, const index_t &j, const vec3 &pi,
                           const std::vector<calder::datum::ptr> &data,
                           Shell_Sum_Type::Node_Type node_type,
-                          const Shell_Tree_Type::node &node,
                           const Shell_Tree_Type &tree) -> vec3 {
-            vec3 pj = node.center();
+            const ext::extents_t &ext = tree.bvh_.internal[j];
+            vec3 pj = 0.5 * (ext[0] + ext[1]);
 
             const calder::scalar_datum::ptr N_datum =
                 static_pointer_cast<calder::scalar_datum>(data[0]);
             const real &wj = N_datum->node_data()[j];
             wa += wj;
-            return compute(i, j, pi, pj, data, node_type, node, tree);
+            return compute(i, j, pi, pj, data, node_type, tree);
           },
           0.5, false);
 

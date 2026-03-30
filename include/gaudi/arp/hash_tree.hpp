@@ -34,10 +34,14 @@ struct radix_tree_node {
   index_t parent = UNULL;
 };
 
-// Generic result type for tree operations returning leaf and internal data
-template <typename T> struct TreeResult {
-  std::vector<T> leaf;
-  std::vector<T> internal;
+// Generic result type for tree operations returning leaf and internal data.
+// LeafT and NodeT may differ to support heterogeneous map/reduce pyramids
+// (e.g. leaf = vec3, internal = extents_t for BVH; leaf = vec3, internal = mat3
+// for edge frame tensors; leaf = quat, internal = mat4 for quaternion
+// covariance). Single-type usage: TreeResult<T> keeps LeafT == NodeT.
+template <typename LeafT, typename NodeT = LeafT> struct TreeResult {
+  std::vector<LeafT> leaf;
+  std::vector<NodeT> internal;
 };
 
 // Convenient type alias for node results
@@ -353,40 +357,65 @@ inline void traverse_best(const std::vector<radix_tree_node> &internal_nodes,
   }
 }
 
-// Build pyramid using map-reduce pattern
-// if input type is != output type, then you  need to map
-// it first.
-// takes an input vector of data, maps it to an output type using a map
-// function, then walks the data up the tree and reduces it using a reduce
-// function
+// Two-tiered map/reduce pyramid on the radix tree.
+//
+// Q0 = leaf input type (e.g. vec3, quat)
+// Q1 = node output type (e.g. mat3, mat4, extents_t)
+//
+// leaf_map:     maps a leaf value into the node type: Q1(const Q0&, const Q1&)
+// node_reduce:  combines a contribution with the accumulated parent: Q1(const Q1&, const Q1&)
+//
+// Both leaf_map and node_reduce MUST form commutative monoids (associative,
+// commutative, with `identity` as the identity element). The per-leaf
+// walk-to-root propagation is O(N log N) total work but trivially
+// GPU-parallelizable with atomic operations (Karras 2012). For
+// non-commutative reduces, a separate level-synchronous BFS would be needed.
+// For FMM M2M translation (geometry-dependent inter-level propagation), a
+// different visitor with access to node centers is required -- see tier 2/3
+// comments in the plan.
+//
+// Heterogeneous type examples:
+//   Additive (Q0==Q1):    leaf_map = a+b,           node_reduce = a+b
+//   BVH extents:          Q0=extents_t, Q1=extents_t, both = ext::expand
+//   Edge frames:          Q0=vec3, Q1=mat3,         leaf_map = F + e*e^T, reduce = +
+//   Quat averaging:       Q0=quat, Q1=mat4,         leaf_map = Q + qq^T,  reduce = +
+//   SVD (future):         Q0=vec3, Q1=covariance matrix, post-process eigendecomposition
+//   Spherical harmonics:  Q0=vec3, Q1=array<real,L*L> at fixed expansion center
+template <typename Q0, typename Q1>
+inline std::vector<Q1>
+build_pyramid(const std::vector<Q0> &leaf_data,
+              const std::vector<radix_tree_node> &internal_nodes,
+              const std::vector<radix_tree_node> &leaf_nodes,
+              auto &&leaf_map, auto &&node_reduce,
+              const Q1 &identity) {
+
+  std::vector<Q1> internal_reduce(leaf_data.size() - 1, identity);
+  for (size_t i = 0; i < leaf_data.size(); i++) {
+    Q1 mapped = leaf_map(leaf_data[i], identity);
+    index_t depth = 0;
+    index_t parent = leaf_nodes[i].parent;
+    while (depth < 64 && parent != UNULL) {
+      internal_reduce[parent] = node_reduce(mapped, internal_reduce[parent]);
+      parent = internal_nodes[parent].parent;
+      depth++;
+    }
+  }
+  return internal_reduce;
+}
+
+// Convenience: single-type build_pyramid where Q0 == Q1 and leaf_map == reduce.
 template <TypeArray TTYPE>
 inline TTYPE build_pyramid(const TTYPE &data,
                            const std::vector<radix_tree_node> &internal_nodes,
                            const std::vector<radix_tree_node> &leaf_nodes,
                            auto &&reduce_func,
                            const typename TTYPE::value_type &default_val) {
-
   using O = typename TTYPE::value_type;
-  auto thread_safe_reduce = [&](const typename TTYPE::value_type &a,
-                                const typename TTYPE::value_type &b) {
-    // lock here
-    return reduce_func(a, b);
-    // unlock here
-  };
-  std::vector<O> internalReduce(data.size() - 1, default_val);
-  for (int i = 0; i < data.size(); i++) {
-    const O &datai = data[i];
-    index_t j = 0;
-    index_t parent = leaf_nodes[i].parent;
-    while (j < 64 && parent != UNULL) {
-      const O &dataj = internalReduce[parent];
-      internalReduce[parent] = thread_safe_reduce(datai, dataj);
-      parent = internal_nodes[parent].parent;
-      j++;
-    }
-  }
-
-  return internalReduce;
+  return build_pyramid<O, O>(
+      data, internal_nodes, leaf_nodes,
+      [&](const O &a, const O &b) -> O { return reduce_func(a, b); },
+      [&](const O &a, const O &b) -> O { return reduce_func(a, b); },
+      default_val);
 }
 
 // Build complete hash tree with pyramid (Morton-key typed).
@@ -529,6 +558,22 @@ make_points(const STYPE &data,
       leaf_points,    // leaf points ordered by indices
       internal_points // internal points
   };
+}
+
+// Draw a polyline through vertices in Morton-sorted order.
+// `data` contains the original (unsorted) positions; `indices` is the
+// Morton permutation (indices[k] = original index of the k-th sorted vertex).
+template <Vec3View TTYPE>
+void log_morton_sorted_order(const TTYPE &data,
+                             const std::vector<index_t> &indices,
+                             const vec4 &color = vec4(1.0, 0.5, 0.0, 1.0)) {
+  if (indices.size() < 2)
+    return;
+  for (size_t i = 0; i + 1 < indices.size(); i++) {
+    const vec3 &a = data[indices[i]];
+    const vec3 &b = data[indices[i + 1]];
+    geometry_logger::line(a, b, color);
+  }
 }
 
 // log_hierarchy for SimplexView types (tuple-based)
@@ -836,7 +881,10 @@ public:
     return permuted_data_view_->get_tuple_ids(i);
   }
 
-  // Get center of mass for a leaf node
+  std::array<vec3, N> leaf_simplex(index_t sorted_id) const {
+    return (*permuted_data_view_)[sorted_id];
+  }
+
   vec3 get_com(index_t i) const {
     return std::get<1>(coms_[i]);
   }
@@ -883,6 +931,8 @@ public:
 template <int N, typename MortonT = morton_t>
 class bvh_tree {
   public:
+    static constexpr int kSimplexN = N;
+
     // Member variables first
     std::vector<index_t> indices_;
     std::vector<radix_tree_node> internal_nodes_;
@@ -919,7 +969,11 @@ class bvh_tree {
     bvh_tree(const simplex_set<N> &set) { update(set); }
 
     index_t get_index(size_t i) const { return indices_[i]; }
-    
+
+    const std::vector<index_t> &adjacency() const { return adjacency_; }
+    const std::vector<vec3> &verts() const { return data_; }
+    const vec3 &vert(index_t i) const { return data_[adjacency_[i]]; }
+
     void update(const std::vector<vec3> &data,
                 const std::vector<index_t> &adjacency) {
       data_ = data;
@@ -988,7 +1042,10 @@ class bvh_tree {
       return (*permuted_data_view_)[i];
     }
 
-    // Get center of mass for a leaf node
+    std::array<vec3, N> leaf_simplex(index_t sorted_id) const {
+      return (*permuted_data_view_)[sorted_id];
+    }
+
     vec3 get_com(index_t i) const {
       return std::get<1>(coms_[i]);
     }
@@ -1054,6 +1111,10 @@ class bvh_tree {
 
 template <int N>
 using BVH_T = bvh_tree<N, morton_t>;
+
+using T1 = bvh_tree<1, morton_t>;
+using T2 = bvh_tree<2, morton_t>;
+using T3 = bvh_tree<3, morton_t>;
 
 // Explicit instantiation declarations - controlled by CMake option
 #if defined(GAUDI_USE_EXPLICIT_INSTANTIATIONS) &&                              \

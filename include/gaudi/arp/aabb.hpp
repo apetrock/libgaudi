@@ -783,10 +783,6 @@ std::vector<Q> build_pyramid(const aabb_tree<TREE_S> &tree,
   return pyramid;
 }
 
-using T1 = arp::aabb_tree<1>;
-using T2 = arp::aabb_tree<2>;
-using T3 = arp::aabb_tree<3>;
-
 } // namespace arp
 } // namespace gaudi
 #endif

@@ -222,7 +222,7 @@ public:
                 << fb.size() << std::endl;
     }
     //f = 16.0 * fb - 1e-6*fwave* fr;
-    f = 8.0 * fb + 1e-7 * fr;
+    f = 1.0 * fb + 1e-6 * fr;
 
     hepworth::vec3_block::ptr x =
         hepworth::vec3_block::create(__R->__M, __R->__x, __R->__v, f);

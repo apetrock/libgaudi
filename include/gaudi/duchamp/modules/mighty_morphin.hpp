@@ -12,7 +12,6 @@
 #include "module_base.hpp"
 #include <algorithm>
 #include <array>
-#include <limits>
 #include <vector>
 #include "gaudi/geometry_logger.hpp"
 
@@ -57,19 +56,10 @@ public:
   virtual std::vector<real> calc_dist(const std::vector<vec3> &x,
                                       triangle_set &tri_set) {
 
-    std::vector<index_t> vert_ids(x.size(), -1);
-    for (int i = 0; i < x.size(); i++) {
-      vert_ids[i] = i;
-    }
     std::vector<real> dists(x.size(), 0.0);
     for (int i = 0; i < x.size(); i++) {
 
-      std::vector<index_t> nearest = arp::getNearest<1, 3>(
-          i, vert_ids, x,     //
-          *tri_set.face_tree, //
-          std::numeric_limits<real>::infinity(), &arp::pnt_tri_min);
-
-      index_t j = nearest.back();
+      index_t j = tri_set.face_tree->find_nearest(std::array<vec3, 1>{{x[i]}});
       if (j < 0)
         continue;
       vec3 xi = x[i];

@@ -1,19 +1,10 @@
-//
-//  m2Includes.h
-//  Manifold
-//
-//  Created by John Delaney on 5/22/11.
-//  Copyright 2011 __MyCompanyName__. All rights reserved.
-//
-// includes files that are required for the data structure only, not derived
-// files that USE the data structure
 #ifndef __M2TREE_CODE__
 #define __M2TREE_CODE__
 
 #include "datums.hpp"
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
-#include "gaudi/arp/aabb.hpp"
+#include "gaudi/arp/hash_tree.hpp"
 #include "gaudi/logger.hpp"
 #include <vector>
 #include "gaudi/geometry_logger.hpp"
@@ -22,83 +13,156 @@ namespace gaudi {
 namespace calder {
 
 template <typename TREE> void test_extents(const TREE &tree) {
-
-  std::vector<ext::extents_t> extents =
-      arp::build_extents(tree, tree.indices(), tree.verts());
-  for (const auto &ext : extents) {
+  for (const auto &ext : tree.bvh_.internal) {
     vec4 c(0.5, 0.5, 0.1, 1.0);
     geometry_logger::ext(ext[0], ext[1], c);
   }
 }
 
 template <typename TREE>
-void test_pyramid(const TREE &tree,                      //
-                  const std::vector<index_t> &q_indices, //
-                  const std::vector<vec3> &q,            //
-                  const std::vector<real> &q_weights) {
-
+void test_pyramid(const TREE &tree, const std::vector<index_t> &q_indices,
+                  const std::vector<vec3> &q, const std::vector<real> &q_weights) {
   std::vector<vec3> wq(q);
-  for (int i = 0; i < q.size(); i++)
+  for (size_t i = 0; i < q.size(); i++)
     wq[i] *= q_weights[i];
 
   datum_t<vec3>::ptr x_datum = datum_t<vec3>::create(q_indices, wq);
   x_datum->pyramid(tree);
-  for (int i = 0; i < tree.nodes.size(); i++) {
-    vec3 cen = tree.nodes[i].center();
-    vec3 N = x_datum->__tree_data[i];
+  for (size_t i = 0; i < tree.internal_nodes_.size(); i++) {
+    const ext::extents_t &ext = tree.bvh_.internal[i];
+    vec3 cen = 0.5 * (ext[0] + ext[1]);
+    vec3 N = x_datum->node_data()[i];
     vec4 c(0.0, 0.5, 0.8, 1.0);
     geometry_logger::line(cen, cen + N, c);
   }
 }
 
 template <typename TREE>
-void test_pyramid_scalar(const TREE &tree,                      //
-                         const std::vector<index_t> &q_indices, //
+void test_pyramid_scalar(const TREE &tree, const std::vector<index_t> &q_indices,
                          const std::vector<real> &q) {
-
   datum_t<real>::ptr x_datum = datum_t<real>::create(q_indices, q);
   x_datum->pyramid(tree);
-  for (int i = 0; i < tree.nodes.size(); i++) {
-    typename TREE::node pNode = tree.nodes[i];
-    real w = x_datum->__tree_data[i];
-    if (pNode.isLeaf()) {
-      real wc = 0.0;
-      for (int jn = pNode.begin; jn < pNode.begin + pNode.size; jn++) {
-        int jj = tree.permutation[jn];
-        // wc += x_datum->leaf_data()[jj];
-        wc += x_datum->leaf_data()[jj];
+  for (size_t i = 0; i < tree.internal_nodes_.size(); i++) {
+    const ext::extents_t &ext = tree.bvh_.internal[i];
+    real w = x_datum->node_data()[i];
+    (void)w;
+    (void)ext;
+  }
+}
+
+// Shared Barnes-Hut opening traversal for a single query point.
+//
+// Walks the BVH using the BH opening test: sc < dc * eps, where sc is the
+// equivalent sphere radius of the node's bounding box and dc is the distance
+// from the query to the box center. "Far" nodes (test passes) call on_far;
+// "near" paths descend until they reach leaf nodes, which call on_leaf.
+//
+// on_far:  void(index_t node_id, index_t query_id, const vec3 &query)
+// on_leaf: void(index_t leaf_id, index_t orig_id, index_t query_id, const vec3 &query)
+template <typename TREE, typename OnFar, typename OnLeaf>
+void traverse_bh_opening(const TREE &tree, index_t query_id,
+                         const vec3 &query, real eps,
+                         OnFar &&on_far, OnLeaf &&on_leaf) {
+  const auto &internal_nodes = tree.internal_nodes_;
+  const auto &bvh = tree.bvh_;
+
+  if (internal_nodes.empty())
+    return;
+
+  std::vector<int> stack;
+  stack.reserve(128);
+  stack.push_back(0);
+
+  while (!stack.empty()) {
+    int node_id = stack.back();
+    stack.pop_back();
+    const auto &node = internal_nodes[node_id];
+    if (node.split == arp::UNULL)
+      continue;
+
+    // Leaf children are single primitives -- always process them exactly.
+    // Only apply the opening test when both children are internal subtrees.
+    if (arp::left_leaf(node) || arp::right_leaf(node)) {
+      if (arp::left_leaf(node)) {
+        index_t leaf_id = node.start;
+        index_t orig_id = tree.get_index(leaf_id);
+        on_leaf(leaf_id, orig_id, query_id, query);
+      } else {
+        stack.push_back(node.split);
       }
-      if (w - wc > 1e-6) {
-        std::cout << "leaf check: " << pNode.level << " " << pNode.size << " "
-                  << w << " " << wc << std::endl;
+
+      if (arp::right_leaf(node)) {
+        index_t leaf_id = node.end;
+        index_t orig_id = tree.get_index(leaf_id);
+        on_leaf(leaf_id, orig_id, query_id, query);
+      } else {
+        stack.push_back(node.split + 1);
       }
     } else {
-      real wc = 0.0;
-      for (int j = 0; j < pNode.getNumChildren(); j++) {
-        if (pNode.children[j] > -1) {
-          wc += x_datum->node_data()[pNode.children[j]];
-        }
-      }
-      if (w - wc > 1e-6) {
-        std::cout << "node check: " << pNode.level << " "
-                  << pNode.getNumChildren() << " " << w << " " << wc << " "
-                  << w - wc << " " << x_datum->node_data()[pNode.children[0]]
-                  << " " << x_datum->node_data()[pNode.children[1]]
-                  << std::endl;
+      const ext::extents_t &e = bvh.internal[node_id];
+      vec3 de = e[1] - e[0];
+      real V = de[0] * de[1] * de[2];
+      real sc = pow(0.75 * V / M_PI, 1.0 / 3.0);
+      vec3 pj = 0.5 * (e[0] + e[1]);
+      real dc = va::dist(query, pj);
+
+      if (sc < dc * eps) {
+        on_far(node_id, query_id, query);
+      } else {
+        stack.push_back(node.split);
+        stack.push_back(node.split + 1);
       }
     }
+  }
+}
+
+// Visualize the Barnes-Hut traversal decisions as bounding boxes.
+// "Far" internal nodes are drawn in far_color; leaf nodes reached by
+// the "near" path are drawn in near_color.
+template <typename TREE>
+void log_bvh_barnes_hut(const TREE &tree, const std::vector<vec3> &queries,
+                        real eps,
+                        const vec4 &far_color = vec4(0.5, 0.5, 0.1, 1.0),
+                        const vec4 &near_color = vec4(0.1, 0.8, 0.2, 1.0)) {
+  for (int qi = 0; qi < static_cast<int>(queries.size()); qi++) {
+    traverse_bh_opening(
+        tree, qi, queries[qi], eps,
+        [&](index_t node_id, index_t, const vec3 & query) {
+          const ext::extents_t &e = tree.bvh_.internal[node_id];
+          vec3 cen = 0.5 * (e[0] + e[1]);
+          geometry_logger::line(cen, query, far_color);
+          geometry_logger::ext(e[0], e[1], far_color);
+        },
+        [&](index_t leaf_id, index_t, index_t, const vec3 &) {
+          const ext::extents_t &e = tree.bvh_.leaf[leaf_id];
+          vec3 cen = 0.5 * (e[0] + e[1]);
+          geometry_logger::ext(e[0], e[1], near_color);
+          geometry_logger::point(queries[qi], near_color);
+        });
+  }
+}
+
+enum Node_Type {
+  LEAF,
+  BRANCH,
+};
+
+template <typename T>
+T get_data(Node_Type node_type, index_t j, index_t data_id,
+           const std::vector<calder::datum::ptr> &data) {
+  const typename calder::datum_t<T>::ptr F_datum =
+      static_pointer_cast<typename calder::datum_t<T>>(data[data_id]);
+  if (node_type == LEAF) {
+    return F_datum->sorted_leaf_data()[j];
+  } else {
+    return F_datum->node_data()[j];
   }
 }
 
 template <typename TREE> class fast_summation {
 public:
   typedef TREE Tree;
-  typedef typename TREE::node Node;
-
-  enum Node_Type {
-    LEAF,
-    BRANCH,
-  };
+  using Node_Type = calder::Node_Type;
 
   fast_summation(const TREE &tree) : __tree(tree) {}
 
@@ -112,158 +176,33 @@ public:
   template <typename Q>
   using ComputeFcn =
       std::function<Q(const index_t &, const index_t &, const vec3 &,
-                      const std::vector<datum::ptr> &, Node_Type, const Node &,
+                      const std::vector<datum::ptr> &, Node_Type,
                       const Tree &)>;
 
   template <typename Q>
   std::vector<Q>
   calc(const std::vector<vec3> &pov, ComputeFcn<Q> leafComputeFcn,
        ComputeFcn<Q> nodeComputeFcn, real eps = 0.5, bool debug = false) {
-    for (int i = 0; i < __data.size(); i++) {
+    for (size_t i = 0; i < __data.size(); i++) {
       __data[i]->pyramid(__tree);
     }
 
     vector<Q> u(pov.size(), z::zero<Q>());
 
-    std::vector<ext::extents_t> extents =
-        arp::build_extents(__tree, __tree.indices(), __tree.verts());
-#if 1
-    if (debug) {
-      for (auto ext : extents) {
-        vec4 c(0.5, 0.5, 0.1, 1.0);
-        // std::cout << ext[0].transpose() << " " << ext[1].transpose() <<
-        // std::endl;
-        geometry_logger::ext(ext[0], ext[1], c);
-      }
-    }
-#endif
+    if (__tree.internal_nodes_.empty())
+      return u;
 
-    int total_count = 0;
-    int leaf_count = 0;
-    int node_count = 0;
-    std::vector<int> counts(__tree.nodes.size(), 0);
-    std::vector<int> pov_counts(pov.size(), 0);
 #pragma omp parallel for
-
-    for (int i = 0; i < pov.size(); i++) {
-      vec3 pi = pov[i];
-
-      // Manual stack: avoids std::stack's deque allocations per POV; grows if depth
-      // exceeds initial reserve (e.g. deep trees).
-      std::vector<int> stack1;
-      stack1.reserve(128);
-      stack1.push_back(0);
-      vec4 c(0.5, 0.5, 0.1, 1.0);
-
-      while (!stack1.empty()) {
-        total_count++;
-        int j = stack1.back();
-        stack1.pop_back();
-        const Node &pNode = __tree.nodes[j];
-        vec3 pj = pNode.center();
-
-        real dc = va::dist(pi, pj);
-
-        ext::extents_t ext = extents[j];
-        vec3 de = ext[1] - ext[0];
-        real V = de[0] * de[1] * de[2];
-        real sc = 1.0 * pow(0.75 * V / M_PI, 1.0 / 3.0);
-        // if (pNode.isLeaf()) {
-        //   real sc = pNode.mag();
-        // }
-        // T sc = va::norm(pNode.half);
-        //  real sc = 0.75 * pNode.mag();
-
-        if (sc < dc * eps || pNode.isLeaf()) {
-          pov_counts[i]++;
-          if (pNode.isLeaf()) {
-            c = vec4(0.8, 0.5, 1.0, 1.0);
-
-            for (int jn = pNode.begin; jn < pNode.begin + pNode.size; jn++) {
-              leaf_count++;
-              int jj = __tree.permutation[jn];
-              counts[j]++;
-              u[i] += leafComputeFcn(i, jj, pi, __data, LEAF, pNode, __tree);
-            }
-
-          } else {
-            node_count++;
-            c = vec4(0.0, 0.5, 0.8, 1.0);
-            u[i] += nodeComputeFcn(i, j, pi, __data, BRANCH, pNode, __tree);
-            ;
-          }
-
-        }
-
-        else {
-          for (int jc = 0; jc < pNode.getNumChildren(); jc++) {
-            if (pNode.children[jc] > -1) {
-              stack1.push_back(pNode.children[jc]);
-            }
-          }
-        }
-#if 0
-        if (i == 500 && true) {
-          geometry_logger::line(pi, pj, c);
-          // geometry_logger::ext(pj - vec3(sc, sc, sc), pj + vec3(sc, sc,
-          // sc),
-          //                          vec4(0.8, 0.0, 0.6, 0.5));
-          geometry_logger::ext(ext[0], ext[1], c);
-          std::cout << " u[" << i << "]: " << u[i] << std::endl;
-        }
-#endif
-      }
+    for (int i = 0; i < static_cast<int>(pov.size()); i++) {
+      traverse_bh_opening(
+          __tree, i, pov[i], eps,
+          [&](index_t node_id, index_t qi, const vec3 &pi) {
+            u[qi] += nodeComputeFcn(qi, node_id, pi, __data, BRANCH, __tree);
+          },
+          [&](index_t leaf_id, index_t, index_t qi, const vec3 &pi) {
+            u[qi] += leafComputeFcn(qi, leaf_id, pi, __data, LEAF, __tree);
+          });
     }
-
-#if 0
-    for (int i = 0; i < counts.size(); i++) {
-      if (counts[i] > 0)
-        std::cout << i << " " << counts[i] << std::endl;
-    
-    }
-#endif
-#if 0
-    double mean = std::accumulate(pov_counts.begin(), pov_counts.end(), 0.0) /
-                  pov_counts.size();
-
-    // Compute the variance
-    double variance = std::accumulate(pov_counts.begin(), pov_counts.end(), 0.0,
-                                      [mean](double acc, double x) {
-                                        return acc + std::pow(x - mean, 2);
-                                      }) /
-                      pov_counts.size();
-
-    // Compute the standard deviation
-    double stddev = std::sqrt(variance);
-    std::cout << "==== counts ==== " << std::endl;
-    std::cout << " -  pov count: " << pov.size() << std::endl;
-    std::cout << " -total count: " << total_count << std::endl;
-    std::cout << " - node count: " << node_count << std::endl;
-    std::cout << " - leaf count: " << leaf_count << std::endl;
-    std::cout << " - compute count: " << node_count + leaf_count << std::endl;
-    std::cout << " - tree leaf nodes:      " << __tree.leafNodes.size()
-              << std::endl;
-    std::cout << " - nlogn:           " << pov.size() * log(pov.size())
-              << std::endl;
-    std ::cout << " - pov / compute:  "
-               << float(pov.size()) / float(node_count + leaf_count)
-               << std::endl;
-    std ::cout << " - compute / pov:  "
-               << float(node_count + leaf_count) / float(pov.size())
-               << std::endl;
-    std::cout << " - node/total: " << float(node_count) / float(total_count)
-              << std::endl;
-    std::cout << " - leaf/total: " << float(leaf_count) / float(total_count)
-              << std::endl;
-    std::cout << " - log(tree leaf nodes): " << log(__tree.leafNodes.size())
-              << std::endl;
-    std::cout << "mean/std: " << mean << " " << sqrt(variance) << std::endl;
-    std::cout << "================ " << std::endl;
-#endif
-
-    // for(int i = 0; i < 5; i++){
-    //  std::cout << u[i].transpose() << std::endl;
-    //}
 
     return u;
   }

@@ -251,24 +251,23 @@ public:
 #if 1
   template <Vec3View PTYPE>
   vector<std::array<index_t, 2>> get_collisions(PTYPE edges_B, real tol) {
-    rod &R = *__R;
-    std::vector<vec3> &x_A = R.__x;
-    std::vector<index_t> edge_verts_A = R.get_edge_vert_ids();
-    // calder::test_extents(*edge_tree, edge_verts, x);
-    // edge_tree->debug();
-    std::vector<std::array<index_t, 2>> collected(edges_B.size() / 2);
+    int num_edges = edges_B.size() / 2;
+    std::vector<std::vector<std::array<index_t, 2>>> per_edge(num_edges);
+
 #pragma omp parallel for
-    for (int k = 0; k < edges_B.size(); k += 2) {
-      const edge_slice<PTYPE> edge(edges_B, k / 2);
-      int kk = edges_B.get_index(k / 2);
-      std::vector<index_t> collisions =
-          bvh_tree->get_nearest(edge, tol);
-      index_t nearest = collisions.empty() ? -1 : collisions[0];
-      if (nearest >= 0) {
-        collected[kk] = {kk, nearest};
-      } else {
-        collected[kk] = {-1, -1};
+    for (int k = 0; k < num_edges; k++) {
+      const edge_slice<PTYPE> edge(edges_B, k);
+      int kk = edges_B.get_index(k);
+      std::vector<index_t> neighbors =
+          bvh_tree->find_neighbors(edge, tol);
+      for (index_t neighbor : neighbors) {
+        per_edge[k].push_back({kk, neighbor});
       }
+    }
+
+    std::vector<std::array<index_t, 2>> collected;
+    for (auto &pairs : per_edge) {
+      collected.insert(collected.end(), pairs.begin(), pairs.end());
     }
     return collected;
   }
@@ -279,15 +278,15 @@ public:
     edge_view_type edge_view(const_cast<std::vector<vec3> &>(x_B),
                              const_cast<std::vector<index_t> &>(edge_verts_B));
     std::vector<std::array<index_t, 2>> raw = get_collisions(edge_view, tol);
-    std::vector<std::array<index_t, 4>> out(raw.size(), {-1, -1, -1, -1});
-    for (size_t i = 0; i < raw.size(); ++i) {
-      const auto &collision = raw[i];
-      if (collision[0] < 0 || collision[1] < 0) {
+    std::vector<std::array<index_t, 4>> out;
+    out.reserve(raw.size());
+    for (const auto &collision : raw) {
+      if (collision[0] < 0 || collision[1] < 0)
         continue;
-      }
       std::array<index_t, 2> rod_ids = get_edge_ids(collision[1]);
-      out[i] = {edge_verts_B[2 * collision[0] + 0], edge_verts_B[2 * collision[0] + 1],
-                rod_ids[0], rod_ids[1]};
+      out.push_back({edge_verts_B[2 * collision[0] + 0],
+                     edge_verts_B[2 * collision[0] + 1], rod_ids[0],
+                     rod_ids[1]});
     }
     return out;
   }
@@ -296,20 +295,22 @@ public:
 #if 1
   template <Vec3View PTYPE>
   vector<std::array<index_t, 2>> get_vert_collisions(PTYPE points_B, real tol) {
-    // calder::test_extents(*edge_tree, edge_verts, x);
-    // edge_tree->debug();
-    std::vector<std::array<index_t, 2>> collected(points_B.size());
+    int num_points = points_B.size();
+    std::vector<std::vector<std::array<index_t, 2>>> per_point(num_points);
+
 #pragma omp parallel for
-    for (int k = 0; k < points_B.size(); k++) {
+    for (int k = 0; k < num_points; k++) {
       const point_slice<PTYPE> point(points_B, k);
-      std::vector<index_t> collisions =
-          bvh_tree->get_nearest(point, tol);
-      index_t nearest = collisions.empty() ? -1 : collisions[0];
-      if (nearest >= 0) {
-        collected[k] = {k, nearest};
-      } else {
-        collected[k] = {-1, -1};
+      std::vector<index_t> neighbors =
+          bvh_tree->find_neighbors(point, tol);
+      for (index_t neighbor : neighbors) {
+        per_point[k].push_back({k, neighbor});
       }
+    }
+
+    std::vector<std::array<index_t, 2>> collected;
+    for (auto &pairs : per_point) {
+      collected.insert(collected.end(), pairs.begin(), pairs.end());
     }
     return collected;
   }
@@ -322,14 +323,13 @@ public:
         const_cast<std::vector<index_t> &>(point_ids));
     std::vector<std::array<index_t, 2>> raw =
         get_vert_collisions(point_view, tol);
-    std::vector<std::array<index_t, 3>> out(raw.size(), {-1, -1, -1});
-    for (size_t i = 0; i < raw.size(); ++i) {
-      const auto &collision = raw[i];
-      if (collision[0] < 0 || collision[1] < 0) {
+    std::vector<std::array<index_t, 3>> out;
+    out.reserve(raw.size());
+    for (const auto &collision : raw) {
+      if (collision[0] < 0 || collision[1] < 0)
         continue;
-      }
       std::array<index_t, 2> rod_ids = get_edge_ids(collision[1]);
-      out[i] = {point_ids[collision[0]], rod_ids[0], rod_ids[1]};
+      out.push_back({point_ids[collision[0]], rod_ids[0], rod_ids[1]});
     }
     return out;
   }
@@ -368,8 +368,18 @@ public:
     std::vector<vec3> &x = R.__x;
     const std::vector<index_t> &edge_verts = R.get_edge_vert_ids();
     edge_view_type edges(x, edge_verts);
-    std::vector<std::array<index_t, 2>> collisions =
+    std::vector<std::array<index_t, 2>> raw =
         get_collisions(edges, 0.5 * offset * R._r);
+
+    std::vector<std::array<index_t, 2>> collisions;
+    collisions.reserve(raw.size());
+    for (auto &c : raw) {
+      if (c[0] == c[1])
+        continue;
+      if (c[0] > c[1])
+        continue;
+      collisions.push_back(c);
+    }
     return collisions;
   }
 #endif

@@ -46,7 +46,6 @@ namespace gaudi
                                   const vec3 &pi, const vec3 &pj,
                                   const std::vector<calder::datum::ptr> &data,
                                   Rod_Sum_Type::Node_Type node_type, //
-                                  const Rod_Sum_Type::Node &node,    //
                                   const Rod_Sum_Type::Tree &tree) -> vec3
           {
             real wi = w_pov[i];
@@ -94,7 +93,6 @@ namespace gaudi
                                   const vec3 &pi, const vec3 &pj,
                                   const std::vector<calder::datum::ptr> &data,
                                   Shell_Sum_Type::Node_Type node_type, //
-                                  const Shell_Sum_Type::Node &node,    //
                                   const Shell_Sum_Type::Tree &tree) -> real
           {
             real wi = w_pov[i];
@@ -141,7 +139,6 @@ namespace gaudi
                                   const vec3 &pi, const vec3 &pj,
                                   const std::vector<calder::datum::ptr> &data,
                                   Shell_Sum_Type::Node_Type node_type, //
-                                  const Shell_Sum_Type::Node &node,    //
                                   const Shell_Sum_Type::Tree &tree) -> vec3
           {
             real wi = w_pov[i];
@@ -152,10 +149,6 @@ namespace gaudi
             wj = std::max(wj, 1e-6);
 
             vec3 dp = pj - pi;
-            // if (i == 0) {
-            //   geometry_logger::line(pi, pj, vec4(0.0, 1.0, 0.5, 1.0));
-            //   geometry_logger::line(pj, pj + 0.1 * Nj, vec4(0.0, 1.0, 0.5, 1.0));
-            // }
             Ni.normalize();
             Nj.normalize();
             real pk = p;
@@ -164,9 +157,6 @@ namespace gaudi
             vec3 gi = calc_tangent_point_radius_grad(-dp, Ni, l0, pk);
 
             return wi * gi - wj * gj;
-            // return wi * gi;
-
-            // return -wj * gj;
           });
       return us;
     }
@@ -194,7 +184,6 @@ namespace gaudi
                                   const vec3 &pi, const vec3 &pj,
                                   const std::vector<calder::datum::ptr> &data,
                                   Shell_Sum_Type::Node_Type node_type, //
-                                  const Shell_Sum_Type::Node &node,    //
                                   const Shell_Sum_Type::Tree &tree) -> mat3
           {
             real wi = w_pov[i];
@@ -255,7 +244,6 @@ namespace gaudi
               const vec3 &pi, const vec3 &pj,
               const std::vector<calder::datum::ptr> &data,
               Shell_Sum_Type::Node_Type node_type, //
-              const Shell_Sum_Type::Node &node,    //
               const Shell_Sum_Type::Tree &tree) -> vec3
           {
             real wi = w_pov[i];

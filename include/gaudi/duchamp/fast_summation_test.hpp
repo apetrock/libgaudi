@@ -155,7 +155,7 @@ public:
     std::vector<index_t> edge_ids = __M->get_edge_range();
 
     std::vector<index_t> edge_map = __M->get_edge_map();
-    arp::T2::ptr edge_tree = arp::aabb_tree<2>::create(edge_verts, x, 16);
+    arp::T2::ptr edge_tree = arp::T2::create(edge_verts, x, 16);
 
     calder::test_extents(*edge_tree);
   }
@@ -171,7 +171,6 @@ public:
     std::vector<index_t> face_ids = M.get_face_range();
 
     arp::T3::ptr face_tree = arp::T3::create(face_vert_ids, x, 12);
-    face_tree->debug();
 
     // calder::test_extents(*face_tree, face_vert_ids, x);
     calder::test_pyramid(*face_tree, face_ids, N, w);

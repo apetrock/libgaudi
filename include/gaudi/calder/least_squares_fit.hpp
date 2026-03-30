@@ -147,7 +147,6 @@ namespace gaudi
               const vec3 &pi, const vec3 &pj,
               const std::vector<calder::datum::ptr> &data,
               typename M_TYPE::Sum_Type::Node_Type node_type, //
-              const typename M_TYPE::Sum_Type::Node &node,    //
               const typename M_TYPE::Sum_Type::Tree &tree) -> type
           {
             vec3 Nj = get_data<vec3>(node_type, j, 0, data);
@@ -476,7 +475,6 @@ namespace gaudi
               const vec3 &pi, const vec3 &pj,
               const std::vector<calder::datum::ptr> &data,
               Shell_Sum_Type::Node_Type node_type, //
-              const Shell_Sum_Type::Node &node,    //
               const Shell_Sum_Type::Tree &tree) -> real
           {
             real wj = get_data<real>(node_type, j, 0, data);

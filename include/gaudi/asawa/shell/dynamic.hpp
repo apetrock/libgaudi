@@ -25,8 +25,8 @@
 #include <type_traits>
 #include <vector>
 
-#include "gaudi/arp/aabb.hpp"
 #include "gaudi/arp/hash_tree.hpp"
+#include "gaudi/arp/aabb.hpp"
 #include "gaudi/arp/simplex_set.hpp"
 
 #ifndef __ASAWA_DYNAMIC_SHELL__
