@@ -15,6 +15,7 @@
 #include <cassert>
 #include <iomanip>
 #include <iostream>
+#include <stdexcept>
 #include <vector>
 
 #ifdef _OPENMP
@@ -36,8 +37,11 @@
 
 namespace gaudi {
 namespace bontecou {
+#ifndef GAUDI_BONTECOU_SCALAR_ALIASES
+#define GAUDI_BONTECOU_SCALAR_ALIASES
 using real = double;
 using index_t = int;
+#endif
 
 using triplet = Eigen::Triplet<double>;
 using vec3 = Eigen::Matrix<real, 3, 1>;
@@ -59,53 +63,47 @@ build_lap(asawa::shell::shell &M,     //
               func_ij,
           bool set_ij = true) {
 
-  auto verts = M.get_vert_range();
-  std::vector<index_t> edges = M.get_edge_vert_ids();
-
   index_t vert_count = M.vert_count();
   index_t edge_count = M.edge_count();
+
+  if (!M.verts_are_dense_packed()) {
+    std::cerr << "[bontecou::build_lap] Shell vertices must be dense-packed: every "
+                 "slot 0..vert_count-1 active (vbegin >= 0). "
+                 "Call asawa::shell::pack(M) and keep vertex data permuted with it.\n";
+    throw std::runtime_error("bontecou::build_lap: shell vertices not dense-packed");
+  }
+  if (static_cast<size_t>(x.size()) != static_cast<size_t>(vert_count)) {
+    std::cerr << "[bontecou::build_lap] Position count " << x.size()
+              << " != vert_count " << vert_count << "\n";
+    throw std::runtime_error("bontecou::build_lap: position vector size mismatch");
+  }
 
   std::vector<triplet> tripletList;
   tripletList.reserve(S * vert_count + S * edge_count);
 
   real Kmin = 9999;
   real Kmax = -9999;
-  auto v_range = M.get_vert_range();
-  auto i_range = std::vector<index_t>(x.size(), -1);
-  int i = 0;
-  for (auto vi : v_range) {
-    i_range[vi] = i++;
-  }
 
-  for (auto v : M.get_vert_range()) {
+  // Rows/columns use vertex id == row of x[vid]; valid only when verts_are_dense_packed().
+  for (index_t vid = 0; vid < vert_count; ++vid) {
+    const asawa::shell::VertId v = asawa::shell::vert_id(static_cast<int>(vid));
+
     real Km = 0.0;
-    // index_t i = i_range[v];
-    index_t i = v;
-
-    if (M.vsize(asawa::shell::vert_id(v)) < 4) {
-      for (int k = 0; k < S; k++)
-        tripletList.push_back(triplet(S * i + k, S * i + k, 1.0));
-      continue;
-    }
-
-    M.for_each_vertex(asawa::shell::vert_id(v),
-                      [&](asawa::shell::CornerId c, asawa::shell::shell &M) {
-      index_t jv = M.vert(M.next(c));
-      index_t j = i_range[jv];
-      real K = func_ij(M, c, x);
-      Km += K;
-      if (!set_ij)
-        return;
-      for (int k = 0; k < S; k++)
-        tripletList.push_back(triplet(S * i + k, S * j + k, K));
-    });
+    M.for_each_vertex(
+        v, [&](asawa::shell::CornerId c, asawa::shell::shell &Ms) {
+          const index_t j = static_cast<index_t>(Ms.vert(Ms.next(c)));
+          real K = func_ij(Ms, c, x);
+          Km += K;
+          if (!set_ij)
+            return;
+          for (int kk = 0; kk < S; kk++)
+            tripletList.push_back(triplet(S * vid + kk, S * j + kk, K));
+        });
 
     Kmin = std::min(Kmin, Km);
     Kmax = std::max(Kmax, Km);
-    // Km = -1.0;
     for (int k = 0; k < S; k++)
-      tripletList.push_back(triplet(S * i + k, S * i + k, -Km));
-    i++;
+      tripletList.push_back(triplet(S * vid + k, S * vid + k, -Km));
   }
   std::cout << " min/max K: " << Kmin << "/" << Kmax << std::endl;
 
@@ -170,7 +168,8 @@ public:
           asawa::shell::CornerId c0p = M.prev(c);
           asawa::shell::CornerId c1p = M.prev(M.other(c));
 
-          return cotan(M, c0p, x) + cotan(M, c1p, x);
+          return asawa::shell::weak_cotan(M, c0p, x) +
+                 asawa::shell::weak_cotan(M, c1p, x);
         });
   }
 
@@ -181,10 +180,8 @@ public:
            const std::vector<vec3> &x) {
           asawa::shell::CornerId c0p = M.prev(c);
           asawa::shell::CornerId c1p = M.prev(M.other(c));
-          real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
-          ct = ct < 1e-6 ? 1e-6 : ct;
-          ct = max(ct, 1e-6);
-          return ct;
+          return asawa::shell::weak_cotan(M, c0p, x) +
+                 asawa::shell::weak_cotan(M, c1p, x);
         });
   }
 
@@ -402,6 +399,9 @@ public:
     return frame;
   }
 
+  /// Cotangent stiffness matrix (weak Laplacian / graph Laplacian sign used here).
+  const sparmat &stiffness() const { return _matC; }
+
   bool inited = false;
 
 private:
@@ -430,10 +430,10 @@ public:
                const std::vector<vec3> &x) {
           asawa::shell::CornerId c0p = M.prev(c);
           asawa::shell::CornerId c1p = M.prev(M.other(c));
-          real ct = cotan(M, c0p, x) + cotan(M, c1p, x);
-          ct = __unitary ? 1.0 : ct;
-          ct = ct < 1e-1 ? 1e-1 : ct;
-          return ct;
+          if (__unitary)
+            return real(1.0);
+          return asawa::shell::weak_cotan(M, c0p, x) +
+                 asawa::shell::weak_cotan(M, c1p, x);
         });
   }
 

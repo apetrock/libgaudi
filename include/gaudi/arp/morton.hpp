@@ -237,7 +237,8 @@ inline uint32_t expandBits(uint32_t v) {
 
 // Normalizes input to [0, c-1] range for Morton encoding
 inline uint32_t scale(real x, real c) {
-  return std::min(std::max(x * c, 0.0), c - 1.0);
+  real scaled = std::min(std::max(x, 0.0), 1.0) * c + 0.5;
+  return static_cast<uint32_t>(std::min(std::max(scaled, 0.0), c - 1.0));
 }
 
 // Calculates a 30-bit Morton code for the given 3D point located within the

@@ -6,6 +6,7 @@
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
 #include "gaudi/arp/hash_tree.hpp"
+#include "gaudi/arp/datums.hpp"
 
 #include "weight_functions.hpp"
 
@@ -299,6 +300,11 @@ std::vector<real> fast_winding(asawa::shell::shell &M,
   std::vector<vec3> Nc = asawa::shell::compress_to_range<vec3>(face_ix, wN);
 
   sum.bind<vec3>(face_ix, Nc);
+
+  std::vector<vec3> centroids = asawa::shell::face_centers(M, x);
+  auto com = calder::com_datum::create(face_ix, weights, centroids);
+  com->pyramid(*face_tree);
+
   std::vector<real> u = sum.calc<real>(
       pov,
       [l0](const index_t &i, const index_t &j, const vec3 &pi,
@@ -308,20 +314,19 @@ std::vector<real> fast_winding(asawa::shell::shell &M,
         auto simplex = tree.leaf_simplex(j);
         return 0.25 / M_PI * va::solidAngle(pi, simplex[0], simplex[1], simplex[2]);
       },
-      [l0](const index_t &i, const index_t &j, const vec3 &pi,
+      [l0, &com](const index_t &i, const index_t &j, const vec3 &pi,
            const std::vector<calder::datum::ptr> &data,
            calder::fast_summation<arp::T3>::Node_Type node_type,
            const arp::T3 &tree) -> real {
         const calder::vec3_datum::ptr N_datum =
             static_pointer_cast<calder::vec3_datum>(data[0]);
         const vec3 &N = N_datum->node_data()[j];
-        const ext::extents_t &ext = tree.bvh_.internal[j];
-        vec3 pj = 0.5 * (ext[0] + ext[1]);
+        vec3 pj = com->get_node_com(j);
         vec3 dp = pj - pi;
         real kappa = calc_inv_dist(dp, 0.0, 3.0);
         return 0.25 / M_PI * kappa * va::dot(N, dp);
       },
-      0.5);
+      0.2);
 
   return u;
 }

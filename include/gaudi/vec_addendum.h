@@ -334,6 +334,30 @@ namespace va
       return 0.0;
   }
 
+  /// Signed cot(∠(c1,c0,c2)) from edge vectors; **0** if degenerate / non-finite.
+  /// Clamps magnitude so needle triangles do not blow up sparse systems (weak Laplacian).
+  template <typename T>
+  inline T cotan_robust(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2,
+                        T max_abs = T(64))
+  {
+    VEC3<T> dc10 = c1 - c0;
+    VEC3<T> dc20 = c2 - c0;
+    T sinP = norm(cross(dc10, dc20));
+    if (!(sinP > T(1e-14)) || !std::isfinite(sinP))
+      return T(0);
+    T cosP = dot(dc10, dc20);
+    if (!std::isfinite(cosP))
+      return T(0);
+    T cotP = cosP / sinP;
+    if (!std::isfinite(cotP))
+      return T(0);
+    if (cotP > max_abs)
+      return max_abs;
+    if (cotP < -max_abs)
+      return -max_abs;
+    return cotP;
+  }
+
   template <typename T>
   inline T abs_cos(const VEC3<T> &c0, const VEC3<T> &c1, const VEC3<T> &c2)
   {

@@ -9,6 +9,7 @@
 #include <memory.h>
 #include <numeric>
 #include <ostream>
+#include <set>
 #include <stdio.h>
 #include <type_traits>
 #include <vector>
@@ -101,6 +102,18 @@ public:
   std::vector<datum_ptr> &get_data() { return __data; }
 
   size_t vert_count() const { return __vert_begin.size(); }
+
+  /// Every slot \c 0 .. vert_count()-1 is an active vertex (\c vbegin valid).
+  /// Per-vertex matrices (Laplacian, etc.) assume vertex id ≡ index into \c x[v].
+  /// Linear scan, \f$O(N)\f$; a cached flag could follow if hot paths need it.
+  bool verts_are_dense_packed() const {
+    for (int i = 0; i < static_cast<int>(vert_count()); ++i) {
+      if (static_cast<int>(vbegin(vert_id(i))) < 0)
+        return false;
+    }
+    return true;
+  }
+
   size_t face_count() const { return __face_begin.size(); }
   size_t edge_count() const { return __corners_next.size() / 2; }
   size_t corner_count() const { return __corners_next.size(); }
@@ -116,8 +129,85 @@ public:
 
   CornerId next(CornerId id) const { return corner_id(__corners_next[id]); }
   CornerId prev(CornerId id) const { return corner_id(__corners_prev[id]); }
+
+  /// Half-edge swing: rotate around the tail vertex to the next outgoing half-edge
+  /// (\c next(other(id))); matches \c patch_hole in \c asawa/faceloader.hpp.
+  CornerId swing(CornerId id) const { return next(other(id)); }
+
   VertId vert(CornerId id) const { return vert_id(__corners_vert[id]); }
   FaceId face(CornerId id) const { return face_id(__corners_face[id]); }
+
+  /// Two triangles sharing the undirected edge of \p edge_c0 (0–2 faces).
+  std::vector<FaceId> dihedral_face_ids(CornerId edge_c0) const {
+    std::vector<FaceId> out;
+    CornerId c1 = other(edge_c0);
+    if (next(edge_c0) < 0)
+      return out;
+    FaceId f0 = face(edge_c0);
+    if (static_cast<int>(f0) >= 0)
+      out.push_back(f0);
+    if (next(c1) >= 0) {
+      FaceId f1 = face(c1);
+      if (static_cast<int>(f1) >= 0 && f1 != f0)
+        out.push_back(f1);
+    }
+    return out;
+  }
+
+  /// Butterfly stencil (see \c duchamp/modules/cross.hpp): the two
+  /// faces on \p edge_c0 plus up to four faces across \c prev/next wings (≤6 unique faces).
+  std::vector<FaceId> butterfly_face_ids(CornerId edge_c0) const {
+    std::set<FaceId> seen;
+    auto add_f = [&seen](FaceId f) {
+      if (static_cast<int>(f) >= 0)
+        seen.insert(f);
+    };
+    CornerId c0 = edge_c0;
+    CornerId c1 = other(c0);
+    add_f(face(c0));
+    if (next(c1) >= 0)
+      add_f(face(c1));
+    if (next(c0) < 0)
+      return std::vector<FaceId>(seen.begin(), seen.end());
+    CornerId ci = prev(c0);
+    CornerId cj = next(c0);
+    CornerId ck = prev(c1);
+    CornerId cl = next(c1);
+    auto add_across = [this, &add_f](CornerId c) {
+      if (next(c) < 0)
+        return;
+      CornerId t = other(c);
+      if (next(t) >= 0)
+        add_f(face(t));
+    };
+    add_across(ci);
+    add_across(cj);
+    if (next(c1) >= 0) {
+      add_across(ck);
+      add_across(cl);
+    }
+    return std::vector<FaceId>(seen.begin(), seen.end());
+  }
+
+  /// Union of face stars of the three vertices of triangle \p f (face 1-ring).
+  void face_one_ring_face_ids(FaceId f, std::vector<FaceId> &out) const {
+    std::set<FaceId> seen;
+    const_for_each_face(f, [&seen, this](CornerId c0, const shell &M) {
+      VertId v = M.vert(c0);
+      M.const_for_each_vertex(v, [&seen, &M](CornerId ci, const shell &Mm) {
+        FaceId fi = Mm.face(ci);
+        if (static_cast<int>(fi) >= 0)
+          seen.insert(fi);
+      });
+    });
+    out.assign(seen.begin(), seen.end());
+  }
+
+  std::vector<FaceId> face_one_ring_face_ids(FaceId f) const {
+    std::vector<FaceId> out;
+    face_one_ring_face_ids(f, out);
+    return out;
+  }
 
   CornerId fbegin(FaceId id) const { return corner_id(__face_begin[id]); }
   CornerId fend(FaceId id) const { return prev(corner_id(__face_begin[id])); }

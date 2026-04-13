@@ -43,6 +43,40 @@ namespace gaudi {
 namespace duchamp {
 using namespace asawa;
 
+void draw_morton_grid(int N, const vec3 &offset, real extent) {
+  struct morton_point {
+    arp::Morton64 code;
+    vec3 pos;
+  };
+
+  std::vector<morton_point> points;
+  points.reserve(N * N * N);
+
+  for (int iz = 0; iz < N; ++iz) {
+    for (int iy = 0; iy < N; ++iy) {
+      for (int ix = 0; ix < N; ++ix) {
+        real u = static_cast<real>(ix) / (N - 1);
+        real v = static_cast<real>(iy) / (N - 1);
+        real w = static_cast<real>(iz) / (N - 1);
+        vec3 world = offset + extent * vec3(u, v, w);
+        points.push_back({arp::morton3D_64(u, v, w), world});
+      }
+    }
+  }
+
+  std::sort(points.begin(), points.end(),
+            [](const morton_point &a, const morton_point &b) {
+              return a.code < b.code;
+            });
+
+  for (size_t i = 0; i + 1 < points.size(); ++i) {
+    real t = static_cast<real>(i) / (points.size() - 1);
+    vec3 rgb = va::hsv_to_rgb(vec3(t * 300.0, 1.0, 1.0));
+    vec4 col(rgb[0], rgb[1], rgb[2], 1.0);
+    geometry_logger::line(points[i].pos, points[i + 1].pos, col);
+  }
+}
+
 class aabb_build {
 public:
   typedef std::shared_ptr<aabb_build> ptr;
@@ -69,6 +103,8 @@ public:
     std::vector<vec3> queries = {tri_center};
 
     calder::visualize_shell_bvh(M, queries, 0.5);
+
+    draw_morton_grid(16, vec3(3.0, -1.5, -1.5), 3.0);
   }
 
   shell::shell::ptr __M;

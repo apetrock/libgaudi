@@ -1,0 +1,1 @@
+add_gaudi_gl_project(frame_curvature_demo SOURCES main.cpp)

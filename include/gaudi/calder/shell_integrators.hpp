@@ -2,6 +2,7 @@
 #define __SHELL_INTEGRATOR__
 
 #include "gaudi/arp/hash_tree.hpp"
+#include "gaudi/arp/datums.hpp"
 #include "integrators.hpp"
 #include <algorithm>
 #include <cmath>
@@ -51,28 +52,28 @@ namespace gaudi
       Shell_Sum_Type sum(*face_tree);
       bind_fcn(face_ids, sum);
 
+      std::vector<real> areas = asawa::shell::face_areas(M, x);
+      std::vector<vec3> centroids = asawa::shell::face_centers(M, x);
+      auto com = calder::com_datum::create(face_ids, areas, centroids);
+      com->pyramid(*face_tree);
+
       std::cout << " -compute: " << std::endl;
       std::vector<T> us = sum.template calc<T>(
           p_pov,
-          [&compute_fcn](const index_t &i, const index_t &j, const vec3 &pi,
+          [&compute_fcn, &com](const index_t &i, const index_t &j, const vec3 &pi,
                          const std::vector<calder::datum::ptr> &data,
                          Shell_Sum_Type::Node_Type node_type,
                          const Shell_Sum_Type::Tree &tree) -> T
           {
-            auto simplex = tree.leaf_simplex(j);
-            vec3 x0 = simplex[0], x1 = simplex[1], x2 = simplex[2];
-            vec3 pj;
-            real dist = va::distance_from_triangle({x0, x1, x2}, pi, pj);
-            pj = 0.333 * (x0 + x1 + x2);
+            vec3 pj = com->get_leaf_com(j);
             return compute_fcn(i, j, pi, pj, data, node_type, tree);
           },
-          [&compute_fcn](const index_t &i, const index_t &j, const vec3 &pi,
+          [&compute_fcn, &com](const index_t &i, const index_t &j, const vec3 &pi,
                          const std::vector<calder::datum::ptr> &data,
                          Shell_Sum_Type::Node_Type node_type,
                          const Shell_Sum_Type::Tree &tree) -> T
           {
-            const ext::extents_t &ext = tree.bvh_.internal[j];
-            vec3 pj = 0.5 * (ext[0] + ext[1]);
+            vec3 pj = com->get_node_com(j);
             return compute_fcn(i, j, pi, pj, data, node_type, tree);
           },
           0.25, false);

@@ -1,7 +1,7 @@
 #ifndef __M2TREE_CODE__
 #define __M2TREE_CODE__
 
-#include "datums.hpp"
+#include "gaudi/arp/datums.hpp"
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
 #include "gaudi/arp/hash_tree.hpp"

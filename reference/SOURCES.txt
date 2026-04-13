@@ -1,0 +1,12 @@
+# Place PDFs in this directory (optional; large files may be gitignored).
+
+# Stein et al. 2020 — A Simple Discretization of the Vector Dirichlet Energy
+# DOI: https://doi.org/10.1111/cgf.14070
+# Preprint PDF: https://ddg.math.uni-goettingen.de/pub/vector-dirichlet.pdf
+# Local copy: stein2020-vector-dirichlet-energy.pdf (fetched 2026-04-13)
+
+# Knöppel et al. 2013 — Globally Optimal Direction Fields (optional, Option 1)
+# https://www.cs.cmu.edu/~kmcrane/Projects/GloballyOptimalDirectionFields/
+
+# Rusinkiewicz 2004 — Estimating curvatures on triangle meshes (quadric / jets)
+# https://gfx.cs.princeton.edu/proj/trimesh2/

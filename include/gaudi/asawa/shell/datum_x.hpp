@@ -20,6 +20,9 @@
 #include "shell.hpp"
 #include "gaudi/geometry_logger.hpp"
 
+#include <Eigen/Dense>
+#include <Eigen/SVD>
+
 #ifndef __ASAWA_X_DATUM__
 #define __ASAWA_X_DATUM__
 namespace gaudi {
@@ -74,6 +77,16 @@ real cotan(const shell &M, CornerId ci, const std::vector<vec3> &x) {
 
   return va::abs_cotan(x0, xp, xn);
   // return va::cotan(x0, xp, xn);
+}
+
+/// Signed half-angle cot weights for the **weak cotan Laplacian** (Pinkall–Polthier).
+/// Degenerate corners contribute **0**; |cot| is capped (see `va::cotan_robust`).
+/// `cotan()` above stays nonnegative for constraints / legacy weights.
+real weak_cotan(const shell &M, CornerId ci, const std::vector<vec3> &x) {
+  vec3 xp = x[M.vert(M.prev(ci))];
+  vec3 x0 = x[M.vert(ci)];
+  vec3 xn = x[M.vert(M.next(ci))];
+  return va::cotan_robust(x0, xp, xn);
 }
 
 real angle(const shell &M, CornerId ci, const std::vector<vec3> &x) {
@@ -158,6 +171,13 @@ real vert_area(const shell &M, VertId vi, const std::vector<vec3> &x) {
     A += face_area(M, M.face(ci), x);
   });
   return A / 3.0;
+}
+
+/// Barycentric-dual mass for an undirected edge: half the sum of endpoint
+/// \ref vert_area values (one third of adjacent face areas per vertex).
+inline real edge_barycentric_dual_mass(const shell &M, CornerId c,
+                                       const std::vector<vec3> &x) {
+  return 0.5 * (vert_area(M, M.vert(c), x) + vert_area(M, M.vert(M.next(c)), x));
 }
 
 real vert_cotan_weight(const shell &M, VertId vi, const std::vector<vec3> &x) {
@@ -642,6 +662,101 @@ std::vector<real> divergence(shell &M, const std::vector<vec3> &g,
   }
 
   return divu;
+}
+
+/// Stencil for per-face curvature fitting (quadric height field over neighbor face centers).
+enum class face_curvature_stencil { one_ring, butterfly };
+
+struct face_curvature_frame {
+  vec3 n = vec3::UnitZ();
+  vec3 t_min = vec3::UnitX();
+  vec3 t_max = vec3::UnitY();
+  real k_min = 0;
+  real k_max = 0;
+};
+
+inline void face_tangent_basis_from_normal(const vec3 &n_in, vec3 *u_out,
+                                           vec3 *v_out) {
+  vec3 n = n_in.normalized();
+  vec3 a = std::abs(n[0]) > 0.5 ? vec3(0, 1, 0) : vec3(1, 0, 0);
+  *u_out = n.cross(a);
+  if (u_out->norm() < 1e-12) {
+    *u_out = vec3(0, 0, 1).cross(n);
+  }
+  *u_out = u_out->normalized();
+  *v_out = n.cross(*u_out).normalized();
+}
+
+/// Discrete principal frame via least-squares quadratic height field
+/// \(z \approx a x^2 + b x y + c y^2\) on face barycenters in the stencil
+/// (Rusinkiewicz-style jet on a triangle mesh; see Rusinkiewicz, 3DPVT 2004).
+inline face_curvature_frame face_curvature_frame_fit(
+    const shell &M, const std::vector<vec3> &x, FaceId f,
+    face_curvature_stencil stencil = face_curvature_stencil::one_ring) {
+  face_curvature_frame out;
+  if (M.fbegin(f) < 0 || M.fsize(f) != 3)
+    return out;
+
+  std::vector<FaceId> stencil_faces;
+  if (stencil == face_curvature_stencil::one_ring)
+    stencil_faces = M.face_one_ring_face_ids(f);
+  else {
+    CornerId c0 = M.fbegin(f);
+    stencil_faces = M.butterfly_face_ids(c0);
+  }
+
+  vec3 c = face_center(M, f, x);
+  out.n = face_normal(M, f, x);
+  vec3 u_axis, v_axis;
+  face_tangent_basis_from_normal(out.n, &u_axis, &v_axis);
+
+  const int m = static_cast<int>(stencil_faces.size());
+  if (m < 3) {
+    out.t_min = u_axis;
+    out.t_max = v_axis;
+    return out;
+  }
+
+  Eigen::MatrixXd A(m, 3);
+  Eigen::VectorXd bz(m);
+  for (int i = 0; i < m; ++i) {
+    FaceId fi = stencil_faces[static_cast<size_t>(i)];
+    vec3 p = face_center(M, fi, x);
+    vec3 d = p - c;
+    real xi = d.dot(u_axis);
+    real yi = d.dot(v_axis);
+    real zi = d.dot(out.n);
+    A(i, 0) = xi * xi;
+    A(i, 1) = xi * yi;
+    A(i, 2) = yi * yi;
+    bz(i) = zi;
+  }
+
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(
+      A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  Eigen::Vector3d coef = svd.solve(bz);
+  Eigen::Matrix2d H;
+  H(0, 0) = 2.0 * coef(0);
+  H(0, 1) = coef(1);
+  H(1, 0) = coef(1);
+  H(1, 1) = 2.0 * coef(2);
+
+  Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> es(H);
+  if (es.info() != Eigen::Success) {
+    out.t_min = u_axis;
+    out.t_max = v_axis;
+    return out;
+  }
+
+  Eigen::Vector2d ev0 = es.eigenvectors().col(0);
+  Eigen::Vector2d ev1 = es.eigenvectors().col(1);
+  vec3 dir0 = (ev0[0] * u_axis + ev0[1] * v_axis).normalized();
+  vec3 dir1 = (ev1[0] * u_axis + ev1[1] * v_axis).normalized();
+  out.k_min = es.eigenvalues()[0];
+  out.k_max = es.eigenvalues()[1];
+  out.t_min = dir0;
+  out.t_max = dir1;
+  return out;
 }
 
 } // namespace shell

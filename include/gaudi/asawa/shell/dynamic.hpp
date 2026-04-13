@@ -74,9 +74,80 @@ real dist_line_line_cen(shell &M, CornerId cA0, CornerId cB0,
   vec3 xB0 = x[vB0];
   vec3 xB1 = x[vB1];
 
-  real d0 = (0.5 * (xA1 + xA0) - 0.5 * (xB1 + xA0)).norm();
+  real d0 = (0.5 * (xA1 + xA0) - 0.5 * (xB1 + xB0)).norm();
   return d0;
 };
+
+struct segment_proximity_result {
+  real distance = std::numeric_limits<real>::max();
+  real s = 0.0;
+  real t = 0.0;
+  vec3 xAB = vec3::Zero();
+  bool valid = false;
+};
+
+// Full segment-segment proximity test with geometric filtering.
+// Returns distance, parametric coords, and connecting vector.
+// Rejects pairs that share vertices, have near-coincident endpoints,
+// have closest-approach past segment ends, or whose connecting vector
+// is too aligned with either edge tangent (colinearity filter).
+segment_proximity_result
+segment_segment_proximity(const vec3 &xA0, const vec3 &xA1, //
+                          const vec3 &xB0, const vec3 &xB1, //
+                          index_t vA0, index_t vA1,          //
+                          index_t vB0, index_t vB1,          //
+                          real tol,                           //
+                          real param_margin = 0.2,            //
+                          real colinear_threshold = 0.35,     //
+                          real endpoint_eps_factor = 0.1) {
+  segment_proximity_result result;
+
+  // shared-vertex rejection
+  if (vA0 == vB0 || vA0 == vB1 || vA1 == vB0 || vA1 == vB1)
+    return result;
+
+  // endpoint disjointness: reject if any endpoint pair is geometrically
+  // near-coincident (catches separate topology with overlapping endpoints)
+  real endpoint_eps = endpoint_eps_factor * tol;
+  real ep2 = endpoint_eps * endpoint_eps;
+  if ((xA0 - xB0).squaredNorm() < ep2 || (xA0 - xB1).squaredNorm() < ep2 ||
+      (xA1 - xB0).squaredNorm() < ep2 || (xA1 - xB1).squaredNorm() < ep2)
+    return result;
+
+  std::array<real, 3> d = va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
+  result.distance = d[0];
+  result.s = d[1];
+  result.t = d[2];
+
+  if (result.distance > tol)
+    return result;
+
+  // parametric bounds: closest approach should be within or near the segments
+  if (result.s < -param_margin || result.s > 1.0 + param_margin ||
+      result.t < -param_margin || result.t > 1.0 + param_margin)
+    return result;
+
+  vec3 xA = va::mix(result.s, xA0, xA1);
+  vec3 xB = va::mix(result.t, xB0, xB1);
+  vec3 dv = xB - xA;
+  real dv_norm = dv.norm();
+  if (dv_norm < 1e-12)
+    return result;
+
+  result.xAB = dv / dv_norm;
+
+  // colinearity filter: connecting vector should be roughly perpendicular
+  // to both edge directions (rejects adjacent / colinear edges)
+  vec3 dA = (xA1 - xA0).normalized();
+  vec3 dB = (xB1 - xB0).normalized();
+  if (std::abs(dA.dot(result.xAB)) > colinear_threshold)
+    return result;
+  if (std::abs(dB.dot(result.xAB)) > colinear_threshold)
+    return result;
+
+  result.valid = true;
+  return result;
+}
 
 std::mt19937_64 rng;
 std::uniform_real_distribution<real> unif(0.0, 1.0);
@@ -411,6 +482,10 @@ public:
     __vdatum_id = __M->insert_datum(vdata);
   };
 
+  void set_collapse_threshold(real Cc) { _Cc = Cc; }
+  void set_stretch_threshold(real Cs) { _Cs = Cs; }
+  void set_bridge_threshold(real Cm) { _Cm = Cm; }
+
   /// Rebuild edge and face BVH trees from the current vertex positions (call
   /// once per frame or before collision queries after geometry changes).
   void update_trees() {
@@ -513,40 +588,60 @@ public:
                            std::vector<std::array<index_t, 2>> &collected) {
     std::vector<bool> flags(M.corner_count() / 2, false);
     real tol = _Cm;
-    collected.erase(std::remove_if(collected.begin(), collected.end(),
-                                   [tol, &M, &x, &flags](const auto &p) {
-                                     if (p[0] < 0)
-                                       return true;
-                                     if (p[1] < 0)
-                                       return true;
+    collected.erase(
+        std::remove_if(
+            collected.begin(), collected.end(),
+            [tol, &M, &x, &flags](const auto &p) {
+              if (p[0] < 0 || p[1] < 0)
+                return true;
 
-                                     vec3 cenA = edge_center(M, corner_id(p[0]), x);
-                                     vec3 cenB = edge_center(M, corner_id(p[1]), x);
-                                     real dist = (cenA - cenB).norm();
+              CornerId cA0 = corner_id(p[0]);
+              CornerId cB0 = corner_id(p[1]);
+              CornerId cA1 = M.other(cA0);
+              CornerId cB1 = M.other(cB0);
 
-                                     if (dist > tol) {
-                                       return true;
-                                     }
+              const vec3 &xA0 = x[M.vert(cA0)];
+              const vec3 &xA1 = x[M.vert(cA1)];
+              const vec3 &xB0 = x[M.vert(cB0)];
+              const vec3 &xB1 = x[M.vert(cB1)];
 
-                                     vec3 NA = edge_normal(M, corner_id(p[0]), x);
-                                     vec3 NB = edge_normal(M, corner_id(p[1]), x);
-                                     real angle = va::dot(NA, NB);
+              // proper segment-segment distance
+              std::array<real, 3> d =
+                  va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
+              if (d[0] > tol)
+                return true;
 
-                                     if (angle > -0.0) {
-                                       return true;
-                                     }
+              // connecting vector between closest points
+              vec3 xA = va::mix(d[1], xA0, xA1);
+              vec3 xB = va::mix(d[2], xB0, xB1);
+              vec3 dv = xB - xA;
+              real dv_norm = dv.norm();
+              if (dv_norm < 1e-12)
+                return true;
+              vec3 xAB = dv / dv_norm;
 
-                                     if (flags[p[0] / 2])
-                                       return true;
-                                     if (flags[p[1] / 2])
-                                       return true;
+              // normals must oppose each other
+              vec3 NA = edge_normal(M, cA0, x);
+              vec3 NB = edge_normal(M, cB0, x);
+              if (va::dot(NA, NB) > -0.0)
+                return true;
 
-                                     flags[p[0] / 2] = true;
-                                     flags[p[1] / 2] = true;
+              // connecting vector must go outward from A and inward to B
+              if (va::dot(NA, xAB) < 0.0)
+                return true;
+              if (va::dot(NB, xAB) > 0.0)
+                return true;
 
-                                     return false;
-                                   }),
-                    collected.end());
+              // dedup: one merge per edge
+              if (flags[p[0] / 2] || flags[p[1] / 2])
+                return true;
+
+              flags[p[0] / 2] = true;
+              flags[p[1] / 2] = true;
+
+              return false;
+            }),
+        collected.end());
   }
 
   vector<std::array<index_t, 2>>
@@ -580,10 +675,20 @@ public:
       index_t best_e = -1;
       real best_d = std::numeric_limits<real>::max();
       for (index_t e1 : nbrs) {
-        real d = arp::line_line_min(e0, edge_verts_t, x_t, e1, edge_verts_m,
-                                    x_m);
-        if (d < tol && d < best_d) {
-          best_d = d;
+        if (e0 >= e1)
+          continue;
+
+        index_t vT0 = edge_verts_t[2 * e0 + 0];
+        index_t vT1 = edge_verts_t[2 * e0 + 1];
+        index_t vS0 = edge_verts_m[2 * e1 + 0];
+        index_t vS1 = edge_verts_m[2 * e1 + 1];
+
+        auto pr = segment_segment_proximity(
+            x_t[vT0], x_t[vT1], x_m[vS0], x_m[vS1], //
+            vT0, vT1, vS0, vS1, tol);
+
+        if (pr.valid && pr.distance < best_d) {
+          best_d = pr.distance;
           best_e = e1;
         }
       }
@@ -675,6 +780,7 @@ public:
 
   void merge_edges() {
     // edge e = c / 2;
+
     shell &M = *__M;
 
     vec3_datum::ptr x_datum =
@@ -689,6 +795,14 @@ public:
       collected.erase(std::remove_if(collected.begin(), collected.end(),
                                      [this](auto c) { return _merge_pred(*__M, corner_id(c[0]), corner_id(c[1])); }),
                       collected.end());
+
+    for (const auto &cp : collected) {
+      if (cp[0] < 0 || cp[1] < 0)
+        continue;
+      vec3 cenA = edge_center(M, corner_id(cp[0]), x);
+      vec3 cenB = edge_center(M, corner_id(cp[1]), x);
+      geometry_logger::line(cenA, cenB, vec4(0.0, 1.0, 0.1, 1.0));
+    }
 
     std::vector<index_t> f_collect(2 * collected.size());
     for (int i = 0; i < collected.size(); i++) {
@@ -820,6 +934,20 @@ public:
       vec3 v2 = data[__M->vert(c2)];
       vec3 v3 = data[__M->vert(c3)];
 
+#if 0 // volume guard — set to 0 to disable
+      {
+        vec3 e01 = v1 - v0;
+        vec3 e02 = v2 - v0;
+        vec3 e03 = v3 - v0;
+        real vol = std::abs(e03.dot(e01.cross(e02))) / 6.0;
+        real l_avg = 0.25 * (e01.norm() + (v2 - v1).norm() +
+                             (v3 - v2).norm() + e03.norm());
+        real l3 = l_avg * l_avg * l_avg;
+        if (l3 > 1e-20 && vol / l3 > _max_flip_vol_ratio)
+          continue;
+      }
+#endif
+
       real m01 = 1.0 / (v0 - v1).norm();
       real m12 = 1.0 / (v1 - v2).norm();
       real m23 = 1.0 / (v2 - v3).norm();
@@ -854,6 +982,12 @@ public:
       real cosN1 = va::norm(vec3(N11 - N10));
       real sinN1 = va::norm(vec3(N11 + N10));
       real tFlip = atan2(sinN1, cosN1);
+
+#if 0 // dihedral guard — set to 0 to disable
+      if (tFlip > _max_flip_dihedral)
+        continue;
+#endif
+
       real dt = tFlip - tSame;
       // std::cout << tFlip << " " << tSame << " " << dt << std::endl;
       real eFlip = cFlip * cFlip + 10.0 * dt * dt;
@@ -902,6 +1036,7 @@ public:
   }
 
   void collapse_edges() {
+
     using comp_less = shell_data_comp<vec3, std::less<real>>;
     const std::vector<vec3> &x = get_vec_data(*__M, 0);
     auto cmp = comp_less(x, _Cc, *__M);
@@ -994,6 +1129,8 @@ public:
   shell::ptr __M;
   index_t __vdatum_id;
   real _Cc, _Cs, _Cm; // collapse, stretch, bridge
+  real _max_flip_vol_ratio = 0.5;
+  real _max_flip_dihedral = 1.0;
 
   OpPredicateFcn _flip_pred;
   MergePredicateFcn _merge_pred;

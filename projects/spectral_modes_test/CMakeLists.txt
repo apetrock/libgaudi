@@ -1,0 +1,1 @@
+add_gaudi_gl_project(spectral_modes_test SOURCES main.cpp)

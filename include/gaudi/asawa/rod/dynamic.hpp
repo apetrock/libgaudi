@@ -130,6 +130,10 @@ public:
     bvh_tree = arp::bvh_tree<2>::create(*edge_set_);
   }
 
+  void set_collapse_threshold(real Cc) { _Cc = Cc; }
+  void set_stretch_threshold(real Cs) { _Cs = Cs; }
+  void set_bridge_threshold(real Cm) { _Cm = Cm; }
+
   template <typename T>
   void set(const index_t &cnew, const T &xnew, std::vector<T> &x) {
     if (cnew >= x.size()) {
