@@ -68,13 +68,13 @@ void fillBuffer_ref(asawa::shell::shell &M, gg::BufferObjectPtr obj,
     });
     // std::cout << std::endl;
 
-    numIndices += face.size();
+    numIndices += static_cast<int>(face.size());
     faces.push_back(face);
   }
-  numVerts = x.size();
+  numVerts = static_cast<int>(x.size());
 
   obj->fillBuffer([&](gg::BufferObject &o) -> void {
-    o.allocateVerts(faces.size(), numVerts);
+    o.allocateVerts(static_cast<int>(faces.size()), numVerts);
     auto &indices = o.indices();
     auto &positions = o.positions();
     auto &colors = o.colors();
@@ -86,11 +86,11 @@ void fillBuffer_ref(asawa::shell::shell &M, gg::BufferObjectPtr obj,
 
     for (int i = 0; i < x.size(); i++) {
       for (int j = 0; j < 3; j++) {
-        positions.col(i)[j] = x[i][j];
+        positions.col(i)[j] = static_cast<float>(x[i][j]);
       }
-      colors.col(i)[0] = col.r;
-      colors.col(i)[1] = col.g;
-      colors.col(i)[2] = col.b;
+      colors.col(i)[0] = static_cast<float>(col.r);
+      colors.col(i)[1] = static_cast<float>(col.g);
+      colors.col(i)[2] = static_cast<float>(col.b);
     }
     // std::cout << indices << std::endl;
   });
@@ -121,13 +121,13 @@ void fillBuffer_ref(asawa::shell::shell &M, gg::BufferObjectPtr obj,
     });
     // std::cout << std::endl;
 
-    numIndices += face.size();
+    numIndices += static_cast<int>(face.size());
     faces.push_back(face);
   }
-  numVerts = x.size();
+  numVerts = static_cast<int>(x.size());
 
   obj->fillBuffer([&](gg::BufferObject &o) -> void {
-    o.allocateVerts(faces.size(), numVerts);
+    o.allocateVerts(static_cast<int>(faces.size()), numVerts);
     auto &indices = o.indices();
     auto &positions = o.positions();
     auto &colors = o.colors();
@@ -139,11 +139,11 @@ void fillBuffer_ref(asawa::shell::shell &M, gg::BufferObjectPtr obj,
 
     for (int i = 0; i < x.size(); i++) {
       for (int j = 0; j < 3; j++) {
-        positions.col(i)[j] = x[i][j];
+        positions.col(i)[j] = static_cast<float>(x[i][j]);
       }
-      colors.col(i)[0] = col[i].r;
-      colors.col(i)[1] = col[i].g;
-      colors.col(i)[2] = col[i].b;
+      colors.col(i)[0] = static_cast<float>(col[i].r);
+      colors.col(i)[1] = static_cast<float>(col[i].g);
+      colors.col(i)[2] = static_cast<float>(col[i].b);
     }
     // std::cout << indices << std::endl;
   });
@@ -220,7 +220,8 @@ void fillBuffer_ref(asawa::rod::rod &R, gg::BufferObjectPtr obj,
   }
 
   obj->fillBuffer([&](gg::BufferObject &o) -> void {
-    o.allocateVerts(faces.size(), verts.size());
+    o.allocateVerts(static_cast<int>(faces.size()),
+                    static_cast<int>(verts.size()));
     auto &indices = o.indices();
     auto &positions = o.positions();
     auto &colors = o.colors();
@@ -233,11 +234,11 @@ void fillBuffer_ref(asawa::rod::rod &R, gg::BufferObjectPtr obj,
     for (int i = 0; i < verts.size(); i++) {
       for (int j = 0; j < 3; j++) {
 
-        positions.col(i)[j] = verts[i][j];
+        positions.col(i)[j] = static_cast<float>(verts[i][j]);
       }
-      colors.col(i)[0] = col.r;
-      colors.col(i)[1] = col.g;
-      colors.col(i)[2] = col.b;
+      colors.col(i)[0] = static_cast<float>(col.r);
+      colors.col(i)[1] = static_cast<float>(col.g);
+      colors.col(i)[2] = static_cast<float>(col.b);
     }
     // std::cout << indices << std::endl;
   });

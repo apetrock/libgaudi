@@ -404,10 +404,70 @@ public:
   real _eps;
 };
 
-template <typename comparator>
+struct face_dedup {
+  std::vector<bool> face_flags;
+
+  explicit face_dedup(const shell &M)
+      : face_flags(static_cast<size_t>(M.face_count()), false) {}
+
+  bool is_blocked(const shell &M, CornerId c0, CornerId c1) const {
+    FaceId f0 = M.face(c0);
+    FaceId f1 = M.face(c1);
+    if (f0 < 0 || f1 < 0)
+      return true;
+    if (face_flags[static_cast<size_t>(f0)])
+      return true;
+    if (face_flags[static_cast<size_t>(f1)])
+      return true;
+    return false;
+  }
+
+  void mark(shell &M, CornerId c0, CornerId c1) {
+    FaceId f0 = M.face(c0);
+    FaceId f1 = M.face(c1);
+    face_flags[static_cast<size_t>(f0)] = true;
+    face_flags[static_cast<size_t>(f1)] = true;
+  }
+};
+
+struct one_ring_dedup {
+  std::vector<bool> edge_flags;
+
+  explicit one_ring_dedup(const shell &M)
+      : edge_flags(static_cast<size_t>(M.corner_count()) / 2, false) {}
+
+  bool is_blocked(const shell & /*M*/, CornerId c0, CornerId /*c1*/) const {
+    return edge_flags[static_cast<size_t>(c0) / 2];
+  }
+
+  void mark(shell &M, CornerId c0, CornerId c1) {
+    VertId v0 = M.vert(c0);
+    VertId v1 = M.vert(c1);
+    if (v0 < 0 || v1 < 0)
+      return;
+    edge_flags[static_cast<size_t>(c0) / 2] = true;
+    flag_one_ring(M, v0);
+    flag_one_ring(M, v1);
+  }
+
+private:
+  void flag_one_ring(shell &M, VertId v) {
+    M.for_each_vertex(v, [this](CornerId ci, shell &m) {
+      CornerId ca = ci;
+      CornerId cb = m.next(ci);
+      CornerId cc = m.next(cb);
+      edge_flags[static_cast<size_t>(ca) / 2] = true;
+      edge_flags[static_cast<size_t>(cb) / 2] = true;
+      edge_flags[static_cast<size_t>(cc) / 2] = true;
+    });
+  }
+};
+
+template <typename comparator, typename DedupPolicy = one_ring_dedup>
 std::vector<CornerId> gather_edges(shell &M, const comparator &comp) {
   auto edges = comp.get_edges();
-  std::vector<bool> face_flags(M.face_count(), false);
+  DedupPolicy policy(M);
+
   std::vector<CornerId> edges_out;
   edges_out.reserve(edges.size());
 
@@ -415,20 +475,12 @@ std::vector<CornerId> gather_edges(shell &M, const comparator &comp) {
     CornerId c0 = edges[static_cast<size_t>(i)];
     CornerId c1 = M.other(c0);
 
-    FaceId f0 = M.face(c0);
-    FaceId f1 = M.face(c1);
-
-    if (f0 < 0 || f1 < 0)
-      continue;
-    if (face_flags[static_cast<size_t>(f0)])
-      continue;
-    if (face_flags[static_cast<size_t>(f1)])
+    if (policy.is_blocked(M, c0, c1))
       continue;
 
     if (comp(c0, c1)) {
       edges_out.push_back(c0);
-      face_flags[static_cast<size_t>(f0)] = true;
-      face_flags[static_cast<size_t>(f1)] = true;
+      policy.mark(M, c0, c1);
     }
   }
 
@@ -1037,11 +1089,11 @@ public:
 
   void collapse_edges() {
 
-    using comp_less = shell_data_comp<vec3, std::less<real>>;
+    using comp = shell_data_comp<vec3, std::less<real>>;
     const std::vector<vec3> &x = get_vec_data(*__M, 0);
-    auto cmp = comp_less(x, _Cc, *__M);
+    auto cmp = comp(x, _Cc, *__M);
 
-    auto edges_typed = gather_edges<comp_less>(*__M, cmp);
+    auto edges_typed = gather_edges<comp>(*__M, cmp);
     std::vector<index_t> edges_to_divide(edges_typed.begin(), edges_typed.end());
 
     if (_collapse_pred)

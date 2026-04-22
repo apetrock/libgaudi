@@ -13,4 +13,14 @@ target_link_libraries(vector_dirichlet_smoke PRIVATE gaudi::core gaudi::headless
 gaudi_msvc_disable_parallel_cl_writers(vector_dirichlet_smoke)
 add_test(NAME vector_dirichlet_smoke COMMAND vector_dirichlet_smoke)
 
+add_executable(spectral_smoke spectral_smoke.cpp)
+target_link_libraries(spectral_smoke PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(spectral_smoke)
+add_test(NAME spectral_smoke COMMAND spectral_smoke)
+
+add_executable(anisotropic_cotan_smoke anisotropic_cotan_smoke.cpp)
+target_link_libraries(anisotropic_cotan_smoke PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(anisotropic_cotan_smoke)
+add_test(NAME anisotropic_cotan_smoke COMMAND anisotropic_cotan_smoke)
+
 message(STATUS "Configured gaudi_tests (headless, no GL)")

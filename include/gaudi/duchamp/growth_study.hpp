@@ -28,13 +28,19 @@
 #include "gaudi/common.h"
 #include "gaudi/logger.hpp"
 
+#include "modules/ginzburg_landau.hpp"
 #include "modules/reaction_diffusion.hpp"
+#include "modules/rx_colormap.hpp"
+#include "modules/swift_hohenberg.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <functional>
 #include <iostream>
 #include <math.h>
 #include <memory>
+#include <limits>
+#include <optional>
 #include <vector>
 #include "gaudi/geometry_logger.hpp"
 
@@ -46,17 +52,39 @@ namespace duchamp {
 
 using namespace asawa;
 
+/// Selects which reaction–diffusion module backs \ref growth_study.
+/// Use `growth_study::create(growth_rx_model::grey_scott)` etc.
+enum class growth_rx_model {
+  grey_scott,
+  swift_hohenberg,
+  ginzburg_landau,
+};
+
 class growth_study {
 public:
   typedef std::shared_ptr<growth_study> ptr;
 
-  static ptr create() { return std::make_shared<growth_study>(); }
+  /// Default \p grey_scott matches pre–multi-model behavior (implicit GS substeps).
+  /// Swift–Hohenberg / CGLE use explicit reaction substeps and need smaller per-step `h`
+  /// (see \ref step_rx).
+  static ptr create(growth_rx_model model = growth_rx_model::grey_scott) {
+    return std::make_shared<growth_study>(model);
+  }
 
   static bool should_trace_frame(index_t frame) {
     return frame < 3 || frame % 60 == 0;
   }
 
-  growth_study() {
+  /// When enabled, \ref step_dynamics logs the first non-finite value in key
+  /// arrays (before sanitization) and a triangle/edge quality summary. Use
+  /// `frame_stride` to probe every N frames only.
+  void set_nan_probe(bool on, int frame_stride = 1) {
+    _nan_probe = on;
+    _nan_probe_stride = std::max(1, frame_stride);
+  }
+
+  explicit growth_study(growth_rx_model model = growth_rx_model::grey_scott)
+      : _rx_model(model) {
     std::cerr << "[growth_study_core] ctor start" << std::endl;
     //__M = shell::load_cube();
     __M = shell::load_bunny();
@@ -84,7 +112,7 @@ public:
 
     real l0 = 4.0 * asawa::shell::avg_length(*__M, x);
     _eps = l0;
-    __surf = shell::dynamic::create(__M, 1.0 * l0, 2.5 * l0, 1.0 * l0);
+    __surf = shell::dynamic::create(__M, 1.0 * l0, 2.5 * l0, 0.5 * l0);
     std::cerr << "[growth_study_core] shell dynamic created" << std::endl;
 
     std::cout << "[growth_study_core] stepping the surface for warmup: 0" << std::endl;
@@ -102,10 +130,28 @@ public:
     //  real f = 0.025, k = 0.0535;
 
     real da0 = 3.0e-4, db0 = 0.5 * da0;
-    reaction_diffusion::ptr rx0 =
-        reaction_diffusion::create(__M, f0, k0, da0, db0);
-    _rx0 = std::dynamic_pointer_cast<module_base>(rx0);
-    std::cerr << "[growth_study_core] reaction diffusion created" << std::endl;
+    switch (_rx_model) {
+    case growth_rx_model::grey_scott: {
+      reaction_diffusion::ptr rx0 =
+          reaction_diffusion::create(__M, f0, k0, da0, db0);
+      _rx0 = std::dynamic_pointer_cast<module_base>(rx0);
+      std::cerr << "[growth_study_core] reaction diffusion (Grey–Scott) created"
+                  << std::endl;
+      break;
+    }
+    case growth_rx_model::swift_hohenberg: {
+      swift_hohenberg::ptr sh = swift_hohenberg::create(__M, 0.04, 1.0);
+      _rx0 = std::dynamic_pointer_cast<module_base>(sh);
+      std::cerr << "[growth_study_core] Swift–Hohenberg created" << std::endl;
+      break;
+    }
+    case growth_rx_model::ginzburg_landau: {
+      ginzburg_landau::ptr gl = ginzburg_landau::create(__M, 1.2, 1.0);
+      _rx0 = std::dynamic_pointer_cast<module_base>(gl);
+      std::cerr << "[growth_study_core] Ginzburg–Landau created" << std::endl;
+      break;
+    }
+    }
     /*
     real f1 = 0.04, k1 = 0.065;
     real da1 = 2.00e-4, db1 = 0.5 * da1;
@@ -127,30 +173,44 @@ public:
         0.5 * (ext[0][2] + ext[1][2]));
   }
 
-  std::vector<vec4> get_mesh_colors() {
-    std::vector<vec4> colors(__M->vert_count(), vec4(1.0, 0.0, 0.0, 1.0));
-    std::vector<real> &rx0a =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxa();
-    std::vector<real> &rx0b =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxb();
-    /*
-        std::vector<real> &rx1a =
-            std::dynamic_pointer_cast<reaction_diffusion>(_rx1)->get_rxa();
-        std::vector<real> &rx1b =
-            std::dynamic_pointer_cast<reaction_diffusion>(_rx1)->get_rxb();
+  /// Optional min–max color map \f$t\in[0,1]\to\f$ RGBA (defaults to cool–warm).
+  void set_mesh_color_gradient(std::function<vec4(real)> g) {
+    _mesh_color_gradient = std::move(g);
+  }
 
-    */
-    vec4 col_a(1.0, 0.0, 1.0, 1.0);
-    vec4 col_b(0.0, 1.0, 1.0, 1.0);
-    vec4 col_c(1.0, 0.0, 1.0, 1.0);
-    for (int k = 0; k < __M->vert_count(); k++) {
-      vec4 col0 = 1.0 * rx0a[k] * col_a + //
-                  3.0 * rx0b[k] * col_b;
-      colors[k] = col0;
-      // if (k % 2 == 0)
-      //   colors[k] = vec4(0.0, 0.0, 1.0, 1.0);
+  std::vector<vec4> get_mesh_colors() {
+    auto default_grad = [](real t) {
+      return vec4(t, 0.15 + 0.85 * (1.0 - t), 1.0 - 0.4 * t, 1.0);
+    };
+    std::function<vec4(real)> grad =
+        _mesh_color_gradient ? *_mesh_color_gradient : default_grad;
+
+    switch (_rx_model) {
+    case growth_rx_model::grey_scott: {
+      std::vector<vec4> colors(__M->vert_count(), vec4(1.0, 0.0, 0.0, 1.0));
+      std::vector<real> &rx0a =
+          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxa();
+      std::vector<real> &rx0b =
+          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxb();
+      vec4 col_a(1.0, 0.0, 1.0, 1.0);
+      vec4 col_b(0.0, 1.0, 1.0, 1.0);
+      for (int k = 0; k < __M->vert_count(); k++) {
+        colors[k] = 1.0 * rx0a[k] * col_a + 3.0 * rx0b[k] * col_b;
+      }
+      return colors;
     }
-    return colors;
+    case growth_rx_model::swift_hohenberg: {
+      std::vector<real> u =
+          std::dynamic_pointer_cast<swift_hohenberg>(_rx0)->get_u();
+      return field_colors_minmax(u, grad);
+    }
+    case growth_rx_model::ginzburg_landau: {
+      auto gl = std::dynamic_pointer_cast<ginzburg_landau>(_rx0);
+      std::vector<real> mag = gl->amplitude_abs();
+      return field_colors_minmax(mag, grad);
+    }
+    }
+    return std::vector<vec4>(__M->vert_count(), vec4(1, 0, 0, 1));
   }
   vec3 get_origin() { return _origin; }
 
@@ -348,28 +408,51 @@ public:
   }
 
   std::vector<real> edge_rx_weights(asawa::shell::shell &shell) {
-    const std::vector<vec3> &x = asawa::const_get_vec_data(shell, 0);
     auto range = shell.get_edge_range();
     std::vector<real> g_edge(__M->edge_count(), 0.0);
 
-    std::vector<real> &rxa =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxa();
-    std::vector<real> &rxb =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxb();
-
-    for (auto c0 : range) {
-      asawa::shell::CornerId cid = asawa::shell::corner_id(c0);
-      int i = shell.vert(cid);
-      int j = shell.vert(shell.other(cid));
-
-      real ra = rxa[i] + rxa[j];
-      real rb = rxb[i] + rxb[j];
-      real dra = rxa[i] - rxa[j];
-      real drb = rxb[i] - rxb[j];
-      real dgrx = 3.0 * abs(drb) - 1.0 * abs(dra);
-      // real grx = (4.0 * rb - 1.0 * ra);
-
-      g_edge[c0 / 2] = dgrx;
+    switch (_rx_model) {
+    case growth_rx_model::grey_scott: {
+      std::vector<real> &rxa =
+          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxa();
+      std::vector<real> &rxb =
+          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxb();
+      for (auto c0 : range) {
+        asawa::shell::CornerId cid = asawa::shell::corner_id(c0);
+        int i = shell.vert(cid);
+        int j = shell.vert(shell.other(cid));
+        real dra = rxa[i] - rxa[j];
+        real drb = rxb[i] - rxb[j];
+        real dgrx = 3.0 * abs(drb) - 1.0 * abs(dra);
+        g_edge[c0 / 2] = dgrx;
+      }
+      break;
+    }
+    case growth_rx_model::swift_hohenberg: {
+      std::vector<real> u =
+          std::dynamic_pointer_cast<swift_hohenberg>(_rx0)->get_u();
+      for (auto c0 : range) {
+        asawa::shell::CornerId cid = asawa::shell::corner_id(c0);
+        int i = shell.vert(cid);
+        int j = shell.vert(shell.other(cid));
+        g_edge[c0 / 2] = std::abs(u[i] - u[j]);
+      }
+      break;
+    }
+    case growth_rx_model::ginzburg_landau: {
+      auto gl = std::dynamic_pointer_cast<ginzburg_landau>(_rx0);
+      const std::vector<real> &ru = gl->get_u();
+      const std::vector<real> &rv = gl->get_v();
+      for (auto c0 : range) {
+        asawa::shell::CornerId cid = asawa::shell::corner_id(c0);
+        int i = shell.vert(cid);
+        int j = shell.vert(shell.other(cid));
+        real ai = std::sqrt(ru[i] * ru[i] + rv[i] * rv[i]);
+        real aj = std::sqrt(ru[j] * ru[j] + rv[j] * rv[j]);
+        g_edge[c0 / 2] = std::abs(ai - aj);
+      }
+      break;
+    }
     }
     return g_edge;
   }
@@ -566,25 +649,81 @@ public:
     auto range = shell.get_vert_range();
 
     const std::vector<vec3> &x = asawa::const_get_vec_data(shell, 0);
-
-    std::vector<real> &rxa =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxa();
-    std::vector<real> &rxb =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxb();
     std::vector<vec3> N = asawa::shell::vertex_normals(shell, x);
 
-    for (auto i : range) {
-      real d = g_geodesic[i];
-      real d2 = pow(d, 3.0);
-      real d12 = pow(d, 1.0);
-      real ra = rxa[i];
-      real rb = rxb[i];
-      vec3 n = N[i];
-      vec3 f = d2 * (rb - 0.15 * ra) * n;
-      // vec3 f = d * (6.0 * rb - 0.5 * ra) * n;
-      N[i] = 8.0 * f;
+    switch (_rx_model) {
+    case growth_rx_model::grey_scott: {
+      std::vector<real> &rxa =
+          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxa();
+      std::vector<real> &rxb =
+          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxb();
+      for (auto i : range) {
+        real d = g_geodesic[i];
+        real d2 = pow(d, 3.0);
+        real ra = rxa[i];
+        real rb = rxb[i];
+        vec3 n = N[i];
+        vec3 f = d2 * (rb - 0.15 * ra) * n;
+        N[i] = 8.0 * f;
+      }
+      break;
+    }
+    case growth_rx_model::swift_hohenberg: {
+      std::vector<real> u =
+          std::dynamic_pointer_cast<swift_hohenberg>(_rx0)->get_u();
+      for (auto i : range) {
+        real d = g_geodesic[i];
+        real d2 = pow(d, 3.0);
+        vec3 n = N[i];
+        real ui = std::isfinite(u[i]) ? u[i] : 0.0;
+        vec3 f = d2 * ui * n;
+        N[i] = 8.0 * f;
+      }
+      break;
+    }
+    case growth_rx_model::ginzburg_landau: {
+      auto gl = std::dynamic_pointer_cast<ginzburg_landau>(_rx0);
+      const std::vector<real> &ru = gl->get_u();
+      const std::vector<real> &rv = gl->get_v();
+      for (auto i : range) {
+        real d = g_geodesic[i];
+        real d2 = pow(d, 3.0);
+        real rui = std::isfinite(ru[i]) ? ru[i] : 0.0;
+        real rvi = std::isfinite(rv[i]) ? rv[i] : 0.0;
+        real amp = std::sqrt(rui * rui + rvi * rvi);
+        vec3 n = N[i];
+        vec3 f = d2 * (amp - 0.15 * rui) * n;
+        N[i] = 8.0 * f;
+      }
+      break;
+    }
     }
     return N;
+  }
+
+  void calc_sh_params(const std::vector<real> &t) {
+    real e0 = 0.02, e1 = 0.07;
+    real g0 = 0.8, g1 = 1.6;
+    real l0 = 2.0e-4, l1 = 7.0e-4;
+    _eps_sh.resize(t.size());
+    _g_sh.resize(t.size());
+    _lam_sh.resize(t.size());
+    for (int i = 0; i < static_cast<int>(t.size()); i++) {
+      _eps_sh[i] = va::mix(t[i], e0, e1);
+      _g_sh[i] = va::mix(t[i], g0, g1);
+      _lam_sh[i] = va::mix(t[i], l0, l1);
+    }
+  }
+
+  void calc_gl_params(const std::vector<real> &t) {
+    real a0 = 0.8, a1 = 1.8;
+    real b0 = 0.6, b1 = 1.4;
+    _alpha_gl.resize(t.size());
+    _beta_gl.resize(t.size());
+    for (int i = 0; i < static_cast<int>(t.size()); i++) {
+      _alpha_gl[i] = va::mix(t[i], a0, a1);
+      _beta_gl[i] = va::mix(t[i], b0, b1);
+    }
   }
 
   void calc_kf(const std::vector<real> &t) {
@@ -616,13 +755,37 @@ public:
 
     const std::vector<real> d = vertex_geodesic_weight(*__M);
     calc_kf(d);
+    calc_sh_params(d);
+    calc_gl_params(d);
 
-    int N = frame == 1 ? 10 : 10;
-    for (int i = 0; i < N; i++) {
-      std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->step_anisotropic(
-          16.0 * _h, _f, _k);
-      //_rx0->step(20.0 * _h);
-      //_rx1->step(20.0 * _h);
+    // Grey–Scott: implicit Newton CN per substep tolerates large h.
+    // SH / CGLE: explicit reaction (+ explicit GL dispersive piece) — use small h
+    // and more substeps so we do not reuse the GS timestep scale verbatim.
+    const int N_gs = (frame == 1 ? 10 : 10);
+    const int N_explicit = 40;
+    const real h_gs = 16.0 * _h;
+    const real h_sh = 2.5e-4;
+    const real h_gl = 1.5e-4;
+
+    switch (_rx_model) {
+    case growth_rx_model::grey_scott:
+      for (int i = 0; i < N_gs; i++) {
+        std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->step_anisotropic(
+            h_gs, _f, _k, nullptr);
+      }
+      break;
+    case growth_rx_model::swift_hohenberg:
+      for (int i = 0; i < N_explicit; i++) {
+        std::dynamic_pointer_cast<swift_hohenberg>(_rx0)->step(
+            h_sh, _eps_sh, _g_sh, _lam_sh, nullptr);
+      }
+      break;
+    case growth_rx_model::ginzburg_landau:
+      for (int i = 0; i < N_explicit; i++) {
+        std::dynamic_pointer_cast<ginzburg_landau>(_rx0)->step(
+            h_gl, _alpha_gl, _beta_gl, nullptr);
+      }
+      break;
     }
     if (should_trace_frame(frame)) {
       std::cerr << "[growth_study_core] step_rx end" << std::endl;
@@ -641,8 +804,31 @@ public:
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     std::vector<vec3> &v = asawa::get_vec_data(*__M, 1);
 
+    if (_nan_probe && (frame % _nan_probe_stride == 0)) {
+      nan_probe_vec3("x(raw)", x);
+      nan_probe_vec3("v(raw)", v);
+    }
+
+    // Break NaN/Inf cascades into hepworth: integrate_inertia uses f → s in
+    // projection_solver (b = M*s + A^T*p); bending normals need finite q.
+    for (index_t ii = 0; ii < static_cast<index_t>(x.size()); ++ii) {
+      if (!x[ii].allFinite())
+        x[ii] = vec3::Zero();
+      if (!v[ii].allFinite())
+        v[ii] = vec3::Zero();
+    }
+
     std::vector<vec3> M = asawa::shell::vertex_areas_3(*__M, x);
+    const real m_min = 1e-14;
+    for (auto &mi : M) {
+      if (!mi.allFinite() || mi[0] < m_min)
+        mi = vec3(m_min, m_min, m_min);
+    }
     std::vector<real> li = asawa::shell::edge_lengths(*__M, x);
+    if (_nan_probe && (frame % _nan_probe_stride == 0)) {
+      nan_probe_scalar("li_edge_lengths(raw)", li);
+      nan_probe_tris_edges(frame, x, li);
+    }
 
     std::vector<vec3> Ns = asawa::shell::vertex_normals(*__M, x);
     std::vector<vec3> f(x.size(), vec3::Zero());
@@ -650,6 +836,11 @@ public:
     std::vector<vec3> f0 = covariant_forces(*__M, vec3(1.0, 1.0, 1.0));
     std::vector<vec3> f1 = rx_forces(*__M);
     std::vector<vec3> f2 = cylinder_forces(*__M);
+    if (_nan_probe && (frame % _nan_probe_stride == 0)) {
+      nan_probe_vec3("f0_covariant", f0);
+      nan_probe_vec3("f1_rx", f1);
+      nan_probe_vec3("f2_cylinder", f2);
+    }
     if (should_trace_frame(frame)) {
       std::cerr << "[growth_study_core] forces ready" << std::endl;
     }
@@ -664,14 +855,34 @@ public:
       // f[i] += 0.1 * f3[i];
     }
 
+    const real f_cap = 1e4 * std::max(_eps, real(1e-6));
+    for (auto &fi : f) {
+      if (!fi.allFinite()) {
+        fi = vec3::Zero();
+        continue;
+      }
+      real fn = fi.norm();
+      if (fn > f_cap && fn > 0.0)
+        fi *= f_cap / fn;
+    }
+
     std::vector<real> g = growth_weights(*__M);
+    if (_nan_probe && (frame % _nan_probe_stride == 0))
+      nan_probe_scalar("g_growth_weight(raw)", g);
     if (should_trace_frame(frame)) {
       std::cerr << "[growth_study_core] growth weights ready" << std::endl;
     }
 
+    for (real &gi : g) {
+      if (!std::isfinite(gi) || gi <= 0.0)
+        gi = 1.0;
+      gi = std::max(0.2, std::min(5.0, gi));
+    }
     for (int i = 0; i < li.size(); i++) {
       // std::cout << g[i] << " " << 1.0 / g[i] << std::endl;
       li[i] = g[i] * li[i];
+      if (!std::isfinite(li[i]) || li[i] <= 0.0)
+        li[i] = 1e-8;
     }
 
     hepworth::vec3_block::ptr X = hepworth::vec3_block::create(M, x, v, f);
@@ -757,16 +968,91 @@ public:
   }
 
   module_base::ptr _rx0;
-  // module_base::ptr _rx1;
+  growth_rx_model _rx_model;
+  std::optional<std::function<vec4(real)>> _mesh_color_gradient;
 
   vec3 _origin;
   real _h = 0.1;
   real _eps = 0.1;
   std::vector<real> _f;
   std::vector<real> _k;
+  std::vector<real> _eps_sh, _g_sh, _lam_sh;
+  std::vector<real> _alpha_gl, _beta_gl;
 
   shell::shell::ptr __M;
   shell::dynamic::ptr __surf;
+
+private:
+  bool _nan_probe = false;
+  int _nan_probe_stride = 1;
+
+  void nan_probe_vec3(const char *tag, const std::vector<vec3> &a) const {
+    if (!_nan_probe)
+      return;
+    for (index_t i = 0; i < static_cast<index_t>(a.size()); ++i) {
+      if (!a[i].allFinite()) {
+        std::cerr << "[growth_study nan_probe] " << tag << " first bad vert "
+                  << i << " -> " << a[i].transpose() << std::endl;
+        return;
+      }
+    }
+  }
+
+  void nan_probe_scalar(const char *tag, const std::vector<real> &a) const {
+    if (!_nan_probe)
+      return;
+    for (index_t i = 0; i < static_cast<index_t>(a.size()); ++i) {
+      if (!std::isfinite(a[i])) {
+        std::cerr << "[growth_study nan_probe] " << tag << " first bad idx "
+                  << i << " -> " << a[i] << std::endl;
+        return;
+      }
+    }
+  }
+
+  /// Degenerate / NaN faces and near-zero edges (bad triangulation / inverted
+  /// elements show up here before hepworth sees them).
+  void nan_probe_tris_edges(int frame, const std::vector<vec3> &x,
+                            const std::vector<real> &li) const {
+    if (!_nan_probe || (frame % _nan_probe_stride) != 0)
+      return;
+
+    std::vector<real> fa = asawa::shell::face_areas(*__M, x);
+    index_t badf = 0;
+    real amin = std::numeric_limits<real>::infinity();
+    for (index_t fi = 0; fi < static_cast<index_t>(fa.size()); ++fi) {
+      if (!std::isfinite(fa[fi]) || fa[fi] <= 1e-20) {
+        if (badf < 12)
+          std::cerr << "[growth_study nan_probe] face " << fi
+                    << " area=" << fa[fi] << std::endl;
+        ++badf;
+      } else {
+        amin = std::min(amin, fa[fi]);
+      }
+    }
+    std::cerr << "[growth_study nan_probe] frame=" << frame
+              << " faces=" << fa.size() << " bad_face_area=" << badf
+              << " min_pos_face_area="
+              << (std::isfinite(amin) ? amin : std::numeric_limits<real>::quiet_NaN())
+              << std::endl;
+
+    index_t bade = 0;
+    real lmin = std::numeric_limits<real>::infinity();
+    for (index_t e = 0; e < static_cast<index_t>(li.size()); ++e) {
+      if (!std::isfinite(li[e]) || li[e] <= 1e-20) {
+        if (bade < 12)
+          std::cerr << "[growth_study nan_probe] edge " << e
+                    << " len=" << li[e] << std::endl;
+        ++bade;
+      } else {
+        lmin = std::min(lmin, li[e]);
+      }
+    }
+    std::cerr << "[growth_study nan_probe] edges=" << li.size()
+              << " bad_edge_len=" << bade << " min_pos_edge_len="
+              << (std::isfinite(lmin) ? lmin : std::numeric_limits<real>::quiet_NaN())
+              << std::endl;
+  }
 };
 
 } // namespace duchamp

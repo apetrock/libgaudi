@@ -13,10 +13,14 @@
  *
  * **Shift–invert** with \f$\sigma\f$ and `LargestMagn` on \f$(A-\sigma I)^{-1}\f$ finds
  * eigenvalues of \f$A\f$ **closest** to \f$\sigma\f$ (mid-band / interior spectrum).
+ *
+ * Implementation: thin wrappers around `spectrum.hpp` (`sparse_sym_eigs_*`).
  */
 
 #ifndef __GAUDI_BONTECOU_LAPLACE_SPECTRUM__
 #define __GAUDI_BONTECOU_LAPLACE_SPECTRUM__
+
+#include "gaudi/bontecou/spectrum.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -26,18 +30,10 @@
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
 
-#include <Spectra/MatOp/SparseSymMatProd.h>
-#include <Spectra/MatOp/SparseSymShiftSolve.h>
-#include <Spectra/SymEigsShiftSolver.h>
-#include <Spectra/SymEigsSolver.h>
-
 namespace gaudi {
 namespace bontecou {
-#ifndef GAUDI_BONTECOU_SCALAR_ALIASES
-#define GAUDI_BONTECOU_SCALAR_ALIASES
-using real = double;
-using index_t = int;
-#endif
+
+// `real` / `index_t` come from `spectrum.hpp`.
 
 /// Build \f$L + \varepsilon I\f$ (sparse).
 inline Eigen::SparseMatrix<real>
@@ -94,8 +90,6 @@ inline void log_laplace_eigen_stats(const Eigen::SparseMatrix<real> &L, index_t 
   const real sigma = std::sqrt(std::max(real(0), var));
   const real l2 = x.norm();
   const real span = mx - mn;
-  // For unit L2 eigenvectors on large n, per-vertex RMS is ~1/sqrt(n); sigma is
-  // often ~that scale, so many adjacent high-frequency modes look similar here.
   const real rms_uniform = real(1) / std::sqrt(static_cast<real>(n));
   std::cerr << "[laplace_spectrum] mode " << mode_j << "  lambda=" << lambda
             << "  |phi|_2=" << l2 << "  phi_span=" << span << "  phi_sigma=" << sigma
@@ -111,29 +105,14 @@ inline void log_laplace_eigen_stats(const Eigen::SparseMatrix<real> &L, index_t 
 /// Spectra), `evecs` is `n × k` with columns as eigenvectors.
 ///
 /// @param ncv  Krylov size; if `<= 0`, uses `min(n, max(2*k+1, k+8))`.
+/// @param warm_start  Optional Lanczos start (length `n`); see `spectrum.hpp`.
 /// @return     `true` if `CompInfo::Successful`.
 inline bool laplace_eigs_largest_magnitude(const Eigen::SparseMatrix<real> &L_reg,
                                            index_t k, index_t ncv,
                                            Eigen::VectorXd &evals,
-                                           Eigen::MatrixXd &evecs) {
-  const index_t n = static_cast<index_t>(L_reg.rows());
-  if (n < 2 || k <= 0 || L_reg.cols() != n)
-    return false;
-  // Spectra requires nev <= n - 1
-  k = std::min(k, n - 1);
-  if (ncv <= 0)
-    ncv = std::min(n, std::max(2 * k + 1, k + 8));
-  ncv = std::min(std::max(ncv, k + 1), n);
-
-  Spectra::SparseSymMatProd<real> op(L_reg);
-  Spectra::SymEigsSolver<Spectra::SparseSymMatProd<real>> eigs(op, k, ncv);
-  eigs.init();
-  eigs.compute(Spectra::SortRule::LargestMagn);
-  if (eigs.info() != Spectra::CompInfo::Successful)
-    return false;
-  evals = eigs.eigenvalues();
-  evecs = eigs.eigenvectors();
-  return true;
+                                           Eigen::MatrixXd &evecs,
+                                           const Eigen::VectorXd *warm_start = nullptr) {
+  return sparse_sym_eigs_largest_magnitude(L_reg, k, ncv, evals, evecs, warm_start);
 }
 
 /// Low-frequency batch: \f$k\f$ eigenpairs with **smallest algebraic** eigenvalues of
@@ -144,24 +123,9 @@ inline bool laplace_eigs_largest_magnitude(const Eigen::SparseMatrix<real> &L_re
 /// Same `evals` / `evecs` layout as `laplace_eigs_largest_magnitude`.
 inline bool laplace_eigs_low_frequency(const Eigen::SparseMatrix<real> &A_reg, index_t k,
                                        index_t ncv, Eigen::VectorXd &evals,
-                                       Eigen::MatrixXd &evecs) {
-  const index_t n = static_cast<index_t>(A_reg.rows());
-  if (n < 2 || k <= 0 || A_reg.cols() != n)
-    return false;
-  k = std::min(k, n - 1);
-  if (ncv <= 0)
-    ncv = std::min(n, std::max(2 * k + 1, k + 8));
-  ncv = std::min(std::max(ncv, k + 1), n);
-
-  Spectra::SparseSymMatProd<real> op(A_reg);
-  Spectra::SymEigsSolver<Spectra::SparseSymMatProd<real>> eigs(op, k, ncv);
-  eigs.init();
-  eigs.compute(Spectra::SortRule::SmallestAlge);
-  if (eigs.info() != Spectra::CompInfo::Successful)
-    return false;
-  evals = eigs.eigenvalues();
-  evecs = eigs.eigenvectors();
-  return true;
+                                       Eigen::MatrixXd &evecs,
+                                       const Eigen::VectorXd *warm_start = nullptr) {
+  return sparse_sym_eigs_smallest_algebraic(A_reg, k, ncv, evals, evecs, warm_start);
 }
 
 /// \f$k\f$ eigenpairs whose eigenvalues of \f$A\f$ lie **nearest** to \f$\sigma\f$
@@ -169,44 +133,23 @@ inline bool laplace_eigs_low_frequency(const Eigen::SparseMatrix<real> &A_reg, i
 /// Fails if \f$A-\sigma I\f$ is singular or factorization breaks.
 ///
 /// @param ncv  if `<= 0`, uses `min(n, max(3*k+2, 2*k+12))` (shift mode wants larger Krylov).
+/// @param warm_start  Optional Lanczos start (length `n`).
 inline bool laplace_eigs_shift_invert_nearest(const Eigen::SparseMatrix<real> &A_reg,
                                               real sigma, index_t k, index_t ncv,
                                               Eigen::VectorXd &evals,
-                                              Eigen::MatrixXd &evecs) {
-  const index_t n = static_cast<index_t>(A_reg.rows());
-  if (n < 2 || k <= 0 || A_reg.cols() != n)
-    return false;
-  k = std::min(k, n - 1);
-  if (ncv <= 0)
-    ncv = std::min(n, std::max(3 * k + 2, 2 * k + 12));
-  ncv = std::min(std::max(ncv, k + 1), n);
-
-  try {
-    Spectra::SparseSymShiftSolve<real> op(A_reg);
-    Spectra::SymEigsShiftSolver<Spectra::SparseSymShiftSolve<real>> eigs(op, k, ncv,
-                                                                         sigma);
-    eigs.init();
-    eigs.compute(Spectra::SortRule::LargestMagn);
-    if (eigs.info() != Spectra::CompInfo::Successful)
-      return false;
-    evals = eigs.eigenvalues();
-    evecs = eigs.eigenvectors();
-    return true;
-  } catch (const std::invalid_argument &e) {
-    std::cerr << "[laplace_spectrum] shift-invert: " << e.what() << "\n";
-    return false;
-  } catch (const std::exception &e) {
-    std::cerr << "[laplace_spectrum] shift-invert: " << e.what() << "\n";
-    return false;
-  }
+                                              Eigen::MatrixXd &evecs,
+                                              const Eigen::VectorXd *warm_start = nullptr) {
+  return sparse_sym_eigs_shift_invert_nearest(A_reg, sigma, k, ncv, evals, evecs,
+                                              warm_start);
 }
 
 /// Back-compat alias for `laplace_eigs_low_frequency`.
 inline bool laplace_eigs_smallest_magnitude(const Eigen::SparseMatrix<real> &L_reg,
                                             index_t k, index_t ncv,
                                             Eigen::VectorXd &evals,
-                                            Eigen::MatrixXd &evecs) {
-  return laplace_eigs_low_frequency(L_reg, k, ncv, evals, evecs);
+                                            Eigen::MatrixXd &evecs,
+                                            const Eigen::VectorXd *warm_start = nullptr) {
+  return laplace_eigs_low_frequency(L_reg, k, ncv, evals, evecs, warm_start);
 }
 
 } // namespace bontecou

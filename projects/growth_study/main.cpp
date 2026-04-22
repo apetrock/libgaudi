@@ -64,6 +64,7 @@ public:
     */
 
     __surf = gaudi::duchamp::growth_study::create();
+     __surf->set_nan_probe(true, 1); // stderr: first NaN per field + tri/edge stats
     std::cerr << "[growth_study] surface created" << std::endl;
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
     colors = {

@@ -9,9 +9,11 @@
 #include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/common.h"
 
+#include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <cmath>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace gaudi {
@@ -127,6 +129,24 @@ build_vector_dirichlet_energy(asawa::shell::shell &M,
   if (out_num_edge_dofs)
     *out_num_edge_dofs = nE;
   return L;
+}
+
+/// Pack a length \f$2 n_E\f$ DOF vector (one eigenvector column, etc.) into \f$n_E\f$
+/// per-edge `vec2` values. Indexing matches `build_vector_dirichlet_energy`:
+/// first component at global indices `0 … n_E-1`, second at `n_E … 2 n_E-1`.
+inline std::vector<vec2> pack_vector_dirichlet_dof_to_vec2(const Eigen::VectorXd &u,
+                                                           int num_edge_dofs) {
+  if (u.size() != 2 * num_edge_dofs) {
+    throw std::runtime_error(
+        "bontecou::pack_vector_dirichlet_dof_to_vec2: expected u.size() == 2 * "
+        "num_edge_dofs (got " +
+        std::to_string(static_cast<int>(u.size())) + " vs 2*" +
+        std::to_string(num_edge_dofs) + ")");
+  }
+  std::vector<vec2> out(static_cast<size_t>(num_edge_dofs));
+  for (int i = 0; i < num_edge_dofs; ++i)
+    out[static_cast<size_t>(i)] = vec2(u(i), u(i + num_edge_dofs));
+  return out;
 }
 
 } // namespace bontecou

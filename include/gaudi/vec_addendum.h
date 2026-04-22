@@ -1305,13 +1305,15 @@ T solidAngle(const VEC3<T> &pi, const VEC3<T> &p0, const VEC3<T> &p1,
   template <typename T>
   bool greater_than(const VEC3<T> &A, const VEC3<T> &B)
   {
-    return (A.array() > B.array()).sum() > 0;
+    return (static_cast<int>(A[0] > B[0]) + static_cast<int>(A[1] > B[1]) +
+            static_cast<int>(A[2] > B[2])) > 0;
   };
 
   template <typename T>
   bool less_than(const VEC3<T> &A, const VEC3<T> &B)
   {
-    return (A.array() < B.array()).sum() > 0;
+    return (static_cast<int>(A[0] < B[0]) + static_cast<int>(A[1] < B[1]) +
+            static_cast<int>(A[2] < B[2])) > 0;
   };
 
   template <typename T>

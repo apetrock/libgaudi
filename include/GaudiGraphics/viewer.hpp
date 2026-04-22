@@ -1186,6 +1186,11 @@ public:
 
   void set_rotate_ball(bool rotate) { _rotate_ball = rotate; }
 
+  /// Continuous redraw + `Scene::onAnimate` (and optional arcball spin when
+  /// `rotate_ball` is enabled). **W** toggles; default is off.
+  void set_animate(bool on) { _animate = on; }
+  bool animate_enabled() const { return _animate; }
+
 private:
 
   struct {

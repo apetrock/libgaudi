@@ -153,12 +153,25 @@ class laplacian {
 public:
   typedef Eigen::SparseMatrix<real> sparmat;
 
-  laplacian(asawa::shell::shell::ptr M, const std::vector<vec3> &x)
+  /// When \p defer_init_C is true, only \ref initM runs; stiffness \ref _matC is left
+  /// zero-sized until \ref set_stiffness or \ref initC is called.
+  explicit laplacian(asawa::shell::shell::ptr M, const std::vector<vec3> &x,
+                     bool defer_init_C = false)
       : __M(M), __x(x) {
-    this->init();
+    initM();
+    if (!defer_init_C)
+      initC();
   }
 
   ~laplacian() {}
+
+  /// Replace cotan stiffness with an externally-built matrix (e.g. anisotropic cotan).
+  /// Caller must supply \c nv×\c nv sparse matrix matching \ref build_lap conventions.
+  void set_stiffness(const sparmat &C) {
+    _matC = C;
+    if (_matM.rows() == 0)
+      initM();
+  }
 
   void printC() {
     print_lap(
