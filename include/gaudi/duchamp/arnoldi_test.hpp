@@ -13,7 +13,7 @@
 #include "gaudi/asawa/primitive_objects.hpp"
 #include "gaudi/common.h"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 #include "gaudi/calder/least_squares_fit.hpp"
 #include "gaudi/calder/shell_integrators.hpp"
 #include "gaudi/calder/tangent_point_integrators.hpp"

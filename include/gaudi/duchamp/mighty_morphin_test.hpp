@@ -19,7 +19,7 @@
 #include "gaudi/common.h"
 #include "gaudi/define_create_func.h"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 #include "gaudi/duchamp/modules/mighty_morphin.hpp"
 #include "modules/ccd.hpp"
 #include "modules/mighty_morphin.hpp"

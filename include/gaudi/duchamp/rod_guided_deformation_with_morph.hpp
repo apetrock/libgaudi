@@ -19,7 +19,7 @@
 
 #include "gaudi/asawa/shell/walk.hpp"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 #include "gaudi/calder/least_squares_fit.hpp"
 #include "gaudi/calder/tangent_point_integrators.hpp"
 
@@ -558,7 +558,7 @@ namespace gaudi
         vec3_datum::ptr x_datum =
             static_pointer_cast<vec3_datum>(__M->get_datum(0));
         std::vector<vec3> &x = x_datum->data();
-        bontecou::laplacian3 M(__M, x, true);
+        kusama::laplacian3 M(__M, x, true);
         M.init();
         real cc = C / 100.0;
         for (int k = 0; k < N; k++)

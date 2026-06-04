@@ -17,10 +17,10 @@
  * Implementation: thin wrappers around `spectrum.hpp` (`sparse_sym_eigs_*`).
  */
 
-#ifndef __GAUDI_BONTECOU_LAPLACE_SPECTRUM__
-#define __GAUDI_BONTECOU_LAPLACE_SPECTRUM__
+#ifndef __GAUDI_KUSAMA_LAPLACE_SPECTRUM__
+#define __GAUDI_KUSAMA_LAPLACE_SPECTRUM__
 
-#include "gaudi/bontecou/spectrum.hpp"
+#include "gaudi/kusama/spectrum.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -31,7 +31,7 @@
 #include <Eigen/SparseCore>
 
 namespace gaudi {
-namespace bontecou {
+namespace kusama {
 
 // `real` / `index_t` come from `spectrum.hpp`.
 
@@ -152,7 +152,7 @@ inline bool laplace_eigs_smallest_magnitude(const Eigen::SparseMatrix<real> &L_r
   return laplace_eigs_low_frequency(L_reg, k, ncv, evals, evecs, warm_start);
 }
 
-} // namespace bontecou
+} // namespace kusama
 } // namespace gaudi
 
 #endif

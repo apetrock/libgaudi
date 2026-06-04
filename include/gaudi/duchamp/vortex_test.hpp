@@ -19,7 +19,7 @@
 #include "gaudi/common.h"
 #include "gaudi/define_create_func.h"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 #include "gaudi/duchamp/modules/vortex.hpp"
 #include "gaudi/calder/least_squares_fit.hpp"
 #include "modules/module_base.hpp"
@@ -227,7 +227,7 @@ namespace gaudi
         vec3_datum::ptr x_datum =
             static_pointer_cast<vec3_datum>(__M->get_datum(0));
         std::vector<vec3> &x = x_datum->data();
-        bontecou::laplacian3 M(__M, x, true);
+        kusama::laplacian3 M(__M, x, true);
         M.init();
         real cc = C / 100.0;
         for (int k = 0; k < N; k++)

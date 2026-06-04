@@ -19,7 +19,7 @@
 #include "gaudi/common.h"
 #include "gaudi/define_create_func.h"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 
 #include "modules/cross.hpp"
 #include "modules/module_base.hpp"

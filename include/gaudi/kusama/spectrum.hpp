@@ -5,8 +5,8 @@
  * No mesh or Laplacian assumptions — see `laplace_spectrum.hpp` for cotan-specific docs.
  */
 
-#ifndef GAUDI_BONTECOU_SPECTRUM_HPP
-#define GAUDI_BONTECOU_SPECTRUM_HPP
+#ifndef GAUDI_KUSAMA_SPECTRUM_HPP
+#define GAUDI_KUSAMA_SPECTRUM_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -22,7 +22,7 @@
 #include <Spectra/SymEigsSolver.h>
 
 namespace gaudi {
-namespace bontecou {
+namespace kusama {
 
 using real = double;
 using index_t = int;
@@ -122,7 +122,7 @@ inline bool sparse_sym_eigs_shift_invert_nearest(const Eigen::SparseMatrix<real>
   }
 }
 
-} // namespace bontecou
+} // namespace kusama
 } // namespace gaudi
 
 #endif

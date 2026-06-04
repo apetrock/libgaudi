@@ -3,7 +3,7 @@
 #define __DUCHAMP_VORTEX_MODULE__
 
 #include "gaudi/asawa/datums.hpp"
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 #include "gaudi/common.h"
 #include "module_base_shell.hpp"
 #include <vector>

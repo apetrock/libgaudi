@@ -36,9 +36,9 @@
 #include "gaudi/geometry_logger.hpp"
 
 namespace gaudi {
-namespace bontecou {
-#ifndef GAUDI_BONTECOU_SCALAR_ALIASES
-#define GAUDI_BONTECOU_SCALAR_ALIASES
+namespace kusama {
+#ifndef GAUDI_KUSAMA_SCALAR_ALIASES
+#define GAUDI_KUSAMA_SCALAR_ALIASES
 using real = double;
 using index_t = int;
 #endif
@@ -67,15 +67,15 @@ build_lap(asawa::shell::shell &M,     //
   index_t edge_count = M.edge_count();
 
   if (!M.verts_are_dense_packed()) {
-    std::cerr << "[bontecou::build_lap] Shell vertices must be dense-packed: every "
+    std::cerr << "[kusama::build_lap] Shell vertices must be dense-packed: every "
                  "slot 0..vert_count-1 active (vbegin >= 0). "
                  "Call asawa::shell::pack(M) and keep vertex data permuted with it.\n";
-    throw std::runtime_error("bontecou::build_lap: shell vertices not dense-packed");
+    throw std::runtime_error("kusama::build_lap: shell vertices not dense-packed");
   }
   if (static_cast<size_t>(x.size()) != static_cast<size_t>(vert_count)) {
-    std::cerr << "[bontecou::build_lap] Position count " << x.size()
+    std::cerr << "[kusama::build_lap] Position count " << x.size()
               << " != vert_count " << vert_count << "\n";
-    throw std::runtime_error("bontecou::build_lap: position vector size mismatch");
+    throw std::runtime_error("kusama::build_lap: position vector size mismatch");
   }
 
   std::vector<triplet> tripletList;
@@ -414,6 +414,26 @@ public:
 
   /// Cotangent stiffness matrix (weak Laplacian / graph Laplacian sign used here).
   const sparmat &stiffness() const { return _matC; }
+  const sparmat &mass() const { return _matM; }
+
+  /// Assemble Crank--Nicolson system matrix for scalar diffusion, same as `diffuse2`.
+  sparmat cn_diffusion_matrix(real h) const {
+    return 2.0 * _matM - h * _matC;
+  }
+
+  /// Solve a generic system `A x = rhs` with the same `SimplicialLDLT` back-end as
+  /// `diffuse2` (copies \p A; factorization is repeated each call – OK for 2N CGLE
+  /// direct solve or a few G–S iters).
+  std::vector<real> solve_system_copy(sparmat A, const std::vector<real> &rhs) {
+    vecX br = to(rhs);
+    return from(solve(A, br));
+  }
+
+  /// Map vertex-range vector to / from compressed storage (exposed for coupled blocks).
+  vecX to_eigen(const std::vector<real> &u) const { return to(u); }
+  std::vector<real> from_eigen(const vecX &b) const { return from(b); }
+  const sparmat *mass_ptr() const { return &_matM; }
+  const sparmat *stiffness_ptr() const { return &_matC; }
 
   bool inited = false;
 
@@ -486,84 +506,6 @@ private:
   const std::vector<vec3> &__x;
 };
 
-std::array<real, 2> grey_scott(std::array<real, 2> uv0a, const real &f,
-                               const real &k, const real &h, const int N = 40) {
-  // first order formulation
-  vec2 uv0 = vec2(uv0a[0], uv0a[1]);
-  vec2 uvi = uv0;
-  for (int j = 0; j < N; j++) {
-    real u = uvi[0];
-    real v = uvi[1];
-    real uv2 = u * v * v;
-    real v2 = v * v;
-    real uv = u * v;
-    vec2 G;
-    G(0) = (-uv2 + f * (1.0 - u));
-    G(1) = (uv2 - (f + k) * v);
-
-    vec2 F = uvi - uv0 - h * G;
-    mat2 dG;
-    dG(0, 0) = -(v2 + f);
-    dG(0, 1) = -2.0 * uv;
-    dG(1, 0) = v2;
-    dG(1, 1) = 2.0 * uv - (f + k);
-
-    mat2 dF = mat2::Identity() - h * dG;
-    // Compute LU decomposition of dF
-    Eigen::PartialPivLU<mat2> lu = dF.partialPivLu();
-    // Solve the linear system using LU decomposition
-    uvi += lu.solve(-F);
-
-    if (F.norm() < 1.0e-12)
-      break;
-  }
-  return {uvi[0], uvi[1]};
-}
-
-std::array<real, 2> grey_scott_2(std::array<real, 2> uv0a, const real &f,
-                                 const real &k, const real &h,
-                                 const int N = 40) {
-  // second order formulation
-  vec2 uv0 = vec2(uv0a[0], uv0a[1]);
-  real u0 = uv0[0];
-  real v0 = uv0[1];
-  real uv20 = u0 * v0 * v0;
-  vec2 G0;
-  G0(0) = (-uv20 + f * (1.0 - u0));
-  G0(1) = (uv20 - (f + k) * v0);
-
-  vec2 uvi = uv0;
-
-  for (int j = 0; j < N; j++) {
-    real u = uvi[0];
-    real v = uvi[1];
-    real uv2 = u * v * v;
-
-    real v2 = v * v;
-    real uv = u * v;
-    vec2 G;
-    G(0) = (-uv2 + f * (1.0 - u));
-    G(1) = (uv2 - (f + k) * v);
-
-    vec2 F = uvi - uv0 - 0.5 * h * (G + G0);
-    mat2 dG;
-    dG(0, 0) = -(v2 + f);
-    dG(0, 1) = -2.0 * uv;
-    dG(1, 0) = v2;
-    dG(1, 1) = 2.0 * uv - (f + k);
-
-    mat2 dF = mat2::Identity() - 0.5 * h * dG;
-    // Compute LU decomposition of dF
-    Eigen::PartialPivLU<mat2> lu = dF.partialPivLu();
-    // Solve the linear system using LU decomposition
-    uvi += lu.solve(-F);
-
-    if (F.norm() < 1.0e-12)
-      break;
-  }
-  return {uvi[0], uvi[1]};
-}
-
-} // namespace bontecou
+} // namespace kusama
 } // namespace gaudi
 #endif

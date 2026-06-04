@@ -14,7 +14,7 @@
 
 #include "gaudi/asawa/shell/walk.hpp"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 
 #include "gaudi/hepworth/block/shell_constraints.hpp"
 #include "gaudi/hepworth/block/shell_constraints_init.hpp"

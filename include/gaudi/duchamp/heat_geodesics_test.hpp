@@ -9,7 +9,7 @@
 #include "GaudiGraphics/geometry_logger.h"
 
 #include "gaudi/arp/arp.h"
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 #include "gaudi/vec_addendum.h"
 
 #include "gaudi/asawa/primitive_objects.hpp"
@@ -368,7 +368,7 @@ public:
     std::cout << " min/max ids: " << mni << " " << mxi << " w: " << w[mni]
               << " " << w[mxi] << std::endl;
 
-    bontecou::laplacian L(__M, x);
+    kusama::laplacian L(__M, x);
     std::vector<real> d = L.heatDist(f, 0.2);
     for (int i = 0; i < __M->vert_count(); i++) {
       vec3 N = vert_normal(*__M, i, x);
@@ -408,7 +408,7 @@ public:
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-    bontecou::laplacian3 M(__M, x);
+    kusama::laplacian3 M(__M, x);
 
     for (int k = 0; k < N; k++) {
       std::cout << "." << std::flush;

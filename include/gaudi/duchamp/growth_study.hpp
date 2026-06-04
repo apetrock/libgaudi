@@ -12,7 +12,9 @@
 #include "gaudi/asawa/shell/walk.hpp"
 #include "gaudi/asawa/datums.hpp"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
+#include "gaudi/kusama/laplacian_anisotropic.hpp"
+#include "gaudi/duchamp/modules/rx_diffuse.hpp"
 
 #include "gaudi/hepworth/block/generic_constraints.hpp"
 #include "gaudi/hepworth/block/generic_constraints_init.hpp"
@@ -28,10 +30,11 @@
 #include "gaudi/common.h"
 #include "gaudi/logger.hpp"
 
-#include "modules/ginzburg_landau.hpp"
-#include "modules/reaction_diffusion.hpp"
+#include "modules/rx/ginzburg_landau.hpp"
+#include "modules/rx/grey_scott.hpp"
 #include "modules/rx_colormap.hpp"
-#include "modules/swift_hohenberg.hpp"
+#include "modules/rx/swift_hohenberg.hpp"
+#include <Eigen/Sparse>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -132,21 +135,21 @@ public:
     real da0 = 3.0e-4, db0 = 0.5 * da0;
     switch (_rx_model) {
     case growth_rx_model::grey_scott: {
-      reaction_diffusion::ptr rx0 =
-          reaction_diffusion::create(__M, f0, k0, da0, db0);
+      rx::grey_scott::ptr rx0 =
+          rx::grey_scott::create(__M, f0, k0, da0, db0);
       _rx0 = std::dynamic_pointer_cast<module_base>(rx0);
       std::cerr << "[growth_study_core] reaction diffusion (Grey–Scott) created"
                   << std::endl;
       break;
     }
     case growth_rx_model::swift_hohenberg: {
-      swift_hohenberg::ptr sh = swift_hohenberg::create(__M, 0.04, 1.0);
+      rx::swift_hohenberg::ptr sh = rx::swift_hohenberg::create(__M, 0.04, 1.0);
       _rx0 = std::dynamic_pointer_cast<module_base>(sh);
       std::cerr << "[growth_study_core] Swift–Hohenberg created" << std::endl;
       break;
     }
     case growth_rx_model::ginzburg_landau: {
-      ginzburg_landau::ptr gl = ginzburg_landau::create(__M, 1.2, 1.0);
+      rx::ginzburg_landau::ptr gl = rx::ginzburg_landau::create(__M, 1.2, 1.0);
       _rx0 = std::dynamic_pointer_cast<module_base>(gl);
       std::cerr << "[growth_study_core] Ginzburg–Landau created" << std::endl;
       break;
@@ -155,8 +158,8 @@ public:
     /*
     real f1 = 0.04, k1 = 0.065;
     real da1 = 2.00e-4, db1 = 0.5 * da1;
-    reaction_diffusion::ptr rx1 =
-        reaction_diffusion::create(__M, f1, k1, da1, db1);
+    rx::grey_scott::ptr rx1 =
+        rx::grey_scott::create(__M, f1, k1, da1, db1);
     _rx1 = std::dynamic_pointer_cast<module_base>(rx1);
 */
     init_origin();
@@ -189,9 +192,9 @@ public:
     case growth_rx_model::grey_scott: {
       std::vector<vec4> colors(__M->vert_count(), vec4(1.0, 0.0, 0.0, 1.0));
       std::vector<real> &rx0a =
-          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxa();
+          std::dynamic_pointer_cast<rx::grey_scott>(_rx0)->get_rxa();
       std::vector<real> &rx0b =
-          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxb();
+          std::dynamic_pointer_cast<rx::grey_scott>(_rx0)->get_rxb();
       vec4 col_a(1.0, 0.0, 1.0, 1.0);
       vec4 col_b(0.0, 1.0, 1.0, 1.0);
       for (int k = 0; k < __M->vert_count(); k++) {
@@ -201,11 +204,11 @@ public:
     }
     case growth_rx_model::swift_hohenberg: {
       std::vector<real> u =
-          std::dynamic_pointer_cast<swift_hohenberg>(_rx0)->get_u();
+          std::dynamic_pointer_cast<rx::swift_hohenberg>(_rx0)->get_u();
       return field_colors_minmax(u, grad);
     }
     case growth_rx_model::ginzburg_landau: {
-      auto gl = std::dynamic_pointer_cast<ginzburg_landau>(_rx0);
+      auto gl = std::dynamic_pointer_cast<rx::ginzburg_landau>(_rx0);
       std::vector<real> mag = gl->amplitude_abs();
       return field_colors_minmax(mag, grad);
     }
@@ -215,6 +218,7 @@ public:
   vec3 get_origin() { return _origin; }
 
   index_t get_new_origin(asawa::shell::shell &shell) {
+    //oof, we have acceleration structures we should use them.
     const std::vector<vec3> &x = asawa::const_get_vec_data(shell, 0);
     index_t imin = 0.0;
     real min = std::numeric_limits<real>::max();
@@ -238,7 +242,7 @@ public:
     std::vector<real> f(shell.vert_count(), 0.0);
     f[imin] = 1.0;
 
-    bontecou::laplacian L(__M, x);
+    kusama::laplacian L(__M, x);
     std::vector<real> d = L.heatDist(f, 0.2);
     return d;
   }
@@ -414,9 +418,9 @@ public:
     switch (_rx_model) {
     case growth_rx_model::grey_scott: {
       std::vector<real> &rxa =
-          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxa();
+          std::dynamic_pointer_cast<rx::grey_scott>(_rx0)->get_rxa();
       std::vector<real> &rxb =
-          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxb();
+          std::dynamic_pointer_cast<rx::grey_scott>(_rx0)->get_rxb();
       for (auto c0 : range) {
         asawa::shell::CornerId cid = asawa::shell::corner_id(c0);
         int i = shell.vert(cid);
@@ -430,7 +434,7 @@ public:
     }
     case growth_rx_model::swift_hohenberg: {
       std::vector<real> u =
-          std::dynamic_pointer_cast<swift_hohenberg>(_rx0)->get_u();
+          std::dynamic_pointer_cast<rx::swift_hohenberg>(_rx0)->get_u();
       for (auto c0 : range) {
         asawa::shell::CornerId cid = asawa::shell::corner_id(c0);
         int i = shell.vert(cid);
@@ -440,7 +444,7 @@ public:
       break;
     }
     case growth_rx_model::ginzburg_landau: {
-      auto gl = std::dynamic_pointer_cast<ginzburg_landau>(_rx0);
+      auto gl = std::dynamic_pointer_cast<rx::ginzburg_landau>(_rx0);
       const std::vector<real> &ru = gl->get_u();
       const std::vector<real> &rv = gl->get_v();
       for (auto c0 : range) {
@@ -466,7 +470,7 @@ public:
     std::vector<real> f(shell.vert_count(), 0.0);
     f[imin] = 1.0;
 
-    bontecou::laplacian L(__M, x);
+    kusama::laplacian L(__M, x);
 
     std::vector<real> d = L.heatDist(f, 0.2);
     std::vector<mat3> F = L.heatFrame(f, 0.2);
@@ -587,7 +591,7 @@ public:
     index_t imin = get_new_origin(shell);
     std::vector<real> fh(shell.vert_count(), 0.0);
     fh[imin] = 1.0;
-    bontecou::laplacian L(__M, x);
+    kusama::laplacian L(__M, x);
     std::vector<real> d = L.heatDist(fh, 0.2);
     std::vector<mat3> F_f = L.heatFrame(fh, 0.2);
     std::vector<mat3> F_v = asawa::shell::face_to_vert<mat3>(shell, F_f);
@@ -654,9 +658,9 @@ public:
     switch (_rx_model) {
     case growth_rx_model::grey_scott: {
       std::vector<real> &rxa =
-          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxa();
+          std::dynamic_pointer_cast<rx::grey_scott>(_rx0)->get_rxa();
       std::vector<real> &rxb =
-          std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->get_rxb();
+          std::dynamic_pointer_cast<rx::grey_scott>(_rx0)->get_rxb();
       for (auto i : range) {
         real d = g_geodesic[i];
         real d2 = pow(d, 3.0);
@@ -670,7 +674,7 @@ public:
     }
     case growth_rx_model::swift_hohenberg: {
       std::vector<real> u =
-          std::dynamic_pointer_cast<swift_hohenberg>(_rx0)->get_u();
+          std::dynamic_pointer_cast<rx::swift_hohenberg>(_rx0)->get_u();
       for (auto i : range) {
         real d = g_geodesic[i];
         real d2 = pow(d, 3.0);
@@ -682,7 +686,7 @@ public:
       break;
     }
     case growth_rx_model::ginzburg_landau: {
-      auto gl = std::dynamic_pointer_cast<ginzburg_landau>(_rx0);
+      auto gl = std::dynamic_pointer_cast<rx::ginzburg_landau>(_rx0);
       const std::vector<real> &ru = gl->get_u();
       const std::vector<real> &rv = gl->get_v();
       for (auto i : range) {
@@ -753,36 +757,59 @@ public:
                 << std::endl;
     }
 
+    const std::vector<vec3> &x_pos = asawa::const_get_vec_data(*__M, 0);
+    _C_aniso = kusama::build_curvature_aligned_laplacian(
+        *__M, x_pos, _aniso_vd_lambda, _aniso_sigma_u, _aniso_sigma_v,
+        asawa::shell::face_curvature_stencil::one_ring, _aniso_kind);
+
+    if (_rx_model == growth_rx_model::grey_scott) {
+      std::dynamic_pointer_cast<rx::grey_scott>(_rx0)->set_diffuse_smooth(
+          std::make_optional<rx_smooth_fn>([this](std::vector<real> &f, real dt) {
+            const std::vector<vec3> &xp = asawa::const_get_vec_data(*__M, 0);
+            rx_diffuse_scalar_implicit_cotan(__M, xp, f, dt, &_C_aniso);
+          }));
+    } else if (_rx_model == growth_rx_model::swift_hohenberg) {
+      std::dynamic_pointer_cast<rx::swift_hohenberg>(_rx0)->set_diffuse_smooth(
+          std::make_optional<rx_smooth_fn>([this](std::vector<real> &f, real dt) {
+            const std::vector<vec3> &xp = asawa::const_get_vec_data(*__M, 0);
+            rx_diffuse_scalar_implicit_cotan(__M, xp, f, dt, &_C_aniso);
+          }));
+    } else {
+      std::dynamic_pointer_cast<rx::ginzburg_landau>(_rx0)->set_dispersive_stiffness(
+          &_C_aniso);
+    }
+
     const std::vector<real> d = vertex_geodesic_weight(*__M);
     calc_kf(d);
     calc_sh_params(d);
     calc_gl_params(d);
 
-    // Grey–Scott: implicit Newton CN per substep tolerates large h.
-    // SH / CGLE: explicit reaction (+ explicit GL dispersive piece) — use small h
-    // and more substeps so we do not reuse the GS timestep scale verbatim.
-    const int N_gs = (frame == 1 ? 10 : 10);
-    const int N_explicit = 40;
+    // Grey--Scott: implicit reaction + implicit diffusion per substep.
+    // Swift--Hohenberg / GL: one macro step per frame (reaction + implicit
+    // diffusion) after operator-split refactor; h chosen from old 40x substeps.
+    const int N_gs = 10;
     const real h_gs = 16.0 * _h;
-    const real h_sh = 2.5e-4;
-    const real h_gl = 1.5e-4;
+    const int N_sh = 1;
+    const real h_sh = 0.01; // was 40 * 2.5e-4
+    const int N_gl = 1;
+    const real h_gl = 0.006; // was 40 * 1.5e-4
 
     switch (_rx_model) {
     case growth_rx_model::grey_scott:
       for (int i = 0; i < N_gs; i++) {
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx0)->step_anisotropic(
+        std::dynamic_pointer_cast<rx::grey_scott>(_rx0)->step_anisotropic(
             h_gs, _f, _k, nullptr);
       }
       break;
     case growth_rx_model::swift_hohenberg:
-      for (int i = 0; i < N_explicit; i++) {
-        std::dynamic_pointer_cast<swift_hohenberg>(_rx0)->step(
+      for (int i = 0; i < N_sh; i++) {
+        std::dynamic_pointer_cast<rx::swift_hohenberg>(_rx0)->step(
             h_sh, _eps_sh, _g_sh, _lam_sh, nullptr);
       }
       break;
     case growth_rx_model::ginzburg_landau:
-      for (int i = 0; i < N_explicit; i++) {
-        std::dynamic_pointer_cast<ginzburg_landau>(_rx0)->step(
+      for (int i = 0; i < N_gl; i++) {
+        std::dynamic_pointer_cast<rx::ginzburg_landau>(_rx0)->step(
             h_gl, _alpha_gl, _beta_gl, nullptr);
       }
       break;
@@ -934,7 +961,7 @@ public:
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-    bontecou::laplacian3 M(__M, x, true);
+    kusama::laplacian3 M(__M, x, true);
     M.init();
     real cc = C / 100.0;
     for (int k = 0; k < N; k++) {
@@ -978,6 +1005,14 @@ public:
   std::vector<real> _k;
   std::vector<real> _eps_sh, _g_sh, _lam_sh;
   std::vector<real> _alpha_gl, _beta_gl;
+
+  /// Curvature-aligned anisotropic cotan stiffness; rebuilt each @ref step_rx.
+  kusama::laplacian::sparmat _C_aniso;
+  real _aniso_vd_lambda = 3.0;
+  real _aniso_sigma_u = 1.0;
+  real _aniso_sigma_v = 0.001;
+  kusama::anisotropic_laplacian_kind _aniso_kind =
+      kusama::anisotropic_laplacian_kind::fem_d;
 
   shell::shell::ptr __M;
   shell::dynamic::ptr __surf;

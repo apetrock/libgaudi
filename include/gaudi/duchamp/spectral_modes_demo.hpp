@@ -7,8 +7,8 @@
 #include "gaudi/asawa/shell/operations.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
 
-#include "gaudi/bontecou/laplacian.hpp"
-#include "gaudi/bontecou/laplace_spectrum.hpp"
+#include "gaudi/kusama/laplacian.hpp"
+#include "gaudi/kusama/laplace_spectrum.hpp"
 #include "gaudi/duchamp/laplace_modes_band.hpp"
 
 #include <algorithm>
@@ -146,12 +146,12 @@ public:
 
     const int nv = static_cast<int>(x.size());
 
-    bontecou::laplacian lap(__M, x);
-    Eigen::SparseMatrix<double> Ls = bontecou::symmetrize_sparse(lap.stiffness());
+    kusama::laplacian lap(__M, x);
+    Eigen::SparseMatrix<double> Ls = kusama::symmetrize_sparse(lap.stiffness());
     Eigen::SparseMatrix<double> Lpos = Ls;
     Lpos *= -1.0;
     Lpos.makeCompressed();
-    _L_eig = bontecou::regularize_stiffness(Lpos, _epsilon);
+    _L_eig = kusama::regularize_stiffness(Lpos, _epsilon);
 
     if (static_cast<int>(_L_eig.rows()) != nv) {
       std::cerr << "[spectral_modes_demo] WARNING: operator size " << _L_eig.rows()
@@ -159,15 +159,15 @@ public:
     }
 
     if (_band == laplace_modes_band::low_frequency)
-      _spectrum_ok = bontecou::laplace_eigs_low_frequency(_L_eig, _requested_modes, 0,
+      _spectrum_ok = kusama::laplace_eigs_low_frequency(_L_eig, _requested_modes, 0,
                                                          _evals, _evecs);
     else if (_band == laplace_modes_band::largest_magnitude)
-      _spectrum_ok = bontecou::laplace_eigs_largest_magnitude(
+      _spectrum_ok = kusama::laplace_eigs_largest_magnitude(
           _L_eig, _requested_modes, 0, _evals, _evecs);
     else {
       double sigma = _mid_band_shift;
       if (sigma < 0.0) {
-        const double bound = bontecou::sparse_sym_max_row_sum_abs(_L_eig);
+        const double bound = kusama::sparse_sym_max_row_sum_abs(_L_eig);
         if (_mid_slider_t >= 0.0 && _mid_slider_t <= 1.0) {
           const double t = std::clamp(_mid_slider_t, 0.0, 1.0);
           sigma = t * std::max(bound, 1e-12);
@@ -184,7 +184,7 @@ public:
                   << " (explicit; mid slider ignored)\n";
       }
       _sigma_used = sigma;
-      _spectrum_ok = bontecou::laplace_eigs_shift_invert_nearest(
+      _spectrum_ok = kusama::laplace_eigs_shift_invert_nearest(
           _L_eig, sigma, _requested_modes, 0, _evals, _evecs);
     }
 
@@ -206,7 +206,7 @@ public:
       }
       const int ncheck = std::min(3, _num_modes);
       for (int j = 0; j < ncheck; ++j)
-        bontecou::log_laplace_eigen_stats(_L_eig, j, _evals[j], _evecs.col(j));
+        kusama::log_laplace_eigen_stats(_L_eig, j, _evals[j], _evecs.col(j));
       if (_num_modes > 1 && _band == laplace_modes_band::low_frequency)
         _mode_idx = 1;
     }
@@ -228,7 +228,7 @@ public:
   void log_current_mode_quality() const {
     if (!_spectrum_ok || _num_modes <= 0)
       return;
-    bontecou::log_laplace_eigen_stats(_L_eig, _mode_idx, _evals[_mode_idx],
+    kusama::log_laplace_eigen_stats(_L_eig, _mode_idx, _evals[_mode_idx],
                                       _evecs.col(_mode_idx));
   }
 

@@ -1,12 +1,12 @@
-#ifndef GAUDI_BONTECOU_VECTOR_DIRICHLET_GUIDED_HPP
-#define GAUDI_BONTECOU_VECTOR_DIRICHLET_GUIDED_HPP
+#ifndef GAUDI_KUSAMA_VECTOR_DIRICHLET_GUIDED_HPP
+#define GAUDI_KUSAMA_VECTOR_DIRICHLET_GUIDED_HPP
 
 /// Guided vector Dirichlet: minimize \f$\tfrac12 u^\top L u + \tfrac{\lambda}{2}(u-g)^\top M (u-g)\f$
 /// with diagonal \f$M\f$ from \ref asawa::shell::edge_barycentric_dual_mass (Stein \f$L\f$ from
 /// \ref build_vector_dirichlet_energy). Solve \f$(L+\lambda M)u=\lambda M g\f$ via \ref m_solver.
 
 #include "gaudi/asawa/shell/datum_x.hpp"
-#include "gaudi/bontecou/vector_dirichlet.hpp"
+#include "gaudi/kusama/vector_dirichlet.hpp"
 #include "gaudi/common.h"
 #include "gaudi/sparse_solver.h"
 
@@ -19,7 +19,7 @@
 #include <vector>
 
 namespace gaudi {
-namespace bontecou {
+namespace kusama {
 
 struct edge_triangle_link {
   int other_edge = -1;
@@ -353,7 +353,7 @@ inline Eigen::VectorXd solve_curvature_guided_vector_dirichlet(
   return solve_guided_vector_dirichlet(L, mass_diag, g, lambda);
 }
 
-} // namespace bontecou
+} // namespace kusama
 } // namespace gaudi
 
 #endif

@@ -13,7 +13,7 @@
 
 #include "gaudi/calder/integrators.hpp"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 
 #include "gaudi/asawa/rod/dynamic.hpp"
 #include "gaudi/asawa/rod/rod.hpp"

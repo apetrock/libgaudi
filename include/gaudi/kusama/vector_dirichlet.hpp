@@ -1,5 +1,5 @@
-#ifndef GAUDI_BONTECOU_VECTOR_DIRICHLET_HPP
-#define GAUDI_BONTECOU_VECTOR_DIRICHLET_HPP
+#ifndef GAUDI_KUSAMA_VECTOR_DIRICHLET_HPP
+#define GAUDI_KUSAMA_VECTOR_DIRICHLET_HPP
 
 /// Stein et al., "A Simple Discretization of the Vector Dirichlet Energy" (CGF 2020).
 /// Assembly matches libigl \c cr_vector_laplacian_intrinsic from the authors' reference
@@ -17,7 +17,7 @@
 #include <vector>
 
 namespace gaudi {
-namespace bontecou {
+namespace kusama {
 
 /// Contiguous dof index for each physical edge slot \c c/2 (\c c from \c get_edge_range).
 inline int build_compact_edge_dof_map(asawa::shell::shell &M,
@@ -40,19 +40,21 @@ inline int edge_orientation_sign(const asawa::shell::shell &M,
   return ia < ib ? 1 : -1;
 }
 
+namespace laplace {
+namespace vector_dirichlet {
+
 /// Sparse symmetric stiffness for \f$\tfrac12 u^\top L u\f$ (two scalar DOFs per edge).
-inline Eigen::SparseMatrix<real>
-build_vector_dirichlet_energy(asawa::shell::shell &M,
-                              const std::vector<vec3> &x,
-                              int *out_num_edge_dofs = nullptr) {
+inline Eigen::SparseMatrix<real> energy(asawa::shell::shell &M,
+                                        const std::vector<vec3> &x,
+                                        int *out_num_edge_dofs = nullptr) {
   if (!M.verts_are_dense_packed()) {
     throw std::runtime_error(
-        "bontecou::build_vector_dirichlet_energy: shell vertices must be "
-        "dense-packed (see bontecou::build_lap)");
+        "kusama::laplace::vector_dirichlet::energy: shell vertices must be "
+        "dense-packed (see kusama::build_lap)");
   }
   if (x.size() != static_cast<size_t>(M.vert_count())) {
     throw std::runtime_error(
-        "bontecou::build_vector_dirichlet_energy: position count mismatch");
+        "kusama::laplace::vector_dirichlet::energy: position count mismatch");
   }
   std::vector<int> slot_map;
   const int nE = build_compact_edge_dof_map(M, slot_map);
@@ -131,14 +133,12 @@ build_vector_dirichlet_energy(asawa::shell::shell &M,
   return L;
 }
 
-/// Pack a length \f$2 n_E\f$ DOF vector (one eigenvector column, etc.) into \f$n_E\f$
-/// per-edge `vec2` values. Indexing matches `build_vector_dirichlet_energy`:
-/// first component at global indices `0 … n_E-1`, second at `n_E … 2 n_E-1`.
-inline std::vector<vec2> pack_vector_dirichlet_dof_to_vec2(const Eigen::VectorXd &u,
-                                                           int num_edge_dofs) {
+/// Pack a length \f$2 n_E\f$ DOF vector into \f$n_E\f$ per-edge `vec2` values.
+inline std::vector<vec2> pack_dof_to_vec2(const Eigen::VectorXd &u,
+                                          int num_edge_dofs) {
   if (u.size() != 2 * num_edge_dofs) {
     throw std::runtime_error(
-        "bontecou::pack_vector_dirichlet_dof_to_vec2: expected u.size() == 2 * "
+        "kusama::laplace::vector_dirichlet::pack_dof_to_vec2: expected u.size() == 2 * "
         "num_edge_dofs (got " +
         std::to_string(static_cast<int>(u.size())) + " vs 2*" +
         std::to_string(num_edge_dofs) + ")");
@@ -149,7 +149,24 @@ inline std::vector<vec2> pack_vector_dirichlet_dof_to_vec2(const Eigen::VectorXd
   return out;
 }
 
-} // namespace bontecou
+} // namespace vector_dirichlet
+} // namespace laplace
+
+/// @deprecated Prefer `kusama::laplace::vector_dirichlet::energy`.
+inline Eigen::SparseMatrix<real>
+build_vector_dirichlet_energy(asawa::shell::shell &M,
+                              const std::vector<vec3> &x,
+                              int *out_num_edge_dofs = nullptr) {
+  return laplace::vector_dirichlet::energy(M, x, out_num_edge_dofs);
+}
+
+/// @deprecated Prefer `kusama::laplace::vector_dirichlet::pack_dof_to_vec2`.
+inline std::vector<vec2> pack_vector_dirichlet_dof_to_vec2(const Eigen::VectorXd &u,
+                                                           int num_edge_dofs) {
+  return laplace::vector_dirichlet::pack_dof_to_vec2(u, num_edge_dofs);
+}
+
+} // namespace kusama
 } // namespace gaudi
 
 #endif

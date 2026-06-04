@@ -16,7 +16,7 @@
 
 #include "gaudi/asawa/shell/walk.hpp"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 #include "gaudi/calder/least_squares_fit.hpp"
 #include "gaudi/calder/tangent_point_integrators.hpp"
 

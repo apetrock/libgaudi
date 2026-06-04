@@ -17,10 +17,10 @@
 #include "gaudi/asawa/primitive_objects.hpp"
 #include "gaudi/common.h"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 
 #include "modules/module_base.hpp"
-#include "modules/reaction_diffusion.hpp"
+#include "modules/rx/grey_scott.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -67,7 +67,7 @@ public:
     real da = 5.00e-4, db = 0.4 * da;
     // real f = 0.025, k = 0.0535;
     real f = 0.05, k = 0.0630;
-    reaction_diffusion::ptr rx = reaction_diffusion::create(__M, f, k, da, db);
+    rx::grey_scott::ptr rx = rx::grey_scott::create(__M, f, k, da, db);
     _rx = std::dynamic_pointer_cast<module_base>(rx);
     init_normals();
   }
@@ -86,9 +86,9 @@ public:
   std::vector<vec4> get_mesh_colors() {
     std::vector<vec4> colors(__M->vert_count(), vec4(1.0, 0.0, 0.0, 1.0));
     std::vector<real> &rxa =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxa();
+        std::dynamic_pointer_cast<rx::grey_scott>(_rx)->get_rxa();
     std::vector<real> &rxb =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxb();
+        std::dynamic_pointer_cast<rx::grey_scott>(_rx)->get_rxb();
 
     vec4 col_a(0.75, 0.35, 0.0, 1.0);
     vec4 col_b(0.0, 2.0, 1.5, 1.0);
@@ -103,9 +103,9 @@ public:
 
   void test_circulation() {
     std::vector<real> &rxa =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxa();
+        std::dynamic_pointer_cast<rx::grey_scott>(_rx)->get_rxa();
     std::vector<real> &rxb =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxb();
+        std::dynamic_pointer_cast<rx::grey_scott>(_rx)->get_rxb();
 
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     std::vector<real> u = rxa;
@@ -146,9 +146,9 @@ public:
 
   void translate_normal(int frame) {
     std::vector<real> &rxa =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxa();
+        std::dynamic_pointer_cast<rx::grey_scott>(_rx)->get_rxa();
     std::vector<real> &rxb =
-        std::dynamic_pointer_cast<reaction_diffusion>(_rx)->get_rxb();
+        std::dynamic_pointer_cast<rx::grey_scott>(_rx)->get_rxb();
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     std::vector<real> u = rxa;
 

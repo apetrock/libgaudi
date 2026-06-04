@@ -13,7 +13,7 @@
 
 #include "gaudi/calder/integrators.hpp"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 
 #include "gaudi/asawa/shell/asset_loader.hpp"
 #include "gaudi/asawa/shell/datum_x.hpp"
@@ -271,7 +271,7 @@ public:
     std::vector<real> div = asawa::shell::divergence(*__M, df, x);
     std::cout << df.size() << " " << x.size() << " " << div.size() << std::endl;
 
-    bontecou::laplacian L(__M, x);
+    kusama::laplacian L(__M, x);
     std::vector<real> p = L.solve(div);
     std::vector<vec3> dp = asawa::shell::gradient(*__M, p, x);
 
@@ -290,7 +290,7 @@ public:
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-    bontecou::laplacian3 M(__M, x);
+    kusama::laplacian3 M(__M, x);
 
     for (int k = 0; k < N; k++) {
       std::cout << "." << std::flush;

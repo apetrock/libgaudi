@@ -26,10 +26,10 @@
 #include "gaudi/asawa/shell/datum_x.hpp"
 #include "gaudi/asawa/shell/operations.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
-#include "gaudi/bontecou/laplace_spectrum.hpp"
-#include "gaudi/bontecou/laplacian.hpp"
-#include "gaudi/bontecou/laplacian_anisotropic.hpp"
-#include "gaudi/bontecou/vector_dirichlet_guided.hpp"
+#include "gaudi/kusama/laplace_spectrum.hpp"
+#include "gaudi/kusama/laplacian.hpp"
+#include "gaudi/kusama/laplacian_anisotropic.hpp"
+#include "gaudi/kusama/vector_dirichlet_guided.hpp"
 #include "gaudi/duchamp/spectral_modes_demo.hpp" // scalar_field_to_mesh_colors, laplace_modes_band
 
 #include <Eigen/Core>
@@ -43,8 +43,8 @@ namespace {
 
 // -- viewer config -----------------------------------------------------------
 constexpr bool kAnisotropyEnabled = false;
-constexpr gaudi::bontecou::anisotropic_laplacian_kind kAnisotropyKindDefault =
-    gaudi::bontecou::anisotropic_laplacian_kind::conductance;
+constexpr gaudi::kusama::anisotropic_laplacian_kind kAnisotropyKindDefault =
+    gaudi::kusama::anisotropic_laplacian_kind::conductance;
 constexpr double kAnisotropySigmaU = 1.0;
 constexpr double kAnisotropySigmaV = 0.01;
 // Match `frame_curvature_demo`'s VD lambda — coherent direction field.
@@ -112,43 +112,43 @@ public:
     if (kAnisotropyEnabled) {
       if (!compute_guidance_field(M, x))
         return;
-      L = gaudi::bontecou::build_anisotropic_cotan_laplacian(
+      L = gaudi::kusama::build_anisotropic_cotan_laplacian(
           M, x, _g, _slot_map, _nE,
           static_cast<gaudi::real>(kAnisotropySigmaU),
           static_cast<gaudi::real>(kAnisotropySigmaV), _aniso_kind);
       cerr << "[spectral_modes] aniso L: nnz=" << L.nonZeros()
            << " kind=" << aniso_kind_string() << "\n";
     } else {
-      gaudi::bontecou::laplacian lap(__M, x);
+      gaudi::kusama::laplacian lap(__M, x);
       L = lap.stiffness();
     }
 
-    Eigen::SparseMatrix<double> Ls = gaudi::bontecou::symmetrize_sparse(L);
+    Eigen::SparseMatrix<double> Ls = gaudi::kusama::symmetrize_sparse(L);
     Eigen::SparseMatrix<double> Lpos = Ls;
     Lpos *= -1.0;
     Lpos.makeCompressed();
-    _A = gaudi::bontecou::regularize_stiffness(Lpos, 1e-6);
+    _A = gaudi::kusama::regularize_stiffness(Lpos, 1e-6);
     if (static_cast<int>(_A.rows()) != nv)
       cerr << "[spectral_modes] WARNING: operator size " << _A.rows()
            << " != nv " << nv << "\n";
 
     bool ok = false;
     if (_band == gaudi::duchamp::laplace_modes_band::low_frequency) {
-      ok = gaudi::bontecou::laplace_eigs_low_frequency(_A, _requested_modes, 0,
+      ok = gaudi::kusama::laplace_eigs_low_frequency(_A, _requested_modes, 0,
                                                        _evals, _evecs);
     } else if (_band == gaudi::duchamp::laplace_modes_band::largest_magnitude) {
-      ok = gaudi::bontecou::laplace_eigs_largest_magnitude(
+      ok = gaudi::kusama::laplace_eigs_largest_magnitude(
           _A, _requested_modes, 0, _evals, _evecs);
     } else {
       double sigma = _mid_band_shift;
       if (sigma < 0.0) {
-        const double bound = gaudi::bontecou::sparse_sym_max_row_sum_abs(_A);
+        const double bound = gaudi::kusama::sparse_sym_max_row_sum_abs(_A);
         const double t = (_mid_slider_t >= 0.0 && _mid_slider_t <= 1.0)
                              ? _mid_slider_t
                              : 0.35;
         sigma = t * std::max(bound, 1e-12);
       }
-      ok = gaudi::bontecou::laplace_eigs_shift_invert_nearest(
+      ok = gaudi::kusama::laplace_eigs_shift_invert_nearest(
           _A, sigma, _requested_modes, 0, _evals, _evecs);
     }
     _spectrum_ok = ok;
@@ -165,7 +165,7 @@ public:
          << " eigenmodes (nnz=" << _A.nonZeros() << ")\n";
     const int ncheck = std::min(3, _num_modes);
     for (int j = 0; j < ncheck; ++j)
-      gaudi::bontecou::log_laplace_eigen_stats(_A, j, _evals[j], _evecs.col(j));
+      gaudi::kusama::log_laplace_eigen_stats(_A, j, _evals[j], _evecs.col(j));
 
     if (kAnisotropyEnabled)
       log_aniso_vs_iso_frobenius_ratio();
@@ -181,12 +181,12 @@ public:
     _slot_map.clear();
     _edge_inc.clear();
     _nE = 0;
-    _nE = gaudi::bontecou::build_compact_edge_dof_map(M, _slot_map);
+    _nE = gaudi::kusama::build_compact_edge_dof_map(M, _slot_map);
     if (_nE <= 0)
       return false;
-    gaudi::bontecou::build_edge_incident_faces(M, _slot_map, _nE, _edge_inc);
+    gaudi::kusama::build_edge_incident_faces(M, _slot_map, _nE, _edge_inc);
     try {
-      _g = gaudi::bontecou::solve_curvature_guided_vector_dirichlet(
+      _g = gaudi::kusama::solve_curvature_guided_vector_dirichlet(
           M, x, static_cast<gaudi::real>(kAnisotropyVDLambda),
           kAnisotropyStencil, /*apply_sign_coherence=*/true);
     } catch (const std::exception &e) {
@@ -234,9 +234,9 @@ public:
         continue;
       const gaudi::vec3 mid =
           0.5 * (x[M.vert(c)] + x[M.vert(M.next(c))]);
-      const gaudi::vec3 n_e = gaudi::bontecou::edge_average_normal(
+      const gaudi::vec3 n_e = gaudi::kusama::edge_average_normal(
           M, x, _edge_inc[static_cast<size_t>(e)]);
-      gaudi::vec3 dir = gaudi::bontecou::edge_guidance_vector_3d(
+      gaudi::vec3 dir = gaudi::kusama::edge_guidance_vector_3d(
           M, c, x, n_e, static_cast<gaudi::real>(_g(e)),
           static_cast<gaudi::real>(_g(e + _nE)));
       if (dir.norm() > 1e-12)
@@ -260,15 +260,15 @@ public:
       return;
     auto &M = *__M;
     std::vector<gaudi::vec3> &x = gaudi::asawa::get_vec_data(M, 0);
-    gaudi::bontecou::laplacian lap(__M, x);
+    gaudi::kusama::laplacian lap(__M, x);
     Eigen::SparseMatrix<double> L_iso =
-        gaudi::bontecou::symmetrize_sparse(lap.stiffness());
+        gaudi::kusama::symmetrize_sparse(lap.stiffness());
     Eigen::SparseMatrix<double> L_ani =
-        gaudi::bontecou::build_anisotropic_cotan_laplacian(
+        gaudi::kusama::build_anisotropic_cotan_laplacian(
             M, x, _g, _slot_map, _nE,
             static_cast<gaudi::real>(kAnisotropySigmaU),
             static_cast<gaudi::real>(kAnisotropySigmaV), _aniso_kind);
-    L_ani = gaudi::bontecou::symmetrize_sparse(L_ani);
+    L_ani = gaudi::kusama::symmetrize_sparse(L_ani);
     if (L_iso.rows() != L_ani.rows() || L_iso.cols() != L_ani.cols())
       return;
     Eigen::SparseMatrix<double> D = L_ani - L_iso;
@@ -296,14 +296,14 @@ public:
 
   void log_active_mode_stats() const {
     if (_spectrum_ok && _num_modes > 0)
-      gaudi::bontecou::log_laplace_eigen_stats(_A, _mode_idx, _evals[_mode_idx],
+      gaudi::kusama::log_laplace_eigen_stats(_A, _mode_idx, _evals[_mode_idx],
                                                _evecs.col(_mode_idx));
   }
 
   void toggle_anisotropic_kind() {
     if (!kAnisotropyEnabled)
       return;
-    using gaudi::bontecou::anisotropic_laplacian_kind;
+    using gaudi::kusama::anisotropic_laplacian_kind;
     _aniso_kind = (_aniso_kind == anisotropic_laplacian_kind::conductance)
                       ? anisotropic_laplacian_kind::fem_d
                       : anisotropic_laplacian_kind::conductance;
@@ -313,7 +313,7 @@ public:
   }
   const char *aniso_kind_string() const {
     return _aniso_kind ==
-                   gaudi::bontecou::anisotropic_laplacian_kind::conductance
+                   gaudi::kusama::anisotropic_laplacian_kind::conductance
                ? "conductance"
                : "fem_d";
   }
@@ -382,7 +382,7 @@ private:
   int _mode_idx = 0;
 
   // anisotropy
-  gaudi::bontecou::anisotropic_laplacian_kind _aniso_kind;
+  gaudi::kusama::anisotropic_laplacian_kind _aniso_kind;
 
   // guidance field cache (used by aniso operator and the overlay)
   Eigen::VectorXd _g;

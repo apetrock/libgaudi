@@ -7,7 +7,7 @@
 
 #include "gaudi/arp/arp.h"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 
 #include "gaudi/asawa/shell/asset_loader.hpp"
 #include "gaudi/asawa/shell/dynamic.hpp"

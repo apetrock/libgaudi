@@ -1,22 +1,24 @@
-#ifndef __GAUDI_DUCHAMP_GINZBURG_LANDAU__
-#define __GAUDI_DUCHAMP_GINZBURG_LANDAU__
+#ifndef __GAUDI_DUCHAMP_RX_GINZBURG_LANDAU_HPP__
+#define __GAUDI_DUCHAMP_RX_GINZBURG_LANDAU_HPP__
 
 #include "gaudi/asawa/datums.hpp"
-#include "gaudi/asawa/shell/datum_x.hpp"
-#include "gaudi/bontecou/laplacian.hpp"
 #include "gaudi/duchamp/modules/module_base_shell.hpp"
-#include <Eigen/Sparse>
+#include "gaudi/duchamp/modules/rx/rx_pipeline.hpp"
+#include "gaudi/kusama/complex_laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
+#include "gaudi/kusama/rx/ginzburg_landau.hpp"
 #include <cmath>
 #include <optional>
 #include <vector>
 
 namespace gaudi {
 namespace duchamp {
+namespace rx {
 
-/// Complex Ginzburg–Landau on two real components `u = Re A`, `v = Im A`:
-/// `∂t A = A + (1+iα) Δ A − (1+iβ) |A|² A` with explicit split:
-/// (1) forward Euler on `G = A − (1+iβ)|A|²A` (real/imag as in plan),
-/// (2) explicit `(1+iα)Δ` via cotan stiffness `multC` (optionally custom sparse C).
+enum class gl_reaction_step_mode { forward_euler, newton };
+
+/// Complex Ginzburg--Landau: `u = Re A`, `v = Im A` with operator split
+/// (reaction, then implicit (1+iα) Δ via @ref kusama::rx::cgle::linear_operator).
 class ginzburg_landau : public module_base_shell {
 public:
   using sparse_mat = Eigen::SparseMatrix<real>;
@@ -38,9 +40,11 @@ public:
     }
   }
 
-  /// Optional anisotropic (or otherwise custom) cotan replacement for `multC`.
   void set_dispersive_stiffness(const sparse_mat *C) { _dispersive_C = C; }
-
+  void set_cgle_linear_config(kusama::rx::cgle::linear_config c) {
+    _cgle_cfg = std::move(c);
+  }
+  void set_reaction_mode(gl_reaction_step_mode m) { _reaction_mode = m; }
   void set_effect_coeff_field(const std::vector<real> *p) { _effect_coeff = p; }
 
   std::vector<real> &get_u() { return asawa::get_real_data(*_M, _iu); }
@@ -64,16 +68,13 @@ public:
     return out;
   }
 
-  void step(real h, const std::vector<real> &alpha,
-            const std::vector<real> &beta,
-            const std::vector<real> *effect_coeff = nullptr) {
-
-    std::vector<vec3> &x = asawa::get_vec_data(*_M, 0);
+  void step_reaction(const std::vector<real> &alpha, const std::vector<real> &beta,
+                     real h, const std::vector<real> *effect_coeff) {
+    (void)alpha;
     std::vector<real> &u = get_u();
     std::vector<real> &v = get_v();
     const std::vector<real> *ec = effect_coeff ? effect_coeff : _effect_coeff;
     const int n = static_cast<int>(u.size());
-
     for (int i = 0; i < n; ++i) {
       real c = rx_effect_coeff_at(ec, i, n);
       real b = i < static_cast<int>(beta.size()) ? beta[i] : _beta0;
@@ -84,23 +85,19 @@ public:
         vi = 0.0;
       ui = std::max(-50.0, std::min(50.0, ui));
       vi = std::max(-50.0, std::min(50.0, vi));
-      real r2 = ui * ui + vi * vi;
-      real gu = ui - r2 * (ui - b * vi);
-      real gv = vi - r2 * (vi + b * ui);
-      u[i] = ui + h * c * gu;
-      v[i] = vi + h * c * gv;
+      if (_reaction_mode == gl_reaction_step_mode::newton) {
+        const real u0 = ui, v0 = vi;
+        kusama::rx::ginzburg_landau::reaction_newton_2d(ui, vi, u0, v0, c, b, h);
+        u[i] = ui;
+        v[i] = vi;
+      } else {
+        real r2 = ui * ui + vi * vi;
+        real gu = ui - r2 * (ui - b * vi);
+        real gv = vi - r2 * (vi + b * ui);
+        u[i] = ui + h * c * gu;
+        v[i] = vi + h * c * gv;
+      }
     }
-
-    std::vector<real> Du = mult_c_on_vertices(_M, x, u, _dispersive_C);
-    std::vector<real> Dv = mult_c_on_vertices(_M, x, v, _dispersive_C);
-
-    for (int i = 0; i < n; ++i) {
-      real c = rx_effect_coeff_at(ec, i, n);
-      real a = i < static_cast<int>(alpha.size()) ? alpha[i] : _alpha0;
-      u[i] += h * c * (Du[i] - a * Dv[i]);
-      v[i] += h * c * (Dv[i] + a * Du[i]);
-    }
-
     for (int i = 0; i < n; ++i) {
       if (!std::isfinite(u[i]))
         u[i] = 0.0;
@@ -111,33 +108,57 @@ public:
     }
   }
 
+  void step_linear(const std::vector<real> &alpha, real h,
+                   const std::vector<real> *effect_coeff) {
+    (void)effect_coeff;
+    std::vector<vec3> &x = asawa::get_vec_data(*_M, 0);
+    std::vector<real> &u = get_u();
+    std::vector<real> &v = get_v();
+    ::gaudi::kusama::laplacian L(_M, x);
+    if (_dispersive_C != nullptr &&
+        static_cast<index_t>(_dispersive_C->rows()) == _M->vert_count() &&
+        static_cast<index_t>(_dispersive_C->cols()) == _M->vert_count()) {
+      L.set_stiffness(*_dispersive_C);
+    }
+    kusama::rx::cgle::linear_operator::apply(L, alpha, h, u, v, _cgle_cfg);
+  }
+
+  void step(real h, const std::vector<real> &alpha, const std::vector<real> &beta,
+            const std::vector<real> *effect_coeff = nullptr) {
+    step_reaction(alpha, beta, h, effect_coeff);
+    step_linear(alpha, h, effect_coeff);
+  }
+
   virtual void step(real h) override {
-    const int n = _M->vert_count();
+    const int n = static_cast<int>(_M->vert_count());
     std::vector<real> alpha(n, _alpha0), beta(n, _beta0);
     step(h, alpha, beta, nullptr);
   }
 
-private:
-  static std::vector<real>
-  mult_c_on_vertices(asawa::shell::shell::ptr M, const std::vector<vec3> &x,
-                     const std::vector<real> &f, const sparse_mat *override_C) {
-    bontecou::laplacian L(M, x);
-    if (override_C != nullptr &&
-        static_cast<index_t>(override_C->rows()) == M->vert_count() &&
-        static_cast<index_t>(override_C->cols()) == M->vert_count())
-      L.set_stiffness(*override_C);
-    std::vector<real> fc = asawa::shell::compress_to_vert_range<real>(*M, f);
-    std::vector<real> m = L.multC(fc);
-    return asawa::shell::expand_from_vert_range<real>(*M, m);
+  rx_pipeline make_rx_pipeline(real h, const std::vector<real> &alpha,
+                               const std::vector<real> &beta,
+                               const std::vector<real> *effect_coeff) {
+    rx_pipeline p;
+    p.push_back([this, h, &alpha, &beta, effect_coeff]() {
+      step_reaction(alpha, beta, h, effect_coeff);
+    });
+    p.push_back([this, h, &alpha, effect_coeff]() {
+      step_linear(alpha, h, effect_coeff);
+    });
+    return p;
   }
 
+private:
   index_t _iu = -1, _iv = -1;
   real _alpha0 = 1.5;
   real _beta0 = 1.0;
   const sparse_mat *_dispersive_C = nullptr;
   const std::vector<real> *_effect_coeff = nullptr;
+  kusama::rx::cgle::linear_config _cgle_cfg;
+  gl_reaction_step_mode _reaction_mode = gl_reaction_step_mode::forward_euler;
 };
 
+} // namespace rx
 } // namespace duchamp
 } // namespace gaudi
 

@@ -18,7 +18,7 @@
 #include "gaudi/asawa/shell/operations.hpp" // triangulate
 #include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/asawa/datums.hpp"
-#include "gaudi/bontecou/vector_dirichlet_guided.hpp"
+#include "gaudi/kusama/vector_dirichlet_guided.hpp"
 #include "gaudi/geometry_logger.hpp"
 
 #include <Eigen/Dense>
@@ -108,11 +108,11 @@ public:
             continue;
           gaudi::vec3 mid =
               0.5 * (x[M.vert(c)] + x[M.vert(M.next(c))]);
-          gaudi::vec3 n_e = gaudi::bontecou::edge_average_normal(
+          gaudi::vec3 n_e = gaudi::kusama::edge_average_normal(
               M, x, __edge_inc[static_cast<size_t>(e)]);
           const double gp = __u_edge(e);
           const double gq = __u_edge(e + __nE);
-          gaudi::vec3 dir = gaudi::bontecou::edge_guidance_vector_3d(
+          gaudi::vec3 dir = gaudi::kusama::edge_guidance_vector_3d(
               M, c, x, n_e, static_cast<gaudi::real>(gp),
               static_cast<gaudi::real>(gq));
           if (dir.norm() > 1e-12)
@@ -131,12 +131,12 @@ public:
       return;
     __guided_solve_done = true;
     try {
-      __nE = gaudi::bontecou::build_compact_edge_dof_map(M, __slot_map);
+      __nE = gaudi::kusama::build_compact_edge_dof_map(M, __slot_map);
       if (__nE <= 0)
         return;
-      gaudi::bontecou::build_edge_incident_faces(M, __slot_map, __nE,
+      gaudi::kusama::build_edge_incident_faces(M, __slot_map, __nE,
                                                  __edge_inc);
-      __u_edge = gaudi::bontecou::solve_curvature_guided_vector_dirichlet(
+      __u_edge = gaudi::kusama::solve_curvature_guided_vector_dirichlet(
           M, x, 3.0, stencil, true);
     } catch (const std::exception &ex) {
       cerr << "[frame_curvature_demo] guided field solve skipped: " << ex.what()

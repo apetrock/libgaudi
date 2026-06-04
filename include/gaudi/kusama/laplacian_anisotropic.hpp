@@ -1,21 +1,21 @@
-#ifndef GAUDI_BONTECOU_LAPLACIAN_ANISOTROPIC_HPP
-#define GAUDI_BONTECOU_LAPLACIAN_ANISOTROPIC_HPP
+#ifndef GAUDI_KUSAMA_LAPLACIAN_ANISOTROPIC_HPP
+#define GAUDI_KUSAMA_LAPLACIAN_ANISOTROPIC_HPP
 
 /// Field-guided anisotropic cotan Laplacian (two discretizations) built from per-edge
 /// VD-style guidance \f$g \in \mathbb{R}^{2|E|}\f$. See plan / docs in repo.
 
 #include "gaudi/asawa/shell/datum_x.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
-#include "gaudi/bontecou/laplacian.hpp"
-#include "gaudi/bontecou/vector_dirichlet.hpp"
-#include "gaudi/bontecou/vector_dirichlet_guided.hpp"
+#include "gaudi/kusama/laplacian.hpp"
+#include "gaudi/kusama/vector_dirichlet.hpp"
+#include "gaudi/kusama/vector_dirichlet_guided.hpp"
 
 #include <Eigen/Sparse>
 #include <cmath>
 #include <vector>
 
 namespace gaudi {
-namespace bontecou {
+namespace kusama {
 
 enum class anisotropic_laplacian_kind { conductance, fem_d };
 
@@ -195,7 +195,7 @@ build_curvature_aligned_laplacian(asawa::shell::shell &M,
                                            sigma_v, kind);
 }
 
-} // namespace bontecou
+} // namespace kusama
 } // namespace gaudi
 
 #endif

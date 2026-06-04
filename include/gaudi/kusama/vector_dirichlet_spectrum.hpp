@@ -1,5 +1,5 @@
-#ifndef GAUDI_BONTECOU_VECTOR_DIRICHLET_SPECTRUM_HPP
-#define GAUDI_BONTECOU_VECTOR_DIRICHLET_SPECTRUM_HPP
+#ifndef GAUDI_KUSAMA_VECTOR_DIRICHLET_SPECTRUM_HPP
+#define GAUDI_KUSAMA_VECTOR_DIRICHLET_SPECTRUM_HPP
 
 /// Partial spectrum of the Stein et al. **vector Dirichlet** stiffness
 /// (`build_vector_dirichlet_energy`, \f$2|E|\times 2|E|\f$).
@@ -8,16 +8,16 @@
 /// so smallest-algebraic / largest-magnitude Spectra modes are well-defined.
 
 #include "gaudi/asawa/shell/shell.hpp"
-#include "gaudi/bontecou/laplace_spectrum.hpp"
-#include "gaudi/bontecou/spectrum.hpp"
-#include "gaudi/bontecou/vector_dirichlet.hpp"
+#include "gaudi/kusama/laplace_spectrum.hpp"
+#include "gaudi/kusama/spectrum.hpp"
+#include "gaudi/kusama/vector_dirichlet.hpp"
 #include "gaudi/common.h"
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 
 namespace gaudi {
-namespace bontecou {
+namespace kusama {
 
 /// Which batch of eigenpairs to request (same regimes as vertex Laplace helpers).
 enum class vector_dirichlet_spectrum_band {
@@ -55,7 +55,7 @@ inline bool vector_dirichlet_partial_spectrum(
   return false;
 }
 
-} // namespace bontecou
+} // namespace kusama
 } // namespace gaudi
 
 #endif

@@ -14,7 +14,7 @@
 #include "gaudi/common.h"
 #include "gaudi/define_create_func.h"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 
 #include "modules/module_base.hpp"
 #include "modules/tangent_point.hpp"

@@ -1,11 +1,15 @@
-#ifndef __GAUDI_DUCHAMP_RX_LOCAL_INTEGRATOR__
-#define __GAUDI_DUCHAMP_RX_LOCAL_INTEGRATOR__
+#ifndef GAUDI_DUCHAMP_RX_DETAIL_RX_INTEGRATOR_HPP
+#define GAUDI_DUCHAMP_RX_DETAIL_RX_INTEGRATOR_HPP
+
+/// Generic local timestep helpers (not shell-specific).
 
 #include "gaudi/common.h"
 #include <functional>
 
 namespace gaudi {
 namespace duchamp {
+namespace rx {
+namespace detail {
 
 /// Forward Euler: `y + h * f(y, p)`.
 template <class State, class Params, class RHS>
@@ -22,8 +26,7 @@ inline State step_rk2(State y, const Params &p, real h, RHS f) {
   return y + h * k2;
 }
 
-/// Classical RK4 per vertex / per degree of freedom when `State` supports
-/// scalar ops and `RHS` returns the same algebra.
+/// Classical RK4 per vertex / per degree of freedom when `State` supports scalar ops.
 template <class State, class Params, class RHS>
 inline State step_rk4(State y, const Params &p, real h, RHS f) {
   State k1 = f(y, p);
@@ -33,6 +36,8 @@ inline State step_rk4(State y, const Params &p, real h, RHS f) {
   return y + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
 }
 
+} // namespace detail
+} // namespace rx
 } // namespace duchamp
 } // namespace gaudi
 

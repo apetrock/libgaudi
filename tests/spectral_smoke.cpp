@@ -1,10 +1,10 @@
 #include "gaudi/asawa/datums.hpp"
 #include "gaudi/asawa/faceloader.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
-#include "gaudi/bontecou/laplace_spectrum.hpp"
-#include "gaudi/bontecou/spectrum.hpp"
-#include "gaudi/bontecou/vector_dirichlet.hpp"
-#include "gaudi/bontecou/vector_dirichlet_spectrum.hpp"
+#include "gaudi/kusama/laplace_spectrum.hpp"
+#include "gaudi/kusama/spectrum.hpp"
+#include "gaudi/kusama/vector_dirichlet.hpp"
+#include "gaudi/kusama/vector_dirichlet_spectrum.hpp"
 #include "gaudi/common.h"
 #include "gaudi/duchamp/spectral_projection_integrator.hpp"
 
@@ -29,7 +29,7 @@ int main() {
     Eigen::VectorXd evals;
     Eigen::MatrixXd evecs;
     const bool ok =
-        bontecou::sparse_sym_eigs_smallest_algebraic(A, 3, 0, evals, evecs, nullptr);
+        kusama::sparse_sym_eigs_smallest_algebraic(A, 3, 0, evals, evecs, nullptr);
     assert(ok);
     assert(evals.size() == 3);
     std::vector<double> got(3);
@@ -53,10 +53,10 @@ int main() {
     asawa::init_vert_datum(*M, vec3(0, 0, 0));
     std::vector<vec3> &x = asawa::get_vec_data(*M, 0);
     x = V;
-    Eigen::SparseMatrix<double> L = bontecou::build_vector_dirichlet_energy(*M, x, &nE);
+    Eigen::SparseMatrix<double> L = kusama::build_vector_dirichlet_energy(*M, x, &nE);
     (void)L;
     Eigen::VectorXd u = Eigen::VectorXd::Ones(2 * nE);
-    std::vector<vec2> pv = bontecou::pack_vector_dirichlet_dof_to_vec2(u, nE);
+    std::vector<vec2> pv = kusama::pack_vector_dirichlet_dof_to_vec2(u, nE);
     assert(static_cast<int>(pv.size()) == nE);
     for (int i = 0; i < nE; ++i) {
       assert(std::abs(pv[static_cast<size_t>(i)][0] - 1.0) < 1e-12);
@@ -147,14 +147,14 @@ int main() {
     int nE = 0;
     Eigen::VectorXd evals;
     Eigen::MatrixXd evecs;
-    const bool ok = bontecou::vector_dirichlet_partial_spectrum(
-        *M, x, 1e-8, bontecou::vector_dirichlet_spectrum_band::smallest_algebraic, 0.0, 4, 0,
+    const bool ok = kusama::vector_dirichlet_partial_spectrum(
+        *M, x, 1e-8, kusama::vector_dirichlet_spectrum_band::smallest_algebraic, 0.0, 4, 0,
         evals, evecs, &nE, nullptr);
     assert(ok);
     assert(nE > 0);
     assert(static_cast<int>(evals.size()) >= 3);
     assert(evecs.rows() == 2 * nE);
-    std::vector<vec2> line = bontecou::pack_vector_dirichlet_dof_to_vec2(evecs.col(0), nE);
+    std::vector<vec2> line = kusama::pack_vector_dirichlet_dof_to_vec2(evecs.col(0), nE);
     assert(static_cast<int>(line.size()) == nE);
     std::cout << "[spectral_smoke] vector_dirichlet_partial_spectrum ok (nE=" << nE << ")\n";
   }

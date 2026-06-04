@@ -11,7 +11,7 @@
 #include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/asawa/shell/walk.hpp"
 
-#include "gaudi/bontecou/laplacian.hpp"
+#include "gaudi/kusama/laplacian.hpp"
 
 #include "gaudi/hepworth/shell/constraints.hpp"
 #include "gaudi/hepworth/shell/constraints_init.hpp"
@@ -76,7 +76,7 @@ public:
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
     std::vector<vec3> &x = x_datum->data();
-    bontecou::laplacian3 M(__M, x, true);
+    kusama::laplacian3 M(__M, x, true);
 
     for (int k = 0; k < N; k++) {
       std::cout << "." << std::flush;

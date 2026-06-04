@@ -1,8 +1,8 @@
 #include "gaudi/asawa/datums.hpp"
 #include "gaudi/asawa/faceloader.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
-#include "gaudi/bontecou/vector_dirichlet.hpp"
-#include "gaudi/bontecou/vector_dirichlet_guided.hpp"
+#include "gaudi/kusama/vector_dirichlet.hpp"
+#include "gaudi/kusama/vector_dirichlet_guided.hpp"
 #include "gaudi/common.h"
 
 #include <cassert>
@@ -23,7 +23,7 @@ int main() {
 
   int nE = 0;
   Eigen::SparseMatrix<double> L =
-      bontecou::build_vector_dirichlet_energy(*M, x, &nE);
+      kusama::build_vector_dirichlet_energy(*M, x, &nE);
   assert(nE > 0);
   assert(L.rows() == 2 * nE);
   assert(L.cols() == 2 * nE);
@@ -45,20 +45,20 @@ int main() {
   // Guided solve residual ||(L+λM)u - λMg||
   {
     std::vector<int> slot_map;
-    int nE2 = bontecou::build_compact_edge_dof_map(*M, slot_map);
+    int nE2 = kusama::build_compact_edge_dof_map(*M, slot_map);
     assert(nE2 == nE);
     std::vector<asawa::shell::CornerId> dof_to_corner;
-    bontecou::build_dof_to_corner(*M, slot_map, nE, dof_to_corner);
+    kusama::build_dof_to_corner(*M, slot_map, nE, dof_to_corner);
     std::vector<std::vector<asawa::shell::FaceId>> edge_inc;
-    bontecou::build_edge_incident_faces(*M, slot_map, nE, edge_inc);
-    Eigen::VectorXd g = bontecou::build_edge_curvature_guidance(
+    kusama::build_edge_incident_faces(*M, slot_map, nE, edge_inc);
+    Eigen::VectorXd g = kusama::build_edge_curvature_guidance(
         *M, x, slot_map, nE, dof_to_corner, edge_inc,
         asawa::shell::face_curvature_stencil::one_ring);
     Eigen::VectorXd mass =
-        bontecou::build_edge_barycentric_mass_diagonal(*M, x, nE, dof_to_corner);
+        kusama::build_edge_barycentric_mass_diagonal(*M, x, nE, dof_to_corner);
     const double lambda = 1e6;
     Eigen::VectorXd u =
-        bontecou::solve_guided_vector_dirichlet(L, mass, g, lambda);
+        kusama::solve_guided_vector_dirichlet(L, mass, g, lambda);
     Eigen::SparseMatrix<double> A = L;
     for (int i = 0; i < 2 * nE; ++i)
       A.coeffRef(i, i) += lambda * mass(i);
@@ -73,25 +73,25 @@ int main() {
   // Sign coherence idempotent on oriented guidance
   {
     std::vector<int> slot_map;
-    int nE2 = bontecou::build_compact_edge_dof_map(*M, slot_map);
+    int nE2 = kusama::build_compact_edge_dof_map(*M, slot_map);
     (void)nE2;
     std::vector<asawa::shell::CornerId> dof_to_corner;
-    bontecou::build_dof_to_corner(*M, slot_map, nE, dof_to_corner);
+    kusama::build_dof_to_corner(*M, slot_map, nE, dof_to_corner);
     std::vector<std::vector<asawa::shell::FaceId>> edge_inc;
-    bontecou::build_edge_incident_faces(*M, slot_map, nE, edge_inc);
-    Eigen::VectorXd g = bontecou::build_edge_curvature_guidance(
+    kusama::build_edge_incident_faces(*M, slot_map, nE, edge_inc);
+    Eigen::VectorXd g = kusama::build_edge_curvature_guidance(
         *M, x, slot_map, nE, dof_to_corner, edge_inc,
         asawa::shell::face_curvature_stencil::one_ring);
     std::vector<vec3> edge_n(static_cast<size_t>(nE), vec3::UnitZ());
     for (int e = 0; e < nE; ++e)
       edge_n[static_cast<size_t>(e)] =
-          bontecou::edge_average_normal(*M, x, edge_inc[static_cast<size_t>(e)]);
-    std::vector<std::vector<bontecou::edge_triangle_link>> adj;
-    bontecou::build_edge_triangle_adjacency(*M, slot_map, nE, adj);
-    bontecou::orient_edge_guidance_sign_coherence(*M, x, nE, dof_to_corner,
+          kusama::edge_average_normal(*M, x, edge_inc[static_cast<size_t>(e)]);
+    std::vector<std::vector<kusama::edge_triangle_link>> adj;
+    kusama::build_edge_triangle_adjacency(*M, slot_map, nE, adj);
+    kusama::orient_edge_guidance_sign_coherence(*M, x, nE, dof_to_corner,
                                                   edge_n, adj, g);
     Eigen::VectorXd once = g;
-    bontecou::orient_edge_guidance_sign_coherence(*M, x, nE, dof_to_corner,
+    kusama::orient_edge_guidance_sign_coherence(*M, x, nE, dof_to_corner,
                                                   edge_n, adj, g);
     assert((g - once).norm() < 1e-12);
     std::cout << "[vector_dirichlet_smoke] sign coherence idempotent ok\n";

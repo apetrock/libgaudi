@@ -16,7 +16,7 @@
 /// **Vertex Laplacian vs vector Dirichlet (Stein edge stiffness):** this integrator operates in
 /// **dense-packed vertex index space** (`A.rows() == vert_count`). The Stein operator from
 /// `build_vector_dirichlet_energy` is `(2|E|)×(2|E|)` on edge DOFs — use
-/// `bontecou::vector_dirichlet_partial_spectrum` for that spectrum; do not feed raw Stein `L`
+/// `kusama::vector_dirichlet_partial_spectrum` for that spectrum; do not feed raw Stein `L`
 /// here unless you first reduce/prolong to `|V|` (not provided).
 ///
 /// **GL / manual validation:** `projects/spectral_modes_test` (keys **B**, **N**, **W**).
@@ -25,9 +25,9 @@
 #include "gaudi/asawa/shell/datum_x.hpp"
 #include "gaudi/asawa/shell/operations.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
-#include "gaudi/bontecou/laplace_spectrum.hpp"
-#include "gaudi/bontecou/laplacian.hpp"
-#include "gaudi/bontecou/laplacian_anisotropic.hpp"
+#include "gaudi/kusama/laplace_spectrum.hpp"
+#include "gaudi/kusama/laplacian.hpp"
+#include "gaudi/kusama/laplacian_anisotropic.hpp"
 #include "gaudi/common.h"
 #include "gaudi/duchamp/laplace_modes_band.hpp"
 
@@ -43,8 +43,8 @@
 namespace gaudi {
 namespace duchamp {
 
-using bontecou::index_t;
-using bontecou::real;
+using kusama::index_t;
+using kusama::real;
 
 /// Same mid-band semantics as `spectral_modes_demo`.
 struct spectral_projection_config {
@@ -174,12 +174,12 @@ make_default_cotan_vertex_operator(asawa::shell::shell::ptr M, std::vector<vec3>
   const int nv = static_cast<int>(x.size());
   if (nv <= 0)
     return {};
-  bontecou::laplacian lap(M, x);
-  Eigen::SparseMatrix<double> Ls = bontecou::symmetrize_sparse(lap.stiffness());
+  kusama::laplacian lap(M, x);
+  Eigen::SparseMatrix<double> Ls = kusama::symmetrize_sparse(lap.stiffness());
   Eigen::SparseMatrix<double> Lpos = Ls;
   Lpos *= -1.0;
   Lpos.makeCompressed();
-  return bontecou::regularize_stiffness(Lpos, static_cast<real>(cfg.epsilon_shift));
+  return kusama::regularize_stiffness(Lpos, static_cast<real>(cfg.epsilon_shift));
 }
 
 /// Curvature-guided anisotropic cotan stiffness: `A = -sym(L_aniso) + εI` (same post-process
@@ -189,19 +189,19 @@ make_anisotropic_cotan_vertex_operator(asawa::shell::shell::ptr M, std::vector<v
                                        const spectral_projection_config &cfg,
                                        real vd_lambda, real sigma_u, real sigma_v,
                                        asawa::shell::face_curvature_stencil stencil,
-                                       bontecou::anisotropic_laplacian_kind kind) {
+                                       kusama::anisotropic_laplacian_kind kind) {
   if (!M)
     return {};
   const int nv = static_cast<int>(x.size());
   if (nv <= 0)
     return {};
-  Eigen::SparseMatrix<real> C = bontecou::build_curvature_aligned_laplacian(
+  Eigen::SparseMatrix<real> C = kusama::build_curvature_aligned_laplacian(
       *M, x, vd_lambda, sigma_u, sigma_v, stencil, kind);
-  Eigen::SparseMatrix<double> Ls = bontecou::symmetrize_sparse(C);
+  Eigen::SparseMatrix<double> Ls = kusama::symmetrize_sparse(C);
   Eigen::SparseMatrix<double> Lpos = Ls;
   Lpos *= -1.0;
   Lpos.makeCompressed();
-  return bontecou::regularize_stiffness(Lpos, static_cast<real>(cfg.epsilon_shift));
+  return kusama::regularize_stiffness(Lpos, static_cast<real>(cfg.epsilon_shift));
 }
 
 /// Default: Spectra via `laplace_eigs_*` / `spectrum.hpp` (symmetric `A`).
@@ -214,14 +214,14 @@ inline bool default_vertex_eigensolve_for_projection(const Eigen::SparseMatrix<d
   const index_t k_req = std::max(1, cfg.requested_modes);
   sigma_used = 0.0;
   if (cfg.band == laplace_modes_band::low_frequency) {
-    return bontecou::laplace_eigs_low_frequency(A, k_req, cfg.ncv, evals, evecs, warm_start);
+    return kusama::laplace_eigs_low_frequency(A, k_req, cfg.ncv, evals, evecs, warm_start);
   }
   if (cfg.band == laplace_modes_band::largest_magnitude) {
-    return bontecou::laplace_eigs_largest_magnitude(A, k_req, cfg.ncv, evals, evecs, warm_start);
+    return kusama::laplace_eigs_largest_magnitude(A, k_req, cfg.ncv, evals, evecs, warm_start);
   }
   double sigma = cfg.mid_band_shift;
   if (sigma < 0.0) {
-    const double bound = bontecou::sparse_sym_max_row_sum_abs(A);
+    const double bound = kusama::sparse_sym_max_row_sum_abs(A);
     if (cfg.mid_slider_t >= 0.0 && cfg.mid_slider_t <= 1.0) {
       const double t = std::clamp(cfg.mid_slider_t, 0.0, 1.0);
       sigma = t * std::max(bound, 1e-12);
@@ -231,7 +231,7 @@ inline bool default_vertex_eigensolve_for_projection(const Eigen::SparseMatrix<d
     }
   }
   sigma_used = sigma;
-  return bontecou::laplace_eigs_shift_invert_nearest(
+  return kusama::laplace_eigs_shift_invert_nearest(
       A, static_cast<real>(sigma), k_req, cfg.ncv, evals, evecs, warm_start);
 }
 
