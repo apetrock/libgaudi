@@ -136,12 +136,21 @@ namespace gaudi
       using type = typename M_TYPE::type;
       std::cout << "gf 0 " << std::endl;
       std::vector<F_TYPE> accumulators(p_pov.size());
+      // Per-primitive area (weight). Ns holds area-weighted normals, so the
+      // area of a single primitive is |Ns|. The area must be summed as a
+      // scalar through the tree: summing the area-weighted normal vector and
+      // taking its magnitude lets opposing normals cancel, which collapses the
+      // weight for curved clusters and biases the fit.
+      std::vector<real> areas(Ns.size(), 0.0);
+      for (size_t k = 0; k < Ns.size(); k++)
+        areas[k] = Ns[k].norm();
       std::cout << "gf 1 " << std::endl;
       std::vector<type> us = M_TYPE::integrate(
           M, p_pov,
-          [&Ns](const std::vector<index_t> &edge_ids, typename M_TYPE::Sum_Type &sum)
+          [&Ns, &areas](const std::vector<index_t> &edge_ids, typename M_TYPE::Sum_Type &sum)
           {
             sum.bind(calder::vec3_datum::create(edge_ids, Ns));
+            sum.bind(calder::scalar_datum::create(edge_ids, areas));
           },
           [&](const index_t i, const index_t j, //
               const vec3 &pi, const vec3 &pj,
@@ -149,12 +158,16 @@ namespace gaudi
               typename M_TYPE::Sum_Type::Node_Type node_type, //
               const typename M_TYPE::Sum_Type::Tree &tree) -> type
           {
-            vec3 Nj = get_data<vec3>(node_type, j, 0, data);
+            vec3 Nj = get_data<vec3>(node_type, j, 0, data); // sum(area * n)
+            real wj = get_data<real>(node_type, j, 1, data); // sum(area)
             vec3 Ni = n_pov[i];
 
-            real wj = Nj.norm();
-
-            Nj /= wj;
+            real nrm = Nj.norm();
+            if (nrm < 1e-12)
+            { // direction undefined (fully canceling cluster)
+              return 0.0;
+            }
+            Nj /= nrm; // area-weighted mean normal direction
 
             vec3 dp = pj - pi;
             real wf = weight_func(i, j, data, node_type, dp, Ni, Nj, l0, p);
@@ -668,8 +681,6 @@ namespace gaudi
         Ns[i] = weights[i] * Ns[i];
       }
       return generic_fit<albers::darboux_cyclide, shell_bundle>(
-          M, Ns, p_pov, N_pov, l0, p, shell_inv_rad_weight);
-      return generic_fit<albers::darboux_cyclide, shell_bundle>(
           M, Ns, p_pov, N_pov, l0, p, shell_inv_dist_weight);
     }
 
@@ -682,7 +693,7 @@ namespace gaudi
       std::vector<vec3> out(p_pov.size(), vec3::Zero());
       for (int i = 0; i < Q.size(); i++)
       {
-        out[i] = -Q[i][9] * Q[i].segment(6, 3); // double check, this is right...
+        out[i] = -Q[i][9] * albers::darboux_grad(Q[i], vec3::Zero());
         if (out[i].hasNaN())
         {
           out[i] = vec3::Zero();

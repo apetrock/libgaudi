@@ -1112,9 +1112,10 @@ class bvh_tree {
 template <int N>
 using BVH_T = bvh_tree<N, morton_t>;
 
-using T1 = bvh_tree<1, morton_t>;
-using T2 = bvh_tree<2, morton_t>;
-using T3 = bvh_tree<3, morton_t>;
+// NOTE: the backend-neutral proximity/FMM aliases T1/T2/T3 live on the module
+// export surface in arp.h, where they are selected by USE_HASH (Morton bvh_tree
+// vs the modernized legacy aabb_tree). Consumers of arp::T1/T2/T3 must include
+// "gaudi/arp/arp.h" so the toggle is honored.
 
 // Explicit instantiation declarations - controlled by CMake option
 #if defined(GAUDI_USE_EXPLICIT_INSTANTIATIONS) &&                              \

@@ -264,8 +264,14 @@ public:
       int kk = edges_B.get_index(k);
       std::vector<index_t> neighbors =
           bvh_tree->find_neighbors(edge, tol);
-      for (index_t neighbor : neighbors) {
-        per_edge[k].push_back({kk, neighbor});
+      if (neighbors.empty()) {
+        // Emit a sentinel so every query edge has at least one result slot;
+        // downstream wrappers filter on negative ids.
+        per_edge[k].push_back({-1, -1});
+      } else {
+        for (index_t neighbor : neighbors) {
+          per_edge[k].push_back({kk, neighbor});
+        }
       }
     }
 
@@ -307,8 +313,14 @@ public:
       const point_slice<PTYPE> point(points_B, k);
       std::vector<index_t> neighbors =
           bvh_tree->find_neighbors(point, tol);
-      for (index_t neighbor : neighbors) {
-        per_point[k].push_back({k, neighbor});
+      if (neighbors.empty()) {
+        // Emit a sentinel so every query point has at least one result slot;
+        // downstream wrappers filter on negative ids.
+        per_point[k].push_back({-1, -1});
+      } else {
+        for (index_t neighbor : neighbors) {
+          per_point[k].push_back({k, neighbor});
+        }
       }
     }
 

@@ -10,6 +10,43 @@ import { consoleLogger } from '../stores/consoleLoggerStore';
 interface BvhTestModuleWithLogger extends BvhTestModule, LoggerWasmModule {}
 interface BvhTestInstanceWithLogger extends BvhTestInstance, WasmLoggerAPI {}
 
+// Procedural radial (UV) sphere as an OBJ string -- mirrors asawa::make_sphere
+// so the demo has no asset-file dependency.
+const generateSphereObj = (radius = 1.0, uSeg = 24, vSeg = 16): string => {
+  const v: string[] = [];
+  const f: string[] = [];
+  v.push(`v 0 ${radius} 0`); // top pole -> index 1
+  for (let r = 1; r < vSeg; r++) {
+    const phi = (Math.PI * r) / vSeg;
+    const y = radius * Math.cos(phi);
+    const rr = radius * Math.sin(phi);
+    for (let s = 0; s < uSeg; s++) {
+      const th = (2 * Math.PI * s) / uSeg;
+      v.push(`v ${rr * Math.cos(th)} ${y} ${rr * Math.sin(th)}`);
+    }
+  }
+  v.push(`v 0 ${-radius} 0`); // bottom pole
+  const top = 1;
+  const bottom = v.length;
+  const ring = (r: number, s: number) =>
+    2 + (r - 1) * uSeg + (((s % uSeg) + uSeg) % uSeg);
+  for (let s = 0; s < uSeg; s++)
+    f.push(`f ${top} ${ring(1, s)} ${ring(1, s + 1)}`);
+  for (let r = 1; r < vSeg - 1; r++)
+    for (let s = 0; s < uSeg; s++) {
+      const a = ring(r, s);
+      const b = ring(r + 1, s);
+      const c = ring(r + 1, s + 1);
+      const d = ring(r, s + 1);
+      f.push(`f ${a} ${b} ${c}`);
+      f.push(`f ${a} ${c} ${d}`);
+    }
+  const last = vSeg - 1;
+  for (let s = 0; s < uSeg; s++)
+    f.push(`f ${bottom} ${ring(last, s + 1)} ${ring(last, s)}`);
+  return [...v, ...f].join("\n") + "\n";
+};
+
 export const BvhTest = () => {
   const [module, setModule] = useState<BvhTestModuleWithLogger | null>(null);
   const [instance, setInstance] = useState<BvhTestInstanceWithLogger | null>(null);
@@ -52,13 +89,8 @@ export const BvhTest = () => {
     if (!instance) return;
     
     try {
-      // Fetch the sphere.obj from the assets
-      const response = await fetch('/assets/models/sphere.obj');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch sphere.obj: ${response.status}`);
-      }
-      const objContent = await response.text();
-      instance.setSphereObjData(objContent);
+      // Procedurally generated sphere -- no asset file needed.
+      const objContent = generateSphereObj();
 
       const success = instance.loadMeshFromString(objContent);
       if (success) {

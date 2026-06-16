@@ -310,10 +310,6 @@ public:
   void clearVisualization() { geometry_logger::clear(); }
 
   // Test harness helpers
-  void setSphereObjData(const std::string &objContent) {
-    gaudi::test::assets::set_sphere_obj_data(objContent);
-  }
-
   bool runAllTests() {
     auto result = gaudi::test::Registry::run_all();
     last_suite_total_ = result.total;
@@ -392,7 +388,6 @@ EMSCRIPTEN_BINDINGS(bvh_test) {
       .function("getLastBvhResult", &BvhTest::getLastBvhResult)
       .function("getLastBruteResult", &BvhTest::getLastBruteResult)
       .function("getLastTestPassed", &BvhTest::getLastTestPassed)
-      .function("setSphereObjData", &BvhTest::setSphereObjData)
       .function("runAllTests", &BvhTest::runAllTests)
       .function("getLastSuiteTotal", &BvhTest::getLastSuiteTotal)
       .function("getLastSuiteFailed", &BvhTest::getLastSuiteFailed)

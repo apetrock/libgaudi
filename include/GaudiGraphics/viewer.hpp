@@ -7,6 +7,8 @@
 // #include <nanogui/glutil.h>
 #include <nanogui/nanogui.h>
 
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <random>
@@ -20,6 +22,7 @@
 #include <regex>
 #include <sstream>
 
+#if defined(GL_DEBUG_TYPE_ERROR) && defined(GL_DEBUG_SEVERITY_HIGH)
 inline const char *GLTypeToString(GLenum type) {
   switch (type) {
   case GL_DEBUG_TYPE_ERROR:
@@ -77,6 +80,7 @@ inline void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id,
           (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""), typeStr,
           sevStr, message);
 }
+#endif
 
 namespace gg {
 using namespace GaudiMath;
@@ -217,6 +221,12 @@ public:
     Vec3 axis = rotation.normalized();
     Eigen::Quaternionf q(Eigen::AngleAxisf(angle, axis));
     ball->state() *= q;
+    updatePosition();
+  }
+
+  void zoom(float amount) {
+    mDist *= std::exp(-0.08 * static_cast<double>(amount));
+    mDist = std::clamp(mDist, 0.2, 50.0);
     updatePosition();
   }
 
@@ -975,6 +985,10 @@ public:
     // window->setPosition(Vector2i(15, 15));
     // window->setLayout(new GroupLayout());
     const GLubyte* version = glGetString(GL_VERSION);
+    if (mFBSize[0] > 0 && mFBSize[1] > 0) {
+      _width = mFBSize[0];
+      _height = mFBSize[1];
+    }
     std::cout << "OpenGL Version: " << version << std::endl;
     std::cout << "screen size: " << _width << " " << _height << std::endl;
     std::cout << "size: " << mSize.transpose() << std::endl;
@@ -983,10 +997,12 @@ public:
     performLayout(mNVGContext);
     std::cerr << "[simple_app] performLayout end" << std::endl;
     std::cerr << "[simple_app] viewer create begin" << std::endl;
-    _viewer = gg::Viewer::create(mSize, d);
+    _viewer = gg::Viewer::create(Eigen::Vector2i(_width, _height), d);
     std::cerr << "[simple_app] viewer create end" << std::endl;
 
     // During init, enable GL debug output only when the driver exposes it.
+#if defined(GL_DEBUG_OUTPUT) && defined(GL_DEBUG_TYPE_ERROR) &&                \
+    defined(GL_DEBUG_SEVERITY_HIGH)
     std::cerr << "[simple_app] enabling GL debug" << std::endl;
     if (glDebugMessageCallback != nullptr) {
       glEnable(GL_DEBUG_OUTPUT);
@@ -996,6 +1012,11 @@ public:
       std::cerr << "[simple_app] GL debug callback unavailable; skipping"
                 << std::endl;
     }
+#else
+    std::cerr << "[simple_app] GL debug callback unavailable at compile time; "
+                 "skipping"
+              << std::endl;
+#endif
 
     std::cerr << "[simple_app] enabling depth/cull" << std::endl;
     glEnable(GL_DEPTH_TEST);
@@ -1076,6 +1097,21 @@ public:
 
     _viewer->onMouseMotion(p, rel, button, modifiers);
     Screen::mouseMotionEvent(p, rel, button, modifiers);
+    return true;
+  }
+
+  virtual bool scrollEvent(const Eigen::Vector2i &p,
+                           const Eigen::Vector2f &rel) override {
+    const bool zoom_modifier =
+        glfwGetKey(mGLFWWindow, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+        glfwGetKey(mGLFWWindow, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS ||
+        glfwGetKey(mGLFWWindow, GLFW_KEY_LEFT_ALT) == GLFW_PRESS ||
+        glfwGetKey(mGLFWWindow, GLFW_KEY_RIGHT_ALT) == GLFW_PRESS;
+
+    if (!zoom_modifier)
+      return Screen::scrollEvent(p, rel);
+
+    _viewer->zoom(rel.y());
     return true;
   }
 

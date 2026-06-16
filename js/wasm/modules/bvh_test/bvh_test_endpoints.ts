@@ -30,7 +30,6 @@ export interface BvhTestInstance {
   getLastTestPassed(): boolean;
 
   // Test harness
-  setSphereObjData(objContent: string): void;
   runAllTests(): boolean;
   getLastSuiteTotal(): number;
   getLastSuiteFailed(): number;

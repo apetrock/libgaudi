@@ -77,10 +77,18 @@ namespace gaudi
         w = 0.0;
       }
 
-      void accumulate(real w, const vec3 &x, const vec3 &N)
+      void set_hessian_weight(real /*weight*/) {}
+
+      void accumulate(real w, const vec3 &x, const vec3 &N,
+                      const mat3 & /*S*/)
       {
         A += w * mk_sphere_v(x);
-        w += w;
+        this->w += w;
+      }
+
+      void accumulate(real w, const vec3 &x, const vec3 &N)
+      {
+        accumulate(w, x, N, mat3::Zero());
       }
 
       vec4 solve()
@@ -94,6 +102,20 @@ namespace gaudi
     TYPEDEF_VEC(5)
     TYPEDEF_MAT(5)
     TYPEDEF_MAT_NM(4, 5)
+    TYPEDEF_MAT_NM(6, 5)
+
+    mat65 mk_sphere_H(vec3 /*dx*/)
+    {
+      mat65 H = mat65::Zero();
+      H.col(0) = vec6(2.0, 2.0, 2.0, 0.0, 0.0, 0.0);
+      return H;
+    }
+
+    vec5 mk_sphere_L(vec3 dx)
+    {
+      const mat65 H = mk_sphere_H(dx);
+      return (H.row(0) + H.row(1) + H.row(2)).transpose();
+    }
 
     mat45 mk_sphere_A(vec3 dx, const vec3 &N)
     {
@@ -137,16 +159,22 @@ namespace gaudi
         b = vec5::Zero();
       }
 
-      void accumulate(real w, const vec3 &x, const vec3 &N)
+      void set_hessian_weight(real w) { hessian_weight_ = w; }
+      real hessian_weight() const { return hessian_weight_; }
+
+      void accumulate(real w, const vec3 &x, const vec3 &N,
+                      const mat3 &S = mat3::Zero())
       {
         vec3 dx = x - vec3::Zero();
-        // placeholder for center, somehow one should be able to pass
-        // center for iterative conditioning
-
         mat45 Ab = mk_sphere_A(dx, N);
         vec4 Nb = mk_N(N);
         b += w * Ab.transpose() * Nb;
         A += w * Ab.transpose() * Ab;
+        if (hessian_weight_ > 0.0)
+        {
+          const mat65 H = mk_sphere_H(dx);
+          accumulate_hessian_block3(hessian_weight_, w, H, S, A, b);
+        }
       }
 
       vec4 solve()
@@ -168,6 +196,9 @@ namespace gaudi
 
       mat5 A;
       vec5 b;
+
+    private:
+      real hessian_weight_ = 0.0;
     };
 
   }

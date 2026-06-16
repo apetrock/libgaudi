@@ -5,6 +5,7 @@
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
 #include "gaudi/arp/hash_tree.hpp"
+#include "gaudi/arp/tree_view.hpp"
 #include "gaudi/logger.hpp"
 #include <vector>
 #include "gaudi/geometry_logger.hpp"
@@ -59,12 +60,16 @@ void test_pyramid_scalar(const TREE &tree, const std::vector<index_t> &q_indices
 //
 // on_far:  void(index_t node_id, index_t query_id, const vec3 &query)
 // on_leaf: void(index_t leaf_id, index_t orig_id, index_t query_id, const vec3 &query)
+//
+// The walk is sourced entirely through arp::tree_view (canonical radix node
+// arrays + bounding boxes), so it is identical for any backend (Morton BVH or
+// the modernized legacy AABB) that exposes that representation.
 template <typename TREE, typename OnFar, typename OnLeaf>
 void traverse_bh_opening(const TREE &tree, index_t query_id,
                          const vec3 &query, real eps,
                          OnFar &&on_far, OnLeaf &&on_leaf) {
-  const auto &internal_nodes = tree.internal_nodes_;
-  const auto &bvh = tree.bvh_;
+  const arp::tree_view view = arp::make_tree_view(tree);
+  const auto &internal_nodes = view.internal_nodes();
 
   if (internal_nodes.empty())
     return;
@@ -85,7 +90,7 @@ void traverse_bh_opening(const TREE &tree, index_t query_id,
     if (arp::left_leaf(node) || arp::right_leaf(node)) {
       if (arp::left_leaf(node)) {
         index_t leaf_id = node.start;
-        index_t orig_id = tree.get_index(leaf_id);
+        index_t orig_id = view.get_index(leaf_id);
         on_leaf(leaf_id, orig_id, query_id, query);
       } else {
         stack.push_back(node.split);
@@ -93,13 +98,13 @@ void traverse_bh_opening(const TREE &tree, index_t query_id,
 
       if (arp::right_leaf(node)) {
         index_t leaf_id = node.end;
-        index_t orig_id = tree.get_index(leaf_id);
+        index_t orig_id = view.get_index(leaf_id);
         on_leaf(leaf_id, orig_id, query_id, query);
       } else {
         stack.push_back(node.split + 1);
       }
     } else {
-      const ext::extents_t &e = bvh.internal[node_id];
+      const ext::extents_t &e = view.internal_bbox(node_id);
       vec3 de = e[1] - e[0];
       real V = de[0] * de[1] * de[2];
       real sc = pow(0.75 * V / M_PI, 1.0 / 3.0);
@@ -124,17 +129,18 @@ void log_bvh_barnes_hut(const TREE &tree, const std::vector<vec3> &queries,
                         real eps,
                         const vec4 &far_color = vec4(0.5, 0.5, 0.1, 1.0),
                         const vec4 &near_color = vec4(0.1, 0.8, 0.2, 1.0)) {
+  const arp::tree_view view = arp::make_tree_view(tree);
   for (int qi = 0; qi < static_cast<int>(queries.size()); qi++) {
     traverse_bh_opening(
         tree, qi, queries[qi], eps,
         [&](index_t node_id, index_t, const vec3 & query) {
-          const ext::extents_t &e = tree.bvh_.internal[node_id];
+          const ext::extents_t &e = view.internal_bbox(node_id);
           vec3 cen = 0.5 * (e[0] + e[1]);
           geometry_logger::line(cen, query, far_color);
           geometry_logger::ext(e[0], e[1], far_color);
         },
         [&](index_t leaf_id, index_t, index_t, const vec3 &) {
-          const ext::extents_t &e = tree.bvh_.leaf[leaf_id];
+          const ext::extents_t &e = view.leaf_bbox(leaf_id);
           vec3 cen = 0.5 * (e[0] + e[1]);
           geometry_logger::ext(e[0], e[1], near_color);
           geometry_logger::point(queries[qi], near_color);

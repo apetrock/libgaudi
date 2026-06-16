@@ -1,6 +1,18 @@
 #include "TIMER.h"
 #include <cassert>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
+
+namespace {
+bool timer_in_parallel() {
+#ifdef _OPENMP
+  return omp_in_parallel();
+#else
+  return false;
+#endif
+}
+} // namespace
 
 using namespace std;
 
@@ -13,7 +25,7 @@ std::stack<std::string> TIMER::_callStack;
 ///////////////////////////////////////////////////////////////////////
 TIMER::TIMER(string blockName) : _stopped(false) 
 {
-  if (omp_in_parallel())
+  if (timer_in_parallel())
     return;
 
   // look at the back of the call stack,
@@ -56,7 +68,7 @@ TIMER::~TIMER()
 ///////////////////////////////////////////////////////////////////////
 void TIMER::stop()
 {
-  if (omp_in_parallel())
+  if (timer_in_parallel())
     return;
   assert(_callStack.size() > 0);
   

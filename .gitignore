@@ -48,6 +48,9 @@ Makefile
 *.dylib
 *.dll
 
+# Asset exceptions (committed test models, despite *.obj above)
+!assets/bunny.obj
+
 # WebAssembly files
 *.wasm
 *.wat

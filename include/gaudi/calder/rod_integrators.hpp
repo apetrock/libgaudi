@@ -2,6 +2,7 @@
 #define __ROD_INTEGRATOR__
 
 #include "gaudi/common.h"
+#include "gaudi/arp/arp.h"
 #include "gaudi/arp/hash_tree.hpp"
 #include "integrators.hpp"
 #include "gaudi/geometry_logger.hpp"

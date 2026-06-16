@@ -12,7 +12,7 @@
 
 import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -74,24 +74,8 @@ async function main() {
       });
     }
     
-    // Try to load sphere.obj for BVH tests (optional)
-    const sphereObjPath = join(__dirname, '..', 'public', 'assets', 'models', 'sphere.obj');
-    if (existsSync(sphereObjPath)) {
-      console.log(`${colors.dim}📁 Loading sphere.obj for BVH tests...${colors.reset}\n`);
-      const sphereData = readFileSync(sphereObjPath, 'utf-8');
-      Module.setSphereObj(sphereData);
-    } else {
-      // Also try the assets folder at project root
-      const rootSphereObjPath = join(__dirname, '..', '..', 'assets', 'models', 'sphere.obj');
-      if (existsSync(rootSphereObjPath)) {
-        console.log(`${colors.dim}📁 Loading sphere.obj from assets...${colors.reset}\n`);
-        const sphereData = readFileSync(rootSphereObjPath, 'utf-8');
-        Module.setSphereObj(sphereData);
-      } else {
-        console.log(`${colors.yellow}⚠️  sphere.obj not found - BVH mesh tests may fail${colors.reset}\n`);
-      }
-    }
-    
+    // BVH tests generate their meshes procedurally -- no asset injection needed.
+
     // Run all tests
     console.log(`${colors.bright}Running tests...${colors.reset}\n`);
     console.log('─'.repeat(60));

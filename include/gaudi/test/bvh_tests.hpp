@@ -5,7 +5,7 @@
 #include "gaudi/arp/hash_tree.hpp"
 #include "gaudi/arp/simplex_set.hpp"
 #include "gaudi/asawa/faceloader.hpp"
-#include "gaudi/asawa/objloader_refactor.hpp"
+#include "gaudi/asawa/primitive_objects.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/common.h"
 #include "gaudi/paths.hpp"
@@ -21,39 +21,6 @@
 
 namespace gaudi {
 namespace test {
-namespace assets {
-
-inline std::string &sphere_obj_data() {
-  static std::string data;
-  return data;
-}
-
-inline void set_sphere_obj_data(const std::string &data) {
-  sphere_obj_data() = data;
-}
-
-inline std::string load_sphere_obj_from_file(
-    const std::string &name = "assets/models/sphere.obj") {
-  auto resolved = gaudi::resolve_path(name);
-  std::ifstream in(resolved, std::ios::in | std::ios::binary);
-  if (!in)
-    return {};
-  std::string contents;
-  in.seekg(0, std::ios::end);
-  contents.resize(static_cast<size_t>(in.tellg()));
-  in.seekg(0, std::ios::beg);
-  in.read(contents.data(), contents.size());
-  return contents;
-}
-
-inline std::string get_sphere_obj_data() {
-  if (!sphere_obj_data().empty()) {
-    return sphere_obj_data();
-  }
-  return load_sphere_obj_from_file();
-}
-
-} // namespace assets
 
 struct MeshData {
   std::vector<vec3> vertices;
@@ -64,11 +31,10 @@ struct MeshData {
   asawa::shell::shell::ptr shell;
 };
 
+// Procedural sphere mesh -- self-contained, no asset file dependency.
 inline MeshData load_sphere_mesh() {
   MeshData mesh;
-  const std::string obj_data = assets::get_sphere_obj_data();
-  GAUDI_ASSERT(!obj_data.empty());
-  asawa::loadObjFromString(obj_data, mesh.vertices, mesh.faces);
+  asawa::make_sphere(mesh.vertices, mesh.faces);
   GAUDI_ASSERT(!mesh.vertices.empty());
   GAUDI_ASSERT(!mesh.faces.empty());
 

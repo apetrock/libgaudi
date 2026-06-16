@@ -5,6 +5,7 @@
 #include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/common.h"
 #include "gaudi/geometry_types.hpp"
+#include "gaudi/arp/arp.h"
 #include "gaudi/arp/hash_tree.hpp"
 #include "gaudi/arp/datums.hpp"
 

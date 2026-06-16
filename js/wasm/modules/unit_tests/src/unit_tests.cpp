@@ -14,15 +14,10 @@
 #include "gaudi/test/simplex_algorithm_tests.hpp"
 #include "gaudi/test/morton_simplex_tests.hpp"
 
-// BVH tests require mesh data - include but set data from JS
+// BVH tests use procedurally generated meshes (no asset injection needed)
 #include "gaudi/test/bvh_tests.hpp"
 
 using namespace gaudi;
-
-// Set sphere OBJ data from JavaScript (for tests that need mesh data)
-void set_sphere_obj(const std::string& obj_data) {
-    test::assets::set_sphere_obj_data(obj_data);
-}
 
 // Run all tests and return a summary string
 std::string run_all_tests() {
@@ -75,5 +70,4 @@ std::string run_core_tests() {
 EMSCRIPTEN_BINDINGS(unit_tests) {
     emscripten::function("runAllTests", &run_all_tests);
     emscripten::function("runCoreTests", &run_core_tests);
-    emscripten::function("setSphereObj", &set_sphere_obj);
 }

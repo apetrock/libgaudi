@@ -146,7 +146,8 @@ GAUDI_TEST(pyramid_extents_datum_matches_make_bvh) {
   std::iota(identity_adj.begin(), identity_adj.end(), 0);
 
   calder::extents_datum ext_datum(identity_adj, fix.centers);
-  ext_datum.do_pyramid(fix.indices, fix.internal_nodes, fix.leaf_nodes);
+  ext_datum.do_pyramid(
+      arp::tree_view(fix.indices, fix.internal_nodes, fix.leaf_nodes));
 
   GAUDI_ASSERT(ext_datum.node_data().size() == bvh_result.internal.size());
 

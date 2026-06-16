@@ -1,6 +1,7 @@
 #ifndef __SHELL_INTEGRATOR__
 #define __SHELL_INTEGRATOR__
 
+#include "gaudi/arp/arp.h"
 #include "gaudi/arp/hash_tree.hpp"
 #include "gaudi/arp/datums.hpp"
 #include "integrators.hpp"
@@ -258,6 +259,7 @@ namespace gaudi
                          Shell_Sum_Type &sum)
           {
             sum.bind(calder::vec3_datum::create(face_ids, N));
+            sum.bind(calder::scalar_datum::create(face_ids, weights));
           },
           [l0, p, &N, &sums](const index_t i, const index_t j,
                              const vec3 &pi, const vec3 &pj,
@@ -265,9 +267,11 @@ namespace gaudi
                              Shell_Sum_Type::Node_Type node_type,
                              const Shell_Sum_Type::Tree &tree) -> mat3
           {
-            vec3 Nj = get_data<vec3>(node_type, j, 0, data);
-            real wN = Nj.norm();
-            Nj /= wN;
+            vec3 Nj = get_data<vec3>(node_type, j, 0, data); // sum(area * n)
+            real wN = get_data<real>(node_type, j, 1, data); // sum(area)
+            if (Nj.norm() < 1e-12)
+              return mat3::Zero();
+            Nj.normalize();
             vec3 dp = pj - pi;
             real w = calc_inv_dist(dp, l0, p);
             sums[i] += w * wN;
@@ -314,6 +318,7 @@ namespace gaudi
                          Shell_Sum_Type &sum)
           {
             sum.bind(calder::vec3_datum::create(face_ids, N));
+            sum.bind(calder::scalar_datum::create(face_ids, weights));
           },
           [l0, p, &N_pov, &sums](const index_t i, const index_t j,
                                  const vec3 &pi, const vec3 &pj,
@@ -322,9 +327,11 @@ namespace gaudi
                                  const Shell_Sum_Type::Tree &tree) -> mat3
           {
             vec3 Ni = N_pov[i];
-            vec3 Nj = get_data<vec3>(node_type, j, 0, data);
-            real wN = Nj.norm();
-            Nj /= wN;
+            vec3 Nj = get_data<vec3>(node_type, j, 0, data); // sum(area * n)
+            real wN = get_data<real>(node_type, j, 1, data); // sum(area)
+            if (Nj.norm() < 1e-12)
+              return mat3::Zero();
+            Nj.normalize();
 
             vec3 dp = pj - pi;
             real Nidp = Ni.dot(dp);
@@ -376,6 +383,7 @@ namespace gaudi
                          Shell_Sum_Type &sum)
           {
             sum.bind(calder::vec3_datum::create(face_ids, N));
+            sum.bind(calder::scalar_datum::create(face_ids, weights));
           },
           [l0, p, &N_pov, &sums](const index_t i, const index_t j,
                                  const vec3 &pi, const vec3 &pj,
@@ -384,9 +392,11 @@ namespace gaudi
                                  const Shell_Sum_Type::Tree &tree) -> mat3
           {
             vec3 Ni = N_pov[i];
-            vec3 Nj = get_data<vec3>(node_type, j, 0, data);
-            real wN = Nj.norm();
-            Nj /= wN;
+            vec3 Nj = get_data<vec3>(node_type, j, 0, data); // sum(area * n)
+            real wN = get_data<real>(node_type, j, 1, data); // sum(area)
+            if (Nj.norm() < 1e-12)
+              return mat3::Zero();
+            Nj.normalize();
             mat3 R = va::rejection_matrix(Ni);
             real Nij = Ni.dot(Nj);
             if (Nij < 0)

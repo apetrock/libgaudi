@@ -1,34 +1,44 @@
-#include <Eigen/Dense>
-#include <Eigen/Eigenvalues>
-
-#include "gaudi/geometry_types.hpp"
-#include "gaudi/logger.hpp"
-#include "gaudi/vec_addendum.h"
-#include <algorithm>
-#include <array>
-#include <cmath>
-#include <cstdio>
-#include <functional>
-#include <iostream>
-#include <queue>
-#include <stack>
-#include <vector>
-#include "gaudi/geometry_logger.hpp"
-
 #ifndef __AAABBB__
 #define __AAABBB__
+
+// ---------------------------------------------------------------------------
+// Legacy half-space AABB tree, modernized onto the SimplexView model.
+// ---------------------------------------------------------------------------
+// This used to be a bucket tree (1 leaf = many primitives, addressed by an
+// `S`/`NODE_S` stride). It now produces the SAME canonical representation as
+// the Morton/radix BVH in hash_tree.hpp:
+//
+//   indices_         sorted-leaf id -> original simplex id (permutation)
+//   internal_nodes_  radix_tree_node[] (N-1 nodes, Karras child/parent links)
+//   leaf_nodes_      radix_tree_node[] (N leaves, 1 leaf = 1 simplex)
+//   bvh_ / coms_     per-node extents + centers of mass
+//
+// The only difference from the Morton backend is how the binary tree is built:
+// here the leaf order and node topology come from recursive half-space splits
+// on simplex centroids (median on the widest axis) instead of a Morton sort.
+// Because the emitted representation is identical, every downstream consumer
+// (arp::tree_view, build_pyramid, calder Barnes-Hut traversal + integrators,
+// get_nearest / get_neighbors) works against this tree unchanged.
+
+#include "gaudi/arp/hash_tree.hpp"
+#include "gaudi/geometry_logger.hpp"
+#include "gaudi/geometry_types.hpp"
+#include "gaudi/vec_addendum.h"
+
+#include <algorithm>
+#include <array>
+#include <limits>
+#include <numeric>
+#include <tuple>
+#include <vector>
+
 namespace gaudi {
 namespace arp {
 
-using real = double;
-using vec3 = Eigen::Matrix<real, 3, 1>;
-using vec4 = Eigen::Matrix<real, 4, 1>;
-using mat3 = Eigen::Matrix<real, 3, 3>;
-
-using index_t = int;
-
-// this is ugly, but we have to do it this way, with two lists because
-// the callback on the data
+// ---------------------------------------------------------------------------
+// Standalone primitive-distance callbacks (used by asawa shell dynamics).
+// Kept verbatim from the legacy tree; not tied to the tree structure.
+// ---------------------------------------------------------------------------
 real pnt_tri_min(const index_t &idT, //
                  const std::vector<index_t> &t_inds,
                  const vector<vec3> &t_x, //
@@ -50,25 +60,11 @@ real pnt_tri_min(const index_t &idT, //
   const vec3 &xt1 = s_x[vS1];
   const vec3 &xt2 = s_x[vS2];
 
-#if 0
-  real d0 = 1.0 / 2.0 * ((xB0 - xA0).norm() + (xB1 - xA1).norm());
-  real d1 = 1.0 / 2.0 * ((xB0 - xA1).norm() + (xB1 - xA0).norm());
-  return min(d0, d1);
-#else
-  // vec3 xN;
-  // real d0 = va::distance_from_triangle({xt0, xt1, xt2}, x0, xN);
-
   std::array<real, 4> cp = va::closest_point({xt0, xt1, xt2}, x0);
   vec3 xT = cp[1] * xt0 + cp[2] * xt1 + cp[3] * xt2;
-  // if (idT == 0)
-  //   geometry_logger::line(x0, xT, vec4(1.0, 0.5, 0.0, 1.0));
-
   return cp[0];
-#endif
 };
 
-// this is ugly, but we have to do it this way, with two lists because
-// the callback on the data
 real line_line_min(const index_t &idT, //
                    const std::vector<index_t> &t_inds,
                    const vector<vec3> &t_x, //
@@ -95,693 +91,262 @@ real line_line_min(const index_t &idT, //
   const vec3 &xA1 = t_x[t_inds[2 * idT + 1]];
   const vec3 &xB0 = s_x[s_inds[2 * idS + 0]];
   const vec3 &xB1 = s_x[s_inds[2 * idS + 1]];
-#if 0
-  real d0 = 1.0 / 2.0 * ((xB0 - xA0).norm() + (xB1 - xA1).norm());
-  real d1 = 1.0 / 2.0 * ((xB0 - xA1).norm() + (xB1 - xA0).norm());
-  return min(d0, d1);
-#else
-  // real d0 = (0.5 * (xA1 + xA0) - 0.5 * (xB1 + xA0)).norm();
   std::array<real, 3> d = va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
   return d[0];
-#endif
 };
 
-template <int S>
-ext::extents_t calc_extents(index_t i, const std::vector<index_t> &indices,
-                            const std::vector<vec3> &vertices) {
-  vec3 min = vertices[indices[S * i + 0]];
-  vec3 max = min;
-  for (int k = 0; k < S; k++) {
-    vec3 p = vertices[indices[S * i + k]];
-    min = va::min(p, min);
-    max = va::max(p, max);
+// ---------------------------------------------------------------------------
+// Half-space radix builder.
+// ---------------------------------------------------------------------------
+// Partition order[s..e] (inclusive) about the median centroid on the widest
+// axis, returning m = last index of the left sub-range (left = [s, m], right =
+// [m+1, e]).
+inline index_t aabb_split(index_t s, index_t e, std::vector<index_t> &order,
+                          const std::vector<vec3> &cen) {
+  vec3 lo = cen[order[s]];
+  vec3 hi = lo;
+  for (index_t i = s + 1; i <= e; i++) {
+    const vec3 &c = cen[order[i]];
+    lo = va::min(lo, c);
+    hi = va::max(hi, c);
   }
+  const vec3 d = hi - lo;
+  int axis = (d[1] > d[0]) ? 1 : 0;
+  if (d[2] > d[axis])
+    axis = 2;
 
-  return {min, max};
+  const index_t mid = s + (e - s) / 2;
+  std::nth_element(order.begin() + s, order.begin() + mid,
+                   order.begin() + e + 1, [&](index_t a, index_t b) {
+                     return cen[a][axis] < cen[b][axis];
+                   });
+  return mid;
 }
 
-template <int S> ext::extents_t calc_extents(std::array<vec3, S> &verts) {
-  vec3 min = verts[0];
-  vec3 max = min;
-  for (int k = 0; k < S; k++) {
-    vec3 p = verts[k];
-    min = va::min(p, min);
-    max = va::max(p, max);
+// Build the canonical (indices, internal_nodes, leaf_nodes) triple from a set
+// of per-simplex centroids. Node ids follow the Karras convention used by the
+// Morton tree: an internal node covering a left sub-range [s, m] is labeled m,
+// a right sub-range [m+1, e] is labeled m+1, and the root is 0 -- a bijection
+// onto {0, ..., n-2} so the arrays line up 1:1 with the datum/bvh arrays.
+inline std::tuple<std::vector<index_t>, std::vector<radix_tree_node>,
+                  std::vector<radix_tree_node>>
+build_aabb_radix(const std::vector<vec3> &centroids) {
+  const index_t n = static_cast<index_t>(centroids.size());
+  std::vector<index_t> order(n);
+  std::iota(order.begin(), order.end(), 0);
+
+  if (n == 0)
+    return {std::move(order), {}, {}};
+
+  std::vector<radix_tree_node> internal(n - 1);
+  std::vector<radix_tree_node> leaf(n);
+  for (index_t i = 0; i < n; i++) {
+    leaf[i].start = i;
+    leaf[i].end = i + 1;
+    leaf[i].split = UNULL;
+    leaf[i].parent = UNULL;
   }
-  return {min, max};
+
+  if (n == 1)
+    return {std::move(order), std::move(internal), std::move(leaf)};
+
+  struct Frame {
+    index_t s, e, id, parent;
+  };
+  std::vector<Frame> stack;
+  stack.reserve(64);
+  stack.push_back({0, n - 1, 0, UNULL});
+
+  while (!stack.empty()) {
+    const Frame f = stack.back();
+    stack.pop_back();
+
+    const index_t m = aabb_split(f.s, f.e, order, centroids);
+    internal[f.id].start = f.s;
+    internal[f.id].end = f.e;
+    internal[f.id].split = m;
+    internal[f.id].parent = f.parent;
+
+    // Left child covers [s, m]; if singleton it is leaf[s], else internal[m].
+    if (m == f.s)
+      leaf[f.s].parent = f.id;
+    else
+      stack.push_back({f.s, m, m, f.id});
+
+    // Right child covers [m+1, e]; if singleton it is leaf[e], else
+    // internal[m+1].
+    if (m + 1 == f.e)
+      leaf[f.e].parent = f.id;
+    else
+      stack.push_back({m + 1, f.e, m + 1, f.id});
+  }
+
+  return {std::move(order), std::move(internal), std::move(leaf)};
 }
 
-template <int S>
-vec3 calc_center(index_t i, const std::vector<index_t> &indices,
-                 const std::vector<vec3> &vertices) {
-  vec3 cen = vec3::Zero();
-
-  for (int k = 0; k < S; k++) {
-    vec3 p = vertices[indices[S * i + k]];
-    cen += p;
-  }
-  return cen /= real(S);
-}
-
-template <typename T, typename CTYPE> struct half_space {
+// ---------------------------------------------------------------------------
+// aabb_tree<N>: drop-in alternative backend to bvh_tree<N>.
+// ---------------------------------------------------------------------------
+// Mirrors bvh_tree<N>'s public surface (members + create/update/get_index/
+// leaf_simplex/get_com/find_nearest/find_neighbors/get_nearest) so it satisfies
+// arp::tree_view and the calder FMM path identically; only the build differs.
+template <int N> class aabb_tree {
 public:
-  CTYPE N;
-  CTYPE cen;
+  static constexpr int kSimplexN = N;
 
-  real d;
-  real mag;
-  half_space() : d(0), N(CTYPE(0, 0, 0)){};
+  std::vector<index_t> indices_;
+  std::vector<radix_tree_node> internal_nodes_;
+  std::vector<radix_tree_node> leaf_nodes_;
+  TreeResult<ext::extents_t> bvh_;
+  std::vector<vec3> data_;
+  std::vector<index_t> adjacency_;
+  std::vector<MassPoint> coms_;
 
-  half_space(const CTYPE &cen_, const CTYPE &N_) { set(cen_, N_); };
-  void set(const CTYPE &cen_, const CTYPE &N_) {
-    mag = N_.norm();
-    N = N_ / mag;
-    d = N.dot(cen_);
-    cen = cen_;
-  }
+  using ptr = std::shared_ptr<aabb_tree<N>>;
+  using permutation_index_type = std::vector<index_t>;
+  using permuted_view =
+      permuted_simplex_view<N, std::vector<vec3>, std::vector<index_t>>;
+  using value_type = typename permuted_view::value_type; // std::array<vec3, N>
 
-  index_t left_right(const CTYPE &p) const { return int(N.dot(p) - d >= 0); }
+  std::optional<permuted_view> permuted_data_view_;
 
-  index_t intersect(const ext::extents_t ext) const {
-    real pmin = N.dot(ext[0]) - d;
-    real pmax = N.dot(ext[1]) - d;
-
-    pmin = va::sgn(pmin);
-    pmax = va::sgn(pmax);
-
-    //-2 0 2 => left itx right
-    return index_t(pmin + pmax);
-  }
-};
-
-using half_s = half_space<real, vec3>;
-
-template <int S> struct aabb_node {
-
-public:
-  int id;
-  int begin;
-  int size;
-  int level;
-  int parent;
-  int children[2];
-
-  half_s half;
-  // coordinate_type centerOfMass;
-  // int neighbors[6]; to be implemented later
-
-  aabb_node() {
-    id = -1;
-    begin = -1;
-    size = -1;
-    level = -1;
-    parent = -1;
-    children[0] = -1;
-    children[1] = -1;
-  }
-
-  ~aabb_node() {}
-
-  aabb_node(const aabb_node &rhs) {
-
-    half = rhs.half;
-    // centerOfMass     = rhs.centerOfMass;
-    id = rhs.id;
-    begin = rhs.begin;
-    size = rhs.size;
-    size = rhs.size;
-    parent = rhs.parent;
-    level = rhs.level;
-
-    children[0] = rhs.children[0];
-    children[1] = rhs.children[1];
-  }
-
-  aabb_node &operator=(const aabb_node &rhs) {
-    // this = new aabb_node();
-    if (this != &rhs) {
-
-      half = rhs.half;
-      // centerOfMass     = rhs.centerOfMass;
-      id = rhs.id;
-      begin = rhs.begin;
-      size = rhs.size;
-      parent = rhs.parent;
-      level = rhs.level;
-
-      children[0] = rhs.children[0];
-      children[1] = rhs.children[1];
-    }
-    return *this;
-  }
-
-  int getNumChildren() const { return 2; }
-
-  bool isLeaf() const { return children[0] < 0 || children[1] < 0; }
-
-  inline void calcSVD(mat3 &M, vec3 &s) {
-    Eigen::JacobiSVD<mat3> svd(M, Eigen::ComputeFullU);
-    const mat3 U = svd.matrixU();
-    s = svd.singularValues();
-    M = U;
-  }
-
-  const vec3 &center() const { return half.cen; }
-  const real &mag() const { return half.mag; }
-
-  void calcHalfCenter(const std::vector<index_t> &indices,
-                      const std::vector<vec3> &vertices,
-                      const std::vector<index_t> &permutation) {
-
-    if (permutation.empty())
-      return;
-
-    vec3 c = vec3::Zero();
-    // avg is weighted, whereas min/max is absolute
-    for (int i = this->begin; i < this->begin + this->size; i++) {
-      for (int k = 0; k < S; k++) {
-        vec3 p = vertices[indices[S * permutation[i] + k]];
-        c += p;
-      }
-    }
-    c /= real(S * this->size);
-
-#if 1
-    vec3 mx_p;
-    index_t mx_d = 0;
-    vec3 var = vec3::Zero();
-    for (int i = this->begin; i < this->begin + this->size; i++) {
-      for (int k = 0; k < S; k++) {
-        vec3 p = vertices[indices[S * permutation[i] + k]];
-        vec3 dp = p - c;
-        var += dp.cwiseProduct(dp);
-      }
-    }
-    var /= real(this->size);
-    index_t mx = var[0] > var[1] ? 0 : 1;
-    mx = var[mx] > var[2] ? mx : 2;
-
-    vec3 N = vec3::Zero();
-    N[mx] = 1.0 * sqrt(var[mx]);
-
-    vec3 Nn = N.normalized();
-    vec3 dc = vec3::Zero();
-    for (int i = this->begin; i < this->begin + this->size; i++) {
-      for (int k = 0; k < S; k++) {
-        vec3 p = vertices[indices[S * permutation[i] + k]];
-        vec3 dp = p - c;
-        dc += Nn.dot(dp) * Nn;
-      }
-    }
-    dc /= real(S * this->size);
-    c += dc;
-    // geometry_logger::line(c, c + N, vec4(1.0, 0.0, 0.0, 0.0));
-    half.set(c, N);
-#else
-    mat3 U = mat3::Zero();
-    for (int i = this->begin; i < this->begin + this->size; i++) {
-      for (int k = 0; k < S; k++) {
-        vec3 p = vertices[indices[S * permutation[i] + k]];
-        vec3 dp = (p - c).normalized();
-        U += dp * dp.transpose();
-      }
-    }
-    Eigen::JacobiSVD<mat3> svd(U, Eigen::ComputeFullU);
-    U = svd.matrixU();
-    vec3 s = svd.singularValues();
-    vec3 N = U.col(0).transpose();
-    N.normalize();
-    real mx = 0.0;
-    for (int i = this->begin; i < this->begin + this->size; i++) {
-      for (int k = 0; k < S; k++) {
-
-        vec3 p = vertices[indices[S * permutation[i] + k]];
-        vec3 dp = (p - c).normalized();
-        real ndp = abs(N.dot(dp));
-        mx = std::max(mx, dp.norm());
-      }
-    }
-    //geometry_logger::line(c, c + mx * N, vec4(1.0, 0.0, 0.0, 0.0));
-    half.set(c, mx * N);
-#endif
-  }
-
-  void debug(const std::vector<index_t> &indices,
-             const std::vector<vec3> &vertices,
-             const std::vector<index_t> &permutation) {
-
-    if (permutation.empty())
-      return;
-    vec3 N = half.N;
-    vec3 h_cen = half.cen;
-    vec4 c(N[0], N[1], N[2], 1.0);
-
-    for (int i = this->begin; i < this->begin + this->size; i++) {
-      vec3 prim_cen(0.0, 0.0, 0.0);
-      for (int k = 0; k < S; k++) {
-        vec3 p = vertices[indices[S * permutation[i] + k]];
-        prim_cen += p;
-      }
-      prim_cen /= real(S);
-      // vec3 hc = half.d * half.N;
-
-      geometry_logger::line(h_cen, prim_cen, c);
-    }
-    geometry_logger::line(h_cen, h_cen + half.mag * half.N, c);
-  }
-
-  void debug_half() {
-
-    vec3 N = half.N;
-    real t = level / 10;
-    vec4 c(cos(t), cos(t + M_PI / 3.0), cos(t + M_PI / 6.0), 1.0);
-    geometry_logger::line(half.cen, half.cen + half.mag * half.N, c);
-  }
-};
-
-// S = stride
-template <int S> struct aabb_tree {
-
-public:
-  typedef std::shared_ptr<aabb_tree<S>> ptr;
-  typedef aabb_node<S> node;
-
-  static ptr create(const std::vector<index_t> &indices,
+  static ptr create(const std::vector<index_t> &adjacency,
                     const std::vector<vec3> &vertices, int lvl = 8) {
-    return std::make_shared<aabb_tree<S>>(indices, vertices, lvl);
+    return std::make_shared<aabb_tree<N>>(vertices, adjacency);
   }
 
-  aabb_tree() {}
-  ~aabb_tree() {}
-
-  aabb_tree(const aabb_tree &other) { *this = other; }
-
-  aabb_tree(const std::vector<index_t> &indices,
-            const std::vector<vec3> &vertices, int lvl = 8)
-      : __x(vertices), __indices(indices) {
-    this->build(__indices, __x, lvl);
+  static ptr create(const simplex_set<N> &set, int lvl = 8) {
+    return std::make_shared<aabb_tree<N>>(set);
   }
 
-  aabb_tree &operator=(const aabb_tree &rhs) {
-    if (this != &rhs) {
-      nodes = rhs.nodes;
-      leafNodes = rhs.leafNodes;
-      permutation = rhs.permutation;
+  aabb_tree(const std::vector<vec3> &data,
+            const std::vector<index_t> &adjacency) {
+    update(data, adjacency);
+  }
+
+  aabb_tree(const simplex_set<N> &set) { update(set); }
+
+  index_t get_index(size_t i) const { return indices_[i]; }
+
+  const std::vector<index_t> &adjacency() const { return adjacency_; }
+  const std::vector<vec3> &verts() const { return data_; }
+  const vec3 &vert(index_t i) const { return data_[adjacency_[i]]; }
+
+  // Per-simplex geometric centroid in the unpermuted (original) order.
+  std::vector<vec3> simplex_centroids() const {
+    std::vector<index_t> identity(adjacency_.size() / N);
+    std::iota(identity.begin(), identity.end(), 0);
+    permuted_view view(const_cast<std::vector<vec3> &>(data_),
+                       const_cast<std::vector<index_t> &>(adjacency_), identity);
+    std::vector<vec3> cents(view.size());
+    for (size_t i = 0; i < view.size(); i++) {
+      value_type s = view[i];
+      vec3 c = vec3::Zero();
+      for (int k = 0; k < N; k++)
+        c += s[k];
+      cents[i] = c / real(N);
     }
-    return *this;
+    return cents;
   }
 
-  void build(const std::vector<index_t> &indices,
-             const std::vector<vec3> &vertices, int maxLevel) {
-    // TIMER function//TIMER(__FUNCTION__);
+  void update(const std::vector<vec3> &data,
+              const std::vector<index_t> &adjacency) {
+    data_ = data;
+    adjacency_ = adjacency;
 
-    // inititalize permutation
-    permutation.resize(indices.size() / S);
-    leafNodes.reserve(indices.size() / S);
-    nodes.reserve(4 * log(indices.size()) * indices.size());
-    // permutation.reserve(points.size());
+    std::vector<vec3> centroids = simplex_centroids();
+    auto [indices, internal_nodes, leaf_nodes] = build_aabb_radix(centroids);
 
-    for (int i = 0; i < permutation.size(); i++)
-      permutation[i] = i;
+    indices_ = std::move(indices);
+    internal_nodes_ = std::move(internal_nodes);
+    leaf_nodes_ = std::move(leaf_nodes);
 
-    node root;
-    root.begin = 0;
-    root.level = 0;
-    root.size = permutation.size();
-    root.id = nodes.size();
-    root.parent = -1;
-    if (indices.empty())
-      return;
+    permuted_data_view_.emplace(data_, adjacency_, indices_);
 
-    root.calcHalfCenter(indices, vertices, permutation);
+    bvh_ = make_bvh(*permuted_data_view_, internal_nodes_, leaf_nodes_);
+    coms_ = calc_com(*permuted_data_view_);
+  }
 
-    stack<int> stack;
-    nodes.reserve(log(indices.size()) * indices.size());
-    stack.push(nodes.size());
-    nodes.push_back(root);
+  void update(const simplex_set<N> &set) {
+    update(set.vertices(), set.adjacency());
+  }
 
-    while (stack.size() > 0) {
-      int pNodeId = stack.top();
-      stack.pop();
+  std::array<index_t, N> get_tuple_ids(const index_t &i) {
+    return permuted_data_view_->get_tuple_ids(i);
+  }
 
-      const node &pNode = nodes[pNodeId];
+  value_type get_simplex(index_t i) const { return (*permuted_data_view_)[i]; }
 
-      int beg = pNode.begin;
-      int N = pNode.size;
+  std::array<vec3, N> leaf_simplex(index_t sorted_id) const {
+    return (*permuted_data_view_)[sorted_id];
+  }
 
-      int cN[2] = {0, 0}, cCounter[2] = {0, 0}, cAccum[2] = {0, 0};
-      std::vector<int> lPerm(N);
+  vec3 get_com(index_t i) const { return std::get<1>(coms_[i]); }
 
-      for (int i = beg; i < beg + N; i++) {
-        vec3 cen = calc_center<S>(permutation[i], indices, vertices);
-        int bin = pNode.half.left_right(cen);
-        cN[bin]++;
-      }
+  template <int Nq> auto dispatch_test() const {
+    if constexpr (Nq == 1 && N == 1)
+      return [](const auto &q, const auto &d) { return test_point_point_tuple(q, d); };
+    else if constexpr (Nq == 1 && N == 2)
+      return [](const auto &q, const auto &d) { return test_point_line_tuple(q, d); };
+    else if constexpr (Nq == 1 && N == 3)
+      return [](const auto &q, const auto &d) { return test_point_tri_tuple(q, d); };
+    else if constexpr (Nq == 2 && N == 1)
+      return [](const auto &q, const auto &d) { return test_point_line_tuple(d, q); };
+    else if constexpr (Nq == 2 && N == 2)
+      return [](const auto &q, const auto &d) { return test_line_line_tuple(q, d); };
+    else if constexpr (Nq == 2 && N == 3)
+      return [](const auto &q, const auto &d) { return test_line_tri_tuple(q, d); };
+    else if constexpr (Nq == 3 && N == 1)
+      return [](const auto &q, const auto &d) { return test_point_tri_tuple(d, q); };
+    else if constexpr (Nq == 3 && N == 2)
+      return [](const auto &q, const auto &d) { return test_line_tri_tuple(d, q); };
+    else if constexpr (Nq == 3 && N == 3)
+      return [](const auto &q, const auto &d) { return test_tri_tri_tuple(q, d); };
+  }
 
-      for (int j = 1; j < 2; j++)
-        cAccum[j] = cAccum[j - 1] + cN[j - 1];
+  template <int Nq> static auto make_query(const auto &view) {
+    if constexpr (Nq == 1)
+      return std::array<vec3, 1>{view[0]};
+    else if constexpr (Nq == 2)
+      return std::array<vec3, 2>{view[0], view[1]};
+    else if constexpr (Nq == 3)
+      return std::array<vec3, 3>{view[0], view[1], view[2]};
+  }
 
-      for (int i = beg; i < beg + N; i++) {
-        vec3 cen = calc_center<S>(permutation[i], indices, vertices);
-        int bin = pNode.half.left_right(cen);
-        lPerm[cAccum[bin] + cCounter[bin]] = permutation[i];
-        cCounter[bin]++;
-      }
+  template <Vec3View PTYPE> index_t find_nearest(const PTYPE &query) {
+    constexpr int Nq = view_stride_v<PTYPE>;
+    return arp::get_nearest<Singulus<Nq>, permuted_view>(
+        make_query<Nq>(query), *permuted_data_view_, internal_nodes_,
+        leaf_nodes_, bvh_, dispatch_test<Nq>());
+  }
 
-      int ii = 0;
+  template <Vec3View PTYPE>
+  std::vector<index_t> find_neighbors(const PTYPE &query, real tol) {
+    constexpr int Nq = view_stride_v<PTYPE>;
+    return arp::get_neighbors<Singulus<Nq>, permuted_view>(
+        make_query<Nq>(query), *permuted_data_view_, internal_nodes_,
+        leaf_nodes_, bvh_, tol, dispatch_test<Nq>());
+  }
 
-      for (int i = 0; i < N; i++) {
-        // update the global permutation with the local permutation
-        permutation[beg + i] = lPerm[i];
-      }
-
-      for (int j = 0; j < 2; j++) {
-        if (cN[j] == 0)
-          continue;
-
-        int cNodeId = nodes.size();
-        node cNode;
-        cNode.level = pNode.level + 1;
-        cNode.begin = beg + cAccum[j];
-        cNode.size = cN[j];
-        cNode.id = cNodeId;
-        cNode.parent = pNodeId;
-        nodes[pNodeId].children[j] = cNodeId;
-
-        cNode.calcHalfCenter(indices, vertices, permutation);
-        nodes.push_back(cNode);
-
-        if (cNode.size < 2 || cNode.level == maxLevel)
-          leafNodes.push_back(cNodeId);
-        else
-          stack.push(cNodeId);
-
-        // leafIds.push_back(cNodeId);
-      }
+  // Legacy wrapper: returns vector with idMin as last element.
+  template <Vec3View PTYPE>
+  std::vector<index_t> get_nearest(const PTYPE &query, real tol) {
+    std::vector<index_t> result;
+    if (tol > 999.9) {
+      result.push_back(find_nearest<PTYPE>(query));
+    } else {
+      result = find_neighbors<PTYPE>(query, tol);
+      result.push_back(-1);
     }
-    // debug(indices, vertices);
+    return result;
   }
-
-  const std::vector<index_t> &indices() const { return this->__indices; }
-  const std::vector<vec3> &verts() const { return this->__x; }
-  const vec3 &vert(index_t i) const { return __x[__indices[i]]; }
-
-  void debug() {
-    for (int i = 0; i < leafNodes.size(); i++) {
-      node &n = nodes[leafNodes[i]];
-      n.debug(__indices, __x, permutation);
-    }
-  }
-
-  void debug_half() {
-    for (int i = 0; i < nodes.size(); i++) {
-      node &n = nodes[i];
-      n.debug_half();
-      // std::cout << n.level << " " << n.children[0] << " " << n.children[1]
-      //          << " " << n.size << std::endl;
-      if (n.isLeaf())
-        continue;
-      vec4 c(0.5, 0.5, 0.5, 1.0);
-
-      if (n.children[0] > 0) {
-        node &n0 = nodes[n.children[0]];
-        geometry_logger::line(n.half.cen, n0.half.cen, c);
-      }
-      if (n.children[1] > 0) {
-        node &n1 = nodes[n.children[1]];
-        geometry_logger::line(n.half.cen, n1.half.cen, c);
-      }
-    }
-  }
-
-  vector<node> nodes;
-  vector<index_t> leafNodes;
-  vector<index_t> permutation;
-  const std::vector<index_t> &__indices;
-  const std::vector<vec3> &__x;
 };
 
-#if 1
-template <int ST, int SS> // T=test, S=set... DOH! T could equal tree...
-std::vector<index_t>
-getNearest(index_t &idT, const std::vector<index_t> &t_inds,
-           const vector<vec3> &t_verts, //
-           const aabb_tree<SS> &s_tree, real tol,
-           std::function<real(const index_t &idT, //
-                              const std::vector<index_t> &t_inds,
-                              const vector<vec3> &t_verts, //
-                              const index_t &idS,          //
-                              const std::vector<index_t> &s_inds,
-                              const std::vector<vec3> &s_verts)>
-               testAB) {
+template <int N> using AABB_T = aabb_tree<N>;
 
-  // TIMER function//TIMER(__FUNCTION__);
-  typedef aabb_tree<SS> tree_type;
-  typedef typename tree_type::node Node;
-
-  bool expanding_rad = tol > 999.9;
-
-  index_t idMin = -1;
-  real dmin = std::numeric_limits<real>::max();
-
-  const Node &root = s_tree.nodes[0];
-  std::stack<int> cstack;
-  cstack.push(0);
-  bool hit = false;
-  // T tol = 0.05;
-  ext::extents_t extT = calc_extents<ST>(idT, t_inds, t_verts);
-  extT = ext::inflate(extT, tol);
-  std::vector<index_t> collisions;
-  while (cstack.size() > 0) {
-    int cId = cstack.top();
-    cstack.pop();
-    const Node &cnode = s_tree.nodes[cId];
-
-    if (expanding_rad && cnode.size > 0) {
-      real d = ext::dist(extT, cnode.half.cen);
-      tol = std::min(tol, d);
-      tol = std::max(tol, cnode.half.mag);
-      extT = calc_extents<ST>(idT, t_inds, t_verts);
-      extT = ext::inflate(extT, tol);
-#if 0
-      if (idT == 17260) {
-
-        std::cout << "d/tol: " << d << " " << tol << std::endl;
-        vec3 cT = 0.5 * (extT[0] + extT[1]);
-        geometry_logger::line(cT, cnode.half.cen, vec4(0.0, 1.0, 0.0, 1.0));
-        geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
-      }
-#endif
-    }
-
-    if (cnode.children[0] == -1 && cnode.children[1] == -1) {
-
-      for (int k = cnode.begin; k < cnode.begin + cnode.size; k++) {
-
-        const index_t &idS = s_tree.permutation[k];
-
-        ext::extents_t extS =
-            calc_extents<SS>(idS, s_tree.indices(), s_tree.verts());
-
-        if (!ext::overlap(extT, extS)) {
-
-          continue;
-        }
-#if 0
-        if (idT == 15978 && 0) {
-          std::cout << "idS: " << idS << std::endl;
-          vec3 cT = 0.5 * (extT[0] + extT[1]);
-          vec3 cS = 0.5 * (extS[0] + extS[1]);
-          geometry_logger::ext(extS[0], extS[1], vec4(0.0, 1.0, 0.0, 1.0));
-          geometry_logger::ext(extT[0], extT[1], vec4(1.0, 0.0, 0.0, 1.0));
-          geometry_logger::line(cT, cS, vec4(1.0, 1.0, 0.0, 1.0));
-        }
-#endif
-        real dist = testAB(idT, t_inds, t_verts, //
-                           idS, s_tree.indices(), s_tree.verts());
-
-        if (dist < dmin) {
-          dmin = dist;
-          idMin = idS;
-        }
-        if (dist < tol && !expanding_rad) {
-          collisions.push_back(idS);
-        }
-      }
-    }
-
-    index_t itx = cnode.half.intersect(extT);
-
-    if (itx <= 0 && cnode.children[0] > 0) {
-      cstack.push(cnode.children[0]);
-    }
-
-    if (itx >= 0 && cnode.children[1] > 0) {
-      cstack.push(cnode.children[1]);
-    }
-  }
-
-  if (dmin < tol) {
-    collisions.push_back(idMin);
-  } else {
-    collisions.push_back(-1);
-#if 0
-    if (expanding_rad) {
-      std::cout << "no collisions:" << idT << std::endl;
-      // exit(0);
-    }
-#endif
-  }
-
-  return collisions;
-};
-#endif
-
-template <int TREE_S, int NODE_S>
-void for_each(
-    index_t i, const aabb_tree<TREE_S> &tree,
-    const std::vector<index_t> &indices,
-    std::function<void(index_t id, const aabb_tree<TREE_S> &tree)> func) {
-  typedef typename aabb_tree<TREE_S>::node node;
-  const node &cnode = tree.nodes[tree.leafNodes[i]];
-  index_t beg = cnode.begin;
-  index_t end = beg + cnode.size;
-
-  for (int j = beg; j < end; j++) {
-    const index_t &id = tree.permutation[j];
-    for (int k = 0; k < NODE_S; k++) {
-
-      func(indices[NODE_S * id + k], tree);
-    }
-  }
-}
-
-bool l_isnan(vec3 v) { return v.hasNaN(); }
-bool l_isnan(vec4 v) { return v.hasNaN(); }
-
-bool l_isnan(mat3 v) { return v.hasNaN(); }
-bool l_isnan(mat4 v) { return v.hasNaN(); }
-bool l_isnan(std::array<vec3, 2> v) { return v[0].hasNaN() || v[1].hasNaN(); }
-bool l_isnan(real v) { return std::isnan(v); }
-
-vec3 print(std::array<vec3, 2> v) { return v[0].transpose(); }
-vec3 print(vec3 v) { return v.transpose(); }
-mat3 print(mat3 v) { return v; }
-mat4 print(mat4 v) { return v; }
-real print(real v) { return v; }
-
-template <int TREE_S, int NODE_S, typename Q0, typename Q1>
-std::vector<Q1>
-__build_pyramid(const aabb_tree<TREE_S> &tree,       //
-                const std::vector<index_t> &indices, //
-                const std::vector<Q0> &x, const Q1 &q_init,
-                std::function<Q1(const Q0 &q0, const Q1 &q1)> lfunc,
-                std::function<Q1(const Q1 &qc, const Q1 &qp)> nfunc) {
-  typedef aabb_tree<TREE_S> tree_type;
-  typedef typename tree_type::node node;
-  std::vector<Q1> charges(tree.nodes.size(), q_init);
-  // init the bounds
-
-  for (int i = 0; i < tree.leafNodes.size(); i++) {
-    Q1 q1 = q_init;
-    for_each<TREE_S, NODE_S>(
-        i, tree, indices, [&](index_t j, const aabb_tree<TREE_S> &tree) {
-          Q0 q0 = x[j];
-          q1 = lfunc(q0, q1);
-          if (l_isnan(q1)) {
-            std::cout << "q0: " << q0 << std::endl;
-            std::cout << j << " " << x.size() << std::endl;
-            throw std::runtime_error(std::string(__PRETTY_FUNCTION__) +
-                                     std::string(": nan"));
-          }
-        });
-    charges[tree.leafNodes[i]] = q1;
-  }
-  // return charges;
-  // std::deque<int> stack(tree.leafNodes.begin(), tree.leafNodes.end());
-
-  std::priority_queue<index_t, std::vector<index_t>, std::less<index_t>> queue;
-
-  for (int node : tree.leafNodes) {
-    queue.push(node);
-  }
-
-  /*
-  while (queue.size() > 0) {
-    std::cout << queue.top() << " ";
-    queue.pop();
-  }
-  std::cout << std::endl;
-
-  for (int node : tree.leafNodes) {
-    queue.push(node);
-  }
-*/
-  std::vector<bool> in_queue(charges.size(), false);
-  while (queue.size() > 0) {
-    index_t cNodeId = queue.top();
-
-    queue.pop();
-    in_queue[cNodeId] = false;
-    const node &cnode = tree.nodes[cNodeId];
-    index_t pNodeId = cnode.parent;
-
-    if (pNodeId < 0)
-      continue;
-
-    const node &pnode = tree.nodes[cnode.parent];
-    const Q1 &extC = charges[cNodeId];
-    const Q1 &extP = charges[pNodeId];
-
-    charges[pNodeId] = nfunc(extC, extP);
-    //    if (pNodeId == 0 || pNodeId == 1 || pNodeId == 2)
-    //      std::cout << pNodeId << " " << cNodeId << " " <<
-    //      print(charges[pNodeId])
-    //                << " " << print(charges[cNodeId]) << std::endl;
-
-    if (!in_queue[pNodeId]) {
-      queue.push(pNodeId);
-      in_queue[pNodeId] = true;
-    }
-  }
-
-  return charges;
-}
-
-template <int S>
-std::vector<ext::extents_t> build_extents(const aabb_tree<S> &tree,
-                                          const std::vector<index_t> &indices,
-                                          const std::vector<vec3> &x) {
-  double mx = std::numeric_limits<double>::max();
-  std::vector<ext::extents_t> extents =
-      __build_pyramid<S, S, vec3, ext::extents_t>(
-          tree, indices, x,
-          {
-              vec3(mx, mx, mx),
-              vec3(-mx, -mx, -mx),
-          }, //
-          [](const vec3 &q0, const ext::extents_t &q1) {
-            return ext::expand(q1, q0);
-          },
-          [](const ext::extents_t &qc, const ext::extents_t &qp) {
-            return ext::expand(qp, qc);
-          });
-
-  return extents;
-}
-
-template <int TREE_S, int NODE_S, typename Q>
-std::vector<Q> build_pyramid(const aabb_tree<TREE_S> &tree,
-                             const std::vector<index_t> &indices,
-                             const std::vector<Q> &x) {
-  std::vector<Q> pyramid = __build_pyramid<TREE_S, NODE_S, Q, Q>(
-      tree, indices, x,
-      z::zero<Q>(), //
-      [](const Q &p, const Q &q) { return p + q; },
-      [](const Q &qc, const Q &qp) { return qp + qc; });
-
-  return pyramid;
-}
+using A1 = aabb_tree<1>;
+using A2 = aabb_tree<2>;
+using A3 = aabb_tree<3>;
 
 } // namespace arp
 } // namespace gaudi

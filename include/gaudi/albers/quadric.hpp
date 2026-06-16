@@ -17,6 +17,7 @@ namespace gaudi
         TYPEDEF_VEC(10)
         TYPEDEF_MAT(10)
         TYPEDEF_MAT_NM(4, 10)
+        TYPEDEF_MAT_NM(6, 10)
 
         mat410 mk_quad_A(vec3 dx)
         {
@@ -52,6 +53,24 @@ namespace gaudi
             A.row(1) = vec3(Q[3], Q[1], Q[5]);
             A.row(2) = vec3(Q[4], Q[5], Q[2]);
             return A;
+        }
+
+        mat610 mk_quad_H(vec3 /*dx*/)
+        {
+            mat610 H = mat610::Zero();
+            for (int j = 0; j < 10; ++j)
+            {
+                vec10 ej = vec10::Zero();
+                ej[j] = 1.0;
+                H.col(j) = vech3(2.0 * quadric_hessian(ej));
+            }
+            return H;
+        }
+
+        vec10 mk_quad_L(vec3 dx)
+        {
+            const mat610 H = mk_quad_H(dx);
+            return (H.row(0) + H.row(1) + H.row(2)).transpose();
         }
         
         vec3 quadric_grad(const vec10 &Q, const vec3 x)
@@ -97,12 +116,21 @@ namespace gaudi
                 b = vec10::Zero();
             }
 
-            void accumulate(real w, const vec3 &x, const vec3 &N)
+            void set_hessian_weight(real w) { hessian_weight_ = w; }
+            real hessian_weight() const { return hessian_weight_; }
+
+            void accumulate(real w, const vec3 &x, const vec3 &N,
+                            const mat3 &S = mat3::Zero())
             {
                 mat410 Ab = mk_quad_A(x);
                 vec4 Nb = mk_N(N);
                 b += w * Ab.transpose() * Nb;
                 A += w * Ab.transpose() * Ab;
+                if (hessian_weight_ > 0.0)
+                {
+                    const mat610 H = mk_quad_H(x);
+                    accumulate_hessian_block3(hessian_weight_, w, H, S, A, b);
+                }
             }
             
             vec10 solve()
@@ -113,6 +141,9 @@ namespace gaudi
 
             mat10 A;
             vec10 b;
+
+        private:
+            real hessian_weight_ = 0.0;
         };
 
 

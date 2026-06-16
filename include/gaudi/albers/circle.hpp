@@ -4,6 +4,7 @@
 #define ALBERS_CIRCLES_H
 #include <Eigen/Dense>
 #include "gaudi/common.h"
+#include "gaudi/albers/ncls.hpp"
 // stub: but least squares shape functions here
 // sphere, cylinder, etc.
 
@@ -11,6 +12,21 @@ namespace gaudi
 {
   namespace albers
   {
+
+    inline mat3 mk_circle_H(vec2 /*dx*/)
+    {
+      mat3 H = mat3::Zero();
+      H.col(0) = vec3(2.0, 0.0, 0.0);
+      H.col(1) = vec3(0.0, 2.0, 0.0);
+      H.col(2) = vec3(0.0, 0.0, 0.0);
+      return H;
+    }
+
+    inline vec3 mk_circle_L(vec2 dx)
+    {
+      const mat3 H = mk_circle_H(dx);
+      return (H.row(0) + H.row(1)).transpose();
+    }
 
     mat3 mk_circle_A(vec2 dx, const vec2 &N)
     {
@@ -80,12 +96,21 @@ namespace gaudi
         b = vec3::Zero();
       }
 
-      void accumulate(real w, const vec2 &x, const vec2 &N)
+      void set_hessian_weight(real w) { hessian_weight_ = w; }
+      real hessian_weight() const { return hessian_weight_; }
+
+      void accumulate(real w, const vec2 &x, const vec2 &N,
+                      const mat2 &S = mat2::Zero())
       {
         vec3 Ai = mk_circle_A(x);
         real bi = mk_circle_b(x);
         b += w * Ai.transpose() * bi;
         A += w * Ai * Ai.transpose();
+        if (hessian_weight_ > 0.0)
+        {
+          const mat3 H = mk_circle_H(x);
+          accumulate_hessian_block2(hessian_weight_, w, H, S, A, b);
+        }
       }
 
       vec3 solve()
@@ -95,6 +120,9 @@ namespace gaudi
 
       mat3 A;
       vec3 b;
+
+    private:
+      real hessian_weight_ = 0.0;
     };
 
     class constrained_circle
@@ -108,12 +136,21 @@ namespace gaudi
         b = vec3::Zero();
       }
 
-      void accumulate(real w, const vec2 &x, const vec2 &N)
+      void set_hessian_weight(real w) { hessian_weight_ = w; }
+      real hessian_weight() const { return hessian_weight_; }
+
+      void accumulate(real w, const vec2 &x, const vec2 &N,
+                      const mat2 &S = mat2::Zero())
       {
         mat3 Ab = mk_circle_A(x, N);
         vec3 Nb = mk_circle_b(x, N);
         b += w * Ab.transpose() * Nb;
         A += w * Ab.transpose() * Ab;
+        if (hessian_weight_ > 0.0)
+        {
+          const mat3 H = mk_circle_H(x);
+          accumulate_hessian_block2(hessian_weight_, w, H, S, A, b);
+        }
       }
 
       vec3 solve()
@@ -123,6 +160,9 @@ namespace gaudi
 
       mat3 A;
       vec3 b;
+
+    private:
+      real hessian_weight_ = 0.0;
     };
   }
 }

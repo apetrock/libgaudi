@@ -5,10 +5,12 @@
 #include "gaudi/test/bvh_tests.hpp"
 #include "gaudi/test/pyramid_datum_tests.hpp"
 #include "gaudi/test/calder_winding_tests.hpp"
+#include "gaudi/test/darboux_cyclide_tests.hpp"
 #include "gaudi/calder/shell_area_conservation_test.hpp"
 #include "gaudi/calder/rod_length_conservation_test.hpp"
 #include "gaudi/test/rod_dynamic_tests.hpp"
 #include "gaudi/test/shell_dynamic_tests.hpp"
+#include "gaudi/test/tree_backend_validation_tests.hpp"
 
 int main() {
   auto result = gaudi::test::Registry::run_all();

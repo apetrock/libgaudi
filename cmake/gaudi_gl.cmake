@@ -79,7 +79,7 @@ function(add_gaudi_gl_project TARGET_NAME)
     gaudi_msvc_disable_parallel_cl_writers(${TARGET_NAME})
 
     if(GUADI_WITH_CHOLMOD)
-        target_link_libraries(${TARGET_NAME} PRIVATE cholmod umfpack)
+        target_link_libraries(${TARGET_NAME} PRIVATE gaudi::cholmod)
     endif()
 endfunction()
 

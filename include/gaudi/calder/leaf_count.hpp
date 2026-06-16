@@ -1,6 +1,7 @@
 #ifndef GAUDI_CALDER_LEAF_COUNT_HPP
 #define GAUDI_CALDER_LEAF_COUNT_HPP
 
+#include "gaudi/arp/arp.h"
 #include "gaudi/arp/hash_tree.hpp"
 #include "gaudi/asawa/rod/rod.hpp"
 #include "gaudi/asawa/shell/datum_x.hpp"
