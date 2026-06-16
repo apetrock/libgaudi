@@ -38,22 +38,29 @@ namespace gaudi
       return kappa;
     };
 
-    real calc_inv_dist(vec3 dx, real eps, real p)
+    real calc_inv_dist(vec3 dx, real l0, real p)
     {
-      // std laplace kernel
+      // Inverse-distance kernel with a length-scale regularizer. The
+      // denominator has units length^p, so l0 must be raised to p as well.
       real dist = dx.norm();
       real distp = pow(dist, p);
-      real kappa = 1.0 / (distp + eps);
+      real lp = pow(l0, p);
+      real kappa = 1.0 / (distp + lp);
       return kappa;
     };
 
-    vec3 calc_d_inv_dist(vec3 dx, real eps, real p)
+    vec3 calc_d_inv_dist(vec3 dx, real l0, real p)
     {
       real dist = dx.norm();
+      if (dist < 1e-16)
+      {
+        return vec3::Zero();
+      }
       real distpm1 = pow(dist, p - 1);
       real distp = pow(dist, p);
-      real distp_eps_2 = pow(distp + eps, 2.0);
-      return -p * distpm1 / distp_eps_2 * dx / dist;
+      real lp = pow(l0, p);
+      real denom2 = pow(distp + lp, 2.0);
+      return -p * distpm1 / denom2 * dx / dist;
     };
 
     // calc w/dw but using gaussian kernel instead of std laplace

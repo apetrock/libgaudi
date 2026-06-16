@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <vector>
 #if defined(WIN32)
 #ifndef NOMINMAX
@@ -19,13 +21,14 @@
 #include "GaudiGraphics/viewer.hpp"
 
 #include "gaudi/asawa/datums.hpp"
+#include "gaudi/asawa/shell/asset_loader.hpp"
 #include "gaudi/asawa/shell/datum_x.hpp"
+#include "gaudi/calder/least_squares_fit.hpp"
 #include "gaudi/duchamp/darboux_cyclide_medial.hpp"
+#include "gaudi/geometry_logger.hpp"
 #include "gaudi/test/darboux_cyclide_torus_fixture.hpp"
 
 namespace {
-
-constexpr int kSingleFitVertex = 0;
 
 class Scene;
 using ScenePtr = std::shared_ptr<Scene>;
@@ -34,10 +37,72 @@ gaudi::duchamp::cyclide_medial_params demo_params() {
   gaudi::duchamp::cyclide_medial_params params;
   params.l0_scale = 0.1;
   params.fit_p = 3.0;
-  params.max_iters = 12;
-  params.tol = 1e-8;
-  params.max_travel_scale = 12.0;
+  params.max_iters = 100;
+  params.tol = 1e-8; 
+  params.max_travel_scale = 1000.0;
+  params.newton_step_scale = 1000.0;
   return params;
+}
+
+void normalize_mesh(gaudi::asawa::shell::shell &M,
+                    gaudi::real target_radius = 1.5) {
+  std::vector<gaudi::vec3> &x = gaudi::asawa::get_vec_data(M, 0);
+  if (x.empty()) {
+    return;
+  }
+
+  gaudi::vec3 lo = x.front();
+  gaudi::vec3 hi = x.front();
+  for (const gaudi::vec3 &p : x) {
+    lo = lo.cwiseMin(p);
+    hi = hi.cwiseMax(p);
+  }
+
+  const gaudi::vec3 center = 0.5 * (lo + hi);
+  gaudi::real radius = 0.0;
+  for (const gaudi::vec3 &p : x) {
+    radius = std::max(radius, (p - center).norm());
+  }
+  if (radius < 1e-12) {
+    return;
+  }
+
+  const gaudi::real scale = target_radius / radius;
+  for (gaudi::vec3 &p : x) {
+    p = scale * (p - center);
+  }
+  std::cerr << "normalized mesh radius=" << target_radius
+            << " scale=" << scale << std::endl;
+}
+
+int run_headless_probe() {
+  const auto params = demo_params();
+  gaudi::asawa::shell::shell::ptr mesh = gaudi::asawa::shell::load_bunny();
+  gaudi::asawa::shell::shell &M = *mesh;
+  normalize_mesh(M);
+
+  gaudi::duchamp::cyclide_medial_stats stats;
+  const std::vector<gaudi::duchamp::cyclide_medial_candidate> candidates =
+      gaudi::duchamp::compute_local_fit_cyclide_medial_candidates(M, params,
+                                                                  &stats);
+  (void)candidates;
+  std::cerr << "headless bunny local-fit zero-to-medial" << std::endl;
+  gaudi::duchamp::print_cyclide_medial_stats(std::cerr, stats);
+  return 0;
+}
+
+void sync_gaudi_debug_to_gg() {
+  const auto &lines = gaudi::geometry_logger::get_lines();
+  const auto &line_cols = gaudi::geometry_logger::get_line_colors();
+  for (size_t i = 0; i + 1 < lines.size(); i += 2) {
+    gg::geometry_logger::line(lines[i], lines[i + 1], line_cols[i]);
+  }
+
+  const auto &points = gaudi::geometry_logger::get_points();
+  const auto &point_cols = gaudi::geometry_logger::get_point_colors();
+  for (size_t i = 0; i < points.size(); ++i) {
+    gg::geometry_logger::point(points[i], point_cols[i]);
+  }
 }
 
 class Scene : public gg::Scene {
@@ -48,22 +113,16 @@ public:
 
   Scene(const gaudi::duchamp::cyclide_medial_params &params)
       : gg::Scene(), __params(params) {
-    __frame =
-        gaudi::test::make_torus_frame(gaudi::vec3(0.7, -0.45, 0.3),
-                                      gaudi::vec3(0.25, 0.65, 0.9));
-    gaudi::test::TorusMesh torus =
-        gaudi::test::make_offset_torus_shell(36, 20, __major_radius,
-                                             __minor_radius, __frame);
-    __M = torus.shell;
+
+    __M = gaudi::asawa::shell::load_bunny();
 
     gaudi::asawa::shell::shell &M = *__M;
-    __single_fit_vertex =
-        std::clamp(kSingleFitVertex, 0, static_cast<int>(M.vert_count()) - 1);
+    normalize_mesh(M);
+    configure_scene_frame(M);
     __candidates =
-        gaudi::duchamp::compute_single_fit_cyclide_medial_candidates(
-            M, __single_fit_vertex, __params, &__stats, &__single_fit_Q);
-    std::cerr << "single-fit cyclide vertex=" << __single_fit_vertex
-              << std::endl;
+        gaudi::duchamp::compute_local_fit_cyclide_medial_candidates(
+            M, __params, &__stats);
+    std::cerr << "bunny local-fit zero-to-medial" << std::endl;
     gaudi::duchamp::print_cyclide_medial_stats(std::cerr, __stats);
 
     _objs.resize(1);
@@ -78,12 +137,32 @@ public:
     gg::fillBuffer_ref(*__M, _objs[0], gg::colorRGB(0.72, 0.74, 0.78, 1.0));
   }
 
+  void configure_scene_frame(gaudi::asawa::shell::shell &M) {
+    const std::vector<gaudi::vec3> &x = gaudi::asawa::const_get_vec_data(M, 0);
+    if (x.empty()) {
+      return;
+    }
+
+    gaudi::vec3 lo = x.front();
+    gaudi::vec3 hi = x.front();
+    for (const gaudi::vec3 &p : x) {
+      lo = lo.cwiseMin(p);
+      hi = hi.cwiseMax(p);
+    }
+
+    __frame = gaudi::test::make_torus_frame(0.5 * (lo + hi), gaudi::vec3::UnitZ());
+    __major_radius = 0.5 * (hi - lo).norm();
+    __minor_radius = 4.0 * gaudi::asawa::shell::avg_length(M, x);
+    std::cerr << "loaded bunny verts=" << M.vert_count()
+              << " faces=" << M.face_count()
+              << " scene_radius=" << __major_radius
+              << " slice_extent=" << __minor_radius << std::endl;
+  }
+
   void draw_medial_rays() {
-    const gaudi::vec4 ray_color(1.0, 0.92, 0.15, 1.0);
-    const gaudi::vec4 trace_color(1.0, 0.35, 0.05, 1.0);
+    const gaudi::vec4 zero_color(0.0, 0.85, 1.0, 1.0);
+    const gaudi::vec4 medial_color(1.0, 0.65, 0.05, 1.0);
     const gaudi::vec4 axis_color(0.35, 0.35, 0.35, 1.0);
-    const gaudi::vec4 fit_color(0.15, 1.0, 0.25, 1.0);
-    const gaudi::vec4 level_color(0.1, 0.9, 1.0, 1.0);
 
     gg::geometry_logger::line(
         __frame.center - 1.7 * __major_radius * __frame.z_axis,
@@ -92,91 +171,19 @@ public:
     gaudi::asawa::shell::shell &M = *__M;
     std::vector<gaudi::vec3> &x = gaudi::asawa::get_vec_data(M, 0);
 
-    const gaudi::vec3 fit_p = x[__single_fit_vertex];
-    const gaudi::real marker = 0.08 * gaudi::asawa::shell::avg_length(M, x);
-    gg::geometry_logger::line(fit_p - marker * __frame.x_axis,
-                              fit_p + marker * __frame.x_axis, fit_color);
-    gg::geometry_logger::line(fit_p - marker * __frame.y_axis,
-                              fit_p + marker * __frame.y_axis, fit_color);
-    gg::geometry_logger::line(fit_p - marker * __frame.z_axis,
-                              fit_p + marker * __frame.z_axis, fit_color);
-    draw_fit_level_slice(fit_p, level_color);
-
     for (const auto &cand : __candidates) {
       const gaudi::vec3 p = x[cand.vertex];
-      for (size_t i = 1; i < cand.trace_world.size(); ++i) {
-        gg::geometry_logger::line(cand.trace_world[i - 1], cand.trace_world[i],
-                                  trace_color);
+      if (cand.projection_converged) {
+        if ((cand.surface_world - p).norm() > 1e-12) {
+          gg::geometry_logger::line(p, cand.surface_world, zero_color);
+        } else {
+          gg::geometry_logger::point(cand.surface_world, zero_color);
+        }
       }
-      if (cand.accepted) {
-        gg::geometry_logger::line(p, cand.center_world, ray_color);
-      }
-    }
-  }
-
-  void draw_fit_level_slice(const gaudi::vec3 &origin,
-                            const gaudi::vec4 &color) {
-    gaudi::vec3 radial = origin - __frame.center;
-    radial -= radial.dot(__frame.z_axis) * __frame.z_axis;
-    if (radial.norm() < 1e-10) {
-      radial = __frame.x_axis;
-    } else {
-      radial.normalize();
-    }
-    const gaudi::vec3 binormal = __frame.z_axis;
-    const gaudi::real extent = 1.4 * __minor_radius;
-    constexpr int N = 48;
-    const gaudi::real h = 2.0 * extent / gaudi::real(N);
-
-    auto sample = [&](int i, int j) {
-      const gaudi::real u = -extent + h * gaudi::real(i);
-      const gaudi::real v = -extent + h * gaudi::real(j);
-      const gaudi::vec3 p = u * radial + v * binormal;
-      return gaudi::albers::eval_darboux(__single_fit_Q, p);
-    };
-    auto world = [&](gaudi::real u, gaudi::real v) {
-      return origin + u * radial + v * binormal;
-    };
-    auto interp = [](gaudi::real a, gaudi::real b) {
-      const gaudi::real denom = a - b;
-      if (std::abs(denom) < 1e-12) {
-        return gaudi::real(0.5);
-      }
-      return std::clamp(a / denom, gaudi::real(0.0), gaudi::real(1.0));
-    };
-
-    for (int i = 0; i < N; ++i) {
-      for (int j = 0; j < N; ++j) {
-        const gaudi::real f00 = sample(i, j);
-        const gaudi::real f10 = sample(i + 1, j);
-        const gaudi::real f11 = sample(i + 1, j + 1);
-        const gaudi::real f01 = sample(i, j + 1);
-
-        std::vector<gaudi::vec3> hits;
-        if ((f00 <= 0.0) != (f10 <= 0.0)) {
-          const gaudi::real t = interp(f00, f10);
-          hits.push_back(world(-extent + h * (gaudi::real(i) + t),
-                               -extent + h * gaudi::real(j)));
-        }
-        if ((f10 <= 0.0) != (f11 <= 0.0)) {
-          const gaudi::real t = interp(f10, f11);
-          hits.push_back(world(-extent + h * gaudi::real(i + 1),
-                               -extent + h * (gaudi::real(j) + t)));
-        }
-        if ((f11 <= 0.0) != (f01 <= 0.0)) {
-          const gaudi::real t = interp(f11, f01);
-          hits.push_back(world(-extent + h * (gaudi::real(i + 1) - t),
-                               -extent + h * gaudi::real(j + 1)));
-        }
-        if ((f01 <= 0.0) != (f00 <= 0.0)) {
-          const gaudi::real t = interp(f01, f00);
-          hits.push_back(world(-extent + h * gaudi::real(i),
-                               -extent + h * (gaudi::real(j + 1) - t)));
-        }
-
-        for (size_t k = 1; k < hits.size(); k += 2) {
-          gg::geometry_logger::line(hits[k - 1], hits[k], color);
-        }
+      if (cand.projection_converged && cand.center_world.allFinite() &&
+          (cand.center_world - cand.surface_world).norm() > 1e-12) {
+        gg::geometry_logger::line(cand.surface_world, cand.center_world,
+                                  medial_color);
       }
     }
   }
@@ -185,6 +192,7 @@ public:
 
   virtual void onDraw(gg::Viewer &viewer) {
     draw_medial_rays();
+    sync_gaudi_debug_to_gg();
     gg::geometry_logger::render();
     std::for_each(mSceneObjects.begin(), mSceneObjects.end(),
                   [&](gg::DrawablePtr obj) mutable {
@@ -200,8 +208,6 @@ private:
   gaudi::duchamp::cyclide_medial_params __params;
   gaudi::duchamp::cyclide_medial_stats __stats;
   std::vector<gaudi::duchamp::cyclide_medial_candidate> __candidates;
-  gaudi::albers::vec14 __single_fit_Q = gaudi::albers::vec14::Zero();
-  int __single_fit_vertex = 0;
   gaudi::real __major_radius = 1.25;
   gaudi::real __minor_radius = 0.35;
   std::vector<gg::DrawablePtr> mSceneObjects;
@@ -235,7 +241,11 @@ public:
 
 } // namespace
 
-int main() {
+int main(int argc, char **argv) {
+  if (argc > 1 && std::strcmp(argv[1], "--probe") == 0) {
+    return run_headless_probe();
+  }
+
   try {
     const auto params = demo_params();
     nanogui::init();

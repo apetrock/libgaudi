@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 #include <vector>
 #include "gaudi/common.h"
 #include "ncls.hpp"
@@ -186,6 +187,8 @@ namespace gaudi
       real surface_residual = 0.0;
       int iterations = 0;
       int clamped_steps = 0;
+      int negative_steps = 0;
+      int backward_clamps = 0;
       darboux_ridge_failure failure = darboux_ridge_failure::not_converged;
       darboux_ridge_failure projection_failure = darboux_ridge_failure::none;
       bool projection_attempted = false;
@@ -203,156 +206,164 @@ namespace gaudi
       return dir.transpose() * darboux_hessian(Q, x) * dir;
     }
 
-    // Unconstrained Newton-Raphson onto the fitted zero level set D(x) = 0.
-    //
-    // We solve D(x) = 0 by minimizing f(x) = D(x)^2 with full Newton steps
-    // (no projection onto an input direction, no KKT/closest-point objective):
-    //   grad f = 2 D grad D
-    //   hess f = 2 (grad D grad D^T + D H_D)
-    //   x <- x - (grad D grad D^T + D H_D)^{-1} (D grad D)
-    // The grad D grad D^T term alone is the Gauss-Newton approximation; adding
-    // the D H_D curvature term makes this the true Newton solve. Near D=0 this
-    // Hessian can be singular, so we fall back to the minimum-norm scalar root
-    // correction in the gradient direction.
-    inline bool darboux_surface_point_newton(
-        const vec14 &Q, const vec3 &x0, int max_iters, real tol, vec3 *x_out,
-        int *iters_out = nullptr, std::vector<vec3> *trace = nullptr,
+    struct darboux_line_newton_result {
+      vec3 x = vec3::Zero();
+      real t = 0.0;
+      real residual = 0.0;
+      int iterations = 0;
+      int clamped_steps = 0;
+      int negative_steps = 0;
+      int backward_clamps = 0;
+      darboux_ridge_failure failure = darboux_ridge_failure::not_converged;
+      bool converged = false;
+    };
+
+    // Shared 1D Newton machinery for scalar equations along a fixed ray:
+    //   x(t) = start + t * dir, F(t) = 0, t <- t - F/F'.
+    // The caller supplies F and F' at the current point. This keeps the
+    // surface projection and ridge solve mechanically identical while leaving
+    // their scalar equations explicit at the call site.
+    template <typename F_TYPE>
+    inline darboux_line_newton_result darboux_line_newton_on_ray(
+        const vec3 &start, const vec3 &dir_in, int max_iters, real tol,
+        F_TYPE &&eval_value_deriv, std::vector<vec3> *trace = nullptr,
         real max_travel = std::numeric_limits<real>::infinity(),
-        const vec3 *travel_origin = nullptr,
-        darboux_ridge_failure *failure_out = nullptr) {
-      vec3 x = x0;
-      const vec3 origin = travel_origin != nullptr ? *travel_origin : x0;
-      if (failure_out != nullptr) {
-        *failure_out = darboux_ridge_failure::not_converged;
+        const vec3 *travel_origin = nullptr, bool clamp_nonnegative = false,
+        real final_tol = -1.0,
+        real max_step = std::numeric_limits<real>::infinity()) {
+      darboux_line_newton_result out;
+      out.x = start;
+      const vec3 origin = travel_origin != nullptr ? *travel_origin : start;
+      if (dir_in.norm() < 1e-12) {
+        out.failure = darboux_ridge_failure::invalid_direction;
+        return out;
       }
 
+      const vec3 dir = dir_in.normalized();
+      real t = 0.0;
       for (int iter = 0; iter < std::max(1, max_iters); ++iter) {
-        const real phi = eval_darboux(Q, x);
-        const real surface_tol = std::max(tol, std::sqrt(tol));
-        if (!std::isfinite(phi) || !x.allFinite()) {
-          if (failure_out != nullptr) {
-            *failure_out = darboux_ridge_failure::nonfinite;
-          }
-          return false;
+        if (clamp_nonnegative) {
+          t = std::max(t, real(0.0));
         }
-        if (std::abs(phi) <= surface_tol) {
-          if (x_out != nullptr) {
-            *x_out = x;
-          }
-          if (iters_out != nullptr) {
-            *iters_out = iter + 1;
-          }
-          if (failure_out != nullptr) {
-            *failure_out = darboux_ridge_failure::none;
-          }
-          return true;
+        const vec3 x = start + t * dir;
+        const std::pair<real, real> value_deriv = eval_value_deriv(x, dir);
+        const real value = value_deriv.first;
+        const real deriv = value_deriv.second;
+        out.x = x;
+        out.t = t;
+        out.residual = std::abs(value);
+        out.iterations = iter + 1;
+
+        if (!x.allFinite() || !std::isfinite(value)) {
+          out.failure = darboux_ridge_failure::nonfinite;
+          return out;
+        }
+        if (out.residual <= tol) {
+          out.failure = darboux_ridge_failure::none;
+          out.converged = true;
+          return out;
+        }
+        if (!std::isfinite(deriv) || std::abs(deriv) < 1e-12) {
+          out.failure = darboux_ridge_failure::small_denominator;
+          return out;
         }
 
-        const vec3 g = darboux_grad(Q, x);
-        const mat3 Hd = darboux_hessian(Q, x);
-        if (!g.allFinite() || !Hd.allFinite()) {
-          if (failure_out != nullptr) {
-            *failure_out = darboux_ridge_failure::nonfinite;
-          }
-          return false;
+        real dt = -value / deriv;
+        if (!std::isfinite(dt)) {
+          out.failure = darboux_ridge_failure::nonfinite;
+          return out;
+        }
+        if (std::isfinite(max_step) && max_step > 0.0 &&
+            std::abs(dt) > max_step) {
+          dt = std::copysign(max_step, dt);
+          ++out.clamped_steps;
+        }
+        if (dt < 0.0) {
+          ++out.negative_steps;
         }
 
-        const mat3 Hf = g * g.transpose() + phi * Hd;
-        const vec3 gf = phi * g;
-        Eigen::SelfAdjointEigenSolver<mat3> eig(Hf);
-        if (eig.info() != Eigen::Success ||
-            !eig.eigenvalues().allFinite()) {
-          if (failure_out != nullptr) {
-            *failure_out = darboux_ridge_failure::small_denominator;
-          }
-          return false;
+        const real t_next_raw = t + dt;
+        if (clamp_nonnegative && t_next_raw < 0.0) {
+          ++out.clamped_steps;
+          ++out.backward_clamps;
         }
-
-        const vec3 evals = eig.eigenvalues().cwiseAbs();
-        const real min_eval = evals.minCoeff();
-        const real max_eval = evals.maxCoeff();
-        const bool ill_conditioned =
-            max_eval <= 0.0 || min_eval <= real(1e-6) * max_eval;
-
-        auto gradient_root_step = [&]() -> vec3 {
-          const real g2 = g.squaredNorm();
-          if (g2 < 1e-24) {
-            return vec3::Constant(std::numeric_limits<real>::quiet_NaN());
-          }
-          return -(phi / g2) * g;
-        };
-
-        vec3 dx = vec3::Zero();
-        if (!ill_conditioned) {
-          Eigen::ColPivHouseholderQR<mat3> qr(Hf);
-          dx = qr.solve(-gf);
-        } else {
-          dx = gradient_root_step();
+        t = clamp_nonnegative ? std::max(t_next_raw, real(0.0)) : t_next_raw;
+        const vec3 x_next = start + t * dir;
+        if (!x_next.allFinite()) {
+          out.failure = darboux_ridge_failure::nonfinite;
+          return out;
         }
-
-        const vec3 x_trial = x + dx;
-        if (dx.allFinite() && x_trial.allFinite() &&
-            (x_trial - origin).norm() <= max_travel) {
-          const real trial_phi = eval_darboux(Q, x_trial);
-          if (!std::isfinite(trial_phi) || std::abs(trial_phi) > std::abs(phi)) {
-            dx = gradient_root_step();
+        if ((x_next - origin).norm() > max_travel) {
+          out.x = x_next;
+          out.t = t;
+          out.failure = darboux_ridge_failure::max_travel;
+          if (trace != nullptr) {
+            trace->push_back(x_next);
           }
-        } else {
-          dx = gradient_root_step();
-        }
-        if (!dx.allFinite()) {
-          if (failure_out != nullptr) {
-            *failure_out = darboux_ridge_failure::small_denominator;
-          }
-          return false;
-        }
-
-        x += dx;
-        if (!x.allFinite()) {
-          if (failure_out != nullptr) {
-            *failure_out = darboux_ridge_failure::nonfinite;
-          }
-          return false;
-        }
-        if ((x - origin).norm() > max_travel) {
-          if (failure_out != nullptr) {
-            *failure_out = darboux_ridge_failure::max_travel;
-          }
-          return false;
+          return out;
         }
         if (trace != nullptr) {
-          trace->push_back(x);
+          trace->push_back(x_next);
         }
       }
 
-      const real phi = eval_darboux(Q, x);
-      if (x.allFinite() && std::abs(phi) <= std::sqrt(tol) * 10.0) {
-        if (x_out != nullptr) {
-          *x_out = x;
+      out.x = start + t * dir;
+      out.t = t;
+      if (out.x.allFinite()) {
+        const std::pair<real, real> value_deriv = eval_value_deriv(out.x, dir);
+        out.residual = std::abs(value_deriv.first);
+        if (final_tol >= 0.0 && out.residual <= final_tol) {
+          out.failure = darboux_ridge_failure::none;
+          out.converged = true;
+          return out;
         }
-        if (iters_out != nullptr) {
-          *iters_out = max_iters;
-        }
-        if (failure_out != nullptr) {
-          *failure_out = darboux_ridge_failure::none;
-        }
-        return true;
       }
-      return false;
+      out.failure = (out.x - origin).norm() > max_travel
+                        ? darboux_ridge_failure::max_travel
+                        : darboux_ridge_failure::not_converged;
+      return out;
     }
 
-    // Newton ridge search on a fixed inward ray through a Darboux signed-value
-    // field. Parameterize x(t) = x_base + t * dir and solve grad D(x) · dir = 0.
+    // 1D Newton-Raphson to find the zero level set along a fixed ray.
     //
-    // If the start point is outside the fitted field (D > 0), first solve down
-    // the gradient to the zero level set, then continue the ridge search
-    // inward from that surface point. Inside points (D <= 0) march inward
-    // directly from the POV.
+    // Parameterize x(t) = start + t * dir and solve D(x(t)) = 0 with:
+    //   t <- t - D(x) / (grad D(x) dot dir)
+    // This is intentionally constrained to the supplied direction, so it avoids
+    // tangential motion from an underdetermined 3D scalar solve near D = 0.
+    inline bool darboux_surface_point_line_newton(
+        const vec14 &Q, const vec3 &start, const vec3 &dir_in, int max_iters,
+        real tol, vec3 *x_out, int *iters_out = nullptr,
+        std::vector<vec3> *trace = nullptr,
+        real max_travel = std::numeric_limits<real>::infinity(),
+        darboux_ridge_failure *failure_out = nullptr) {
+      const real surface_tol = std::max(tol, std::sqrt(tol));
+      const darboux_line_newton_result result = darboux_line_newton_on_ray(
+          start, dir_in, max_iters, surface_tol,
+          [&](const vec3 &x, const vec3 &dir) {
+            return std::make_pair(eval_darboux(Q, x), darboux_grad(Q, x).dot(dir));
+          },
+          trace, max_travel, nullptr, false, std::sqrt(tol) * 10.0);
+      if (x_out != nullptr) {
+        *x_out = result.x;
+      }
+      if (iters_out != nullptr) {
+        *iters_out = result.iterations;
+      }
+      if (failure_out != nullptr) {
+        *failure_out = result.failure;
+      }
+      return result.converged;
+    }
+
+    // Newton ridge search on a fixed ray through a Darboux signed-value field.
+    // Parameterize x(t) = start + t * dir and solve grad D(x) · dir = 0.
+    // Surface projection, if needed, should happen before calling this helper.
     inline darboux_ridge_estimate estimate_center_ridge(
         const vec14 &Q, const vec3 &start, const vec3 &inward_dir,
         int max_iters = 12, real tol = 1e-8,
         std::vector<vec3> *trace = nullptr,
-        real max_travel = std::numeric_limits<real>::infinity()) {
+        real max_travel = std::numeric_limits<real>::infinity(),
+        real max_step = std::numeric_limits<real>::infinity()) {
       darboux_ridge_estimate out;
       if (inward_dir.norm() < 1e-12) {
         out.failure = darboux_ridge_failure::invalid_direction;
@@ -360,7 +371,6 @@ namespace gaudi
       }
       const vec3 dir = inward_dir.normalized();
       vec3 x_base = start;
-      real t = 0.0;
       if (trace != nullptr) {
         trace->clear();
         trace->push_back(start);
@@ -368,94 +378,25 @@ namespace gaudi
 
       const real d0 = eval_darboux(Q, start);
       out.surface_residual = std::abs(d0);
-      const vec3 g0 = darboux_grad(Q, start);
-      const real g0_norm = g0.norm();
-      const real surface_dist =
-          g0_norm > 1e-12 ? std::abs(d0) / g0_norm
-                           : std::numeric_limits<real>::infinity();
-      const real surface_dist_tol =
-          std::max(std::sqrt(tol), real(0.01) * max_travel);
-      if (d0 > 0.0 && surface_dist > surface_dist_tol) {
-        out.projection_attempted = true;
-        vec3 x_surface = start;
-        int root_iters = 0;
-        darboux_ridge_failure projection_failure =
-            darboux_ridge_failure::not_converged;
-        if (darboux_surface_point_newton(Q, start, max_iters, tol, &x_surface,
-                                         &root_iters, trace, max_travel,
-                                         &start, &projection_failure)) {
-          x_base = x_surface;
-          out.projection_converged = true;
-          out.surface_residual = std::abs(eval_darboux(Q, x_base));
-          out.iterations = root_iters;
-        } else {
-          out.projection_failure = projection_failure;
-        }
-      }
 
-      auto over_travel = [&](const vec3 &x) {
-        return (x - start).norm() > max_travel;
-      };
-
-      for (int iter = 0; iter < std::max(1, max_iters); ++iter) {
-        t = std::max(t, real(0.0));
-        const vec3 x = x_base + t * dir;
-        const real ridge = darboux_directional_deriv(Q, x, dir);
-        out.residual = std::abs(ridge);
-        out.iterations += 1;
-
-        if (!std::isfinite(ridge) || !x.allFinite()) {
-          out.failure = darboux_ridge_failure::nonfinite;
-          return out;
-        }
-        if (out.residual <= tol) {
-          out.center = x;
-          out.travel = (x - start).norm();
-          out.failure = darboux_ridge_failure::none;
-          out.accepted = out.center.allFinite() && out.travel > 1e-12;
-          return out;
-        }
-
-        const real denom = darboux_directional_second_deriv(Q, x, dir);
-        if (!std::isfinite(denom) || std::abs(denom) < 1e-12) {
-          out.failure = darboux_ridge_failure::small_denominator;
-          return out;
-        }
-
-        const real dt = -ridge / denom;
-        if (!std::isfinite(dt)) {
-          out.failure = darboux_ridge_failure::nonfinite;
-          return out;
-        }
-
-        const real t_next = t + dt;
-        if (t_next < 0.0) {
-          ++out.clamped_steps;
-        }
-        t = std::max(t_next, real(0.0));
-        if (over_travel(x_base + t * dir)) {
-          const vec3 x_reject = x_base + t * dir;
-          out.center = x_reject;
-          out.travel = (x_reject - start).norm();
-          out.failure = darboux_ridge_failure::max_travel;
-          if (trace != nullptr && x_reject.allFinite()) {
-            trace->push_back(x_reject);
-          }
-          return out;
-        }
-        if (trace != nullptr) {
-          trace->push_back(x_base + t * dir);
-        }
-      }
-
-      t = std::max(t, real(0.0));
-      const vec3 x = x_base + t * dir;
-      out.center = x;
-      out.travel = (x - start).norm();
-      out.residual = std::abs(darboux_directional_deriv(Q, x, dir));
-      out.failure = over_travel(x) ? darboux_ridge_failure::max_travel
-                                   : darboux_ridge_failure::not_converged;
-      out.accepted = false;
+      const darboux_line_newton_result ridge_result = darboux_line_newton_on_ray(
+          x_base, dir, max_iters, tol,
+          [&](const vec3 &x, const vec3 &ray_dir) {
+            return std::make_pair(
+                darboux_directional_deriv(Q, x, ray_dir),
+                darboux_directional_second_deriv(Q, x, ray_dir));
+          },
+          trace, max_travel, &start, true, -1.0, max_step);
+      out.center = ridge_result.x;
+      out.travel = (out.center - start).norm();
+      out.residual = ridge_result.residual;
+      out.iterations += ridge_result.iterations;
+      out.clamped_steps += ridge_result.clamped_steps;
+      out.negative_steps += ridge_result.negative_steps;
+      out.backward_clamps += ridge_result.backward_clamps;
+      out.failure = ridge_result.failure;
+      out.accepted = ridge_result.converged && out.center.allFinite() &&
+                     out.travel > 1e-12;
       return out;
     }
 
@@ -474,19 +415,73 @@ namespace gaudi
       {
         mat414 Ab = mk_darboux_A(x);
         vec4 Nb = mk_N(N);
+
+        const vec3 n = N.normalized();
+        const vec3 seed =
+            std::abs(n.dot(vec3::UnitZ())) < 0.9 ? vec3::UnitZ() : vec3::UnitX();
+        const vec3 t1 = seed.cross(n).normalized();
+        const vec3 t2 = n.cross(t1).normalized();
+
+        const auto value_row = Ab.row(0);
+        const auto tangent_row_1 =
+            t1[0] * Ab.row(1) + t1[1] * Ab.row(2) + t1[2] * Ab.row(3);
+        const auto tangent_row_2 =
+            t2[0] * Ab.row(1) + t2[1] * Ab.row(2) + t2[2] * Ab.row(3);
+
+        A += w * value_row.transpose() * value_row;
+        A += w * tangent_row_1.transpose() * tangent_row_1;
+        A += w * tangent_row_2.transpose() * tangent_row_2;
+
+        // Orientation only for the homogeneous solve.
         b += w * Ab.transpose() * Nb;
-        A += w * Ab.transpose() * Ab;
       }
 
       vec14 solve()
       {
-        vec14 x = A.colPivHouseholderQr().solve(b);
+        Eigen::SelfAdjointEigenSolver<mat14> es(A);
+        vec14 x = es.eigenvectors().col(0);
+        if (x.dot(b) < 0.0)
+        {
+          x *= -1.0;
+        }
         return x;
       }
 
       mat14 A;
       vec14 b;
     };
+
+    class normal_constrained_darboux_cyclide
+    {
+    public:
+      using coefficients = vec14;
+
+      normal_constrained_darboux_cyclide()
+      {
+        A = mat14::Zero();
+        b = vec14::Zero();
+      }
+
+      void accumulate(real w, const vec3 &x, const vec3 &N)
+      {
+        mat414 Ab = mk_darboux_A(x);
+        vec4 Nb = mk_N(N);
+
+        A += w * Ab.transpose() * Ab;
+        b += w * Ab.transpose() * Nb;
+      }
+
+      vec14 solve()
+      {
+        Eigen::ColPivHouseholderQR<mat14> qr(A);
+        return qr.solve(b);
+      }
+
+      mat14 A;
+      vec14 b;
+    };
+
+    using tangent_plane_darboux_cyclide = darboux_cyclide;
 
   }
 }

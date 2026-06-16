@@ -134,7 +134,6 @@ namespace gaudi
     {
 
       using type = typename M_TYPE::type;
-      std::cout << "gf 0 " << std::endl;
       std::vector<F_TYPE> accumulators(p_pov.size());
       // Per-primitive area (weight). Ns holds area-weighted normals, so the
       // area of a single primitive is |Ns|. The area must be summed as a
@@ -144,7 +143,6 @@ namespace gaudi
       std::vector<real> areas(Ns.size(), 0.0);
       for (size_t k = 0; k < Ns.size(); k++)
         areas[k] = Ns[k].norm();
-      std::cout << "gf 1 " << std::endl;
       std::vector<type> us = M_TYPE::integrate(
           M, p_pov,
           [&Ns, &areas](const std::vector<index_t> &edge_ids, typename M_TYPE::Sum_Type &sum)
@@ -169,6 +167,8 @@ namespace gaudi
             }
             Nj /= nrm; // area-weighted mean normal direction
 
+
+
             vec3 dp = pj - pi;
             real wf = weight_func(i, j, data, node_type, dp, Ni, Nj, l0, p);
 
@@ -183,16 +183,12 @@ namespace gaudi
 
             return 0.0;
           });
-      std::cout << "gf 2 " << std::endl;
       std::vector<typename F_TYPE::coefficients> out(p_pov.size(), F_TYPE::coefficients::Zero());
-      std::cout << "gf 3 " << std::endl;
-      std::cout << "out.size() " << out.size() << " " << accumulators.size() << std::endl;
 
       for (int i = 0; i < accumulators.size(); i++)
       {
         out[i] = accumulators[i].solve();
       }
-      std::cout << "gf 4 " << std::endl;
       return out;
     }
 
@@ -566,6 +562,63 @@ namespace gaudi
     TYPEDEF_MAT(14)
     TYPEDEF_MAT_NM(4, 14)
 
+    std::vector<vec14> darboux_cyclide(asawa::shell::shell &M,
+                                       const std::vector<vec3> &p_pov,
+                                       const std::vector<vec3> &N_pov, real l0,
+                                       real p = 3.0, real w0 = 1e-2)
+    {
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < Ns.size(); i++)
+      {
+        Ns[i] = weights[i] * Ns[i];
+      }
+
+      (void)w0;
+      //return generic_fit<albers::darboux_cyclide, shell_bundle>(
+      //    M, Ns, p_pov, N_pov, l0, p, shell_inv_dist_weight);
+      return generic_fit<albers::darboux_cyclide, shell_bundle>(
+        M, Ns, p_pov, N_pov, l0, p, shell_inv_dist_weight);
+    }
+
+    std::vector<vec14> darboux_cyclide_tangent_plane(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0, real p = 3.0,
+        real w0 = 1e-2)
+    {
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < Ns.size(); i++)
+      {
+        Ns[i] = weights[i] * Ns[i];
+      }
+
+      (void)w0;
+      return generic_fit<albers::darboux_cyclide, shell_bundle>(
+          M, Ns, p_pov, N_pov, l0, p, shell_inv_dist_weight);
+    }
+
+    std::vector<vec14> darboux_cyclide_normal_constrained(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0, real p = 3.0,
+        real w0 = 1e-2)
+    {
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < Ns.size(); i++)
+      {
+        Ns[i] = weights[i] * Ns[i];
+      }
+
+      (void)w0;
+      return generic_fit<albers::normal_constrained_darboux_cyclide,
+                         shell_bundle>(M, Ns, p_pov, N_pov, l0, p,
+                                       shell_inv_dist_weight);
+    }
+
     std::vector<vec14> darboux_cyclide(asawa::rod::rod &R,
                                        const std::vector<vec3> &Nr,
                                        const std::vector<vec3> &p_pov,
@@ -582,6 +635,30 @@ namespace gaudi
           R, Ns, p_pov, N_pov, l0, p, rod_inv_dist_weight);
     }
 
+    std::vector<vec14> darboux_cyclide_tangent_plane(
+        asawa::rod::rod &R, const std::vector<vec3> &Nr,
+        const std::vector<vec3> &p_pov, const std::vector<vec3> &N_pov,
+        real l0, real p = 3.0)
+    {
+      return darboux_cyclide(R, Nr, p_pov, N_pov, l0, p);
+    }
+
+    std::vector<vec14> darboux_cyclide_normal_constrained(
+        asawa::rod::rod &R, const std::vector<vec3> &Nr,
+        const std::vector<vec3> &p_pov, const std::vector<vec3> &N_pov,
+        real l0, real p = 3.0)
+    {
+      std::vector<real> weights = R.l0();
+      std::vector<vec3> Ns = Nr;
+      for (int i = 0; i < Ns.size(); i++)
+      {
+        Ns[i] = weights[i] * Nr[i];
+      }
+      return generic_fit<albers::normal_constrained_darboux_cyclide,
+                         rod_bundle>(R, Ns, p_pov, N_pov, l0, p,
+                                     rod_inv_dist_weight);
+    }
+
     std::vector<vec3> darboux_cyclide_grad(asawa::rod::rod &R,
                                            const std::vector<vec3> &Nr,
                                            const std::vector<vec3> &p_pov,
@@ -592,7 +669,7 @@ namespace gaudi
       std::vector<vec3> out(p_pov.size(), vec3::Zero());
       for (int i = 0; i < Q.size(); i++)
       {
-        out[i] = -Q[i][9] * albers::darboux_grad(Q[i], vec3::Zero()); // double check, this is right...
+        out[i] = albers::darboux_grad(Q[i], vec3::Zero());
         if (out[i].hasNaN())
         {
           out[i] = vec3::Zero();
@@ -668,22 +745,6 @@ namespace gaudi
       return out;
     }
 
-    std::vector<vec14> darboux_cyclide(asawa::shell::shell &M,
-                                       const std::vector<vec3> &p_pov,
-                                       const std::vector<vec3> &N_pov, real l0,
-                                       real p = 3.0, real w0 = 1e-2)
-    {
-      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
-      std::vector<real> weights = asawa::shell::face_areas(M, x);
-      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
-      for (int i = 0; i < Ns.size(); i++)
-      {
-        Ns[i] = weights[i] * Ns[i];
-      }
-      return generic_fit<albers::darboux_cyclide, shell_bundle>(
-          M, Ns, p_pov, N_pov, l0, p, shell_inv_dist_weight);
-    }
-
     std::vector<vec3> darboux_cyclide_grad(asawa::shell::shell &M,
                                            const std::vector<vec3> &p_pov,
                                            const std::vector<vec3> &N_pov, real l0,
@@ -693,7 +754,7 @@ namespace gaudi
       std::vector<vec3> out(p_pov.size(), vec3::Zero());
       for (int i = 0; i < Q.size(); i++)
       {
-        out[i] = -Q[i][9] * albers::darboux_grad(Q[i], vec3::Zero());
+        out[i] = albers::darboux_grad(Q[i], vec3::Zero());
         if (out[i].hasNaN())
         {
           out[i] = vec3::Zero();
