@@ -15,6 +15,7 @@
 #include "rod_integrators.hpp"
 #include "shell_integrators.hpp"
 #include "gaudi/albers/quadric.hpp"
+#include "gaudi/albers/line_cylinder.hpp"
 #include "gaudi/albers/sphere.hpp"
 #include "gaudi/albers/darboux_cyclide.hpp"
 #include "gaudi/albers/circle.hpp"
@@ -85,8 +86,7 @@ namespace gaudi
                        typename M_TYPE::Sum_Type::Node_Type node_type, //
                        const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p = 3.0)
     {
-      // return dp.dot(Nj) > 0 ? 1.0 : 0.0;
-      return dp.dot(Ni) < 0 ? 1.0 : 0.0;
+      return dp.dot(Nj) > 0 ? 1.0 : 0.0;
     }
     template <typename M_TYPE>
     real inv_convex_weight(int i, int j, //
@@ -94,8 +94,22 @@ namespace gaudi
                            typename M_TYPE::Sum_Type::Node_Type node_type, //
                            const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p = 3.0)
     {
-      // return dp.dot(Nj) > 0 ? 1.0 : 0.0;
-      return dp.dot(Ni) < 0 ? calc_inv_dist(dp, l0, p) : 0.0;
+      return dp.dot(Nj) > 0 ? calc_inv_dist(dp, l0, p) : 0.0;
+    }
+
+    template <typename M_TYPE>
+    real soft_inv_convex_weight(int i, int j, //
+                                const std::vector<calder::datum::ptr> &data,
+                                typename M_TYPE::Sum_Type::Node_Type node_type, //
+                                const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p = 3.0)
+    {
+      const real dist = dp.norm();
+      if (dist < 1e-12)
+      {
+        return 0.0;
+      }
+      const real convexity = std::max(real(0.0), dp.normalized().dot(Nj));
+      return convexity * calc_inv_dist(dp, l0, p);
     }
 
     template <typename M_TYPE>
@@ -113,8 +127,7 @@ namespace gaudi
                            typename M_TYPE::Sum_Type::Node_Type node_type, //
                            const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p = 3.0)
     {
-      // return dp.dot(Nj) > 0 ? 1.0 : 0.0;
-      return dp.dot(Ni) < 0 ? calc_inv_dist(dp, l0, p) : 0.0;
+      return dp.dot(Nj) > 0 ? calc_cauchy(dp, l0, p) : 0.0;
     }
 
     GENERATE_WEIGHT_FUNCS(identity_weight)
@@ -122,15 +135,15 @@ namespace gaudi
     GENERATE_WEIGHT_FUNCS(inv_rad_weight)
     GENERATE_WEIGHT_FUNCS(convex_weight)
     GENERATE_WEIGHT_FUNCS(inv_convex_weight)
+    GENERATE_WEIGHT_FUNCS(soft_inv_convex_weight)
 
-    template <typename F_TYPE, typename M_TYPE>
+    template <typename F_TYPE, typename M_TYPE, typename W_FUNC>
     std::vector<typename F_TYPE::coefficients> generic_fit(typename M_TYPE::Manifold_Type &M,
                                                            const std::vector<vec3> &Ns,
                                                            const std::vector<vec3> &p_pov,
                                                            const std::vector<vec3> &n_pov, real l0,
-                                                           real p = 3.0, //
-                                                           weight_func<M_TYPE>
-                                                               weight_func = identity_weight<M_TYPE>)
+                                                           real p, //
+                                                           W_FUNC weight_func)
     {
 
       using type = typename M_TYPE::type;
@@ -365,6 +378,21 @@ namespace gaudi
         out[i] = cen;
       }
       return out;
+    }
+
+    std::vector<vec6> normal_aligned_line_convexity(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &n_pov, real l0, real p = 3.0)
+    {
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < Ns.size(); i++)
+      {
+        Ns[i] = weights[i] * Ns[i];
+      }
+      return generic_fit<albers::normal_aligned_line, shell_bundle>(
+          M, Ns, p_pov, n_pov, l0, p, shell_soft_inv_convex_weight);
     }
 
     std::vector<vec4> sphere(asawa::shell::shell &M, const std::vector<vec3> &p_pov,
@@ -617,6 +645,62 @@ namespace gaudi
       return generic_fit<albers::normal_constrained_darboux_cyclide,
                          shell_bundle>(M, Ns, p_pov, N_pov, l0, p,
                                        shell_inv_dist_weight);
+    }
+
+    std::vector<vec14> darboux_cyclide_normal_constrained_bilateral(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0, real p = 3.0,
+        real normal_l0 = 0.25, real w0 = 1e-2)
+    {
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < Ns.size(); i++)
+      {
+        Ns[i] = weights[i] * Ns[i];
+      }
+
+      (void)w0;
+      const real sigma = std::max(normal_l0, real(1e-6));
+      auto bilateral_weight = [sigma](
+                                  int i, int j,
+                                  const std::vector<calder::datum::ptr> &data,
+                                  shell_bundle::Sum_Type::Node_Type node_type,
+                                  const vec3 &dp, const vec3 &Ni,
+                                  const vec3 &Nj, real l0, real p) -> real
+      {
+        (void)i;
+        (void)j;
+        (void)data;
+        (void)node_type;
+        const real spatial = calc_inv_dist(dp, l0, p);
+        const real normal_dist = (Ni.normalized() - Nj.normalized()).norm();
+        const real normal =
+            1.0 / (std::pow(normal_dist, p) + std::pow(sigma, p));
+        return spatial * normal;
+      };
+      return generic_fit<albers::normal_constrained_darboux_cyclide,
+                         shell_bundle>(M, Ns, p_pov, N_pov, l0, p,
+                                       bilateral_weight);
+    }
+
+    std::vector<vec14> darboux_cyclide_normal_constrained_convexity(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0, real p = 3.0,
+        real w0 = 1e-2)
+    {
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < Ns.size(); i++)
+      {
+        Ns[i] = weights[i] * Ns[i];
+      }
+
+      (void)w0;
+      return generic_fit<albers::normal_constrained_darboux_cyclide,
+                         shell_bundle>(M, Ns, p_pov, N_pov, l0, p,
+                                       shell_soft_inv_convex_weight);
     }
 
     std::vector<vec14> darboux_cyclide(asawa::rod::rod &R,

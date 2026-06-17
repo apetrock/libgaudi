@@ -3,6 +3,7 @@
 
 #include "gaudi/albers/darboux_cyclide.hpp"
 #include "gaudi/asawa/datums.hpp"
+#include "gaudi/asawa/shell/datum_x.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/calder/least_squares_fit.hpp"
 #include "gaudi/common.h"
@@ -19,6 +20,10 @@ namespace duchamp {
 struct cyclide_medial_params {
   real l0_scale = 0.1;
   real fit_p = 3.0;
+  real normal_l0 = 0.35;
+  real min_normal_alignment = -0.25;
+  real medial_smooth_scale = 0.0;
+  real medial_smooth_blend = 1.0;
   int max_iters = 120;
   real tol = 1e-8;
   real max_travel_scale = 12.0;
@@ -32,6 +37,7 @@ struct cyclide_medial_candidate {
   vec3 center_local = vec3::Zero();
   vec3 surface_world = vec3::Zero();
   vec3 surface_local = vec3::Zero();
+  vec3 cylinder_axis_world = vec3::Zero();
   std::vector<vec3> trace_world;
   real travel = 0.0;
   real residual = 0.0;
@@ -59,6 +65,102 @@ inline bool cyclide_medial_candidate_valid(
     const albers::darboux_ridge_estimate &est) {
   return est.accepted && est.center.allFinite() && est.travel > 1e-12 &&
          std::isfinite(est.residual);
+}
+
+inline void smooth_pipe_fit_medial_axis(
+    asawa::shell::shell &M, std::vector<cyclide_medial_candidate> &candidates,
+    real smooth_scale, real blend) {
+  if (smooth_scale <= 0.0 || candidates.empty()) {
+    return;
+  }
+
+  const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+  const real avg_len = asawa::shell::avg_length(M, x);
+  const real l0 = std::max(smooth_scale * avg_len, real(1e-12));
+  const real alpha = std::clamp(blend, real(0.0), real(1.0));
+
+  std::vector<vec3> centers(x.size(), vec3::Zero());
+  std::vector<vec3> axes(x.size(), vec3::Zero());
+  std::vector<real> valid(x.size(), 0.0);
+  for (const cyclide_medial_candidate &cand : candidates) {
+    if (!cand.accepted || cand.vertex < 0 ||
+        cand.vertex >= static_cast<int>(x.size())) {
+      continue;
+    }
+    const size_t vi = static_cast<size_t>(cand.vertex);
+    centers[vi] = cand.center_world;
+    if (cand.cylinder_axis_world.squaredNorm() > 1e-12) {
+      axes[vi] = cand.cylinder_axis_world.normalized();
+    }
+    valid[vi] = 1.0;
+  }
+
+  std::vector<vec3> axis_faces(M.face_count(), vec3::Zero());
+  for (auto fi : M.get_face_range()) {
+    vec3 ref = vec3::Zero();
+    vec3 axis_sum = vec3::Zero();
+    int axis_count = 0;
+    M.const_for_each_face(asawa::shell::face_id(fi),
+                          [&](asawa::shell::CornerId c0,
+                              const asawa::shell::shell &shell) {
+                            const vec3 axis = axes[shell.vert(c0)];
+                            if (axis.squaredNorm() <= 1e-12) {
+                              return;
+                            }
+                            if (ref.squaredNorm() <= 1e-12) {
+                              ref = axis.normalized();
+                            }
+                            axis_sum += axis.dot(ref) < 0.0 ? -axis : axis;
+                            ++axis_count;
+                          });
+    if (axis_count > 0 && axis_sum.squaredNorm() > 1e-12) {
+      axis_faces[fi] = axis_sum.normalized();
+    }
+  }
+
+  const std::vector<vec3> center_faces =
+      asawa::shell::vert_to_face<vec3>(M, x, centers);
+  const std::vector<real> valid_faces =
+      asawa::shell::vert_to_face<real>(M, x, valid);
+  const std::vector<vec3> smooth_centers =
+      calder::mls_avg<vec3>(M, center_faces, x, l0, 2.0);
+  const std::vector<mat3> smooth_axis_frames =
+      calder::gaussian_covariant_vector_frame(M, axis_faces, x, l0);
+  const std::vector<real> smooth_valid =
+      calder::mls_avg<real>(M, valid_faces, x, l0, 2.0);
+
+  for (cyclide_medial_candidate &cand : candidates) {
+    if (!cand.accepted || cand.vertex < 0 ||
+        cand.vertex >= static_cast<int>(x.size())) {
+      continue;
+    }
+    const size_t vi = static_cast<size_t>(cand.vertex);
+    if (smooth_valid[vi] <= 1e-8) {
+      continue;
+    }
+
+    const vec3 center = smooth_centers[vi] / smooth_valid[vi];
+    if (center.allFinite()) {
+      cand.center_world = (1.0 - alpha) * cand.center_world + alpha * center;
+      cand.center_local = cand.center_world - cand.surface_world;
+      cand.travel = cand.center_local.norm();
+    }
+
+    if (smooth_axis_frames[vi].allFinite()) {
+      vec3 axis = smooth_axis_frames[vi].col(2);
+      if (!axis.allFinite() || axis.norm() <= 1e-12) {
+        continue;
+      }
+      if (axis.dot(cand.cylinder_axis_world) < 0.0) {
+        axis *= -1.0;
+      }
+      const vec3 blended_axis =
+          (1.0 - alpha) * cand.cylinder_axis_world + alpha * axis.normalized();
+      if (blended_axis.norm() > 1e-12) {
+        cand.cylinder_axis_world = blended_axis.normalized();
+      }
+    }
+  }
 }
 
 inline void dump_cyclide_medial_probe(const albers::vec14 &Q, int vertex,
@@ -665,8 +767,8 @@ compute_local_fit_cyclide_medial_candidates(
   }
 
   const std::vector<albers::vec14> fits =
-      calder::darboux_cyclide_normal_constrained(M, x, vertex_normals, l0,
-                                                 params.fit_p);
+      calder::darboux_cyclide_normal_constrained_convexity(
+          M, x, vertex_normals, l0, params.fit_p);
 
   const real max_travel = params.max_travel_scale * avg_len;
   const real max_newton_step =
@@ -695,6 +797,9 @@ compute_local_fit_cyclide_medial_candidates(
   real local_not_converged_travel_sum = 0.0;
   real local_not_converged_travel_max = 0.0;
   int local_not_converged_samples = 0;
+  std::vector<vec3> cylinder_pov(x.size(), vec3::Zero());
+  std::vector<vec3> cylinder_normals(x.size(), vec3::UnitZ());
+  std::vector<int> cylinder_valid(x.size(), 0);
 
   for (auto v_id : verts) {
     const int vi = static_cast<int>(v_id);
@@ -707,10 +812,11 @@ compute_local_fit_cyclide_medial_candidates(
 
     const vec3 fit_origin = x[vi];
     const vec3 local_start = vec3::Zero();
-    const vec3 inward = -vertex_normals[vi].normalized();
     const albers::vec14 &Q = fits[vi];
+    const vec3 inward = -vertex_normals[vi].normalized();
 
     const vec3 g_start = albers::darboux_grad(Q, local_start);
+    real normal_alignment = -1.0;
     if (g_start.allFinite() && g_start.norm() > 1e-12) {
       vec3 fit_normal = g_start.normalized();
       const vec3 mesh_normal = vertex_normals[vi].normalized();
@@ -718,6 +824,7 @@ compute_local_fit_cyclide_medial_candidates(
         fit_normal *= -1.0;
       }
       const real align = fit_normal.dot(mesh_normal);
+      normal_alignment = align;
       grad_alignment_sum += align;
       min_grad_alignment = std::min(min_grad_alignment, align);
       ++grad_alignment_samples;
@@ -725,8 +832,9 @@ compute_local_fit_cyclide_medial_candidates(
 
     std::vector<vec3> trace_local;
     albers::darboux_ridge_estimate est;
+    vec3 medial_dir = vec3::Zero();
     if (g_start.allFinite() && g_start.norm() > 1e-12) {
-      const vec3 medial_dir = -g_start.normalized();
+      medial_dir = -g_start.normalized();
       est = albers::estimate_center_ridge(
           Q, local_start, medial_dir, params.max_iters, params.tol,
           &trace_local, max_travel, max_newton_step);
@@ -753,6 +861,48 @@ compute_local_fit_cyclide_medial_candidates(
     cand.projection_attempted = false;
     cand.projection_converged = true;
     cand.accepted = cyclide_medial_candidate_valid(est);
+    if (normal_alignment < params.min_normal_alignment) {
+      cand.accepted = false;
+    }
+    if (cand.accepted) {
+      cylinder_pov[static_cast<size_t>(vi)] = cand.center_world;
+      cylinder_normals[static_cast<size_t>(vi)] = inward;
+      cylinder_valid[static_cast<size_t>(vi)] = 1;
+    }
+    if (params.probe_vertex == vi) {
+      std::cerr << "local cyclide medial probe vertex=" << vi
+                << " accepted=" << cand.accepted
+                << " failure=" << static_cast<int>(cand.failure)
+                << " travel=" << cand.travel
+                << " residual=" << cand.residual
+                << " normal_alignment=" << normal_alignment
+                << " D_start=" << albers::eval_darboux(Q, local_start)
+                << " |g_start|=" << g_start.norm()
+                << " medial_dir=" << medial_dir.transpose() << std::endl;
+      if (medial_dir.squaredNorm() > 1e-12) {
+        const real ridge0 =
+            albers::darboux_directional_deriv(Q, local_start, medial_dir);
+        const real d2_0 =
+            albers::darboux_directional_second_deriv(Q, local_start,
+                                                     medial_dir);
+        std::cerr << "  initial ridge=" << ridge0 << " d2=" << d2_0
+                  << " raw_dt=" << (-ridge0 / d2_0) << std::endl;
+        for (int ti = 0; ti < static_cast<int>(trace_local.size()); ++ti) {
+          const vec3 &pt = trace_local[static_cast<size_t>(ti)];
+          const real ridge =
+              albers::darboux_directional_deriv(Q, pt, medial_dir);
+          const real d2 =
+              albers::darboux_directional_second_deriv(Q, pt, medial_dir);
+          const real step =
+              ti > 0 ? (pt - trace_local[static_cast<size_t>(ti - 1)]).norm()
+                     : 0.0;
+          std::cerr << "  trace[" << ti << "] x=" << pt.transpose()
+                    << " D=" << albers::eval_darboux(Q, pt)
+                    << " ridge=" << ridge << " d2=" << d2
+                    << " step=" << step << std::endl;
+        }
+      }
+    }
 
     if (cand.projection_attempted) {
       ++projection_attempted;
@@ -806,6 +956,39 @@ compute_local_fit_cyclide_medial_candidates(
       }
     }
     out.push_back(cand);
+  }
+
+  const std::vector<vec6> cylinder_fits =
+      calder::normal_aligned_line_convexity(M, cylinder_pov, cylinder_normals,
+                                            l0, params.fit_p);
+  for (cyclide_medial_candidate &cand : out) {
+    if (!cand.accepted || cand.vertex < 0 ||
+        cand.vertex >= static_cast<int>(cylinder_fits.size()) ||
+        cylinder_valid[static_cast<size_t>(cand.vertex)] == 0) {
+      continue;
+    }
+    vec3 axis = albers::plucker_line_direction(
+        cylinder_fits[static_cast<size_t>(cand.vertex)]);
+    if (!axis.allFinite() || axis.norm() < 1e-12) {
+      continue;
+    }
+    if (axis.dot(cand.center_local) < 0.0) {
+      axis *= -1.0;
+    }
+    cand.cylinder_axis_world = axis.normalized();
+  }
+
+  smooth_pipe_fit_medial_axis(M, out, params.medial_smooth_scale,
+                              params.medial_smooth_blend);
+
+  travel_sum = 0.0;
+  residual_sum = 0.0;
+  for (const cyclide_medial_candidate &cand : out) {
+    if (!cand.accepted) {
+      continue;
+    }
+    travel_sum += cand.travel;
+    residual_sum += cand.residual;
   }
 
   if (stats.accepted > 0) {

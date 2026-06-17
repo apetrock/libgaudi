@@ -212,6 +212,80 @@ namespace gaudi
       return us;
     }
 
+    template <typename KERNEL_FUNC>
+    std::vector<mat3> covariant_vector_frame(
+        asawa::shell::shell &M, const std::vector<vec3> &v,
+        const std::vector<vec3> &p_pov, real l0, KERNEL_FUNC kernel_func)
+    {
+      const std::vector<vec3> &x = asawa::get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<mat3> frames(v.size(), mat3::Zero());
+      std::vector<real> active(v.size(), 0.0);
+      for (int i = 0; i < static_cast<int>(v.size()); i++)
+      {
+        if (weights[i] < 1e-16 || v[i].norm() < 1e-12)
+        {
+          continue;
+        }
+        const vec3 axis = v[i].normalized();
+        frames[i] = weights[i] * axis * axis.transpose();
+        active[i] = weights[i];
+      }
+
+      std::vector<real> sums(p_pov.size(), 0.0);
+      std::vector<mat3> us = integrate_over_shell<mat3>(
+          M, p_pov,
+          [&frames, &active](const std::vector<index_t> &face_ids,
+                             Shell_Sum_Type &sum)
+          {
+            sum.bind(calder::datum_t<mat3>::create(face_ids, frames));
+            sum.bind(calder::datum_t<real>::create(face_ids, active));
+          },
+          [l0, &sums, kernel_func](const index_t i, const index_t j,
+                                   const vec3 &pi, const vec3 &pj,
+                                   const std::vector<calder::datum::ptr> &data,
+                                   Shell_Sum_Type::Node_Type node_type,
+                                   const Shell_Sum_Type::Tree &tree) -> mat3
+          {
+            (void)tree;
+            const mat3 frame = get_data<mat3>(node_type, j, 0, data);
+            const real w = get_data<real>(node_type, j, 1, data);
+            if (w < 1e-16)
+            {
+              return mat3::Zero();
+            }
+            const vec3 dp = pj - pi;
+            const real kappa = kernel_func(dp, l0);
+            sums[i] += w * kappa;
+            return kappa * frame;
+          });
+
+      for (int i = 0; i < static_cast<int>(us.size()); i++)
+      {
+        if (sums[i] < 1e-16)
+        {
+          us[i] = mat3::Zero();
+          continue;
+        }
+        const mat3 C = us[i] / sums[i];
+        Eigen::SelfAdjointEigenSolver<mat3> es(C);
+        us[i] = es.info() == Eigen::Success ? es.eigenvectors() : mat3::Zero();
+      }
+      return us;
+    }
+
+    std::vector<mat3> gaussian_covariant_vector_frame(
+        asawa::shell::shell &M, const std::vector<vec3> &v,
+        const std::vector<vec3> &p_pov, real l0)
+    {
+      return covariant_vector_frame(
+          M, v, p_pov, l0,
+          [](const vec3 &dp, real l0) -> real
+          {
+            return calc_gaussian(dp, l0);
+          });
+    }
+
     std::vector<vec3> vortex_force(asawa::shell::shell &M,
                                    const std::vector<vec3> &p_pov,
                                    const std::vector<vec3> &omega, real l0,
