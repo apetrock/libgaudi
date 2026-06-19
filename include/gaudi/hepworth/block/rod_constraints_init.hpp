@@ -165,7 +165,7 @@ void init_collisions(asawa::rod::rod &R, asawa::rod::dynamic &dynamic,
         continue;
       if (R.next(corner_id(c4[1])) == c4[2])
         continue;
-      gg::geometry_logger::line(0.5 * (xA0 + xA1), 0.5 * (xB0 + xB1),
+      geometry_logger::line(0.5 * (xA0 + xA1), 0.5 * (xB0 + xB1),
                                 vec4(0.0, 1.0, 1.0, 1.0));
       constraints.push_back(
           rod_collision::create({c4[0], c4[1], c4[2], c4[3]}, w, K * R._r, blocks));

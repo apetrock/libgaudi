@@ -18,6 +18,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <random>
 #include <functional>
 #include <iostream>
 #include <limits>

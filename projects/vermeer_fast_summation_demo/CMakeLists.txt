@@ -1,0 +1,1 @@
+add_gaudi_vermeer_project(vermeer_fast_summation_demo SOURCES main.cpp)

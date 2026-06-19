@@ -69,7 +69,7 @@ namespace gaudi
         std::vector<vec3> Nr = calder::mls_avg<vec3>(M, Nf, xr, eps, 2.0);
         for (int i = 0; i < Nr.size(); i++)
         {
-          vec3 T = R.dir(i);
+          vec3 T = R.dir(asawa::rod::corner_id(i));
           vec3 B = Nr[i].cross(T);
           Nr[i] = T.cross(B);
           Nr[i].normalize();
@@ -118,7 +118,7 @@ namespace gaudi
 
       vec3 xri = xr[ivr];
       vec3 xf = asawa::shell::face_pnt(xri, M, ifs, x_s);
-      gg::geometry_logger::line(xri, xf, vec4(1.0, 0.0, 1.0, 1.0));
+      geometry_logger::line(xri, xf, vec4(1.0, 0.0, 1.0, 1.0));
 #endif
         }
 
@@ -195,7 +195,7 @@ namespace gaudi
       if (cons[2] < 0)
         continue;
 
-      gg::geometry_logger::line(xr[i0],
+      geometry_logger::line(xr[i0],
                                 xr[i0] + 1.0 * dist[i0] * Nr[i0].normalized(),
                                 vec4(0.0, 1.0, 1.0, 1.0));
     }
@@ -236,7 +236,7 @@ namespace gaudi
       if (cons[2] < 0)
         continue;
 
-      gg::geometry_logger::line(xr[i0],
+      geometry_logger::line(xr[i0],
                                 xr[i0] + 0.1 * g_d[i0] * Nr[i0].normalized(),
                                 vec4(0.0, 1.0, 1.0, 1.0));
     }
@@ -323,19 +323,19 @@ namespace gaudi
           if ((is_perp > 0.75 && d[0] < 1.0 * eps))
           {
 
-            // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
+            // geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
 
             real lr = (xr1 - xr0).norm();
 
-            // gg::geometry_logger::line(xs, xs + 1.0 * g_di * dr,
+            // geometry_logger::line(xs, xs + 1.0 * g_di * dr,
             //                           vec4(0.5, 0.5, 1.0, 1.0));
-            // gg::geometry_logger::line(xs, xs + 0.1 * g_di * Nri,
+            // geometry_logger::line(xs, xs + 0.1 * g_di * Nri,
             //                          vec4(0.5, 0.5, 1.0, 1.0));
             _adjacent.insert(
                 M.find_edge_from_verts(asawa::shell::vert_id(vs0),
                                        asawa::shell::vert_id(vs1))
 );
-            // gg::geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
+            // geometry_logger::line(xs0, xs1, vec4(0.0, 0.0, 1.0, 1.0));
 
             hepworth::block::edge_edge_weld::ptr constraint =
                 hepworth::block::edge_edge_weld::create(
@@ -622,7 +622,7 @@ namespace gaudi
 
 #if 0
     for (int i = 0; i < df.size(); i++) {
-      gg::geometry_logger::line(xe[i], xe[i] + 0.1 * df[i] * Ne[i],
+      geometry_logger::line(xe[i], xe[i] + 0.1 * df[i] * Ne[i],
                                 vec4(0.0, 0.5, 1.0, 1.0));
     }
 #endif
@@ -648,7 +648,7 @@ namespace gaudi
 
 #if 0
     for (int i = 0; i < df.size(); i++) {
-      gg::geometry_logger::line(xf[verts_F[i]],
+      geometry_logger::line(xf[verts_F[i]],
                                 xf[verts_F[i]] + 0.1 * df[verts_F[i]] * Nf[i],
                                 vec4(0.0, 0.5, 1.0, 1.0));
     }

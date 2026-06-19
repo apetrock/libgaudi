@@ -3,15 +3,19 @@
 
 #include "gaudi/albers/darboux_cyclide.hpp"
 #include "gaudi/asawa/datums.hpp"
+#include "gaudi/asawa/shell/asset_loader.hpp"
 #include "gaudi/asawa/shell/datum_x.hpp"
+#include "gaudi/asawa/shell/operations.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/calder/least_squares_fit.hpp"
 #include "gaudi/common.h"
+#include "gaudi/geometry_logger.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <vector>
 
 namespace gaudi {
@@ -1043,6 +1047,157 @@ inline void print_cyclide_medial_stats(std::ostream &os,
      << " avg_travel=" << stats.avg_travel
      << " avg_residual=" << stats.avg_residual << std::endl;
 }
+
+inline cyclide_medial_params default_cyclide_medial_demo_params() {
+  cyclide_medial_params params;
+  params.l0_scale = 2.0;
+  params.fit_p = 3.0;
+  params.normal_l0 = 2.0;
+  params.min_normal_alignment = -0.5;
+  params.medial_smooth_scale = 8.0;
+  params.medial_smooth_blend = 1.0;
+  params.max_iters = 100;
+  params.tol = 1e-8;
+  params.max_travel_scale = 1000.0;
+  params.newton_step_scale = 1000.0;
+  return params;
+}
+
+inline void normalize_cyclide_medial_demo_mesh(asawa::shell::shell &M,
+                                               real target_radius = 1.5) {
+  std::vector<vec3> &x = asawa::get_vec_data(M, 0);
+  if (x.empty()) {
+    return;
+  }
+
+  vec3 lo = x.front();
+  vec3 hi = x.front();
+  for (const vec3 &p : x) {
+    lo = lo.cwiseMin(p);
+    hi = hi.cwiseMax(p);
+  }
+
+  const vec3 center = 0.5 * (lo + hi);
+  real radius = 0.0;
+  for (const vec3 &p : x) {
+    radius = std::max(radius, (p - center).norm());
+  }
+  if (radius < 1e-12) {
+    return;
+  }
+
+  const real scale = target_radius / radius;
+  for (vec3 &p : x) {
+    p = scale * (p - center);
+  }
+  std::cerr << "normalized mesh radius=" << target_radius
+            << " scale=" << scale << std::endl;
+}
+
+class darboux_cyclide_medial_demo {
+public:
+  using ptr = std::shared_ptr<darboux_cyclide_medial_demo>;
+
+  static ptr create(cyclide_medial_params params =
+                        default_cyclide_medial_demo_params()) {
+    return std::make_shared<darboux_cyclide_medial_demo>(params);
+  }
+
+  explicit darboux_cyclide_medial_demo(cyclide_medial_params params)
+      : __params(params) {
+    __M = asawa::shell::load_bunny();
+    asawa::shell::triangulate(*__M);
+    normalize_cyclide_medial_demo_mesh(*__M);
+    configure_scene_frame();
+    __candidates =
+        compute_local_fit_cyclide_medial_candidates(*__M, __params, &__stats);
+    std::cerr << "bunny local-fit zero-to-medial" << std::endl;
+    print_cyclide_medial_stats(std::cerr, __stats);
+  }
+
+  void step(int frame) {
+    _frame = frame;
+    draw_medial_rays();
+  }
+
+  int frame() const { return _frame; }
+  const cyclide_medial_stats &stats() const { return __stats; }
+  const std::vector<cyclide_medial_candidate> &candidates() const {
+    return __candidates;
+  }
+
+  asawa::shell::shell::ptr __M;
+
+private:
+  void configure_scene_frame() {
+    const std::vector<vec3> &x = asawa::const_get_vec_data(*__M, 0);
+    if (x.empty()) {
+      return;
+    }
+
+    vec3 lo = x.front();
+    vec3 hi = x.front();
+    for (const vec3 &p : x) {
+      lo = lo.cwiseMin(p);
+      hi = hi.cwiseMax(p);
+    }
+
+    __center = 0.5 * (lo + hi);
+    __major_radius = 0.5 * (hi - lo).norm();
+    __minor_radius = 4.0 * asawa::shell::avg_length(*__M, x);
+    std::cerr << "loaded bunny verts=" << __M->vert_count()
+              << " faces=" << __M->face_count()
+              << " scene_radius=" << __major_radius
+              << " slice_extent=" << __minor_radius << std::endl;
+  }
+
+  void draw_medial_rays() {
+    const vec4 zero_color(0.0, 0.85, 1.0, 1.0);
+    const vec4 medial_color(1.0, 0.65, 0.05, 1.0);
+    const vec4 cylinder_axis_color(0.9, 0.15, 1.0, 1.0);
+    const vec4 axis_color(0.35, 0.35, 0.35, 1.0);
+
+    geometry_logger::line(__center - 1.7 * __major_radius * vec3::UnitZ(),
+                          __center + 1.7 * __major_radius * vec3::UnitZ(),
+                          axis_color);
+
+    std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
+    const real cylinder_axis_len = 8.0 * asawa::shell::avg_length(*__M, x);
+
+    for (const auto &cand : __candidates) {
+      if (cand.vertex < 0 || cand.vertex >= static_cast<int>(x.size())) {
+        continue;
+      }
+
+      const vec3 p = x[static_cast<size_t>(cand.vertex)];
+      if (cand.projection_converged) {
+        if ((cand.surface_world - p).norm() > 1e-12) {
+          geometry_logger::line(p, cand.surface_world, zero_color);
+        } else {
+          geometry_logger::point(cand.surface_world, zero_color);
+        }
+      }
+      if (cand.projection_converged && cand.center_world.allFinite() &&
+          (cand.center_world - cand.surface_world).norm() > 1e-12) {
+        geometry_logger::line(cand.surface_world, cand.center_world,
+                              medial_color);
+      }
+      if (cand.accepted && cand.cylinder_axis_world.squaredNorm() > 1e-12) {
+        const vec3 dp =
+            cylinder_axis_len * cand.cylinder_axis_world.normalized();
+        geometry_logger::line(p - dp, p + dp, cylinder_axis_color);
+      }
+    }
+  }
+
+  cyclide_medial_params __params;
+  cyclide_medial_stats __stats;
+  std::vector<cyclide_medial_candidate> __candidates;
+  vec3 __center = vec3::Zero();
+  real __major_radius = 1.25;
+  real __minor_radius = 0.35;
+  int _frame = 0;
+};
 
 } // namespace duchamp
 } // namespace gaudi

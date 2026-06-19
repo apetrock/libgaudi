@@ -8,6 +8,14 @@
 namespace gaudi {
 namespace geometry_logger {
 
+inline vec4 sdf4(double d) {
+  const vec4 inside(0.0, 1.0, 0.0, 1.0);
+  const vec4 outside(1.0, 0.0, 0.0, 1.0);
+  if (d < 0.0)
+    return std::abs(d) * inside;
+  return std::abs(d) * outside;
+}
+
 // Geometry visualization functions
 void line(const vec3 &p0, const vec3 &p1, const vec4 &color);
 void box(const vec3 &cen, const vec3 &h, const vec4 &col);

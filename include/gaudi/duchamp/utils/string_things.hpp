@@ -4,8 +4,6 @@
 #include "Eigen/src/Geometry/AngleAxis.h"
 #include "gaudi/vec_addendum.h"
 
-#include "GaudiGraphics/geometry_logger.h"
-
 #include "gaudi/asawa/shell/shell.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"

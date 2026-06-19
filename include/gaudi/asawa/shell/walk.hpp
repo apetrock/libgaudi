@@ -213,7 +213,7 @@ std::vector<vec2> project_dihedral(const shell &M, const std::vector<vec3> &x,
   vec3 p1 = p0 + Rdir;
   // p1 = R2 * (p1 - xc) + xc;
 
-  gg::geometry_logger::line(p0, p0 + 0.02 * Rdir, vec4(1.0, 1.0, 0.0, 1.0));
+  geometry_logger::line(p0, p0 + 0.02 * Rdir, vec4(1.0, 1.0, 0.0, 1.0));
   vec3 B = (T.cross(N)).normalized();
 
   return project2({x0p, x0, x1p, x1, p0, p1}, xc, T, B, N);
@@ -239,7 +239,7 @@ bool walk(const shell &M, const std::vector<vec3> &x, const CornerId &start,
     vec3 N0 = edge_normal(M, c00, x);
     vec3 N1 = edge_normal(M, c10, x);
 
-    gg::geometry_logger::line(x0 + n_o * N0, x1 + n_o * N1, col);
+    geometry_logger::line(x0 + n_o * N0, x1 + n_o * N1, col);
   };
 
   auto get_one_ring = [&](CornerId c) {
@@ -472,7 +472,7 @@ void log_adj_edges(shell &M, const std::vector<vec3> &x, VertId v) {
     vec3 N1 = vert_normal(M, v1, x);
     real n_o = 0.0025;
     vec4 col = vec4(0.75, 0.25, 0.5, 1.0);
-    gg::geometry_logger::line(x0 + n_o * N0, x1 + n_o * N1, col);
+    geometry_logger::line(x0 + n_o * N0, x1 + n_o * N1, col);
   });
 }
 
@@ -519,7 +519,7 @@ inline void log_edge(shell &M, const std::vector<vec3> &x, CornerId c0, real n_o
   vec3 x0 = x[v0];
   vec3 x1 = x[v1];
   vec3 N0 = edge_normal(M, c0, x);
-  gg::geometry_logger::line(x0 + n_o * N0, x1 + n_o * N0, col);
+  geometry_logger::line(x0 + n_o * N0, x1 + n_o * N0, col);
 };
 
 inline void log_seg_v(shell &M, const std::vector<vec3> &x, //
@@ -528,7 +528,7 @@ inline void log_seg_v(shell &M, const std::vector<vec3> &x, //
   vec3 x1 = x[v1];
   vec3 N0 = vert_normal(M, vert_id(v0), x);
   vec3 N1 = vert_normal(M, vert_id(v1), x);
-  gg::geometry_logger::line(x0 + n_o * N0, x1 + n_o * N1, col);
+  geometry_logger::line(x0 + n_o * N0, x1 + n_o * N1, col);
 };
 
 inline void log_seg_e(shell &M, const std::vector<vec3> &x, //
@@ -540,7 +540,7 @@ inline void log_seg_e(shell &M, const std::vector<vec3> &x, //
   vec3 N0 = edge_normal(M, c0, x);
   vec3 N1 = edge_normal(M, c1, x);
 
-  gg::geometry_logger::line(x0 + n_o * N0, x1 + n_o * N1, col);
+  geometry_logger::line(x0 + n_o * N0, x1 + n_o * N1, col);
 };
 
 std::vector<index_t> stitch_walk(shell &M, const std::vector<vec3> &x,

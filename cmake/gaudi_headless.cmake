@@ -5,8 +5,9 @@
 # Logger backend pattern: same headers (geometry_logger.hpp, logger.hpp),
 # different .cpp implementations per environment:
 #   - Native headless: src/geometry_logger.cpp, src/terminal_logger_impl.cpp
+#   - Native Vermeer: src/vermeer/geometry_logger_impl.cpp
 #   - WASM: js/wasm/API/src/geometry_logger_impl.cpp, terminal_logger_impl.cpp
-#   - GL: future backend
+#   - GL: legacy projects may still call gg::geometry_logger directly
 
 if(TARGET gaudi_headless)
     return()

@@ -84,12 +84,12 @@ public:
       // vec3 dX = db * xAB / l;
       vec3 dX = xAB - _eps * xAB / l;
 
-      gg::geometry_logger::line(xA, xB, vec4(1.0, 0.0, 0.0, 1.0));
-      gg::geometry_logger::line(xA, xA - dX, vec4(0.5, 0.2, 0.0, 1.0));
-      gg::geometry_logger::line(xB, xB + dX, vec4(0.5, 0.0, 0.2, 1.0));
+      geometry_logger::line(xA, xB, vec4(1.0, 0.0, 0.0, 1.0));
+      geometry_logger::line(xA, xA - dX, vec4(0.5, 0.2, 0.0, 1.0));
+      geometry_logger::line(xB, xB + dX, vec4(0.5, 0.0, 0.2, 1.0));
 
-      gg::geometry_logger::line(x00, x01, vec4(0.0, 1.0, 0.5, 1.0));
-      gg::geometry_logger::line(x10, x11, vec4(1.0, 0.5, 1.0, 1.0));
+      geometry_logger::line(x00, x01, vec4(0.0, 1.0, 0.5, 1.0));
+      geometry_logger::line(x10, x11, vec4(1.0, 0.5, 1.0, 1.0));
 
       p.block(_id0 + 0, 0, 3, 1) = _w * (x00 - a0 * dX);
       p.block(_id0 + 3, 0, 3, 1) = _w * (x01 - a1 * dX);
@@ -97,7 +97,7 @@ public:
       p.block(_id0 + 9, 0, 3, 1) = _w * (x11 + b1 * dX);
     } else {
 
-      gg::geometry_logger::line(xA, xB, vec4(0.0, 1.0, 0.0, 1.0));
+      geometry_logger::line(xA, xB, vec4(0.0, 1.0, 0.0, 1.0));
       p.block(_id0 + 0, 0, 3, 1) = _w * x00;
       p.block(_id0 + 3, 0, 3, 1) = _w * x01;
       p.block(_id0 + 6, 0, 3, 1) = _w * x10;
@@ -175,7 +175,7 @@ public:
       real dh = 0.5 * hst * (_eps - h - db);
       // real dh = 0.5 * hst * db;
 
-      gg::geometry_logger::line(xP, xP + dh * N, vec4(1.0, 0.0, 0.0, 1.0));
+      geometry_logger::line(xP, xP + dh * N, vec4(1.0, 0.0, 0.0, 1.0));
       // gg::geometry_logger::line(xN, xN + dx, vec4(1.0, 0.0, 0.0, 1.0));
       // gg::geometry_logger::line(xN, xN + _eps * N, vec4(1.0, 1.0, 0.0, 1.0));
       // gg::geometry_logger::line(xT0, xT1, vec4(0.75, 0.0, 0.25, 1.0));

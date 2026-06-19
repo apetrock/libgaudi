@@ -4,7 +4,7 @@
 #include "Eigen/src/Geometry/AngleAxis.h"
 #include "gaudi/vec_addendum.h"
 
-#include "GaudiGraphics/geometry_logger.h"
+#include "gaudi/geometry_logger.hpp"
 
 #include "gaudi/asawa/rod/dynamic.hpp"
 #include "gaudi/asawa/rod/rod.hpp"
@@ -12,6 +12,7 @@
 #include "gaudi/asawa/shell/asset_loader.hpp"
 #include "gaudi/asawa/shell/dynamic.hpp"
 #include "gaudi/asawa/shell/operations.hpp"
+#include "gaudi/asawa/shell/shell_id.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
 
 #include "gaudi/asawa/shell/walk.hpp"
@@ -35,7 +36,6 @@
 #include <memory>
 #include <set>
 #include <vector>
-#include "gaudi/geometry_logger.hpp"
 
 #ifndef __ROD_GUIDED__
 #define __ROD_GUIDED__
@@ -59,8 +59,8 @@ public:
 
     shell::triangulate(*__M);
     for (int i = 0; i < __M->face_count(); i++) {
-      if (__M->fbegin(i) > 0) {
-        assert(__M->fsize(i) == 3);
+      if (__M->fbegin(asawa::shell::face_id(i)) > asawa::shell::corner_id(0)) {
+        assert(__M->fsize(asawa::shell::face_id(i)) == 3);
       }
     }
 
@@ -78,7 +78,7 @@ public:
     /////////////////////
     // Rod
     /////////////////////
-    std::vector<vec3> x_w = walk(*__M, 0.0, 0, 4000);
+    std::vector<vec3> x_w = walk(*__M, 0.0, shell::corner_id(0), 4000);
 
     __R = rod::rod::create(x_w, false);
     //__R->_update_frames(normals);
@@ -126,7 +126,7 @@ public:
 #if 0
     i = 0;
     for (vec3 &N : Nss) {
-      gg::geometry_logger::line(x_s[i], x_s[i] + 1.0 * N,
+      geometry_logger::line(x_s[i], x_s[i] + 1.0 * N,
                                 vec4(1.0, 1.0, 0.0, 1.0));
       i++;
     }

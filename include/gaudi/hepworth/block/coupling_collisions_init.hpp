@@ -43,7 +43,7 @@ void init_coupling_collisions(
       vec3 xA1 = x0[c[1]];
       vec3 xB0 = x1[c[2]];
       vec3 xB1 = x1[c[3]];
-      gg::geometry_logger::line(0.5 * (xA0 + xA1), 0.5 * (xB0 + xB1),
+      geometry_logger::line(0.5 * (xA0 + xA1), 0.5 * (xB0 + xB1),
                                 vec4(0.0, 1.0, 1.0, 1.0));
       constraints.push_back(rod_collision::create({c[0], c[1], c[2], c[3]}, w,
                                                   1.0 * rod0._r, blocks));

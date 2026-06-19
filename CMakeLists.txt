@@ -24,6 +24,7 @@ set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}
 # Options
 # ---------------------------------------------------------------------------
 option(GAUDI_WITH_GL "Build OpenGL viewer projects (nanogui)" OFF)
+option(GAUDI_WITH_VERMEER "Build WebGPU viewer projects (libvermeer)" OFF)
 option(GAUDI_USE_EXPLICIT_INSTANTIATIONS "Use explicit template instantiations for faster compilation" ON)
 option(WITH_OPENMP "Use OpenMP" ON)
 option(WITH_CUDA "Build with CUDA support" OFF)
@@ -193,6 +194,18 @@ if(GAUDI_WITH_GL)
     #add_subdirectory(projects/wav2fft)
 else()
     message(STATUS "GAUDI_WITH_GL=OFF, skipping OpenGL projects")
+endif()
+
+# ---------------------------------------------------------------------------
+# Vermeer / WebGPU module + viewer projects (optional)
+# ---------------------------------------------------------------------------
+if(GAUDI_WITH_VERMEER)
+    include(cmake/gaudi_vermeer.cmake)
+    add_subdirectory(projects/vermeer_fast_summation_demo)
+    add_subdirectory(projects/vermeer_rod_guided_demo)
+    add_subdirectory(projects/vermeer_darboux_cyclide_medial_demo)
+else()
+    message(STATUS "GAUDI_WITH_VERMEER=OFF, skipping WebGPU projects")
 endif()
 
 # ---------------------------------------------------------------------------

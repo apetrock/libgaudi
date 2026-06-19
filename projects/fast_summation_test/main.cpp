@@ -23,10 +23,9 @@
 #include <string>
 
 #include "GaudiGraphics/buffers.hpp"
-#include "GaudiGraphics/geometry_logger.h"
 #include "GaudiGraphics/mesh_helper.hpp"
 #include "GaudiGraphics/viewer.hpp"
-// #include "gaudi/asawa/asawa.h"
+#include "gaudi/geometry_logger.hpp"
 
 #include "gaudi/duchamp/fast_summation_test.hpp"
 
@@ -42,6 +41,20 @@ using namespace GaudiMath;
 class Scene;
 using ScenePtr = std::shared_ptr<Scene>;
 
+void sync_gaudi_debug_to_gg() {
+  const auto &lines = gaudi::geometry_logger::get_lines();
+  const auto &line_cols = gaudi::geometry_logger::get_line_colors();
+  for (size_t i = 0; i + 1 < lines.size(); i += 2) {
+    gg::geometry_logger::line(lines[i], lines[i + 1], line_cols[i]);
+  }
+
+  const auto &points = gaudi::geometry_logger::get_points();
+  const auto &point_cols = gaudi::geometry_logger::get_point_colors();
+  for (size_t i = 0; i < points.size(); ++i) {
+    gg::geometry_logger::point(points[i], point_cols[i]);
+  }
+}
+
 class Scene : public gg::Scene {
 
 public:
@@ -56,17 +69,16 @@ public:
     _obj->init();
     mSceneObjects.push_back(_obj);
     __surf = gaudi::duchamp::fast_summation_test::create();
-    //__surf = gaudi::duchamp::transport_mesh_test::create();
     mSceneObjects.push_back(gg::geometry_logger::get_instance().debugLines);
   }
 
   virtual void onAnimate(int frame) {
 
+    gaudi::geometry_logger::clear();
+    gg::geometry_logger::clear();
     __surf->step(frame);
     gg::fillBuffer_ref(*__surf->__M, _obj);
-    // std::cout << "rendering debug" << std::endl;
-    // asawa::test();
-
+    sync_gaudi_debug_to_gg();
     gg::geometry_logger::render();
   }
 
@@ -78,6 +90,7 @@ public:
                       obj->draw(viewer.getProjection(), viewer.getModelView());
                   });
 
+    gaudi::geometry_logger::clear();
     gg::geometry_logger::clear();
   }
 
