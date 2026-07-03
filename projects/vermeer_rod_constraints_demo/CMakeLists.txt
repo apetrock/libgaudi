@@ -1,0 +1,1 @@
+add_gaudi_vermeer_project(vermeer_rod_constraints_demo SOURCES main.cpp)

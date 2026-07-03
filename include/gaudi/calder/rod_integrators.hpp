@@ -202,7 +202,7 @@ namespace gaudi
     std::vector<vec3> vortex_force(asawa::rod::rod &R,
                                    const std::vector<vec3> &p_pov,
                                    const std::vector<real> &phi, real l0 = 1e-2,
-                                   real p = 4.0)
+                                   real p = 4.0, real q = 1.0)
     {
 
       std::vector<vec3> &x = R.x();
@@ -222,7 +222,7 @@ namespace gaudi
             sum.bind(calder::scalar_datum::create(edge_ids, weights));
             sum.bind(calder::vec3_datum::create(edge_ids, T));
           },
-          [l0, p](const index_t i, const index_t j,
+          [l0, p, q](const index_t i, const index_t j,
                   const vec3 &pi, const vec3 &pj,
                   const std::vector<calder::datum::ptr> &data,
                   Rod_Sum_Type::Node_Type node_type,
@@ -231,9 +231,15 @@ namespace gaudi
             real w = get_data<real>(node_type, j, 0, data);
             vec3 T = get_data<vec3>(node_type, j, 1, data);
             vec3 dp = pj - pi;
+            vec3 Xt = dp.cross(T);
+            const real geom = dp.squaredNorm() * T.squaredNorm();
+            if (geom < 1e-24) {
+              return vec3::Zero();
+            }
+            const real sin2 = Xt.squaredNorm() / geom;
+            const real angular = q == 0.0 ? 1.0 : std::pow(sin2, q/2.0);
             real kappa = calc_inv_dist(dp, l0, p);
-
-            return -w * kappa * dp.cross(T);
+            return -angular * w * kappa * Xt;
           });
       return us;
     }

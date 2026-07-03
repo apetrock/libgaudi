@@ -49,17 +49,35 @@ inline void sync_debug_line_buffer_from_rod(const duchamp::demo_trait &demo,
   }
 }
 
-inline void append_debug_line_buffer_from_logger(lewitt::debug_line_buffer &buffer) {
+inline void append_debug_lines_from_logger(std::vector<lewitt::debug_line_buffer::line> &lines) {
   const auto &logger = lewitt::logger::geometry::get_instance();
   if (!logger.debugLines) {
     return;
   }
 
   for (const auto &line : logger.debugLines->exported_lines()) {
-    buffer.add_line(glm::vec3(line.p0.x, line.p0.y, line.p0.z),
-                    glm::vec3(line.p1.x, line.p1.y, line.p1.z),
-                    glm::vec3(line.color.x, line.color.y, line.color.z), line.radius);
+    lines.push_back({glm::vec3(line.p0.x, line.p0.y, line.p0.z),
+                     glm::vec3(line.p1.x, line.p1.y, line.p1.z),
+                     glm::vec3(line.color.x, line.color.y, line.color.z), line.radius});
   }
+}
+
+inline void append_debug_line_buffer_from_logger(lewitt::debug_line_buffer &buffer) {
+  std::vector<lewitt::debug_line_buffer::line> lines;
+  append_debug_lines_from_logger(lines);
+  for (const auto &line : lines) {
+    buffer.add_line(line.p0, line.p1, line.color, line.radius);
+  }
+}
+
+inline void sync_debug_line_buffer(const duchamp::demo_trait &demo,
+                                   lewitt::debug_line_buffer &buffer) {
+  std::vector<lewitt::debug_line_buffer::line> lines;
+  if (auto polyline = demo.rod_polyline()) {
+    lines = lines_from_rod_snapshot(*polyline);
+  }
+  append_debug_lines_from_logger(lines);
+  buffer.set_lines(lines);
 }
 
 inline std::vector<std::weak_ptr<lewitt::debug_line_buffer>>

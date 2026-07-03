@@ -35,6 +35,7 @@ public:
   virtual std::string name() const = 0;
 
   virtual std::optional<mesh_snapshot> shell_mesh() const { return std::nullopt; }
+  virtual std::optional<mesh_snapshot> rod_mesh() const { return std::nullopt; }
   virtual std::optional<rod_snapshot> rod_polyline() const { return std::nullopt; }
 };
 

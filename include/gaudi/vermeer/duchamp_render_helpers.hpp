@@ -26,6 +26,18 @@ inline void sync_shell_renderables(const duchamp::demo_trait &demo, wgpu::Device
   }
 }
 
+inline void sync_rod_mesh_renderable(const duchamp::demo_trait &demo, wgpu::Device device,
+                                     const mesh_snapshot_renderable::ptr &forward_mesh) {
+  if (!forward_mesh) {
+    return;
+  }
+  if (auto mesh = demo.rod_mesh()) {
+    forward_mesh->update(*mesh, device);
+  } else {
+    forward_mesh->clear_snapshot();
+  }
+}
+
 inline void sync_rod_renderable(const duchamp::demo_trait &demo,
                                 const rod_snapshot_renderable::ptr &rod) {
   if (!rod) {

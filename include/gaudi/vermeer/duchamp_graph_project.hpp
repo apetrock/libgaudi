@@ -9,6 +9,7 @@
 #include "gaudi/vermeer/duchamp_mesh_scene.hpp"
 #include "lewitt/debug_line_buffer.hpp"
 #include "lewitt/gpu_session.hpp"
+#include "lewitt/performance.hpp"
 
 namespace gaudi {
 namespace vermeer {
@@ -20,11 +21,12 @@ public:
       : _demo(std::move(demo)), _debug_lines(lewitt::debug_line_buffer::create()) {}
 
   bool init(lewitt::gpu_context &ctx) override {
+    LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_graph_project::init");
     if (!ctx.scene || !_demo) {
       return false;
     }
 
-    _scene = duchamp_mesh_scene::create(_demo);
+    _scene = duchamp_mesh_scene::create(_demo, duchamp_mesh_scene::k_slot_count);
     _demo->reset();
     _scene.update(ctx);
     sync_debug_lines(*_demo);
@@ -36,6 +38,7 @@ public:
   }
 
   void update(lewitt::gpu_context &ctx, uint frame) override {
+    LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_graph_project::update");
     geometry_logger::clear();
     _demo->step(static_cast<int>(frame));
     _scene.update(ctx);
@@ -46,6 +49,7 @@ public:
   void render(lewitt::gpu_context &ctx,
               const std::function<void(wgpu::RenderPassEncoder &)> &overlay =
                   nullptr) override {
+    LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_graph_project::render");
     ctx.scene->update();
     ctx.scene->update_uniforms(ctx.queue);
     _pipeline.set_meshes(_scene.mesh_refs());
@@ -60,8 +64,8 @@ public:
 
 protected:
   void sync_debug_lines(const duchamp::demo_trait &demo) {
-    sync_debug_line_buffer_from_rod(demo, *_debug_lines);
-    append_debug_line_buffer_from_logger(*_debug_lines);
+    LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_graph_project::sync_debug_lines");
+    sync_debug_line_buffer(demo, *_debug_lines);
   }
 
   duchamp::demo_trait::ptr _demo;

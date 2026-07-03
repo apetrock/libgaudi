@@ -117,23 +117,25 @@ inline void make_sphere(std::vector<vec3> &vertices,
     return 1 + (r - 1) * u_segments + (s % u_segments);
   };
 
+  // Winding is CCW seen from outside so face_cross / vert_normal point outward.
+
   // Top cap.
   for (int s = 0; s < u_segments; ++s)
-    faces.push_back({top, ring(1, s), ring(1, s + 1)});
+    faces.push_back({top, ring(1, s + 1), ring(1, s)});
 
   // Interior bands (two triangles per quad, split on the a-c diagonal).
   for (int r = 1; r < v_segments - 1; ++r)
     for (int s = 0; s < u_segments; ++s) {
       const int a = ring(r, s), b = ring(r + 1, s);
       const int c = ring(r + 1, s + 1), d = ring(r, s + 1);
-      faces.push_back({a, b, c});
-      faces.push_back({a, c, d});
+      faces.push_back({a, c, b});
+      faces.push_back({a, d, c});
     }
 
   // Bottom cap.
   const int last = v_segments - 1;
   for (int s = 0; s < u_segments; ++s)
-    faces.push_back({bottom, ring(last, s + 1), ring(last, s)});
+    faces.push_back({bottom, ring(last, s), ring(last, s + 1)});
 }
 
 // Torus centered at the origin, axis = +Z.  Parameters mirror the offset-torus

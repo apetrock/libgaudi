@@ -10,6 +10,7 @@
 
 #include "gaudi/duchamp/demo_trait.hpp"
 #include "lewitt/mesh_buffer.hpp"
+#include "lewitt/performance.hpp"
 
 namespace gaudi {
 namespace vermeer {
@@ -23,6 +24,7 @@ inline glm::vec3 to_glm_vec3(const vec3 &v) {
 inline std::vector<glm::vec3>
 compute_vertex_normals(const std::vector<glm::vec3> &positions,
                        const std::vector<uint32_t> &indices) {
+  LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::compute_vertex_normals");
   std::vector<glm::vec3> normals(positions.size(), glm::vec3(0.0f));
   for (size_t i = 0; i + 2 < indices.size(); i += 3) {
     const uint32_t i0 = indices[i + 0];
@@ -50,6 +52,7 @@ compute_vertex_normals(const std::vector<glm::vec3> &positions,
 
 inline std::vector<glm::vec3>
 positions_from_snapshot(const duchamp::mesh_snapshot &snapshot) {
+  LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::positions_from_snapshot");
   std::vector<glm::vec3> positions;
   positions.reserve(snapshot.positions.size());
   std::transform(snapshot.positions.begin(), snapshot.positions.end(),
@@ -61,6 +64,7 @@ inline std::vector<lewitt::mesh_buffer::vertex>
 mesh_vertices_from_snapshot(const duchamp::mesh_snapshot &snapshot,
                             const glm::vec3 &default_color = glm::vec3(0.72f, 0.74f,
                                                                          0.78f)) {
+  LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::mesh_vertices_from_snapshot");
   if (snapshot.positions.empty() || snapshot.indices.empty()) {
     return {};
   }
@@ -85,6 +89,7 @@ inline bool update_mesh_buffer(lewitt::mesh_buffer &mesh,
                                wgpu::Device device,
                                const glm::vec3 &default_color = glm::vec3(0.72f, 0.74f,
                                                                           0.78f)) {
+  LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::update_mesh_buffer");
   const auto vertices = mesh_vertices_from_snapshot(snapshot, default_color);
   if (vertices.empty()) {
     mesh.clear();

@@ -125,8 +125,17 @@ public:
     return std::make_shared<quat_block>(J, u, o);
   }
 
+  static ptr create(std::vector<vec4> &J, std::vector<quat> &u, std::vector<quat> &o,
+                    std::vector<vec3> &torques) {
+    return std::make_shared<quat_block>(J, u, o, torques);
+  }
+
   quat_block(std::vector<vec4> &J, std::vector<quat> &u, std::vector<quat> &o)
-      : _J(J), _u(u), _o(o) {}
+      : _J(J), _u(u), _o(o), _torques(nullptr) {}
+
+  quat_block(std::vector<vec4> &J, std::vector<quat> &u, std::vector<quat> &o,
+             std::vector<vec3> &torques)
+      : _J(J), _u(u), _o(o), _torques(&torques) {}
   virtual ~quat_block() {}
 
   virtual void map_to_x(vecX &q) { sim_block::map_to_x<4, quat>(_u, q); }
@@ -153,8 +162,12 @@ public:
       quat o = _o[i];
       quat u = _u[i];
 
-      // real J = J;
-      quat sO = o; // torque terms + h / J
+      quat sO = o;
+      if (_torques && i < _torques->size()) {
+        const vec3 &tau = (*_torques)[i];
+        const quat tau_q(0.0, tau.x(), tau.y(), tau.z());
+        sO.coeffs() += h * h * (u * tau_q).coeffs();
+      }
       quat su = u;
 
       su.coeffs() += 0.5 * h * (u * sO).coeffs();
@@ -167,6 +180,7 @@ public:
   std::vector<quat> &_u;
   std::vector<quat> &_o;
   std::vector<vec4> &_J;
+  std::vector<vec3> *_torques = nullptr;
 };
 
 } // namespace hepworth

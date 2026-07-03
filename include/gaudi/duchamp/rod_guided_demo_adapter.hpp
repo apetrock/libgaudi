@@ -21,8 +21,8 @@ public:
     return make_shell_mesh_snapshot(*demo()->__M, vec3(0.62, 0.66, 0.72));
   }
 
-  std::optional<rod_snapshot> rod_polyline() const override {
-    return make_rod_snapshot(*demo()->__R, vec3(1.0, 0.45, 0.15));
+  std::optional<mesh_snapshot> rod_mesh() const override {
+    return make_rod_mesh_snapshot(*demo()->__R, vec3(1.0, 0.45, 0.15));
   }
 };
 
