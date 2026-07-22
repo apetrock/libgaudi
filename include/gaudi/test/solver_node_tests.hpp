@@ -37,7 +37,7 @@ GAUDI_TEST(solver_builder_smoke) {
   auto config = hepworth::block::block_solver_builder<hepworth::block::shell_position_block>::create()
                     .with_blocks(shell)
                     .with_recompute(
-                        hepworth::block::make_shell_bending_recompute(shell, 1.0))
+                        hepworth::block::make_shell_bending_recompute<0>(shell, 1.0))
                     .dt(0.01)
                     .iterations(2)
                     .build();
@@ -60,7 +60,7 @@ GAUDI_TEST(solver_presolve_and_recompute_called) {
                     })
                     .with_recompute([&](hepworth::block::solver_context &ctx) {
                       recompute_called = true;
-                      hepworth::block::make_shell_bending_recompute(shell, 1.0)(ctx);
+                      hepworth::block::make_shell_bending_recompute<0>(shell, 1.0)(ctx);
                       constraint_count = ctx.constraints.size();
                     })
                     .iterations(1)
@@ -84,7 +84,7 @@ GAUDI_TEST(solver_node_one_step) {
   auto config = hepworth::block::block_solver_builder<hepworth::block::shell_position_block>::create()
                     .with_blocks(shell)
                     .with_recompute(
-                        hepworth::block::make_shell_bending_recompute(shell, 10.0))
+                        hepworth::block::make_shell_bending_recompute<0>(shell, 10.0))
                     .dt(0.01)
                     .damping(0.5)
                     .iterations(5)
@@ -101,7 +101,7 @@ GAUDI_TEST(solver_node_one_step) {
 
 GAUDI_TEST(solver_shell_physics_bundle_size) {
   auto shell = make_shell_block_setup();
-  auto bundle = hepworth::block::make_shell_physics_bundle(shell, 1.0, 0.1);
+  auto bundle = hepworth::block::make_shell_physics_bundle<0>(shell, 1.0, 0.1);
   GAUDI_ASSERT(bundle.size() == 2);
 }
 

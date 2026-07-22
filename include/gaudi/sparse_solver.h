@@ -31,7 +31,7 @@ inline bool prefer_iterative_solve(const matS &A) {
   if (n <= 0)
     return false;
   const Eigen::Index nnz = A.nonZeros();
-  return n > 32000 || nnz > 4000000;
+  return n > 3200000 || nnz > 4000000;
 }
 
 using CGSolver =
@@ -152,8 +152,8 @@ public:
 #if USE_CHOLMOD
   Eigen::CholmodSupernodalLLT<matS> __solver;
 #else
-  Eigen::SimplicialLDLT<matS, Eigen::Lower, Eigen::NaturalOrdering<int>>
-      __solver;
+  // AMDOrdering cuts fill-in vs NaturalOrdering on mesh Laplacians / AᵀA.
+  Eigen::SimplicialLDLT<matS, Eigen::Lower, Eigen::AMDOrdering<int>> __solver;
 #endif
 
   CGSolver _cg_iter;

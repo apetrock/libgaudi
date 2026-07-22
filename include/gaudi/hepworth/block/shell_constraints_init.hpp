@@ -117,10 +117,12 @@ void init_triangle_strain(const asawa::shell::shell &shell,
 void init_area(const asawa::shell::shell &shell,
                std::vector<projection_constraint::ptr> &constraints,
                const std::vector<vec3> &x, const std::vector<real> &w,
-               std::vector<sim_block::ptr> blocks, bool zero = false) {
+               std::vector<sim_block::ptr> blocks,
+               area_mode mode = area_mode::rest) {
 
   auto range = shell.get_face_range();
   int i = 0;
+  const bool zero = mode == area_mode::zero;
   for (auto fi : range) {
     asawa::shell::FaceId fid = asawa::shell::face_id(fi);
     if (shell.fsize(fid) != 3)
@@ -140,11 +142,12 @@ void init_area(const asawa::shell::shell &shell,
 void init_area(const asawa::shell::shell &shell,
                std::vector<projection_constraint::ptr> &constraints,
                const std::vector<vec3> &x, const real &w,
-               std::vector<sim_block::ptr> blocks, bool zero = false) {
+               std::vector<sim_block::ptr> blocks,
+               area_mode mode = area_mode::rest) {
 
   auto range = shell.get_face_range();
   std::vector<real> ws(range.size(), w);
-  init_area(shell, constraints, x, ws, blocks, zero);
+  init_area(shell, constraints, x, ws, blocks, mode);
 }
 
 void init_bending(const asawa::shell::shell &shell,
@@ -195,37 +198,45 @@ void init_willmore(const asawa::shell::shell &shell,
   init_willmore(shell, constraints, x, ws, blocks);
 }
 
+inline std::vector<real>
+laplacian_stencil_weights(const asawa::shell::shell &shell,
+                          asawa::shell::VertId vi, const std::vector<vec3> &x,
+                          laplacian_stencil stencil) {
+  switch (stencil) {
+  case laplacian_stencil::unitary:
+    return asawa::shell::vert_unitary_weights(shell, vi, x);
+  case laplacian_stencil::cotan:
+    return asawa::shell::vert_cotan_weights(shell, vi, x);
+  case laplacian_stencil::angle:
+    return asawa::shell::vert_angle_weights(shell, vi, x);
+  }
+  return asawa::shell::vert_cotan_weights(shell, vi, x);
+}
+
 void init_laplacian(const asawa::shell::shell &shell,
                     std::vector<projection_constraint::ptr> &constraints,
-                    const std::vector<vec3> &x, int weight_type, const real &w,
+                    const std::vector<vec3> &x, laplacian_mode mode,
+                    laplacian_stencil stencil, const real &w,
                     std::vector<sim_block::ptr> blocks) {
 
   for (int iv = 0; iv < shell.vert_count(); iv++) {
-    real A =
-        asawa::shell::vert_area(shell, asawa::shell::vert_id(iv), x);
+    const asawa::shell::VertId vid = asawa::shell::vert_id(iv);
+    const real A = asawa::shell::vert_area(shell, vid, x);
     if (A < 1e-8)
       continue;
-    auto ring = shell.get_one_ring(asawa::shell::vert_id(iv));
+    auto ring = shell.get_one_ring(vid);
     std::vector<index_t> idx(ring.begin(), ring.end());
     idx.insert(idx.begin(), iv);
+    const std::vector<real> weights = laplacian_stencil_weights(shell, vid, x, stencil);
 
-    std::vector<real> weights;
-    switch (weight_type) {
-    case 0:
-      weights = asawa::shell::vert_unitary_weights(shell,
-                                                   asawa::shell::vert_id(iv),
-                                                   x);
-    case 1:
-      weights = asawa::shell::vert_cotan_weights(shell,
-                                                   asawa::shell::vert_id(iv),
-                                                   x);
-    case 2:
-      weights = asawa::shell::vert_angle_weights(shell,
-                                                   asawa::shell::vert_id(iv),
-                                                   x);
+    switch (mode) {
+    case laplacian_mode::null:
+      constraints.push_back(laplacian::create(idx, weights, x, w * A, blocks));
+      break;
+    case laplacian_mode::smooth:
+      constraints.push_back(bending::create(idx, weights, x, w, blocks));
+      break;
     }
-
-    constraints.push_back(laplacian::create(idx, weights, x, w * A, blocks));
   }
 }
 

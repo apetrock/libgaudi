@@ -113,6 +113,9 @@ find_range(index_t i, const std::vector<MortonT> &hash) {
 // Build radix tree from sorted indices and hashes
 template <typename MortonT>
 inline NodeResult build_tree(const std::vector<MortonT> &hash) {
+  if (hash.empty()) {
+    return {{}, {}};
+  }
   std::vector<radix_tree_node> internal_nodes(hash.size() - 1);
   std::vector<radix_tree_node> leaf_nodes(hash.size());
 
@@ -389,6 +392,11 @@ build_pyramid(const std::vector<Q0> &leaf_data,
               auto &&leaf_map, auto &&node_reduce,
               const Q1 &identity) {
 
+  // Empty mesh / zero leaves: size()-1 would underflow to SIZE_MAX → length_error.
+  if (leaf_data.empty()) {
+    return {};
+  }
+
   std::vector<Q1> internal_reduce(leaf_data.size() - 1, identity);
   for (size_t i = 0; i < leaf_data.size(); i++) {
     Q1 mapped = leaf_map(leaf_data[i], identity);
@@ -442,6 +450,9 @@ make_bvh(const TTYPE &data, const std::vector<radix_tree_node> &internal_nodes,
     throw std::runtime_error("Data size must be a multiple of " +
                              std::to_string(N));
   }
+  if (data.empty()) {
+    return {{}, {}};
+  }
 
   const auto exts = calc_extents<N>(data);
   const auto default_val = ext::init();
@@ -465,6 +476,10 @@ template <SimplexView STYPE>
 inline TreeResult<ext::extents_t>
 make_bvh(const STYPE &data, const std::vector<radix_tree_node> &internal_nodes,
          const std::vector<radix_tree_node> &leaf_nodes) {
+
+  if (data.empty()) {
+    return {{}, {}};
+  }
 
   const auto exts = calc_extents(data);
   const auto default_val = ext::init();
@@ -846,6 +861,17 @@ public:
               const std::vector<index_t> &adjacency) {
     data_ = data;
     adjacency_ = adjacency;
+
+    if (adjacency_.size() < N) {
+      indices_.clear();
+      internal_nodes_.clear();
+      leaf_nodes_.clear();
+      hashes_.clear();
+      coms_.clear();
+      bvh_ = {{}, {}};
+      permuted_data_view_.reset();
+      return;
+    }
     
     // Create initial simplex view to compute hash
     permuted_simplex_view<N, std::vector<vec3>, std::vector<index_t>> 
@@ -921,6 +947,8 @@ public:
 
   template <SimplexView QueryType>
   std::vector<index_t> find_neighbors(const typename QueryType::value_type &query, real tol) {
+    if (!permuted_data_view_ || leaf_nodes_.empty())
+      return {};
     return arp::get_neighbors<QueryType, permuted_view_type>(
         query, *permuted_data_view_, internal_nodes_, leaf_nodes_, bvh_, tol,
         dispatch_test<QueryType>());
@@ -978,6 +1006,17 @@ class bvh_tree {
                 const std::vector<index_t> &adjacency) {
       data_ = data;
       adjacency_ = adjacency;
+
+      if (adjacency_.size() < static_cast<size_t>(N)) {
+        indices_.clear();
+        internal_nodes_.clear();
+        leaf_nodes_.clear();
+        hashes_.clear();
+        coms_.clear();
+        bvh_ = {{}, {}};
+        permuted_data_view_.reset();
+        return;
+      }
       
       // Create identity permutation for initial hashing
       std::vector<index_t> identity(adjacency_.size() / N);
@@ -1007,6 +1046,17 @@ class bvh_tree {
     void update(const simplex_set<N> &set) {
       data_ = set.vertices();
       adjacency_ = set.adjacency();
+
+      if (adjacency_.size() < static_cast<size_t>(N)) {
+        indices_.clear();
+        internal_nodes_.clear();
+        leaf_nodes_.clear();
+        hashes_.clear();
+        coms_.clear();
+        bvh_ = {{}, {}};
+        permuted_data_view_.reset();
+        return;
+      }
       
       // Create identity permutation for initial hashing
       std::vector<index_t> identity(adjacency_.size() / N);
@@ -1089,6 +1139,8 @@ class bvh_tree {
 
     template <Vec3View PTYPE>
     std::vector<index_t> find_neighbors(const PTYPE &query, real tol) {
+      if (!permuted_data_view_ || leaf_nodes_.empty())
+        return {};
       constexpr int Nq = view_stride_v<PTYPE>;
       return arp::get_neighbors<Singulus<Nq>, permuted_view>(
           make_query<Nq>(query), *permuted_data_view_,

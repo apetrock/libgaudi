@@ -2,16 +2,17 @@
 """Gaudi build/run CLI.
 
 Usage:
-    python gaudi.py test [--debug]
-    python gaudi.py run <target> [--debug] [--shift-fraction F] [-- EXTRA ...]
-    python gaudi.py build <target> [--debug]
-    python gaudi.py configure <profile>
+    python gaudi.py test [--debug] [--asan]
+    python gaudi.py run <target> [--debug] [--asan] [--shift-fraction F] [-- EXTRA ...]
+    python gaudi.py build <target> [--debug] [--asan]
+    python gaudi.py configure <profile> [--debug] [--asan]
     python gaudi.py list
 """
 
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -29,31 +30,113 @@ PROFILES = {
         "dir": "build_gl_viewers",
         "cmake_args": ["-DGAUDI_WITH_GL=ON"],
     },
+    "vermeer": {
+        "dir": "build_vermeer",
+        "cmake_args": ["-DGAUDI_WITH_VERMEER=ON", "-DBUILD_TESTING=ON"],
+    },
     "asan": {
         "dir": "build_asan",
         "cmake_args": ["-DGAUDI_WITH_GL=ON", "-DCMAKE_BUILD_TYPE=asan"],
     },
 }
 
-GENERATOR = "Visual Studio 17 2022"
-
 # ── Target resolution ───────────────────────────────────────────────────────
 
 TEST_ALIASES = {"tests", "test", "gaudi_tests"}
+_SUBDIR_RE = re.compile(r"^\s*add_subdirectory\(projects/(\S+)\)")
 
 
-def _enabled_gl_targets():
-    """Parse CMakeLists.txt for uncommented add_subdirectory(projects/X)."""
-    cml = ROOT / "CMakeLists.txt"
-    targets = []
-    for line in cml.read_text().splitlines():
-        m = re.match(r"\s*add_subdirectory\(projects/(\S+)\)", line)
-        if m:
-            targets.append(m.group(1))
-    return targets
+def _cmake_generator():
+    if sys.platform == "win32":
+        return "Visual Studio 17 2022"
+    if shutil.which("ninja"):
+        return "Ninja"
+    return "Unix Makefiles"
 
 
-def _all_gl_targets():
+def _default_multi_config():
+    return sys.platform == "win32"
+
+
+def _read_cache_value(build_dir, key):
+    cache = build_dir / "CMakeCache.txt"
+    if not cache.exists():
+        return None
+    prefix = f"{key}:"
+    for line in cache.read_text().splitlines():
+        if line.startswith(prefix):
+            return line.split("=", 1)[1].strip()
+    return None
+
+
+def is_multi_config(build_dir):
+    gen = _read_cache_value(build_dir, "CMAKE_GENERATOR")
+    if gen:
+        return "Visual Studio" in gen or "Xcode" in gen
+    return _default_multi_config()
+
+
+def build_config(debug):
+    return "Debug" if debug else "Release"
+
+
+def profile_dir(profile_key, asan=False):
+    base = PROFILES[profile_key]["dir"]
+    return f"{base}_asan" if asan else base
+
+
+def profile_cmake_args(profile_key, asan=False):
+    args = list(PROFILES[profile_key]["cmake_args"])
+    if asan and not any(a.startswith("-DCMAKE_BUILD_TYPE=") for a in args):
+        args.append("-DCMAKE_BUILD_TYPE=asan")
+    return args
+
+
+def profile_build_type(profile_key, asan=False):
+    for arg in profile_cmake_args(profile_key, asan):
+        if arg.startswith("-DCMAKE_BUILD_TYPE="):
+            return arg.split("=", 1)[1]
+    return None
+
+
+def effective_config(profile_key, debug, asan=False):
+    if asan:
+        return "asan"
+    pinned = profile_build_type(profile_key, asan=False)
+    if pinned:
+        return pinned
+    return build_config(debug)
+
+
+def _enabled_targets_by_profile():
+    """Parse CMakeLists.txt for enabled GL and Vermeer project targets."""
+    gl, vermeer = [], []
+    block = None
+    for line in (ROOT / "CMakeLists.txt").read_text().splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if stripped.startswith("if(GAUDI_WITH_GL)"):
+            block = "gl"
+            continue
+        if stripped.startswith("if(GAUDI_WITH_VERMEER)"):
+            block = "vermeer"
+            continue
+        if block and (stripped.startswith("else()") or stripped.startswith("endif()")):
+            block = None
+            continue
+        m = _SUBDIR_RE.match(line)
+        if not m:
+            continue
+        name = m.group(1)
+        if block == "gl":
+            gl.append(name)
+        elif block == "vermeer":
+            vermeer.append(name)
+    return gl, vermeer
+
+
+def _all_project_targets():
     """Every projects/ dir that has a CMakeLists.txt."""
     return sorted(
         d.name
@@ -62,23 +145,48 @@ def _all_gl_targets():
     )
 
 
+def exe_path(profile_key, target, config, asan=False):
+    """Return executable path for a cmake target."""
+    build_dir = ROOT / profile_dir(profile_key, asan)
+    multi = is_multi_config(build_dir)
+    exe_name = "gaudi_tests" if target == "gaudi_tests" else target
+
+    if multi:
+        subdir = "tests" if target == "gaudi_tests" else f"projects/{target}"
+        return build_dir / subdir / config / f"{exe_name}.exe"
+    if target == "gaudi_tests":
+        return build_dir / "tests" / exe_name
+    return build_dir / "projects" / target / exe_name
+
+
 def resolve_target(name):
-    """Return (profile_key, cmake_target, exe_path_template)."""
+    """Return (profile_key, cmake_target)."""
     if name in TEST_ALIASES:
-        return "test", "gaudi_tests", "tests/{config}/gaudi_tests.exe"
+        return "test", "gaudi_tests"
 
-    gl = _enabled_gl_targets()
-    if name in gl:
-        return "gl", name, f"projects/{name}/{{config}}/{name}.exe"
+    gl_enabled, vermeer_enabled = _enabled_targets_by_profile()
 
-    all_gl = _all_gl_targets()
-    if name in all_gl:
+    if name in vermeer_enabled:
+        return "vermeer", name
+
+    if name in gl_enabled:
+        return "gl", name
+
+    all_projects = _all_project_targets()
+    if name in all_projects:
+        if name.startswith("vermeer_"):
+            print(
+                f"Warning: '{name}' exists in projects/ but is commented out in "
+                f"CMakeLists.txt (GAUDI_WITH_VERMEER block). It may fail to build.",
+                file=sys.stderr,
+            )
+            return "vermeer", name
         print(
             f"Warning: '{name}' exists in projects/ but is commented out in "
-            f"CMakeLists.txt. It may fail to build.",
+            f"CMakeLists.txt (GAUDI_WITH_GL block). It may fail to build.",
             file=sys.stderr,
         )
-        return "gl", name, f"projects/{name}/{{config}}/{name}.exe"
+        return "gl", name
 
     sys.exit(f"Error: unknown target '{name}'. Run `python gaudi.py list`.")
 
@@ -86,109 +194,161 @@ def resolve_target(name):
 # ── Actions ─────────────────────────────────────────────────────────────────
 
 
-def configure(profile_key):
-    prof = PROFILES[profile_key]
-    build_dir = ROOT / prof["dir"]
+def configure(profile_key, config=None, asan=False):
+    build_dir = ROOT / profile_dir(profile_key, asan)
+    generator = _cmake_generator()
     cmd = [
         "cmake",
         "-S", str(ROOT),
         "-B", str(build_dir),
-        "-G", GENERATOR,
-        *prof["cmake_args"],
+        "-G", generator,
+        *profile_cmake_args(profile_key, asan),
     ]
+    if config and not is_multi_config(build_dir) and not profile_build_type(profile_key, asan):
+        cmd.append(f"-DCMAKE_BUILD_TYPE={config}")
     print(f">> {' '.join(cmd)}")
     return subprocess.run(cmd).returncode
 
 
-def ensure_configured(profile_key):
-    prof = PROFILES[profile_key]
-    build_dir = ROOT / prof["dir"]
+def ensure_configured(profile_key, config, asan=False):
+    prof_dir = profile_dir(profile_key, asan)
+    build_dir = ROOT / prof_dir
     if not (build_dir / "CMakeCache.txt").exists():
-        print(f"Build directory '{prof['dir']}' not configured. Running cmake...")
-        rc = configure(profile_key)
+        print(f"Build directory '{prof_dir}' not configured. Running cmake...")
+        rc = configure(profile_key, config, asan)
         if rc != 0:
             sys.exit(f"cmake configure failed (exit {rc})")
+        return
+
+    if not is_multi_config(build_dir) and not profile_build_type(profile_key, asan):
+        cached_type = _read_cache_value(build_dir, "CMAKE_BUILD_TYPE")
+        if cached_type and cached_type != config:
+            print(
+                f"Build type mismatch ({cached_type} vs {config}) in "
+                f"'{prof_dir}', reconfiguring..."
+            )
+            rc = configure(profile_key, config, asan)
+            if rc != 0:
+                sys.exit(f"cmake configure failed (exit {rc})")
 
 
-def build(profile_key, target, config):
-    ensure_configured(profile_key)
-    build_dir = ROOT / PROFILES[profile_key]["dir"]
-    cmd = [
-        "cmake",
-        "--build", str(build_dir),
-        "--target", target,
-        "--config", config,
-    ]
+def build(profile_key, target, config, asan=False):
+    ensure_configured(profile_key, config, asan)
+    build_dir = ROOT / profile_dir(profile_key, asan)
+    cmd = ["cmake", "--build", str(build_dir), "--target", target]
+    if is_multi_config(build_dir):
+        cmd.extend(["--config", config])
     print(f">> {' '.join(cmd)}")
     return subprocess.run(cmd).returncode
 
 
-def run_exe(profile_key, exe_template, config, extra_args=None):
-    build_dir = ROOT / PROFILES[profile_key]["dir"]
-    exe = build_dir / exe_template.format(config=config)
+def run_exe(profile_key, target, config, extra_args=None, asan=False):
+    exe = exe_path(profile_key, target, config, asan)
     if not exe.exists():
         sys.exit(f"Error: executable not found at {exe}")
     argv = [str(exe)]
     if extra_args:
         argv.extend(extra_args)
+    env = None
+    if asan:
+        env = os.environ.copy()
+        env["ASAN_OPTIONS"] = "symbolize=1:halt_on_error=1"
+        env["UBSAN_OPTIONS"] = "print_stacktrace=1:halt_on_error=1"
+        if "ASAN_SYMBOLIZER_PATH" not in env:
+            symbolizer = shutil.which("llvm-symbolizer")
+            if symbolizer:
+                env["ASAN_SYMBOLIZER_PATH"] = symbolizer
+        print(
+            f">> ASAN_OPTIONS={env['ASAN_OPTIONS']} "
+            f"UBSAN_OPTIONS={env['UBSAN_OPTIONS']}"
+        )
     print(f">> {' '.join(argv)}")
-    return subprocess.run(argv).returncode
+    return subprocess.run(argv, env=env).returncode
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
 
+def _warn_debug_with_asan(debug, asan):
+    if debug and asan:
+        print(
+            "Warning: --asan pins CMAKE_BUILD_TYPE=asan; ignoring --debug.",
+            file=sys.stderr,
+        )
+
+
 def cmd_test(args):
-    config = "Debug" if args.debug else "Release"
-    rc = build("test", "gaudi_tests", config)
+    _warn_debug_with_asan(args.debug, args.asan)
+    config = effective_config("test", args.debug, args.asan)
+    rc = build("test", "gaudi_tests", config, args.asan)
     if rc != 0:
         sys.exit(rc)
-    sys.exit(run_exe("test", "tests/{config}/gaudi_tests.exe", config))
+    sys.exit(run_exe("test", "gaudi_tests", config, asan=args.asan))
 
 
 def cmd_run(args):
-    config = "Debug" if args.debug else "Release"
-    profile, target, exe_tpl = resolve_target(args.target)
-    rc = build(profile, target, config)
+    profile, target = resolve_target(args.target)
+    _warn_debug_with_asan(args.debug, args.asan)
+    config = effective_config(profile, args.debug, args.asan)
+    rc = build(profile, target, config, args.asan)
     if rc != 0:
         sys.exit(rc)
     forward = list(args.forward or [])
     if getattr(args, "shift_fraction", None) is not None:
         forward = ["--shift-fraction", str(args.shift_fraction)] + forward
-    sys.exit(run_exe(profile, exe_tpl, config, forward if forward else None))
+    sys.exit(run_exe(profile, target, config, forward if forward else None, args.asan))
 
 
 def cmd_build(args):
-    config = "Debug" if args.debug else "Release"
-    profile, target, _ = resolve_target(args.target)
-    sys.exit(build(profile, target, config))
+    profile, target = resolve_target(args.target)
+    _warn_debug_with_asan(args.debug, args.asan)
+    config = effective_config(profile, args.debug, args.asan)
+    sys.exit(build(profile, target, config, args.asan))
 
 
 def cmd_configure(args):
     key = args.profile
     if key not in PROFILES:
         sys.exit(f"Unknown profile '{key}'. Choose from: {', '.join(PROFILES)}")
-    sys.exit(configure(key))
+    _warn_debug_with_asan(getattr(args, "debug", False), args.asan)
+    config = effective_config(key, getattr(args, "debug", False), args.asan)
+    sys.exit(configure(key, config, args.asan))
 
 
 def cmd_list(_args):
-    enabled = _enabled_gl_targets()
-    all_gl = _all_gl_targets()
-    disabled = [t for t in all_gl if t not in enabled]
+    gl_enabled, vermeer_enabled = _enabled_targets_by_profile()
+    all_projects = _all_project_targets()
+    gl_disabled = [t for t in all_projects if t not in gl_enabled and not t.startswith("vermeer_")]
+    vermeer_disabled = [
+        t for t in all_projects if t.startswith("vermeer_") and t not in vermeer_enabled
+    ]
 
     print("Headless targets:")
-    print(f"  tests          (alias: test, gaudi_tests)  [build_test]")
+    print(f"  tests          (alias: test, gaudi_tests)  [{profile_dir('test')}]")
+    print(f"                 with --asan:                 [{profile_dir('test', True)}]")
     print()
-    print("GL viewer targets (enabled):                  [build_gl_viewers]")
-    for t in enabled:
+    print(f"GL viewer targets (enabled):                  [{profile_dir('gl')}]")
+    for t in gl_enabled:
         print(f"  {t}")
-    if disabled:
+    if gl_disabled:
         print()
         print("GL viewer targets (commented out in CMakeLists.txt):")
-        for t in disabled:
+        for t in gl_disabled:
+            print(f"  {t}  (disabled)")
+    print()
+    print(f"Vermeer / WebGPU targets (enabled):           [{profile_dir('vermeer')}]")
+    print(f"                 with --asan:                 [{profile_dir('vermeer', True)}]")
+    for t in vermeer_enabled:
+        print(f"  {t}")
+    if vermeer_disabled:
+        print()
+        print("Vermeer targets (commented out in CMakeLists.txt):")
+        for t in vermeer_disabled:
             print(f"  {t}  (disabled)")
     print()
     print(f"Build profiles: {', '.join(PROFILES)}")
+    print("Use --asan on test/build/run/configure for ASan+UBSan (separate *_asan dirs).")
+    print(f"CMake generator: {_cmake_generator()}")
 
 
 def main():
@@ -200,18 +360,30 @@ def main():
 
     p_test = sub.add_parser("test", help="Build and run headless tests")
     p_test.add_argument("--debug", action="store_true", help="Debug config")
+    p_test.add_argument(
+        "--asan",
+        action="store_true",
+        help="ASan+UBSan build (CMAKE_BUILD_TYPE=asan, uses build_test_asan)",
+    )
 
     p_run = sub.add_parser(
         "run",
         help="Build and run a target",
         epilog=(
-            "Example:  python gaudi.py run spectral_modes_test --shift-fraction 0.35\n"
+            "Examples:\n"
+            "  python gaudi.py run vermeer_dipole_tunneling_demo\n"
+            "  python gaudi.py run spectral_modes_test --shift-fraction 0.35\n"
             "          (F=0 low spectrum, F=1 high, 0<F<1 interior via shift-invert)"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_run.add_argument("target", help="Target name (e.g. aabb_test)")
+    p_run.add_argument("target", help="Target name (e.g. vermeer_dipole_tunneling_demo)")
     p_run.add_argument("--debug", action="store_true", help="Debug config")
+    p_run.add_argument(
+        "--asan",
+        action="store_true",
+        help="ASan+UBSan build (CMAKE_BUILD_TYPE=asan, uses <profile>_asan dir)",
+    )
     p_run.add_argument(
         "--shift-fraction",
         type=float,
@@ -231,9 +403,20 @@ def main():
     p_build = sub.add_parser("build", help="Build a target (no run)")
     p_build.add_argument("target", help="Target name")
     p_build.add_argument("--debug", action="store_true", help="Debug config")
+    p_build.add_argument(
+        "--asan",
+        action="store_true",
+        help="ASan+UBSan build (CMAKE_BUILD_TYPE=asan, uses <profile>_asan dir)",
+    )
 
     p_cfg = sub.add_parser("configure", help="(Re)generate cmake for a profile")
-    p_cfg.add_argument("profile", help="Profile: test, gl, asan")
+    p_cfg.add_argument("profile", help=f"Profile: {', '.join(PROFILES)}")
+    p_cfg.add_argument("--debug", action="store_true", help="Debug build type")
+    p_cfg.add_argument(
+        "--asan",
+        action="store_true",
+        help="ASan+UBSan build (CMAKE_BUILD_TYPE=asan, uses <profile>_asan dir)",
+    )
 
     sub.add_parser("list", help="Show available targets")
 

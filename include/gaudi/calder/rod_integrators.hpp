@@ -36,21 +36,19 @@ namespace gaudi
                                       Rod_Bind_Fcn bind_fcn = nullptr,
                                       Rod_Compute_Fcn<T> compute_fcn = nullptr)
     {
-      std::vector<vec3> x = R.xc();
+      // Use vertex positions (__x), not edge midpoints (xc). Adjacency is
+      // (i, next(i)), so leaves are the true rod edges that attributes bind to.
+      const std::vector<vec3> &x = R.x();
 
       std::vector<index_t> edge_verts = R.get_edge_vert_ids();
       std::vector<index_t> edge_map = R.get_edge_map();
       auto rverts = R.get_vert_range();
       std::vector<index_t> edge_ids(rverts.begin(), rverts.end());
 
-      std::cout << "summing" << std::endl;
-      std::cout << " -n_faces: " << edge_ids.size() << std::endl;
-      std::cout << " -create: " << std::endl;
       Rod_Tree_Type::ptr edge_tree = arp::T2::create(edge_verts, x, 12);
 
       Rod_Sum_Type sum(*edge_tree);
       bind_fcn(edge_ids, sum);
-      std::cout << " -compute: " << std::endl;
       std::vector<T> us = sum.template calc<T>(
           p_pov,
           [&compute_fcn](const index_t &i, const index_t &j, const vec3 &pi,
@@ -352,7 +350,7 @@ namespace gaudi
                             const vec4 &near_color = vec4(0.1, 0.8, 0.2, 1.0),
                             const vec4 &morton_color = vec4(1.0, 0.5, 0.0, 1.0))
     {
-      std::vector<vec3> x = R.xc();
+      const std::vector<vec3> &x = R.x();
       std::vector<index_t> edge_verts = R.get_edge_vert_ids();
       auto rverts = R.get_vert_range();
       std::vector<index_t> edge_ids(rverts.begin(), rverts.end());

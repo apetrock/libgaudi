@@ -564,6 +564,71 @@ GAUDI_TEST(duchamp_cyclide_medial_newton_offset_torus) {
   GAUDI_EXPECT(crazy_travel == 0);
 }
 
+GAUDI_TEST(calder_darboux_cyclide_convexity_fit_w0_foot_normal) {
+  const real major_radius = 1.25;
+  const real minor_radius = 0.35;
+  const TorusFrame frame = make_torus_frame(vec3::Zero(), vec3::UnitZ());
+  TorusMesh torus =
+      make_offset_torus_shell(48, 24, major_radius, minor_radius, frame);
+  GAUDI_ASSERT(torus.shell != nullptr);
+  asawa::shell::shell &M = *torus.shell;
+  const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+  const real l0 = 2.0 * asawa::shell::avg_length(M, x);
+
+  const int probe = 17;
+  const vec3 pov = x[probe];
+  const vec3 true_normal = canonical_torus_normal(pov, major_radius);
+  const vec3 perturbed_normal =
+      (true_normal + 0.35 * frame.x_axis).normalized();
+  const std::vector<vec3> p_fit = {pov};
+  const std::vector<vec3> n_fit = {perturbed_normal};
+
+  auto foot_alignment = [&](const albers::vec14 &Q,
+                            const vec3 &target_normal) -> real {
+    const vec3 g = albers::darboux_grad(Q, vec3::Zero());
+    if (!g.allFinite() || g.norm() < 1e-12) {
+      return -1.0;
+    }
+    vec3 gn = g.normalized();
+    if (gn.dot(target_normal) < 0.0) {
+      gn *= -1.0;
+    }
+    return gn.dot(target_normal);
+  };
+
+  const std::vector<albers::vec14> Q_none =
+      calder::darboux_cyclide_normal_constrained_convexity(M, p_fit, n_fit, l0,
+                                                           3.0, 0.0);
+  const std::vector<albers::vec14> Q_tiny =
+      calder::darboux_cyclide_normal_constrained_convexity(M, p_fit, n_fit, l0,
+                                                           3.0, 1e-12);
+  const std::vector<albers::vec14> Q_strong =
+      calder::darboux_cyclide_normal_constrained_convexity(M, p_fit, n_fit, l0,
+                                                           3.0, 1.0);
+
+  GAUDI_ASSERT(Q_none.size() == 1);
+  GAUDI_ASSERT(Q_tiny.size() == 1);
+  GAUDI_ASSERT(Q_strong.size() == 1);
+  GAUDI_EXPECT(Q_none[0].allFinite());
+  GAUDI_EXPECT(Q_tiny[0].allFinite());
+  GAUDI_EXPECT(Q_strong[0].allFinite());
+
+  const real align_none = foot_alignment(Q_none[0], perturbed_normal);
+  const real align_tiny = foot_alignment(Q_tiny[0], perturbed_normal);
+  const real align_strong = foot_alignment(Q_strong[0], perturbed_normal);
+  const real align_strong_true = foot_alignment(Q_strong[0], true_normal);
+
+  std::cerr << "\n[calder_darboux_cyclide_convexity_fit_w0_foot_normal]"
+            << " align_w0=0: " << align_none
+            << " align_w0=1e-12: " << align_tiny
+            << " align_w0=1: " << align_strong
+            << " strong_vs_true: " << align_strong_true << "\n";
+
+  GAUDI_EXPECT((Q_none[0] - Q_tiny[0]).norm() < 1e-10);
+  GAUDI_EXPECT(align_strong > align_none + 1e-3);
+  GAUDI_EXPECT(align_strong > 0.9);
+}
+
 } // namespace test
 } // namespace gaudi
 

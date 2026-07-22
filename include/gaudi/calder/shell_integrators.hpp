@@ -44,12 +44,7 @@ namespace gaudi
       std::vector<index_t> face_map = M.get_face_map();
       auto face_ids_typed = M.get_face_range();
       std::vector<index_t> face_ids(face_ids_typed.begin(), face_ids_typed.end());
-      std::cout << "summing" << std::endl;
-      std::cout << " -n_faces: " << face_ids.size() << std::endl;
-      std::cout << " -create: " << std::endl;
-
       Shell_Tree_Type::ptr face_tree = arp::T3::create(face_vert_ids, x, 16);
-      std::cout << " -sum: " << std::endl;
       Shell_Sum_Type sum(*face_tree);
       bind_fcn(face_ids, sum);
 
@@ -58,7 +53,6 @@ namespace gaudi
       auto com = calder::com_datum::create(face_ids, areas, centroids);
       com->pyramid(*face_tree);
 
-      std::cout << " -compute: " << std::endl;
       std::vector<T> us = sum.template calc<T>(
           p_pov,
           [&compute_fcn, &com](const index_t &i, const index_t &j, const vec3 &pi,

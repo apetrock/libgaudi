@@ -28,6 +28,17 @@ namespace gaudi {
 namespace hepworth {
 namespace block {
 
+// Stencil weights for one-ring Laplacian-type constraints.
+enum class laplacian_stencil { unitary, cotan, angle };
+
+// null  — laplacian constraint, projection target p = 0 (Δx = 0, minimal surface).
+// smooth — bending constraint, projection toward rest one-ring gradient (membrane).
+enum class laplacian_mode { null, smooth };
+
+// rest — per-triangle area constraint toward rest configuration.
+// zero — per-triangle area constraint with p = 0 (minimize face area).
+enum class area_mode { rest, zero };
+
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 class edge_strain : public block_constraint {
@@ -218,6 +229,7 @@ public:
     // p.block(_id0, 0, 3, 2) = (_w * P * F);
     mat32 PF = P * F;
 
+    // zero: minimize triangle area (p = 0). Otherwise project toward rest area.
     if (_zero) {
       p.block(_id0 + 0, 0, 3, 1) = vec3::Zero();
       p.block(_id0 + 3, 0, 3, 1) = vec3::Zero();

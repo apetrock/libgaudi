@@ -53,18 +53,15 @@ real rod_total_edge_length(asawa::rod::rod &R) {
 }
 
 real rod_recovered_scalar_length(asawa::rod::rod &R, const vec3 &pi, real eps) {
-  std::vector<vec3> xc = R.xc();
+  const std::vector<vec3> &x = R.x();
   std::vector<index_t> edge_verts = R.get_edge_vert_ids();
   std::vector<asawa::rod::CornerId> rverts = R.get_vert_range();
   std::vector<index_t> edge_ids(rverts.begin(), rverts.end());
-  std::vector<real> lc;
-  lc.reserve(rverts.size());
-  for (asawa::rod::CornerId ci : rverts) {
-    lc.push_back(R.l0()[static_cast<int>(ci)]);
-  }
-  arp::T2::ptr tree = arp::T2::create(edge_verts, xc, 12);
+  // Corner-id indexed lengths (same layout as integrate_over_rod / Darboux).
+  const std::vector<real> &lc = R.l0();
+  arp::T2::ptr tree = arp::T2::create(edge_verts, x, 12);
   calder::fast_summation<arp::T2> sum(*tree);
-  sum.bind<real>(edge_ids, lc);
+  sum.bind(calder::scalar_datum::create(edge_ids, lc));
   std::vector<vec3> pov = {pi};
   std::vector<real> u = sum.calc<real>(
       pov,
@@ -101,9 +98,9 @@ GAUDI_TEST(calder_rod_pyramid_length_matches_total_edge_length) {
 
   std::vector<index_t> ev = R.get_edge_vert_ids();
   GAUDI_ASSERT(ev.size() >= 2);
-  std::vector<vec3> xc = R.xc();
-  const vec3 on_vertex = xc[ev[0]];
-  const vec3 mid_edge = 0.5 * (xc[ev[0]] + xc[ev[1]]);
+  const std::vector<vec3> &x = R.x();
+  const vec3 on_vertex = x[ev[0]];
+  const vec3 mid_edge = 0.5 * (x[ev[0]] + x[ev[1]]);
   const vec3 far(1000.0, 0.0, 0.0);
 
   const real eps_bh = 0.5;
@@ -116,10 +113,10 @@ GAUDI_TEST(calder_rod_pyramid_length_matches_total_edge_length) {
     real eps;
   };
   const Row rows[] = {
-      {"vertex (xc)", on_vertex, eps_bh},
-      {"vertex (xc)", on_vertex, eps_tight},
-      {"mid_edge (xc)", mid_edge, eps_bh},
-      {"mid_edge (xc)", mid_edge, eps_tight},
+      {"vertex (__x)", on_vertex, eps_bh},
+      {"vertex (__x)", on_vertex, eps_tight},
+      {"mid_edge (__x)", mid_edge, eps_bh},
+      {"mid_edge (__x)", mid_edge, eps_tight},
       {"far off curve", far, eps_bh},
       {"far off curve", far, eps_tight},
   };
@@ -163,12 +160,12 @@ GAUDI_TEST(calder_rod_leaf_visit_counts) {
   auto rod_ptr = make_circle_rod(64, 2.0);
   asawa::rod::rod &R = *rod_ptr;
 
-  // T2::create uses xc() vertex positions (see integrate_over_rod); queries must
+  // T2::create uses __x vertex positions (see integrate_over_rod); queries must
   // use the same coordinates or opening-angle tests see the wrong geometry.
-  std::vector<vec3> xc = R.xc();
+  const std::vector<vec3> &x = R.x();
   std::vector<index_t> ev = R.get_edge_vert_ids();
-  const vec3 on_vertex = xc[ev[0]];
-  const vec3 mid_edge = 0.5 * (xc[ev[0]] + xc[ev[1]]);
+  const vec3 on_vertex = x[ev[0]];
+  const vec3 mid_edge = 0.5 * (x[ev[0]] + x[ev[1]]);
   const vec3 far(1000.0, 0.0, 0.0);
 
   const real eps_bh = 0.5;
@@ -182,7 +179,7 @@ GAUDI_TEST(calder_rod_leaf_visit_counts) {
   const real n_mid = calder::rod_leaf_visit_count(R, mid_edge, eps_leaf);
 
   std::cerr << "\n[calder_rod_leaf_visit_counts]\n"
-            << "  (queries in xc() space; tree built from R.xc())\n"
+            << "  (queries in __x space; tree built from R.x())\n"
             << "  " << std::setw(22) << "POV"
             << "  " << std::setw(12) << "eps=0.5"
             << "  " << std::setw(12) << "eps=1e-6"
@@ -191,11 +188,11 @@ GAUDI_TEST(calder_rod_leaf_visit_counts) {
             << "  " << std::setw(12) << static_cast<int>(n_far_bh + real(0.5))
             << "  " << std::setw(12) << static_cast<int>(n_far_tight + real(0.5))
             << "\n"
-            << "  " << std::setw(22) << "vertex (xc)"
+            << "  " << std::setw(22) << "vertex (__x)"
             << "  " << std::setw(12) << static_cast<int>(n_vertex_bh + real(0.5))
             << "  " << std::setw(12) << static_cast<int>(n_vertex + real(0.5))
             << "\n"
-            << "  " << std::setw(22) << "mid_edge (xc)"
+            << "  " << std::setw(22) << "mid_edge (__x)"
             << "  " << std::setw(12) << static_cast<int>(n_mid_bh + real(0.5))
             << "  " << std::setw(12) << static_cast<int>(n_mid + real(0.5))
             << "\n\n";

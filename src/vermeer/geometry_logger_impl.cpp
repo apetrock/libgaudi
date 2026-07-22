@@ -9,7 +9,6 @@ namespace gaudi {
 namespace geometry_logger {
 namespace {
 
-constexpr float kDebugLineRadius = 0.01f;
 constexpr float kDebugPointRadius = 0.025f;
 
 glm::vec3 to_glm_vec3(const vec3 &v) {
@@ -24,20 +23,33 @@ glm::vec3 to_glm_color(const vec4 &v) {
 
 } // namespace
 
-void line(const vec3 &p0, const vec3 &p1, const vec4 &color) {
+void line(const vec3 &p0, const vec3 &p1, const vec4 &color, real radius) {
   const std::array<glm::vec3, 2> segment = {to_glm_vec3(p0), to_glm_vec3(p1)};
-  lewitt::logger::geometry::line(segment, to_glm_color(color), kDebugLineRadius);
+  lewitt::logger::geometry::line(segment, to_glm_color(color),
+                                 static_cast<float>(radius));
 }
 
 void box(const vec3 &cen, const vec3 &h, const vec4 &col) {
   const vec3 mn = cen - h;
   const vec3 mx = cen + h;
+  vec3 p000(mn[0], mn[1], mn[2]);
+  vec3 p001(mn[0], mn[1], mx[2]);
+  vec3 p010(mn[0], mx[1], mn[2]);
+  vec3 p011(mn[0], mx[1], mx[2]);
 
-  line(vec3(mn[0], mn[1], mn[2]), vec3(mx[0], mn[1], mn[2]), col);
-  line(vec3(mx[0], mn[1], mn[2]), vec3(mx[0], mx[1], mn[2]), col);
-  line(vec3(mx[0], mx[1], mn[2]), vec3(mn[0], mx[1], mn[2]), col);
-  line(vec3(mn[0], mx[1], mn[2]), vec3(mn[0], mn[1], mn[2]), col);
+  vec3 p100(mx[0], mn[1], mn[2]);
+  vec3 p101(mx[0], mn[1], mx[2]);
+  vec3 p110(mx[0], mx[1], mn[2]);
+  vec3 p111(mx[0], mx[1], mx[2]);
 
+  line(p000, p001, col);
+  line(p001, p011, col);
+  line(p011, p010, col);
+  line(p010, p000, col);
+
+
+
+  /*
   line(vec3(mn[0], mn[1], mx[2]), vec3(mx[0], mn[1], mx[2]), col);
   line(vec3(mx[0], mn[1], mx[2]), vec3(mx[0], mx[1], mx[2]), col);
   line(vec3(mx[0], mx[1], mx[2]), vec3(mn[0], mx[1], mx[2]), col);
@@ -47,10 +59,36 @@ void box(const vec3 &cen, const vec3 &h, const vec4 &col) {
   line(vec3(mx[0], mn[1], mn[2]), vec3(mx[0], mn[1], mx[2]), col);
   line(vec3(mx[0], mx[1], mn[2]), vec3(mx[0], mx[1], mx[2]), col);
   line(vec3(mn[0], mx[1], mn[2]), vec3(mn[0], mx[1], mx[2]), col);
+ */
 }
 
 void ext(const vec3 &mn, const vec3 &mx, const vec4 &col) {
-  box(0.5 * (mn + mx), 0.5 * (mx - mn), col);
+  vec3 p000(mn[0], mn[1], mn[2]);
+  vec3 p001(mn[0], mn[1], mx[2]);
+  vec3 p010(mn[0], mx[1], mn[2]);
+  vec3 p011(mn[0], mx[1], mx[2]);
+
+  vec3 p100(mx[0], mn[1], mn[2]);
+  vec3 p101(mx[0], mn[1], mx[2]);
+  vec3 p110(mx[0], mx[1], mn[2]);
+  vec3 p111(mx[0], mx[1], mx[2]);
+
+  line(p101, p111, col);
+  line(p000, p010, col);
+  line(p100, p110, col);
+  line(p001, p011, col);
+
+  // y = mn
+  line(p000, p100, col);
+  line(p100, p101, col);
+  line(p101, p001, col);
+  line(p001, p000, col);
+
+  // y = mx
+  line(p010, p110, col);
+  line(p110, p111, col);
+  line(p111, p011, col);
+  line(p011, p010, col);
 }
 
 void frame(const mat3 &M, const vec3 &c, double C) {

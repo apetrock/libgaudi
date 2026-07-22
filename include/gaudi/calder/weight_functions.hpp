@@ -11,6 +11,7 @@
 #define __CALDER_WEIGHT_FUNCTIONS___
 
 #include <gaudi/common.h>
+#include <gaudi/vec_addendum.h>
 #include <cmath>
 #include <cstdlib>
 #include <ostream>
@@ -89,9 +90,7 @@ namespace gaudi
 
     real calc_tangent_point_radius(const vec3 &dp, const vec3 &N)
     {
-      real ndp = dp.squaredNorm();
-      real nPdp = (N * N.transpose() * dp).norm();
-      return 0.5 * ndp / nPdp;
+      return va::tangent_point_radius(dp, N);
     };
 
     real calc_tangent_point_inverse_radius(const vec3 &dp, const vec3 &N,

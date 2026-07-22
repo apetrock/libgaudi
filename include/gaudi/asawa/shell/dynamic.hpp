@@ -221,18 +221,29 @@ op_edges(shell &M,                      //
   size_t vstart = M.vert_count();
   size_t fstart = M.face_count();
   size_t Ne = edges_to_op.size();
-  M.inflate_edge_pairs(C_ALLOC * Ne);
-  M.inflate_verts(V_ALLOC * Ne);
-  M.inflate_faces(F_ALLOC * Ne);
+  // Guard against size_t wrap / absurd counts that become std::length_error.
+  constexpr size_t kMaxOpEdges = 1ull << 24;
+  if (Ne > kMaxOpEdges) {
+    std::cerr << "op_edges: absurd edge count Ne=" << Ne
+              << " OP=" << OP << " C_ALLOC=" << C_ALLOC
+              << " V_ALLOC=" << V_ALLOC << " F_ALLOC=" << F_ALLOC << std::endl;
+    std::abort();
+  }
+  const size_t c_alloc_n = static_cast<size_t>(C_ALLOC) * Ne;
+  const size_t v_alloc_n = static_cast<size_t>(V_ALLOC) * Ne;
+  const size_t f_alloc_n = static_cast<size_t>(F_ALLOC) * Ne;
+  M.inflate_edge_pairs(c_alloc_n);
+  M.inflate_verts(v_alloc_n);
+  M.inflate_faces(f_alloc_n);
 
   for (auto d : M.get_data()) {
 
     if (d->type() == EDGE)
-      d->alloc(C_ALLOC * edges_to_op.size());
+      d->alloc(c_alloc_n);
     if (d->type() == VERTEX)
-      d->alloc(V_ALLOC * edges_to_op.size());
+      d->alloc(v_alloc_n);
     if (d->type() == FACE)
-      d->alloc(F_ALLOC * edges_to_op.size());
+      d->alloc(f_alloc_n);
   }
 
   for (index_t i = 0; i < edges_to_op.size(); i += STRIDE) {
@@ -561,6 +572,15 @@ public:
       face_tree_->update(face_set);
   }
 
+  /// True if the shell still has at least one live edge (not collapsed to nothing).
+  bool has_active_edges() const {
+    for (int i = 0; i < static_cast<int>(__M->corner_count()); i += 2) {
+      if (__M->next(corner_id(i)) >= 0)
+        return true;
+    }
+    return false;
+  }
+
   void delete_degenerates(shell &M) {
     vec3_datum::ptr x_datum = static_pointer_cast<vec3_datum>(M.get_datum(0));
     std::vector<vec3> &x = x_datum->data();
@@ -835,6 +855,10 @@ public:
     // edge e = c / 2;
 
     shell &M = *__M;
+    if (!has_active_edges()) {
+      std::cout << "merge: skip (no active edges)" << std::endl;
+      return;
+    }
 
     vec3_datum::ptr x_datum =
         static_pointer_cast<vec3_datum>(__M->get_datum(0));
@@ -862,7 +886,12 @@ public:
       f_collect[2 * i + 0] = collected[i][0];
       f_collect[2 * i + 1] = collected[i][1];
     }
+    std::cout << "merge: pairs=" << collected.size()
+              << " f_collect=" << f_collect.size()
+              << " verts=" << M.vert_count()
+              << " corners=" << M.corner_count() << std::endl;
     std::vector<real> S(f_collect.size(), 0.5);
+    try {
                merge_op(*__M, f_collect, S, x,
              [&x, tol](index_t i,                         //
                        index_t cs,                        //
@@ -880,6 +909,14 @@ public:
                return merge_edge(M, c0A, c0B, vert_id(vs + 2 * i + 0),
                                  vert_id(vs + 2 * i + 1));
              });
+    } catch (const std::exception &e) {
+      std::cerr << "merge_op threw: " << e.what()
+                << " pairs=" << collected.size()
+                << " f_collect=" << f_collect.size()
+                << " verts=" << M.vert_count()
+                << " corners=" << M.corner_count() << std::endl;
+      throw;
+    }
   }
 
   void break_cycles() {
@@ -1139,9 +1176,21 @@ public:
 
   void step(bool merge_edges_ = true, bool break_cycles_ = true) {
     for (int k = 0; k < 1; k++) {
+      if (!has_active_edges()) {
+        std::cout << "dynamic::step: mesh has no active edges, skipping"
+                  << std::endl;
+        return;
+      }
+
       std::cout << "subd" << std::endl;
       subdivide_edges();
       delete_degenerates(*__M);
+
+      if (!has_active_edges()) {
+        std::cout << "dynamic::step: collapsed to nothing after subd"
+                  << std::endl;
+        return;
+      }
 
       if (break_cycles_) {
         std::cout << "break, ";
@@ -1151,9 +1200,21 @@ public:
       }
       std::cout << std::endl;
 
+      if (!has_active_edges()) {
+        std::cout << "dynamic::step: collapsed to nothing after break"
+                  << std::endl;
+        return;
+      }
+
       std::cout << "collapse" << std::endl;
       collapse_edges();
       delete_degenerates(*__M);
+
+      if (!has_active_edges()) {
+        std::cout << "dynamic::step: collapsed to nothing after collapse"
+                  << std::endl;
+        return;
+      }
 
       if (merge_edges_) {
         std::cout << "merge" << std::endl;
@@ -1161,12 +1222,19 @@ public:
         delete_degenerates(*__M);
       }
 
+      if (!has_active_edges()) {
+        std::cout << "dynamic::step: collapsed to nothing after merge"
+                  << std::endl;
+        return;
+      }
+
       std::cout << "flip" << std::endl;
       flip_edges();
       delete_degenerates(*__M);
     }
 
-    pack(*__M);
+    if (has_active_edges())
+      pack(*__M);
   }
 
   void step(real dt, const std::vector<vec3> &dx) {

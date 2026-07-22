@@ -923,7 +923,8 @@ public:
     hepworth::block::init_edge_willmore(*__M, constraints, 3.0e-1, {X});
 
     // hepworth::block::init_triangle_strain(*__M, constraints, x, 1.0e-1, {X});
-    hepworth::block::init_area(*__M, constraints, x, 2.0e-1, {X}, false);
+    hepworth::block::init_area(*__M, constraints, x, 2.0e-1, {X},
+                               hepworth::block::area_mode::rest);
     real eps = 3.0 * __surf->_Cm;
 
     hepworth::block::init_pnt_tri_collisions(*__M, *__surf, constraints, x,

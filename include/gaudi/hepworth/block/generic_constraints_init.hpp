@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "gaudi/common.h"
+#include "generic_constraints.hpp"
 #include "shell_collision_constraint.hpp"
 #include "shell_constraints.hpp"
 

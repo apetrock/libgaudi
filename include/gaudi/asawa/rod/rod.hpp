@@ -44,11 +44,17 @@ public:
   }
   static ptr create(const std::vector<vec3> &verts, bool loop = true) {
     ptr R = std::make_shared<rod>();
-    R->insert_strand(verts, loop);
+    if (loop) {
+      R->append_loop(verts);
+    } else {
+      R->insert_strand(verts, false);
+    }
     return R;
   }
 
   rod() {}
+
+  void append_loop(const std::vector<vec3> &verts) { insert_strand(verts, true); }
 
   void insert_strand(const std::vector<vec3> &verts, bool loop) {
 

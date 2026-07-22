@@ -10,6 +10,7 @@
 #include "gaudi/calder/least_squares_fit.hpp"
 #include "gaudi/common.h"
 #include "gaudi/geometry_logger.hpp"
+#include "gaudi/kusama/cyclide_jet_smooth.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -21,18 +22,30 @@
 namespace gaudi {
 namespace duchamp {
 
+enum class medial_axis_display {
+  MedialAxis,
+  SmoothedFitHessian,
+};
+
 struct cyclide_medial_params {
   real l0_scale = 0.1;
-  real fit_p = 3.0;
+  real fit_p = 2.0;
+  real fit_w0 = 10.0; // foot-normal fraction of accumulated MLS weight (w_foot = fit_w0 * w_accum)
   real normal_l0 = 0.35;
   real min_normal_alignment = -0.25;
   real medial_smooth_scale = 0.0;
-  real medial_smooth_blend = 1.0;
+  real medial_smooth_blend = 0.0;
   int max_iters = 120;
   real tol = 1e-8;
   real max_travel_scale = 12.0;
   real newton_step_scale = 1000.0;
   int probe_vertex = -1;
+  kusama::cyclide_jet_smooth_params smooth;
+  bool enable_cyclide_smooth = true;
+  medial_axis_display display = medial_axis_display::SmoothedFitHessian;
+  //medial_axis_display display = medial_axis_display::MedialAxis;
+  real hessian_frame_scale = 3.0;
+  real hessian_line_radius = 0.004;
 };
 
 struct cyclide_medial_candidate {
@@ -771,8 +784,8 @@ compute_local_fit_cyclide_medial_candidates(
   }
 
   const std::vector<albers::vec14> fits =
-      calder::darboux_cyclide_normal_constrained_convexity(
-          M, x, vertex_normals, l0, params.fit_p);
+      calder::darboux_cyclide_shell_fit(M, x, vertex_normals, l0, params.fit_p,
+                                        params.fit_w0);
 
   const real max_travel = params.max_travel_scale * avg_len;
   const real max_newton_step =

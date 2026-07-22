@@ -5,6 +5,7 @@
 #include "Eigen/src/Geometry/AngleAxis.h"
 #include "block_constraint.hpp"
 #include "gaudi/common.h"
+#include "gaudi/vec_addendum.h"
 #include "shell_constraints.hpp"
 #include "sim_block.hpp"
 #include "gaudi/geometry_logger.hpp"
@@ -224,6 +225,8 @@ public:
   real _w1;
 };
 
+
+
 real smin_cubic(real a, real b, real k) {
   real h = max(k - abs(a - b), 0.0) / k;
   return min(a, b) - h * h * h * k * (1.0 / 6.0);
@@ -235,9 +238,7 @@ real smin_log(real a, real b, real k) {
 }
 
 real tangent_point_radius(const vec3 &dp, const vec3 &N) {
-  real ndp = dp.squaredNorm();
-  real nPdp = (N * N.transpose() * dp).norm();
-  return 0.5 * ndp / nPdp;
+  return va::tangent_point_radius(dp, N);
 };
 
 class point_edge_creep : public block_constraint {

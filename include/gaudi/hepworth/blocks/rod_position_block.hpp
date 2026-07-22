@@ -1,6 +1,7 @@
 #ifndef __GAUDI_HEPWORTH_ROD_POSITION_BLOCK__
 #define __GAUDI_HEPWORTH_ROD_POSITION_BLOCK__
 
+#include <functional>
 #include <vector>
 
 #include "gaudi/asawa/rod/dynamic.hpp"
@@ -17,6 +18,7 @@ namespace block {
 class rod_position_block : public dof_block_wrapper {
 public:
   using ptr = std::shared_ptr<rod_position_block>;
+  using vec3_force_fn = std::function<std::vector<vec3>()>;
   using input_port = vec3_forces_port;
 
   rod_position_block(asawa::rod::rod::ptr rod, asawa::rod::dynamic::ptr dynamic)
@@ -26,9 +28,20 @@ public:
   asawa::rod::dynamic::ptr dynamic;
   std::vector<vec3> forces;
 
+  rod_position_block &with_force(vec3_force_fn fn) {
+    if (fn) {
+      _force_fns.push_back(std::move(fn));
+    }
+    return *this;
+  }
+
   void prepare(solver_context &ctx) override {
     (void)ctx;
     forces.assign(rod->v().size(), vec3::Zero());
+    // Same scale as graph connectors (apply_external_input default = 1).
+    for (const auto &fn : _force_fns) {
+      apply_external_input(fn());
+    }
   }
 
   void apply_external_input(const std::vector<vec3> &input, real scale = 1.0) override {
@@ -52,6 +65,7 @@ public:
 
 private:
   vec3_block::ptr _vec3;
+  std::vector<vec3_force_fn> _force_fns;
 };
 
 } // namespace block

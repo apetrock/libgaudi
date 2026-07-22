@@ -1,6 +1,7 @@
 #ifndef __GAUDI_HEPWORTH_SHELL_POSITION_BLOCK__
 #define __GAUDI_HEPWORTH_SHELL_POSITION_BLOCK__
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -18,6 +19,7 @@ namespace block {
 class shell_position_block : public dof_block_wrapper {
 public:
   using ptr = std::shared_ptr<shell_position_block>;
+  using vec3_force_fn = std::function<std::vector<vec3>()>;
   using input_port = vec3_forces_port;
   using positions_ptr = std::shared_ptr<duchamp::shell_vert_positions>;
   using velocities_ptr = std::shared_ptr<duchamp::shell_vert_velocities>;
@@ -32,10 +34,22 @@ public:
   std::vector<vec3> mass;
   std::vector<vec3> forces;
 
+  shell_position_block &with_force(vec3_force_fn fn) {
+    if (fn) {
+      _force_fns.push_back(std::move(fn));
+    }
+    return *this;
+  }
+
   void prepare(solver_context &ctx) override {
     (void)ctx;
     mass = asawa::shell::vertex_areas_3(*mesh, xs->get());
     forces.assign(xs->size(), vec3::Zero());
+    // Same scale as graph connectors (apply_external_input default = 1).
+    // integrate_inertia uses x += h*v + h*h*f, so f is already "a".
+    for (const auto &fn : _force_fns) {
+      apply_external_input(fn());
+    }
   }
 
   void apply_external_input(const std::vector<vec3> &input, real scale = 1.0) override {
@@ -59,6 +73,7 @@ public:
 
 private:
   vec3_block::ptr _vec3;
+  std::vector<vec3_force_fn> _force_fns;
 };
 
 using shell_block = shell_position_block;

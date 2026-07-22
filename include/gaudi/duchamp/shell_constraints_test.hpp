@@ -116,7 +116,9 @@ public:
     hepworth::block::init_edge_strain(*__M, constraints, x, l0, 3e-2, {X});
     hepworth::block::init_pinned(*__M, constraints, x, 5.0e-3, {X});
     hepworth::block::init_bending(*__M, constraints, x, 3.0e-1, {X});
-    hepworth::block::init_laplacian(*__M, constraints, x, 1, 2.0e-1, {X});
+    hepworth::block::init_laplacian(*__M, constraints, x, hepworth::block::laplacian_mode::null,
+                                    hepworth::block::laplacian_stencil::cotan, 2.0e-1,
+                                    {X});
     hepworth::block::init_area(*__M, constraints, x, 5.0e-2, {X});
 
     //  hepworth::shell::init_cross(*__M, constraints, 1.05, 0.1);

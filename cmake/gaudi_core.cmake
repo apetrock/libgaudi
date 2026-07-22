@@ -28,6 +28,7 @@ target_include_directories(gaudi_core INTERFACE
     "${LIBGAUDI_ROOT}/include"
     "${LIBGAUDI_ROOT}/ext/eigen"
     "${LIBGAUDI_ROOT}/ext/spectra/include"
+    "${LIBGAUDI_ROOT}/scripts/sympy/generated"
 )
 
 target_compile_features(gaudi_core INTERFACE cxx_std_20)
@@ -35,5 +36,20 @@ target_compile_features(gaudi_core INTERFACE cxx_std_20)
 target_compile_definitions(gaudi_core INTERFACE
     GAUDI_REPO_ROOT="${LIBGAUDI_ROOT}"
 )
+
+# Propagate OpenMP so Eigen parallelizes matmul / reductions / some sparse ops.
+if(GAUDI_HAS_OPENMP)
+    if(TARGET OpenMP::OpenMP_CXX)
+        target_link_libraries(gaudi_core INTERFACE OpenMP::OpenMP_CXX)
+        message(STATUS "gaudi::core linking OpenMP::OpenMP_CXX")
+    else()
+        target_compile_options(gaudi_core INTERFACE ${OpenMP_CXX_FLAGS})
+        target_link_options(gaudi_core INTERFACE ${OpenMP_CXX_FLAGS})
+        if(OpenMP_omp_LIBRARY)
+            target_link_libraries(gaudi_core INTERFACE ${OpenMP_omp_LIBRARY})
+        endif()
+        message(STATUS "gaudi::core linking OpenMP via legacy flags")
+    endif()
+endif()
 
 message(STATUS "gaudi::core configured (headers + Eigen + Spectra, C++20)")

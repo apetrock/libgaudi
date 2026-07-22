@@ -1,11 +1,17 @@
 #pragma once
 
+#include <chrono>
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <thread>
 
 #include "gaudi/duchamp/demo_trait.hpp"
-#include "gaudi/geometry_logger.hpp"
 #include "gaudi/vermeer/debug_line_utils.hpp"
 #include "gaudi/vermeer/duchamp_mesh_scene.hpp"
+#include "gaudi/vermeer/duchamp_playback.hpp"
+#include "gaudi/vermeer/duchamp_sim_runtime.hpp"
+#include "gaudi/vermeer/scene_frame.hpp"
 #include "gaudi/vermeer/vermeer_config.hpp"
 #include "lewitt/debug_line_buffer.hpp"
 #include "lewitt/gpu_session.hpp"
@@ -17,21 +23,33 @@ namespace vermeer {
 
 class duchamp_project : public lewitt::project_renderer {
 public:
-  explicit duchamp_project(duchamp::demo_trait::ptr demo, vermeer_config config = {})
-      : _demo(std::move(demo)), _config(config),
+  explicit duchamp_project(duchamp::demo_trait::ptr demo, vermeer_config config = {},
+                           std::shared_ptr<duchamp_playback> playback = nullptr)
+      : _config(config), _playback(std::move(playback)),
+        _runtime(std::move(demo), _playback),
         _debug_lines(lewitt::debug_line_buffer::create()) {}
+
+  ~duchamp_project() override { _runtime.stop(); }
 
   bool init(lewitt::gpu_context &ctx) override {
     LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_project::init");
-    if (!ctx.scene || !_demo) {
+    if (!ctx.scene || !_runtime.demo()) {
       return false;
     }
 
-    _scene = duchamp_mesh_scene::create(_demo);
-    _demo->reset();
-    _scene.update(ctx);
-    sync_debug_lines(*_demo);
-    _debug_lines->upload(ctx.device);
+    _scene = duchamp_mesh_scene::create(duchamp_mesh_scene::k_slot_count);
+    _runtime.reset_demo();
+    _runtime.start();
+
+    // Wait briefly for the first sim frame so the first present isn't empty.
+    for (int i = 0; i < 200 && !_last_frame; ++i) {
+      if (auto frame = _runtime.channel().take_latest(_seen_generation)) {
+        apply_frame(ctx, *frame);
+        _last_frame = std::move(frame);
+      } else {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+    }
 
     lewitt::render_graph_config graph_config{};
     graph_config.type = _config.renderer_type;
@@ -43,11 +61,14 @@ public:
 
   void update(lewitt::gpu_context &ctx, uint frame) override {
     LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_project::update");
-    geometry_logger::clear();
-    _demo->step(static_cast<int>(frame));
-    _scene.update(ctx);
-    sync_debug_lines(*_demo);
-    _debug_lines->upload(ctx.device);
+    (void)frame;
+    if (_playback)
+      poll_playback_input(*_playback, ctx.window);
+
+    if (auto next = _runtime.channel().take_latest(_seen_generation)) {
+      apply_frame(ctx, *next);
+      _last_frame = std::move(next);
+    }
   }
 
   void render(lewitt::gpu_context &ctx,
@@ -65,16 +86,21 @@ public:
   void resize(lewitt::gpu_context &ctx) override { _graph->resize(ctx); }
 
 private:
-  void sync_debug_lines(const duchamp::demo_trait &demo) {
-    LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_project::sync_debug_lines");
-    sync_debug_line_buffer(demo, *_debug_lines);
+  void apply_frame(lewitt::gpu_context &ctx, const SceneFrame &frame) {
+    LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_project::apply_frame");
+    _scene.apply_snapshots(frame.shell, frame.rod, ctx.device);
+    apply_scene_debug_lines(frame.debug_lines, *_debug_lines);
+    _debug_lines->upload(ctx.device);
   }
 
-  duchamp::demo_trait::ptr _demo;
   vermeer_config _config;
+  std::shared_ptr<duchamp_playback> _playback;
+  duchamp_sim_runtime _runtime;
   duchamp_mesh_scene _scene;
   std::unique_ptr<lewitt::pipeline_graph> _graph;
   lewitt::debug_line_buffer::ptr _debug_lines;
+  std::shared_ptr<const SceneFrame> _last_frame;
+  uint64_t _seen_generation = 0;
 };
 
 } // namespace vermeer

@@ -1,0 +1,1 @@
+add_gaudi_vermeer_project(vermeer_dipole_tunneling_demo SOURCES main.cpp)

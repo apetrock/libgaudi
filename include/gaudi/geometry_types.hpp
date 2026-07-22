@@ -654,4 +654,19 @@ namespace gaudi
 
   } // namespace ext
 } // namespace gaudi
+
+#include "gaudi/tribox_test.hpp"
+
+namespace gaudi {
+namespace ext {
+
+inline bool overlap(const extents_t &e, const vec3 &p0, const vec3 &p1,
+                    const vec3 &p2) {
+  const vec3 tri[3] = {p0, p1, p2};
+  return va::tri_box<real, vec3>().triBoxOverlap(center(e),
+                                                 0.5 * (e[1] - e[0]), tri);
+}
+
+} // namespace ext
+} // namespace gaudi
 #endif

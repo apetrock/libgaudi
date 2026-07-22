@@ -353,7 +353,6 @@ std::vector<mat3> fast_frame(asawa::shell::shell &M, const std::vector<vec3> &x,
   arp::T2::ptr edge_tree = arp::T2::create(edge_verts, x, 12);
 
   calder::fast_summation<arp::T2> sum(*edge_tree);
-  std::cout << " ==== wE.size(): " << wE.size() << std::endl;
   std::vector<vec3> Ec = asawa::shell::compress_to_range<vec3>(edge_ids, wE);
   sum.bind(calder::edge_frame_datum::create(edge_ids, Ec));
   std::vector<real> sums(p_pov.size(), 0.0);

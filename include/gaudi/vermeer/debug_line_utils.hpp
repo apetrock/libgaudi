@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 
 #include "gaudi/duchamp/demo_trait.hpp"
+#include "gaudi/vermeer/scene_frame.hpp"
 #include "lewitt/debug_line_buffer.hpp"
 #include "lewitt/geometry_logger.h"
 
@@ -50,16 +51,23 @@ inline void sync_debug_line_buffer_from_rod(const duchamp::demo_trait &demo,
 }
 
 inline void append_debug_lines_from_logger(std::vector<lewitt::debug_line_buffer::line> &lines) {
-  const auto &logger = lewitt::logger::geometry::get_instance();
-  if (!logger.debugLines) {
-    return;
-  }
-
-  for (const auto &line : logger.debugLines->exported_lines()) {
+  const auto exported = lewitt::logger::geometry::export_lines();
+  for (const auto &line : exported) {
     lines.push_back({glm::vec3(line.p0.x, line.p0.y, line.p0.z),
                      glm::vec3(line.p1.x, line.p1.y, line.p1.z),
-                     glm::vec3(line.color.x, line.color.y, line.color.z), line.radius});
+                     glm::vec3(line.color.x, line.color.y, line.color.z),
+                     line.radius});
   }
+}
+
+inline void apply_scene_debug_lines(const std::vector<scene_debug_line> &src,
+                                    lewitt::debug_line_buffer &buffer) {
+  std::vector<lewitt::debug_line_buffer::line> lines;
+  lines.reserve(src.size());
+  for (const auto &line : src) {
+    lines.push_back({line.p0, line.p1, line.color, line.radius});
+  }
+  buffer.set_lines(lines);
 }
 
 inline void append_debug_line_buffer_from_logger(lewitt::debug_line_buffer &buffer) {

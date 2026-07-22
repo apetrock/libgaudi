@@ -113,7 +113,7 @@ public:
 
   std::vector<vec3> &_x;
   std::vector<vec3> &_v;
-  std::vector<vec3> _f;
+  std::vector<vec3> &_f;
   std::vector<vec3> &_M;
 };
 

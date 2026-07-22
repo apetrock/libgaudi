@@ -52,14 +52,14 @@ public:
                                                     hepworth::block::rod_quaternion_block>::create()
                   .with_blocks(_rod_pos, _rod_quat)
                   .with_bundle(hepworth::block::make_rod_physics_bundle<0, 1>(
-                      __R, __Rd, 1e-1, 3e-1, 1.0))
+                      __R, __Rd, 1e-1, 2e-1, 1.0))
                   .dt(0.05)
-                  .damping(0.1)
+                  .damping(0.01)
                   .build();
 
     _boundary = _graph.create_node<boundary_gradient_node>(__R, __sdf0, __sdf1);
-    _tangent = _graph.create_node<tangent_point_gradient_node>(__R, __Rd, 0.0);
-    _vortex = _graph.create_node<vortex_force_node>(__R, __Rd, 1e-5, 6.0, 0.0);
+    _tangent = _graph.create_node<tangent_point_gradient_node>(__R, __Rd, 0.0e-7);
+    _vortex = _graph.create_node<vortex_force_node>(__R, __Rd, 1e-1, 4.0, 0.0);
     _add = _graph.create_node<vec3_junction_node<3>>();
     _solver_node = _graph.create_node<
         hepworth::block::block_solver_node<hepworth::block::rod_position_block,
@@ -76,7 +76,7 @@ public:
 
   void step(int frame) {
     _frame = frame;
-    grow_rod_rest_lengths(*__R, 1.001);
+    grow_rod_rest_lengths(*__R, 1.0 - 0.0001);
     _boundary->set_frame(frame);
     _graph.run();
     __Rd->step();
@@ -108,15 +108,27 @@ private:
     const vec3 f1 = p0.cross(f2).normalized();
     const vec3 f0 = f1.cross(f2).normalized();
 
-    std::vector<vec3> points;
     const int N = 256;
-    for (int i = 0; i < N; i++) {
-      const real thet = 2.0 * M_PI * real(i) / real(N);
-      const vec3 pi = r0 * cos(thet) * f0 + r1 * sin(thet) * f1;
-      points.push_back(pi);
-    }
+    auto make_ellipse_loop = [&](const vec3 &center, real er0, real er1, const vec3 &axis0,
+                                 const vec3 &axis1) {
+      std::vector<vec3> pts;
+      pts.reserve(N);
+      for (int i = 0; i < N; i++) {
+        const real thet = 2.0 * M_PI * real(i) / real(N);
+        pts.push_back(center + er0 * cos(thet) * axis0 + er1 * sin(thet) * axis1);
+      }
+      return pts;
+    };
 
-    __R = rod::rod::create(points);
+    const vec3 cen = vec3::Zero();
+    const vec3 norm_axis = f2;
+    const real C = 0.2;
+    const vec3 c0 = cen - C * norm_axis;
+    const vec3 c1 = cen + C * norm_axis;
+
+    __R = rod::rod::create();
+    __R->append_loop(make_ellipse_loop(c0, r0, r1, f0, f1));
+    __R->append_loop(make_ellipse_loop(c1, r0, r1, f0, f1));
     const real lavg = __R->lavg();
     __Rd = rod::dynamic::create(__R, 0.25 * lavg, 2.5 * lavg, 0.25 * lavg);
   }

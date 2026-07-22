@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "gaudi/common.h"
-#include "gaudi/geometry_logger.hpp"
+#include "gaudi/vec_addendum.h"
 #include "rod_collision_constraint.hpp"
 #include "rod_constraints.hpp"
 
@@ -135,17 +135,60 @@ void init_angle(const asawa::rod::rod &R,
   }
 }
 
+// Skip rod-rod pairs whose endpoints are within `min_sep` chain hops.
+// min_sep=1 ≈ old prev/next neighbor filter; 2 also drops one-hop pairs
+// (AB vs CD) that otherwise light up along gently curved rods.
+inline bool rod_edges_chain_neighbors(const asawa::rod::rod &R, index_t a0,
+                                      index_t a1, index_t b0, index_t b1,
+                                      int min_sep = 2) {
+  using asawa::rod::corner_id;
+  using asawa::rod::CornerId;
+  if (a0 == b0 || a0 == b1 || a1 == b0 || a1 == b1)
+    return true;
+  if (min_sep <= 0)
+    return false;
+
+  auto reaches = [&](index_t from, index_t target) {
+    CornerId c = corner_id(from);
+    for (int i = 0; i < min_sep; ++i) {
+      c = R.next(c);
+      if (c < 0)
+        break;
+      if (static_cast<index_t>(c) == target)
+        return true;
+    }
+    c = corner_id(from);
+    for (int i = 0; i < min_sep; ++i) {
+      c = R.prev(c);
+      if (c < 0)
+        break;
+      if (static_cast<index_t>(c) == target)
+        return true;
+    }
+    return false;
+  };
+
+  return reaches(a0, b0) || reaches(a0, b1) || reaches(a1, b0) ||
+         reaches(a1, b1);
+}
+
 void init_collisions(asawa::rod::rod &R, asawa::rod::dynamic &dynamic,
                      std::vector<projection_constraint::ptr> &constraints,
                      const real &w, std::vector<sim_block::ptr> blocks,
-                     real K = 1.0) {
+                     real K = 1.0, int chain_sep = 2, real geom_margin = 0.1,
+                     real r_override = -1.0) {
   using asawa::rod::corner_id;
   const std::vector<vec3> &x = R.__x;
+  // True seg-seg gate (AABB false positives can have midpoints ≫ R apart).
+  // Note: va::distance_Segment_Segment returns *squared* distance in d[0].
+  const real r = (r_override < 0.0) ? R._r : r_override;
+  const real max_sep = (1.0 + geom_margin) * r;
+  const real max_sep2 = max_sep * max_sep;
   vector<std::array<index_t, 2>> collisions =
       dynamic.get_internal_collisions(K);
 
   for (auto &c : collisions) {
-    if (c[0] > -1) {      
+    if (c[0] > -1) {
       std::array<index_t, 4> c4 = dynamic.get_collision_ids(c);
       vec3 xA0 = x[c4[0]];
       vec3 xA1 = x[c4[1]];
@@ -157,16 +200,14 @@ void init_collisions(asawa::rod::rod &R, asawa::rod::dynamic &dynamic,
       if (R.length(corner_id(c[1])) < 1e-8)
         continue;
 
-      if (R.prev(corner_id(c4[0])) == c4[2])
+      if (rod_edges_chain_neighbors(R, c4[0], c4[1], c4[2], c4[3], chain_sep))
         continue;
-      if (R.next(corner_id(c4[1])) == c4[3])
+
+      const std::array<real, 3> d =
+          va::distance_Segment_Segment(xA0, xA1, xB0, xB1);
+      if (!(d[0] < max_sep2))
         continue;
-      if (R.prev(corner_id(c4[0])) == c4[3])
-        continue;
-      if (R.next(corner_id(c4[1])) == c4[2])
-        continue;
-      geometry_logger::line(0.5 * (xA0 + xA1), 0.5 * (xB0 + xB1),
-                                vec4(0.0, 1.0, 1.0, 1.0));
+
       constraints.push_back(
           rod_collision::create({c4[0], c4[1], c4[2], c4[3]}, w, K * R._r, blocks));
     }

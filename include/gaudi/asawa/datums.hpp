@@ -196,6 +196,12 @@ public:
   virtual void flip(const shell::shell &M, const index_t &i) {}
 
   virtual void do_alloc(const size_t &sz) {
+    constexpr size_t kMaxDatumAlloc = 1ull << 26;
+    if (sz > kMaxDatumAlloc) {
+      std::cerr << "datum::do_alloc absurd size sz=" << sz
+                << " data.size()=" << __data.size() << std::endl;
+      std::abort();
+    }
     __tmp = std::vector<TYPE>(sz, z::zero<TYPE>());
     __data.resize(__data.size() + sz, z::zero<TYPE>());
   }

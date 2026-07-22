@@ -112,6 +112,54 @@ namespace gaudi
       return convexity * calc_inv_dist(dp, l0, p);
     }
 
+    // Soft radial gate on the rod: down-weight samples whose displacement from
+    // the query lies along the local tangent. Requires datum[2] = length-weighted
+    // tangents bound by generic_fit(..., Ts).
+    //   sin(φ) = |dp_⊥| / |dp|,  w = κ_inv_dist(dp; p0) · sin(φ)^p1
+    template <typename M_TYPE>
+    real inv_dist_tangent_plane_weight(
+        int i, int j, //
+        const std::vector<calder::datum::ptr> &data,
+        typename M_TYPE::Sum_Type::Node_Type node_type, //
+        const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p0,
+        real p1)
+    {
+      (void)i;
+      (void)Ni;
+      (void)Nj;
+      if (data.size() < 3)
+      {
+        return calc_inv_dist(dp, l0, p0);
+      }
+      vec3 Tj = get_data<vec3>(node_type, j, 2, data);
+      const real tn = Tj.norm();
+      if (tn < 1e-12)
+      {
+        return 0.0;
+      }
+      Tj /= tn;
+
+      const real dist = dp.norm();
+      if (dist < 1e-12)
+      {
+        return 0.0;
+      }
+      const real sin_phi = va::reject(Tj, dp).norm() / dist;
+      return calc_inv_dist(dp, l0, p0) * std::pow(sin_phi, p1);
+    }
+
+    // weight_func signature has a single p; default both powers to that p.
+    template <typename M_TYPE>
+    real inv_dist_tangent_plane_weight(
+        int i, int j, //
+        const std::vector<calder::datum::ptr> &data,
+        typename M_TYPE::Sum_Type::Node_Type node_type, //
+        const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p = 3.0)
+    {
+      return inv_dist_tangent_plane_weight<M_TYPE>(i, j, data, node_type, dp, Ni,
+                                                   Nj, l0, p, p);
+    }
+
     template <typename M_TYPE>
     real cauchy_weight(int i, int j, //
                          const std::vector<calder::datum::ptr> &data,
@@ -136,18 +184,22 @@ namespace gaudi
     GENERATE_WEIGHT_FUNCS(convex_weight)
     GENERATE_WEIGHT_FUNCS(inv_convex_weight)
     GENERATE_WEIGHT_FUNCS(soft_inv_convex_weight)
+    // Rod-only: needs length-weighted tangents bound as datum[2].
+    weight_func<rod_bundle> rod_inv_dist_tangent_plane_weight =
+        inv_dist_tangent_plane_weight<rod_bundle>;
 
     template <typename F_TYPE, typename M_TYPE, typename W_FUNC>
-    std::vector<typename F_TYPE::coefficients> generic_fit(typename M_TYPE::Manifold_Type &M,
-                                                           const std::vector<vec3> &Ns,
-                                                           const std::vector<vec3> &p_pov,
-                                                           const std::vector<vec3> &n_pov, real l0,
-                                                           real p, //
-                                                           W_FUNC weight_func)
+    std::vector<typename F_TYPE::coefficients> generic_fit(
+        typename M_TYPE::Manifold_Type &M, const std::vector<vec3> &Ns,
+        const std::vector<vec3> &p_pov, const std::vector<vec3> &n_pov, real l0,
+        real p, //
+        W_FUNC weight_func, real foot_normal_w = 0.0,
+        const std::vector<vec3> *Ts = nullptr)
     {
 
       using type = typename M_TYPE::type;
       std::vector<F_TYPE> accumulators(p_pov.size());
+      std::vector<real> collected_w(p_pov.size(), 0.0);
       // Per-primitive area (weight). Ns holds area-weighted normals, so the
       // area of a single primitive is |Ns|. The area must be summed as a
       // scalar through the tree: summing the area-weighted normal vector and
@@ -156,12 +208,18 @@ namespace gaudi
       std::vector<real> areas(Ns.size(), 0.0);
       for (size_t k = 0; k < Ns.size(); k++)
         areas[k] = Ns[k].norm();
+      const bool bind_T = Ts != nullptr && Ts->size() == Ns.size();
       std::vector<type> us = M_TYPE::integrate(
           M, p_pov,
-          [&Ns, &areas](const std::vector<index_t> &edge_ids, typename M_TYPE::Sum_Type &sum)
+          [&Ns, &areas, Ts, bind_T](const std::vector<index_t> &edge_ids,
+                                    typename M_TYPE::Sum_Type &sum)
           {
             sum.bind(calder::vec3_datum::create(edge_ids, Ns));
             sum.bind(calder::scalar_datum::create(edge_ids, areas));
+            if (bind_T)
+            {
+              sum.bind(calder::vec3_datum::create(edge_ids, *Ts));
+            }
           },
           [&](const index_t i, const index_t j, //
               const vec3 &pi, const vec3 &pj,
@@ -192,10 +250,23 @@ namespace gaudi
               return 0.0;
             }
 
+            collected_w[i] += w_total;
             accumulators[i].accumulate(w_total, dp, Nj);
 
             return 0.0;
           });
+      if (foot_normal_w >= 1e-8)
+      {
+        for (size_t i = 0; i < p_pov.size(); ++i)
+        {
+          const real w_foot = foot_normal_w * collected_w[i];
+          if (w_foot < 1e-8)
+          {
+            continue;
+          }
+          accumulators[i].accumulate(w_foot, vec3::Zero(), n_pov[i]);
+        }
+      }
       std::vector<typename F_TYPE::coefficients> out(p_pov.size(), F_TYPE::coefficients::Zero());
 
       for (int i = 0; i < accumulators.size(); i++)
@@ -641,10 +712,9 @@ namespace gaudi
         Ns[i] = weights[i] * Ns[i];
       }
 
-      (void)w0;
       return generic_fit<albers::normal_constrained_darboux_cyclide,
                          shell_bundle>(M, Ns, p_pov, N_pov, l0, p,
-                                       shell_inv_dist_weight);
+                                       shell_inv_dist_weight, w0);
     }
 
     std::vector<vec14> darboux_cyclide_normal_constrained_bilateral(
@@ -697,17 +767,31 @@ namespace gaudi
         Ns[i] = weights[i] * Ns[i];
       }
 
-      (void)w0;
       return generic_fit<albers::normal_constrained_darboux_cyclide,
                          shell_bundle>(M, Ns, p_pov, N_pov, l0, p,
-                                       shell_soft_inv_convex_weight);
+                                       shell_soft_inv_convex_weight, w0);
+    }
+
+    // Darboux shell MLS fit mode. Flip the active branch:
+    //   #if 1 / #elif 0  -> normal-constrained inv_dist (broader neighborhood)
+    //   #if 0 / #elif 1  -> convex-gated inv_dist (default, current behavior)
+    inline std::vector<vec14> darboux_cyclide_shell_fit(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0, real p = 3.0,
+        real w0 = 1e-2)
+    {
+#if 0
+      return darboux_cyclide_normal_constrained(M, p_pov, N_pov, l0, p, w0);
+#else
+      return darboux_cyclide_normal_constrained_convexity(M, p_pov, N_pov, l0, p, w0);
+#endif
     }
 
     std::vector<vec14> darboux_cyclide(asawa::rod::rod &R,
                                        const std::vector<vec3> &Nr,
                                        const std::vector<vec3> &p_pov,
                                        const std::vector<vec3> &N_pov, real l0,
-                                       real p = 3.0)
+                                       real p = 3.0, real foot_normal_w = 0.0)
     {
       std::vector<real> weights = R.l0();
       std::vector<vec3> Ns = Nr;
@@ -715,22 +799,50 @@ namespace gaudi
       {
         Ns[i] = weights[i] * Nr[i];
       }
+      // foot_normal_w > 0: soft tip-in of N_pov at the query (∇D ∥ N, D≈0).
+      // Weight is scaled by collected MLS mass so it stays relative to the fit.
       return generic_fit<albers::darboux_cyclide, rod_bundle>(
-          R, Ns, p_pov, N_pov, l0, p, rod_inv_dist_weight);
+          R, Ns, p_pov, N_pov, l0, p, rod_inv_dist_weight, foot_normal_w);
     }
 
     std::vector<vec14> darboux_cyclide_tangent_plane(
         asawa::rod::rod &R, const std::vector<vec3> &Nr,
         const std::vector<vec3> &p_pov, const std::vector<vec3> &N_pov,
-        real l0, real p = 3.0)
+        real l0, real p0 = 3.0, real foot_normal_w = 0.0, real p1 = -1.0)
     {
-      return darboux_cyclide(R, Nr, p_pov, N_pov, l0, p);
+      std::vector<real> weights = R.l0();
+      std::vector<vec3> dirs = R.dirs();
+      std::vector<vec3> Ns = Nr;
+      std::vector<vec3> Ts(Nr.size(), vec3::Zero());
+      for (int i = 0; i < static_cast<int>(Ns.size()); i++)
+      {
+        Ns[i] = weights[i] * Nr[i];
+        const real dn = dirs[i].norm();
+        if (dn > 1e-12)
+        {
+          Ts[i] = weights[i] * (dirs[i] / dn);
+        }
+      }
+      // Soft radial gate: κ(dp; p0) · sin(φ)^p1, sin(φ)=|dp_⊥|/|dp| vs rod T.
+      // p1 < 0 → use p0 for both (single-knob default).
+      const real p_sin = (p1 < 0.0) ? p0 : p1;
+      auto weight = [p_sin](int i, int j, //
+                            const std::vector<calder::datum::ptr> &data,
+                            rod_node_type node_type, //
+                            const vec3 &dp, const vec3 &Ni, const vec3 &Nj,
+                            real l0_, real p_dist) -> real
+      {
+        return inv_dist_tangent_plane_weight<rod_bundle>(
+            i, j, data, node_type, dp, Ni, Nj, l0_, p_dist, p_sin);
+      };
+      return generic_fit<albers::darboux_cyclide, rod_bundle>(
+          R, Ns, p_pov, N_pov, l0, p0, weight, foot_normal_w, &Ts);
     }
 
     std::vector<vec14> darboux_cyclide_normal_constrained(
         asawa::rod::rod &R, const std::vector<vec3> &Nr,
         const std::vector<vec3> &p_pov, const std::vector<vec3> &N_pov,
-        real l0, real p = 3.0)
+        real l0, real p = 3.0, real foot_normal_w = 1e-2)
     {
       std::vector<real> weights = R.l0();
       std::vector<vec3> Ns = Nr;
@@ -740,7 +852,7 @@ namespace gaudi
       }
       return generic_fit<albers::normal_constrained_darboux_cyclide,
                          rod_bundle>(R, Ns, p_pov, N_pov, l0, p,
-                                     rod_inv_dist_weight);
+                                     rod_inv_dist_weight, foot_normal_w);
     }
 
     std::vector<vec3> darboux_cyclide_grad(asawa::rod::rod &R,
@@ -788,9 +900,7 @@ namespace gaudi
                                                           real p = 3.0)
     {
 #if 1
-      std::cout << "using constrained sphere\n";
       std::vector<vec4> S = constrained_sphere(R, Nr, p_pov, N_pov, l0, 2.0);
-      std::cout << "done\n";
       std::vector<vec3> cens(S.size());
       for (int i = 0; i < cens.size(); i++)
       {
@@ -922,7 +1032,7 @@ namespace gaudi
         {
           continue;
         }
-#if 0        
+#if 0
         geometry_logger::line(x, x + 0.01 * S.col(0), vec4(1.0, 0.0, 0.0, 1.0));
         geometry_logger::line(x, x + 0.01 * S.col(1), vec4(0.0, 1.0, 0.0, 1.0));
         geometry_logger::line(x, x + 0.01 * S.col(2), vec4(0.0, 0.0, 1.0, 1.0));

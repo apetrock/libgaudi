@@ -16,9 +16,11 @@ inline vec4 sdf4(double d) {
   return std::abs(d) * outside;
 }
 
+constexpr real k_default_line_radius = 0.01;
+
 // Geometry visualization functions
-void line(const vec3 &p0, const vec3 &p1, const vec4 &color);
-void box(const vec3 &cen, const vec3 &h, const vec4 &col);
+void line(const vec3 &p0, const vec3 &p1, const vec4 &color,
+          real radius = k_default_line_radius);
 void ext(const vec3 &mn, const vec3 &mx, const vec4 &col);
 void frame(const mat3 &M, const vec3 &c, double C);
 void point(const vec3 &p0, const vec4 &color);
@@ -33,4 +35,4 @@ const std::vector<vec4> &get_point_colors();
 } // namespace geometry_logger
 } // namespace gaudi
 
-#endif 
+#endif

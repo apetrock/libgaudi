@@ -39,19 +39,20 @@ inline real shell_leaf_visit_count(asawa::shell::shell &M,
 }
 
 /// Same for polylines / closed rods (`T2` over edges). Query positions should
-/// match the vertex space used to build the tree (`rod.xc()` in integrators).
+/// match the vertex space used to build the tree (`rod.x()` / `__x` in
+/// integrators — true edge endpoints, not edge midpoints).
 /// Note: `fast_summation` uses a 3D AABB volume for the opening test; a
 /// perfectly planar curve can have zero volume at some nodes (`sc==0`), which
 /// forces only the branch path—tests may need a slight out-of-plane wiggle or a
 /// very small `eps` to see leaf callbacks.
 inline real rod_leaf_visit_count(asawa::rod::rod &R, const vec3 &pi,
                                  real eps = 0.5) {
-  std::vector<vec3> xc = R.xc();
+  const std::vector<vec3> &x = R.x();
   std::vector<index_t> edge_verts = R.get_edge_vert_ids();
   std::vector<asawa::rod::CornerId> rverts = R.get_vert_range();
   std::vector<index_t> edge_ids(rverts.begin(), rverts.end());
   std::vector<real> ones(edge_ids.size(), 1.0);
-  arp::T2::ptr tree = arp::T2::create(edge_verts, xc, 12);
+  arp::T2::ptr tree = arp::T2::create(edge_verts, x, 12);
   fast_summation<arp::T2> sum(*tree);
   sum.bind<real>(edge_ids, ones);
   std::vector<vec3> pov = {pi};

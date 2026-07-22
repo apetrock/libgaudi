@@ -1,6 +1,7 @@
 #ifndef ALBERS_LINE_CYLINDER_H
 #define ALBERS_LINE_CYLINDER_H
 
+#include <algorithm>
 #include <Eigen/Dense>
 
 #include "gaudi/common.h"
@@ -83,6 +84,25 @@ public:
   mat6 A;
   vec6 b;
 };
+
+inline vec6 fit_normal_aligned_line(const std::vector<vec3> &points,
+                                    const std::vector<vec3> &normals,
+                                    const std::vector<real> *weights = nullptr) {
+  normal_aligned_line fit;
+  const size_t n = std::min(points.size(), normals.size());
+  for (size_t i = 0; i < n; ++i) {
+    if (normals[i].squaredNorm() < 1e-24) {
+      continue;
+    }
+    const real w =
+        (weights != nullptr && i < weights->size()) ? (*weights)[i] : 1.0;
+    if (w <= 0.0) {
+      continue;
+    }
+    fit.accumulate(w, points[i], normals[i].normalized());
+  }
+  return fit.solve();
+}
 
 } // namespace albers
 } // namespace gaudi

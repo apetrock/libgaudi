@@ -6,7 +6,8 @@
 namespace gaudi {
 namespace geometry_logger {
 
-void line(const vec3 &p0, const vec3 &p1, const vec4 &color) {
+void line(const vec3 &p0, const vec3 &p1, const vec4 &color, real radius) {
+    (void)radius;
     wasm_geometry_logger::line(p0, p1, color);
 }
 

@@ -4,6 +4,8 @@
 
 #include "shell.hpp"
 
+#include "../datums.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -331,6 +333,10 @@ void triangulate_face(shell &M, FaceId fi) {
   }
 }
 
+void triangulate_face(shell &M, FaceId fi);
+
+void remove_orphan_vertices(shell &M);
+
 void triangulate(shell &M) {
   size_t Nf = M.face_count();
   for (int i = 0; i < static_cast<int>(Nf); i++) {
@@ -339,6 +345,47 @@ void triangulate(shell &M) {
       continue;
     triangulate_face(M, fi);
   }
+  remove_orphan_vertices(M);
+}
+
+// Compact the vertex array by dropping vertices that no face references.
+// Orphan vertices keep stale positions in the per-vertex data arrays, which
+// lets downstream POV snapshots emit points with no surface neighborhood
+// (and thus no meaningful medial axis). Remaps corner vertex ids and
+// permutes every VERTEX datum so indices stay dense and consistent.
+void remove_orphan_vertices(shell &M) {
+  const index_t nv = static_cast<index_t>(M.vert_count());
+  std::vector<index_t> old_to_new(nv, -1);
+  std::vector<index_t> permute;
+  permute.reserve(nv);
+  index_t n = 0;
+  for (index_t i = 0; i < nv; ++i) {
+    if (M.vbegin(vert_id(i)) > -1) {
+      old_to_new[i] = n;
+      permute.push_back(i); // permute[new] = old
+      ++n;
+    }
+  }
+  if (n == nv) {
+    return; // no orphans
+  }
+
+  std::vector<index_t> &cv = M.corners_vert();
+  for (index_t &v : cv) {
+    if (v >= 0 && v < nv) {
+      v = old_to_new[v];
+    }
+  }
+
+  for (datum_ptr &d : M.get_data()) {
+    if (d && d->type() == prim_type::VERTEX) {
+      d->permute(permute);
+      d->resize(static_cast<size_t>(n));
+    }
+  }
+
+  M.update_head();
+  M.update_prev();
 }
 
 bool has_vert(shell &M, VertId vA, VertId vB) {

@@ -37,16 +37,10 @@ std::vector<std::vector<vec3>> tunnel(asawa::shell::shell &M,
     total_weight += weights[i];
   }
 
-  std::cout << __PRETTY_FUNCTION__ << std::endl;
-  std::cout << "summing" << std::endl;
-  std::cout << " -n_faces: " << face_ids.size() << std::endl;
-  std::cout << " -create: " << std::endl;
-
   Shell_Tree_Type::ptr face_tree = arp::T3::create(face_vert_ids, x, 16);
   // calder::test_extents(*face_tree);
   //  calder::test_pyramid_scalar(*face_tree, face_ids, weights);
 
-  std::cout << " -sum: " << std::endl;
   Shell_Sum_Type sum(*face_tree);
 
   sum.bind(calder::scalar_datum::create(face_ids, weights));
@@ -54,7 +48,6 @@ std::vector<std::vector<vec3>> tunnel(asawa::shell::shell &M,
 
   std::vector<std::vector<vec3>> paths;
   for (int i = 0; i < start_points.size(); i++) {
-    std::cout << " -compute path: " << std::endl;
     vec3 Ni = Np[i];
     vec3 xi = start_points[i];
     std::vector<vec3> path = {xi};
@@ -184,7 +177,6 @@ public:
   std::vector<std::vector<vec3>> drill(const std::vector<vec3> &start_points,
                                        const std::vector<vec3> &headings) {
     asawa::shell::shell &M = *_M;
-    std::cout << "start_points: " << start_points.size() << std::endl;
     std::vector<std::vector<vec3>> paths =
         calder::tunnel(M, start_points, headings, _eps, 1.5);
     return paths;

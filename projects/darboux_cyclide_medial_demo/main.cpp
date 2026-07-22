@@ -43,7 +43,7 @@ gaudi::duchamp::cyclide_medial_params demo_params() {
   params.medial_smooth_scale = 8.0;
   params.medial_smooth_blend = 1.0;
   params.max_iters = 100;
-  params.tol = 1e-8; 
+  params.tol = 1e-8;
   params.max_travel_scale = 1000.0;
   params.newton_step_scale = 1000.0;
   return params;
@@ -138,8 +138,7 @@ void inspect_exact_convex_fit(gaudi::asawa::shell::shell &M, int vertex,
   const std::vector<gaudi::vec3> p_fit = {pov};
   const std::vector<gaudi::vec3> n_fit = {Ni};
   const std::vector<gaudi::albers::vec14> bh_Qs =
-      gaudi::calder::darboux_cyclide_normal_constrained_convexity(
-          M, p_fit, n_fit, l0, params.fit_p);
+      gaudi::calder::darboux_cyclide_shell_fit(M, p_fit, n_fit, l0, params.fit_p);
   const gaudi::albers::vec14 bh_Q =
       bh_Qs.empty() ? gaudi::albers::vec14::Zero() : bh_Qs.front();
 

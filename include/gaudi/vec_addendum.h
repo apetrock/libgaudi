@@ -55,6 +55,14 @@ namespace va
     return sgn(v0.dot(v1));
   }
 
+  template <typename T>
+  inline T tangent_point_radius(const VEC3<T> &dp, const VEC3<T> &N)
+  {
+    const T ndp = dp.squaredNorm();
+    const T nPdp = (N * N.transpose() * dp).norm();
+    return T(0.5) * ndp / nPdp;
+  }
+
   template <class Tf, class Tv>
   inline Tv linear(Tf f, const Tv &x, const Tv &y)
   {

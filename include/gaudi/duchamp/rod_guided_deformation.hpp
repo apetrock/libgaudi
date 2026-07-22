@@ -54,7 +54,10 @@ public:
 
   rod_guided_deformation() {
     //__M = load_cube();
-    __M = shell::load_bunny();
+    //
+    const int n_sphere = 192;
+    __M = shell::load_sphere(1.0, n_sphere, n_sphere / 2);
+    //__M = shell::load_bunny();
     //__M = shell::load_crab();
 
     shell::triangulate(*__M);
@@ -71,19 +74,19 @@ public:
     // dynamic surface
     /////////
     real l0 = asawa::shell::avg_length(*__M, x);
-    real C = 0.6;
+    real C = 3.0;
     // real C = 2.0;
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, C * l0);
 
     /////////////////////
     // Rod
     /////////////////////
-    std::vector<vec3> x_w = walk(*__M, 0.0, shell::corner_id(0), 4000);
+    std::vector<vec3> x_w = walk(*__M, 0.0, shell::corner_id(0), 10000);
 
     __R = rod::rod::create(x_w, false);
     //__R->_update_frames(normals);
 
-    real lavg = 1.0 * l0;
+    real lavg = 3.0 * l0;
     __R->_r = 0.020;
     __Rd = rod::dynamic::create(__R, 0.35 * lavg, 2.0 * lavg, 0.25 * lavg);
 
@@ -93,6 +96,7 @@ public:
     }
 
     _knotted_surface = knotted_surface_module::create(__M, __surf, __R, __Rd);
+    _knotted_surface->set_dipole_radius(2.0 * __R->_r); // independent of rod collision r
   };
 
   std::vector<vec3> calc_quadric_grad() {
@@ -148,26 +152,19 @@ public:
     for (int i = 0; i < g0.size(); i++) {
       // gg::geometry_logger::line(x[i], x[i] + 1.0e-7 * g0[i],
       //                           vec4(0.6, 0.0, 0.8, 1.0));
-      g0[i] *= -2.0e-6;
+      g0[i] *= 2.0e-6;
     }
     return g0;
   }
 #endif
 
   void step(int frame) {
-    std::cout << "frame: " << frame << std::endl;
-    std::cout << "  -surface" << std::endl;
-    std::cout << "    -corners: " << __M->corner_count() << std::endl;
-    std::cout << "    -verts: " << __M->vert_count() << std::endl;
-    std::cout << "    -faces: " << __M->face_count() << std::endl;
-    std::cout << "  -curve" << std::endl;
-    std::cout << "    -verts: " << __R->x().size() << std::endl;
-
+    _knotted_surface->set_rod_offset(1.0 + 0.02 * real(frame));
     // walk(__surf->_Cc);
     if (frame < 1200) {
       _knotted_surface->init_step(_h);
-      _knotted_surface->add_rod_force(compute_tangent_point_gradient());
-      _knotted_surface->add_shell_force(calc_quadric_grad());
+      //_knotted_surface->add_rod_force(compute_tangent_point_gradient());
+      // _knotted_surface->add_shell_force(calc_quadric_grad());
       _knotted_surface->step(_h);
     }
 

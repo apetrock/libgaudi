@@ -73,14 +73,59 @@ if(WITH_OPENMP)
     endif()
     unset(_GAUDI_BT_CHECK)
 
+    # AppleClang does not ship libomp; Homebrew's keg-only libomp needs hints
+    # before find_package(OpenMP), otherwise discovery silently fails.
+    if(APPLE)
+        set(_gaudi_need_libomp_hints FALSE)
+        if(NOT OpenMP_omp_LIBRARY OR OpenMP_omp_LIBRARY MATCHES "NOTFOUND")
+            set(_gaudi_need_libomp_hints TRUE)
+        endif()
+        if(NOT OpenMP_CXX_FLAGS OR OpenMP_CXX_FLAGS MATCHES "NOTFOUND")
+            set(_gaudi_need_libomp_hints TRUE)
+        endif()
+        if(_gaudi_need_libomp_hints)
+            find_program(GAUDI_BREW_EXECUTABLE brew)
+            if(GAUDI_BREW_EXECUTABLE)
+                execute_process(
+                    COMMAND "${GAUDI_BREW_EXECUTABLE}" --prefix libomp
+                    OUTPUT_VARIABLE GAUDI_LIBOMP_PREFIX
+                    OUTPUT_STRIP_TRAILING_WHITESPACE
+                    ERROR_QUIET
+                    RESULT_VARIABLE GAUDI_LIBOMP_BREW_RC)
+                if(GAUDI_LIBOMP_BREW_RC EQUAL 0 AND EXISTS "${GAUDI_LIBOMP_PREFIX}/include/omp.h")
+                    message(STATUS "Using Homebrew libomp at ${GAUDI_LIBOMP_PREFIX}")
+                    set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${GAUDI_LIBOMP_PREFIX}/include"
+                        CACHE STRING "OpenMP C flags" FORCE)
+                    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${GAUDI_LIBOMP_PREFIX}/include"
+                        CACHE STRING "OpenMP CXX flags" FORCE)
+                    set(OpenMP_C_LIB_NAMES "omp" CACHE STRING "OpenMP C libs" FORCE)
+                    set(OpenMP_CXX_LIB_NAMES "omp" CACHE STRING "OpenMP CXX libs" FORCE)
+                    set(OpenMP_omp_LIBRARY "${GAUDI_LIBOMP_PREFIX}/lib/libomp.dylib"
+                        CACHE FILEPATH "libomp" FORCE)
+                endif()
+            endif()
+        endif()
+        unset(_gaudi_need_libomp_hints)
+    endif()
+
     find_package(OpenMP)
-    if(OPENMP_FOUND)
-        message(STATUS "OpenMP found, setting OpenMP vars")
-        set(ENV{OMP_NUM_THREADS} 8)
+    if(OpenMP_CXX_FOUND)
+        message(STATUS "OpenMP found (CXX version ${OpenMP_CXX_VERSION})")
+        # Prefer modern imported target; also keep legacy flags for older paths.
+        set(GAUDI_HAS_OPENMP ON)
+    elseif(OPENMP_FOUND)
+        message(STATUS "OpenMP found (legacy OPENMP_FOUND)")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+        set(GAUDI_HAS_OPENMP ON)
+    else()
+        message(WARNING "WITH_OPENMP=ON but OpenMP was not found. "
+            "On macOS install libomp (brew install libomp) and reconfigure.")
+        set(GAUDI_HAS_OPENMP OFF)
     endif()
+else()
+    set(GAUDI_HAS_OPENMP OFF)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -205,6 +250,7 @@ if(GAUDI_WITH_VERMEER)
     add_subdirectory(projects/vermeer_rod_guided_demo)
     add_subdirectory(projects/vermeer_darboux_cyclide_medial_demo)
     add_subdirectory(projects/vermeer_rod_constraints_demo)
+    add_subdirectory(projects/vermeer_dipole_tunneling_demo)
 else()
     message(STATUS "GAUDI_WITH_VERMEER=OFF, skipping WebGPU projects")
 endif()

@@ -54,8 +54,13 @@ public:
 
   static duchamp_mesh_scene create(duchamp::demo_trait::ptr demo,
                                    std::size_t mesh_count = k_slot_count) {
-    duchamp_mesh_scene scene;
+    duchamp_mesh_scene scene = create(mesh_count);
     scene._demo = std::move(demo);
+    return scene;
+  }
+
+  static duchamp_mesh_scene create(std::size_t mesh_count = k_slot_count) {
+    duchamp_mesh_scene scene;
     scene._meshes.reserve(mesh_count);
     for (std::size_t i = 0; i < mesh_count; ++i) {
       scene._meshes.push_back(lewitt::mesh_buffer::create());
@@ -79,6 +84,19 @@ public:
       sync_slot(mesh_slot::rod, [&]() { return _demo->rod_mesh(); }, ctx.device,
                 default_color);
     }
+  }
+
+  // Upload from a published SceneFrame (render thread; no demo access).
+  // Always replace slot contents — each SceneFrame is intentionally new, so
+  // skip the expensive full-mesh hash used by update().
+  void apply_snapshots(const std::optional<duchamp::mesh_snapshot> &shell,
+                       const std::optional<duchamp::mesh_snapshot> &rod,
+                       wgpu::Device device,
+                       const glm::vec3 &default_color =
+                           glm::vec3(0.72f, 0.74f, 0.78f)) {
+    LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_mesh_scene::apply_snapshots");
+    force_slot(mesh_slot::shell, shell, device, default_color);
+    force_slot(mesh_slot::rod, rod, device, default_color);
   }
 
   const std::vector<lewitt::mesh_buffer::ptr> &meshes() const { return _meshes; }
@@ -115,6 +133,22 @@ private:
       clear_mesh_buffer(*mesh);
       _last_snapshot_hashes[index].reset();
     }
+  }
+
+  void force_slot(mesh_slot slot,
+                  const std::optional<duchamp::mesh_snapshot> &snapshot,
+                  wgpu::Device device, const glm::vec3 &default_color) {
+    const auto index = static_cast<std::size_t>(slot);
+    if (index >= _meshes.size())
+      return;
+    auto mesh = _meshes[index];
+    if (!mesh)
+      return;
+    if (snapshot)
+      update_mesh_buffer(*mesh, *snapshot, device, default_color);
+    else
+      clear_mesh_buffer(*mesh);
+    _last_snapshot_hashes[index].reset();
   }
 
   duchamp::demo_trait::ptr _demo;

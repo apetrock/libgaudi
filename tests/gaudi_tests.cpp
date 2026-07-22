@@ -12,10 +12,16 @@
 #include "gaudi/test/shell_dynamic_tests.hpp"
 #include "gaudi/test/tree_backend_validation_tests.hpp"
 #include "gaudi/test/field_tests.hpp"
+#include "gaudi/test/field_graph_tests.hpp"
+#include "gaudi/test/medial_graph_tests.hpp"
+#include "gaudi/test/cyclide_smooth_tests.hpp"
+#include "gaudi/test/kusama_cyclide_smooth_tests.hpp"
+#include "gaudi/test/medial_bench_tests.hpp"
 #include "gaudi/test/solver_node_tests.hpp"
 #include "gaudi/test/rod_solver_tests.hpp"
 #include "gaudi/test/rod_force_graph_tests.hpp"
 #include "gaudi/test/rod_mesh_snapshot_tests.hpp"
+#include "gaudi/test/dipole_tunneling_tests.hpp"
 #include "liblombardi_tests.cpp"
 
 int main() {

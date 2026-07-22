@@ -25,6 +25,11 @@ struct solver_context {
   int iterations = 10;
 };
 
+template <size_t... Is>
+inline std::vector<sim_block::ptr> select_blocks(const solver_context &ctx) {
+  return {ctx.blocks[Is]...};
+}
+
 using presolve_fn = std::function<void(solver_context &)>;
 using constraint_recompute_fn = std::function<void(solver_context &)>;
 using constraint_bundle = std::vector<constraint_recompute_fn>;
