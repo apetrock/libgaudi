@@ -92,6 +92,17 @@ private:
 
   void worker_loop() {
     using namespace std::chrono_literals;
+
+    // Publish post-reset geometry before any step so init / first present see
+    // the starting scene without waiting on (or skipping past) step 0.
+    if (_running.load(std::memory_order_acquire)) {
+      geometry_logger::clear();
+      const int frame0 =
+          _playback ? _playback->sim_frame.load(std::memory_order_relaxed)
+                    : _fallback_frame;
+      _channel.publish(capture_frame(frame0));
+    }
+
     while (_running.load(std::memory_order_acquire)) {
       // Don't start the next (expensive) step until render has taken the last
       // frame — otherwise the worker busy-loops and starves the main thread.

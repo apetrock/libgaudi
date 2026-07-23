@@ -92,19 +92,20 @@ public:
 
   virtual void map_from_x(const vecX &q, const real &h, const real &damp) {
     std::vector<vec3> x1(_x.size());
-    std::vector<vec3> v(_x.size());
     sim_block::map_from_x(q, x1);
 
+    // Paper / Bouaziz: v^{t+1} = (x^{t+1} - x^t) / h  (not vs the prediction s).
+    const std::vector<vec3> &x0 = _x_prev.size() == _x.size() ? _x_prev : _x;
     for (int i = 0; i < _x.size(); i++)
-      v[i] = (1.0 - damp) / h * (x1[i] - _x[i]);
+      _v[i] = (1.0 - damp) / h * (x1[i] - x0[i]);
 
     _x = x1;
-    _v = v;
   }
 
   virtual void integrate_inertia(const real &h) {
+    _x_prev = _x;
     for (size_t i = 0; i < _v.size(); i++) {
-
+      // s = x + h v + h² a  (f stored as acceleration, matching existing force path)
       _x[i] += h * _v[i] + h * h * _f[i];
     }
   }
@@ -115,6 +116,7 @@ public:
   std::vector<vec3> &_v;
   std::vector<vec3> &_f;
   std::vector<vec3> &_M;
+  std::vector<vec3> _x_prev;
 };
 
 class quat_block : public sim_block {
@@ -142,35 +144,46 @@ public:
   virtual void map_mass(vecX &q) { sim_block::map_to_x<4, vec4>(_J, q); }
 
   virtual void map_from_x(const vecX &q, const real &h, const real &damp) {
-    sim_block::map_from_x(q, _u);
-
     std::vector<quat> u1(_u.size());
-    std::vector<quat> o(_o.size());
     sim_block::map_from_x(q, u1);
 
-    for (int i = 0; i < _u.size(); i++) {
-      o[i] = _u[i].conjugate() * u1[i];
-      o[i].coeffs() *= 2.0 * (1.0 - damp) / h;
+    // Soler et al. Alg.1 line 12: ω^{t+1} = (2/h) Im(ū^t ◦ u^{t+1})
+    // Must use u^t saved before integrate — not the prediction s_u, and not u^{t+1}.
+    const std::vector<quat> &u0 = _u_prev.size() == _u.size() ? _u_prev : _u;
+    for (int i = 0; i < static_cast<int>(_u.size()); i++) {
+      quat dq = u0[i].conjugate() * u1[i];
+      if (dq.w() < 0.0)
+        dq.coeffs() *= -1.0; // short arc
+      dq.coeffs() *= 2.0 * (1.0 - damp) / h;
+      _o[i] = dq;
     }
-
     _u = u1;
-    _o = o;
   }
 
   virtual void integrate_inertia(const real &h) {
+    // Soler et al. Alg.1 lines 3–4:
+    //   s_ω = ω + h J⁻¹[τ − ω × (Jω)]
+    //   s_u = u + (h/2)(u ◦ s_ω)
+    // τ is world-space; convert to body for Newton–Euler.
+    _u_prev = _u;
     for (size_t i = 0; i < _o.size(); i++) {
-      quat o = _o[i];
-      quat u = _u[i];
+      vec3 omega(_o[i].x(), _o[i].y(), _o[i].z());
+      const vec4 &Ji = _J[i];
+      const vec3 Jw(Ji[0] * omega[0], Ji[1] * omega[1], Ji[2] * omega[2]);
 
-      quat sO = o;
-      if (_torques && i < _torques->size()) {
-        const vec3 &tau = (*_torques)[i];
-        const quat tau_q(0.0, tau.x(), tau.y(), tau.z());
-        sO.coeffs() += h * h * (u * tau_q).coeffs();
+      vec3 tau_body = vec3::Zero();
+      if (_torques && i < _torques->size())
+        tau_body = _u[i].inverse() * (*_torques)[i];
+
+      const vec3 torque_net = tau_body - omega.cross(Jw);
+      for (int k = 0; k < 3; ++k) {
+        const real Jk = std::max(std::abs(Ji[k]), real(1e-12));
+        omega[k] += h * torque_net[k] / Jk;
       }
-      quat su = u;
 
-      su.coeffs() += 0.5 * h * (u * sO).coeffs();
+      const quat sO(0.0, omega[0], omega[1], omega[2]);
+      quat su = _u[i];
+      su.coeffs() += 0.5 * h * (_u[i] * sO).coeffs();
       _u[i] = su;
       _u[i].normalize();
     }
@@ -181,6 +194,7 @@ public:
   std::vector<quat> &_o;
   std::vector<vec4> &_J;
   std::vector<vec3> *_torques = nullptr;
+  std::vector<quat> _u_prev;
 };
 
 } // namespace hepworth

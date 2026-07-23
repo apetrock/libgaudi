@@ -22,6 +22,7 @@
 #include "gaudi/test/rod_force_graph_tests.hpp"
 #include "gaudi/test/rod_mesh_snapshot_tests.hpp"
 #include "gaudi/test/dipole_tunneling_tests.hpp"
+#include "gaudi/test/symmetric_bezier_tests.hpp"
 #include "liblombardi_tests.cpp"
 
 int main() {

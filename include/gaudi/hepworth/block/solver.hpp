@@ -61,6 +61,10 @@ public:
       block->integrate_inertia(h);
       block->map_to_x(s);
     }
+    // Soler et al. Alg.1 line 6: start local/global from the momentum prediction.
+    // Without this, project() runs on q^t and never sees torque-tipped frames, so
+    // bend/twist springs cannot propagate twist to neighbors.
+    q = s;
     int Nm = q.size();
 
     std::vector<trip> triplets;

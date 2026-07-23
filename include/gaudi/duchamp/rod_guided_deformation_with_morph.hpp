@@ -50,24 +50,7 @@ namespace gaudi
 
     int ROT = 600;
 
-    struct walk_config
-    {
-      walk_config(index_t i0 = 0, index_t N_steps = 4000, real thet = 0.0, //
-                  bool rotate = false, vec2 cr = vec2(5.0, -8.0),
-                  bool align = false, vec4 ca = vec4(1.0, 0.5, 0.0, 0.0))
-          : i0(i0), N_steps(N_steps), thet(thet), rotate(rotate), align(align)
-      {
-        this->ca = ca;
-        this->cr = cr;
-      };
-      index_t i0 = 0;
-      index_t N_steps = 15000;
-      real thet = 0.0;
-      bool align = false;
-      vec4 ca = vec4(5.0, -8.0, 0.0, 0.0);
-      bool rotate = false;
-      vec2 cr = vec2(1.0, 0.5);
-    };
+    using walk_config = silly_walk_config;
 
     const int N_walk_configs = 6;
 
@@ -77,22 +60,33 @@ namespace gaudi
     int iwp = (iw0 + N_walk_configs - 1) % N_walk_configs;
     int Nw = 2500;
     walk_config _wc[N_walk_configs] = {
-        walk_config(100, Nw, 1.5, false, vec2(0.0, 0.0), false,
-                    vec4(0.0, 0.0, 0.0, 0.0)),
-        walk_config(100, Nw, 0.55, false, vec2(0.0, 0.0), false,
-                    vec4(0.0, 0.0, 0.0, 0.0)), // jennifer_0
-        walk_config(100, Nw, 0.23, true, vec2(3.0, -5.0), false,
-                    vec4(0.0, 0.6, 0.0, 0.0)),
-        walk_config(100, Nw, 0.6, true, vec2(6.0, -8.0), true,
-                    vec4(1.0, 0.1, 0.1, 0.25)),
-        walk_config(100, Nw, 0.265, false, vec2(0.0, 0.0), true,
-                    vec4(1.0, 0.2, 0.3, 0.00)),
-        walk_config(100, Nw, 2.5, false, vec2(0.0, 0.0), true,
-                    vec4(0.5, 0.0, 0.65, 0.22))};
-    // walk_config(0, 4000, 0.0, false, vec2(5.0, -8.0), false,
-    // vec4(1.0, 0.5, 0.0, 0.0)),
-    // walk_config(0, 4000, 0.0, false, vec2(5.0, -8.0), false,
-    // vec4(1.0, 0.5, 0.0, 0.0))};
+        {.i0 = 100, .N_steps = Nw, .thet = 1.5},
+        {.i0 = 100, .N_steps = Nw, .thet = 0.55}, // jennifer_0
+        {.i0 = 100,
+         .N_steps = Nw,
+         .thet = 0.23,
+         .rotate = true,
+         .twist_amp = 3.0,
+         .twist_freq = -5.0},
+        {.i0 = 100,
+         .N_steps = Nw,
+         .thet = 0.6,
+         .rotate = true,
+         .twist_amp = 6.0,
+         .twist_freq = -8.0,
+         .align = true,
+         .ca = vec3(1.0, 0.1, 0.25)},
+        {.i0 = 100,
+         .N_steps = Nw,
+         .thet = 0.265,
+         .align = true,
+         .ca = vec3(1.0, 0.2, 0.3)},
+        {.i0 = 100,
+         .N_steps = Nw,
+         .thet = 2.5,
+         .align = true,
+         .ca = vec3(0.5, 0.0, 0.65)},
+    };
 
     inline vec3 hsv_mix(real t, vec3 a, vec3 b)
     {
@@ -219,16 +213,10 @@ namespace gaudi
         // Rod
         /////////////////////
         walk_config wc0 = _wc[iw0];
-        std::vector<vec3> x_w =                                                //
-            silly_walk(*__M, wc0.thet, asawa::shell::corner_id(wc0.i0), wc0.N_steps, //
-                       wc0.rotate, wc0.cr,                                     //
-                       wc0.align, wc0.ca, _eps);
+        std::vector<vec3> x_w = wc0.run(*__M);
 
         walk_config wc1 = _wc[iw1];
-        _target =                                                              //
-            silly_walk(*__M, wc1.thet, asawa::shell::corner_id(wc1.i0), wc1.N_steps, //
-                       wc1.rotate, wc1.cr,                                     //
-                       wc1.align, wc1.ca, _eps);
+        _target = wc1.run(*__M);
 
         __R = rod::rod::create(x_w, false);
         //__R->_update_frames(normals);

@@ -50,6 +50,8 @@ public:
 
     _pipeline = PipelineT::create(ctx, _scene.mesh_refs(), debug_line_weak_refs({_debug_lines}));
     _pipeline.rebind_pool();
+    if (_last_frame)
+      _pipeline.request_record_frame();
     return static_cast<bool>(_pipeline.gbuffer) && static_cast<bool>(_pipeline.sink);
   }
 
@@ -59,9 +61,12 @@ public:
     if (_playback)
       poll_playback_input(*_playback, ctx.window);
 
+    const bool live = ctx.scene && ctx.scene->camera_animating();
     if (auto next = _runtime.channel().take_latest(_seen_generation)) {
       apply_frame(ctx, *next);
       _last_frame = std::move(next);
+      if (!live)
+        _pipeline.request_record_frame();
     }
   }
 
@@ -71,6 +76,8 @@ public:
     LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_graph_project::render");
     ctx.scene->update();
     ctx.scene->update_uniforms(ctx.queue);
+    if (ctx.scene && ctx.scene->camera_animating())
+      _pipeline.request_record_frame();
     _pipeline.set_meshes(_scene.mesh_refs());
     _pipeline.set_debug_lines(debug_line_weak_refs({_debug_lines}));
     _pipeline.render(ctx, overlay);

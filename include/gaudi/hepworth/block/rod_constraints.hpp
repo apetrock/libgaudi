@@ -217,12 +217,22 @@ public:
   static ptr create(const std::vector<index_t> &ids, 
              const std::vector<quat> &u, const real &w,
              std::vector<sim_block::ptr> blocks) {
-    return std::make_shared<bend_twist>(ids, u, w, blocks);
+    return std::make_shared<bend_twist>(ids, u, w, w, blocks);
+  }
+  static ptr create(const std::vector<index_t> &ids,
+             const std::vector<quat> &u, const real &w_bend, const real &w_twist,
+             std::vector<sim_block::ptr> blocks) {
+    return std::make_shared<bend_twist>(ids, u, w_bend, w_twist, blocks);
   }
   bend_twist(const std::vector<index_t> &ids, 
              const std::vector<quat> &u, const real &w,
              std::vector<sim_block::ptr> blocks)
-      : block_constraint(ids, w, blocks) {
+      : bend_twist(ids, u, w, w, blocks) {}
+  bend_twist(const std::vector<index_t> &ids,
+             const std::vector<quat> &u, const real &w_bend, const real &w_twist,
+             std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, std::max(w_bend, w_twist), blocks),
+        _w_bend(w_bend), _w_twist(w_twist) {
 
         quat ui = u[ids[0]];
         quat uj = u[ids[1]];
@@ -240,7 +250,28 @@ public:
     quat uj = _blocks[0]->get_quat(jj, q);
     quat O = ui.inverse() * uj;
     quat dO = O.inverse() * _O;
-    //dO = uj * ui.inverse() * _
+
+    // Anisotropic correction: material e2 is the rod tangent (see rod frames).
+    // Scale bend (⊥ e2) vs twist (∥ e2) independently, then weight rows by max.
+    {
+      Eigen::AngleAxis<real> aa(dO);
+      vec3 omega = aa.angle() * aa.axis();
+      const vec3 e2 = vec3::UnitZ();
+      const vec3 omega_t = omega.dot(e2) * e2;
+      const vec3 omega_b = omega - omega_t;
+      const real wmax = std::max(_w_bend, _w_twist);
+      if (wmax > 1.0e-16) {
+        const vec3 omega_corr =
+            (_w_bend / wmax) * omega_b + (_w_twist / wmax) * omega_t;
+        const real ang = omega_corr.norm();
+        if (ang > 1.0e-16) {
+          dO = quat(Eigen::AngleAxis<real>(ang, omega_corr / ang));
+        } else {
+          dO = quat::Identity();
+        }
+      }
+    }
+
     ui = ui * dO.inverse();
     uj = uj * dO;
 
@@ -263,6 +294,8 @@ public:
     id0 += 8;
   }
   quat _O;
+  real _w_bend = 1.0;
+  real _w_twist = 1.0;
 };
 
 

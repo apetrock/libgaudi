@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "gaudi/common.h"
+#include "gaudi/geometry_logger.hpp"
 #include "gaudi/geometry_types.hpp"
 #include "gaudi/vec_addendum.h"
 
@@ -52,13 +53,13 @@ public:
                                                     hepworth::block::rod_quaternion_block>::create()
                   .with_blocks(_rod_pos, _rod_quat)
                   .with_bundle(hepworth::block::make_rod_physics_bundle<0, 1>(
-                      __R, __Rd, 1e-1, 2e-1, 1.0))
+                      __R, __Rd, 1e-2, 1e-2, 1.0))
                   .dt(0.05)
-                  .damping(0.01)
+                  .damping(0.1)
                   .build();
 
     _boundary = _graph.create_node<boundary_gradient_node>(__R, __sdf0, __sdf1);
-    _tangent = _graph.create_node<tangent_point_gradient_node>(__R, __Rd, 0.0e-7);
+    _tangent = _graph.create_node<tangent_point_gradient_node>(__R, __Rd, 1.0e-8);
     _vortex = _graph.create_node<vortex_force_node>(__R, __Rd, 1e-1, 4.0, 0.0);
     _add = _graph.create_node<vec3_junction_node<3>>();
     _solver_node = _graph.create_node<
@@ -80,9 +81,20 @@ public:
     _boundary->set_frame(frame);
     _graph.run();
     __Rd->step();
+#if 1 // draw_frames — flip to 0 to disable
+    draw_frames();
+#endif
   }
 
 private:
+  void draw_frames(real scale = 0.12) const {
+    const std::vector<vec3> &x = __R->x();
+    const std::vector<quat> &u = __R->u();
+    const size_t n = std::min(x.size(), u.size());
+    for (size_t i = 0; i < n; ++i)
+      geometry_logger::frame(u[i].toRotationMatrix(), x[i], scale);
+  }
+
   std::vector<vec3> get_fib(real r0, int N = 13) {
     const real golden = 0.5 * (1.0 + sqrt(5));
     std::vector<vec3> cens(N, vec3::Zero());

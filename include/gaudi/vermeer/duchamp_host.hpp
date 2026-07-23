@@ -22,6 +22,10 @@ public:
       : _demo(std::move(demo)), _config(config) {}
 
   int run(uint32_t initial_width = 1280, uint32_t initial_height = 720) {
+    // Apply VERMEER_RECORD* here so demos that construct duchamp_host
+    // directly (not via vermeer()) still pick up gaudi.py defaults.
+    apply_record_env(_config);
+
     lewitt::app_runner app;
     auto playback = std::make_shared<duchamp_playback>();
     playback->set_window_title(_demo ? _demo->name() : "Vermeer");

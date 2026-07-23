@@ -81,8 +81,17 @@ public:
     /////////////////////
     // Rod
     /////////////////////
-    std::vector<vec3> x_w = walk(*__M, 0.0, shell::corner_id(0), 10000);
-
+    silly_walk_config walk_cfg{
+        .i0 = 0,
+        .N_steps = 10000,
+        .thet = M_PI / 2.0,
+        .rotate = true,
+        .twist_amp = 1.00,
+        .twist_freq = 0.6,
+        .align = true,
+        .ca = vec3(0.05, 0.08, 2.3),
+    };
+    std::vector<vec3> x_w = walk_cfg.run(*__M);
     __R = rod::rod::create(x_w, false);
     //__R->_update_frames(normals);
 

@@ -180,15 +180,21 @@ public:
       }
       
       real M = M_PI * _r * _r * mass;
-      real J = mass * rho * M * _r * _r;
+      // Soler et al.: J'_n = l ρ diag(J1,J2,J3) with circular
+      // J1=J2=πr⁴/4, J3=πr⁴/2. Stored as Eigen quat coeffs (x,y,z,w) with w=0.
+      const real r2 = _r * _r;
+      const real r4 = r2 * r2;
+      const real J1 = M_PI * r4 / 4.0;
+      const real J3 = M_PI * r4 / 2.0;
+      const real lrho = mass * rho;
 
       __M[i][0] = M;
       __M[i][1] = M;
       __M[i][2] = M;
 
-      __J[i][0] = 0.25 * J;
-      __J[i][1] = 0.25 * J;
-      __J[i][2] = 0.5 * J;
+      __J[i][0] = lrho * J1;
+      __J[i][1] = lrho * J1;
+      __J[i][2] = lrho * J3;
       __J[i][3] = 0.0;
       
       if (next(ci) != corner_id(-1)) {

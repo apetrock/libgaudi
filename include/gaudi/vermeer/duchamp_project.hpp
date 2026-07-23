@@ -41,7 +41,7 @@ public:
     _runtime.reset_demo();
     _runtime.start();
 
-    // Wait briefly for the first sim frame so the first present isn't empty.
+    // Wait briefly for the pre-step SceneFrame so the first present isn't empty.
     for (int i = 0; i < 200 && !_last_frame; ++i) {
       if (auto frame = _runtime.channel().take_latest(_seen_generation)) {
         apply_frame(ctx, *frame);
@@ -56,6 +56,8 @@ public:
     graph_config.record = _config.record;
     _graph = lewitt::make_pipeline_graph(ctx, _scene.mesh_refs(),
                                          debug_line_weak_refs({_debug_lines}), graph_config);
+    if (_graph && _last_frame)
+      _graph->request_record_frame();
     return static_cast<bool>(_graph);
   }
 
@@ -65,9 +67,13 @@ public:
     if (_playback)
       poll_playback_input(*_playback, ctx.window);
 
+    const bool live = ctx.scene && ctx.scene->camera_animating();
     if (auto next = _runtime.channel().take_latest(_seen_generation)) {
       apply_frame(ctx, *next);
       _last_frame = std::move(next);
+      // Sim-synced capture when the camera is idle; live mode handles orbit/zoom.
+      if (_graph && !live)
+        _graph->request_record_frame();
     }
   }
 
@@ -78,6 +84,9 @@ public:
     (void)overlay;
     ctx.scene->update();
     ctx.scene->update_uniforms(ctx.queue);
+    // Live capture while orbiting / coasting / scrolling so camera moves land in the dump.
+    if (_graph && ctx.scene && ctx.scene->camera_animating())
+      _graph->request_record_frame();
     _graph->set_meshes(_scene.mesh_refs());
     _graph->set_debug_lines(debug_line_weak_refs({_debug_lines}));
     _graph->compute(ctx);

@@ -1,0 +1,1 @@
+add_gaudi_vermeer_project(vermeer_torque_loop_demo SOURCES main.cpp)

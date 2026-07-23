@@ -10,6 +10,7 @@
 #include "gaudi/hepworth/block/generic_constraints_init.hpp"
 #include "gaudi/hepworth/block/rod_constraints_init.hpp"
 #include "gaudi/hepworth/block/shell_constraints_init.hpp"
+#include "gaudi/hepworth/block/symmetric_bezier_constraint.hpp"
 #include "gaudi/hepworth/block/sim_block.hpp"
 #include "gaudi/hepworth/block/solver_composition.hpp"
 #include "gaudi/hepworth/blocks/rod_position_block.hpp"
@@ -105,11 +106,35 @@ inline constraint_recompute_fn make_rod_stretch_shear_recompute(asawa::rod::rod:
 }
 
 template <size_t... Is>
+inline constraint_recompute_fn make_rod_smooth_recompute(asawa::rod::rod::ptr rod,
+                                                         real w) {
+  return [rod, w](solver_context &ctx) {
+    init_smooth(*rod, ctx.constraints, w, select_blocks<Is...>(ctx));
+  };
+}
+
+template <size_t... Is>
+inline constraint_recompute_fn make_rod_symmetric_bezier_recompute(
+    asawa::rod::rod::ptr rod, real w) {
+  return [rod, w](solver_context &ctx) {
+    init_symmetric_bezier(*rod, ctx.constraints, w, select_blocks<Is...>(ctx));
+  };
+}
+
+template <size_t... Is>
+inline constraint_recompute_fn make_rod_bend_twist_recompute(asawa::rod::rod::ptr rod,
+                                                             real w_bend,
+                                                             real w_twist) {
+  return [rod, w_bend, w_twist](solver_context &ctx) {
+    init_bend_twist(*rod, ctx.constraints, w_bend, w_twist,
+                    select_blocks<Is...>(ctx), false);
+  };
+}
+
+template <size_t... Is>
 inline constraint_recompute_fn make_rod_bend_twist_recompute(asawa::rod::rod::ptr rod,
                                                              real w) {
-  return [rod, w](solver_context &ctx) {
-    init_bend_twist(*rod, ctx.constraints, w, select_blocks<Is...>(ctx), false);
-  };
+  return make_rod_bend_twist_recompute<Is...>(rod, w, w);
 }
 
 template <size_t... Is>
@@ -127,10 +152,20 @@ template <size_t IPos, size_t IQuat>
 inline constraint_bundle make_rod_physics_bundle(asawa::rod::rod::ptr rod,
                                                  asawa::rod::dynamic::ptr dynamic,
                                                  real stretch_w, real bend_w,
-                                                 real collision_w) {
+                                                 real twist_w, real collision_w) {
   return {make_rod_stretch_shear_recompute<IPos, IQuat>(rod, stretch_w),
-          make_rod_bend_twist_recompute<IQuat>(rod, bend_w),
+          make_rod_bend_twist_recompute<IQuat>(rod, bend_w, twist_w),
           make_rod_collisions_recompute<IPos>(rod, dynamic, collision_w)};
+}
+
+// Backward-compatible: bend_w used for both bend and twist.
+template <size_t IPos, size_t IQuat>
+inline constraint_bundle make_rod_physics_bundle(asawa::rod::rod::ptr rod,
+                                                 asawa::rod::dynamic::ptr dynamic,
+                                                 real stretch_w, real bend_w,
+                                                 real collision_w) {
+  return make_rod_physics_bundle<IPos, IQuat>(rod, dynamic, stretch_w, bend_w,
+                                              bend_w, collision_w);
 }
 
 } // namespace block

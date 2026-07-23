@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "gaudi/common.h"
+#include "gaudi/asawa/shell/dynamic.hpp"
 #include "shell_collision_constraint.hpp"
 #include "shell_constraints.hpp"
 #include "gaudi/geometry_logger.hpp"

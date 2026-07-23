@@ -1,0 +1,13 @@
+# Medial shape energy — pure W, ε-only objective
+
+# W = P H P / ||g||   (regular surface; guard ||g|| < tol → W = 0)
+# s2 = trace(W * W)
+# E = 1 / (s2 + eps)
+# E', E'' from chain rule on W jets
+
+given g, g_dot, g_ddot ∈ ℝ³
+given H, H_dot, H_ddot ∈ ℝ^(3×3)
+given eps ∈ ℝ
+
+# Medial search near negative singularities (||g||→0):
+# hybrid damped Newton + bracket fallback + backoff — not σ in W

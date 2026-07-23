@@ -3,10 +3,14 @@
 
 Usage:
     python gaudi.py test [--debug] [--asan]
-    python gaudi.py run <target> [--debug] [--asan] [--shift-fraction F] [-- EXTRA ...]
+    python gaudi.py run <target> [--debug] [--asan] [--no-record] [--record-path PATH]
+                          [--shift-fraction F] [-- EXTRA ...]
     python gaudi.py build <target> [--debug] [--asan]
     python gaudi.py configure <profile> [--debug] [--asan]
     python gaudi.py list
+
+Vermeer runs record to dump/<target>.mp4 by default (requires ffmpeg).
+Use --no-record to disable, or --record-path to override the output stem.
 """
 
 import argparse
@@ -242,7 +246,30 @@ def build(profile_key, target, config, asan=False):
     return subprocess.run(cmd).returncode
 
 
-def run_exe(profile_key, target, config, extra_args=None, asan=False):
+def _vermeer_record_env(env, target, record_path=None):
+    """Enable FFmpeg capture for Vermeer demos into dump/<target>.mp4."""
+    stem = Path(record_path) if record_path else (ROOT / "dump" / target)
+    if not stem.is_absolute():
+        stem = ROOT / stem
+    stem.parent.mkdir(parents=True, exist_ok=True)
+    # Respect a pre-set VERMEER_RECORD_PATH unless --record-path was given.
+    if record_path is not None or "VERMEER_RECORD_PATH" not in env:
+        env["VERMEER_RECORD_PATH"] = str(stem)
+    env["VERMEER_RECORD"] = "1"
+    print(f">> VERMEER_RECORD=1 VERMEER_RECORD_PATH={env['VERMEER_RECORD_PATH']}")
+    print(f">>   output: {env['VERMEER_RECORD_PATH']}.mp4 (sim frames only)")
+    return env
+
+
+def run_exe(
+    profile_key,
+    target,
+    config,
+    extra_args=None,
+    asan=False,
+    record=False,
+    record_path=None,
+):
     exe = exe_path(profile_key, target, config, asan)
     if not exe.exists():
         sys.exit(f"Error: executable not found at {exe}")
@@ -250,8 +277,9 @@ def run_exe(profile_key, target, config, extra_args=None, asan=False):
     if extra_args:
         argv.extend(extra_args)
     env = None
-    if asan:
+    if asan or record:
         env = os.environ.copy()
+    if asan:
         env["ASAN_OPTIONS"] = "symbolize=1:halt_on_error=1"
         env["UBSAN_OPTIONS"] = "print_stacktrace=1:halt_on_error=1"
         if "ASAN_SYMBOLIZER_PATH" not in env:
@@ -262,6 +290,8 @@ def run_exe(profile_key, target, config, extra_args=None, asan=False):
             f">> ASAN_OPTIONS={env['ASAN_OPTIONS']} "
             f"UBSAN_OPTIONS={env['UBSAN_OPTIONS']}"
         )
+    if record:
+        _vermeer_record_env(env, target, record_path)
     print(f">> {' '.join(argv)}")
     return subprocess.run(argv, env=env).returncode
 
@@ -296,7 +326,32 @@ def cmd_run(args):
     forward = list(args.forward or [])
     if getattr(args, "shift_fraction", None) is not None:
         forward = ["--shift-fraction", str(args.shift_fraction)] + forward
-    sys.exit(run_exe(profile, target, config, forward if forward else None, args.asan))
+
+    record = profile == "vermeer" and not getattr(args, "no_record", False)
+    record_path = getattr(args, "record_path", None)
+    if record_path is not None and profile != "vermeer":
+        print(
+            "Warning: --record-path ignored (recording is Vermeer-only).",
+            file=sys.stderr,
+        )
+        record_path = None
+    if record and not shutil.which("ffmpeg"):
+        print(
+            "Warning: ffmpeg not found on PATH; recording may fail to start.",
+            file=sys.stderr,
+        )
+
+    sys.exit(
+        run_exe(
+            profile,
+            target,
+            config,
+            forward if forward else None,
+            args.asan,
+            record=record,
+            record_path=record_path,
+        )
+    )
 
 
 def cmd_build(args):
@@ -348,6 +403,7 @@ def cmd_list(_args):
     print()
     print(f"Build profiles: {', '.join(PROFILES)}")
     print("Use --asan on test/build/run/configure for ASan+UBSan (separate *_asan dirs).")
+    print("Vermeer run defaults to FFmpeg dump/<target>.mp4; use --no-record to disable.")
     print(f"CMake generator: {_cmake_generator()}")
 
 
@@ -372,6 +428,9 @@ def main():
         epilog=(
             "Examples:\n"
             "  python gaudi.py run vermeer_dipole_tunneling_demo\n"
+            "          (Vermeer: records to dump/<target>.mp4 by default)\n"
+            "  python gaudi.py run vermeer_dipole_tunneling_demo --no-record\n"
+            "  python gaudi.py run vermeer_dipole_tunneling_demo --record-path dump/my_run\n"
             "  python gaudi.py run spectral_modes_test --shift-fraction 0.35\n"
             "          (F=0 low spectrum, F=1 high, 0<F<1 interior via shift-invert)"
         ),
@@ -383,6 +442,19 @@ def main():
         "--asan",
         action="store_true",
         help="ASan+UBSan build (CMAKE_BUILD_TYPE=asan, uses <profile>_asan dir)",
+    )
+    p_run.add_argument(
+        "--no-record",
+        action="store_true",
+        help="Disable default FFmpeg recording for Vermeer targets",
+    )
+    p_run.add_argument(
+        "--record-path",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Vermeer recording stem (default: dump/<target> → dump/<target>.mp4)"
+        ),
     )
     p_run.add_argument(
         "--shift-fraction",

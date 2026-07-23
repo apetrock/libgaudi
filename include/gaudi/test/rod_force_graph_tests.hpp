@@ -127,6 +127,71 @@ GAUDI_TEST(rod_force_graph_external_force_drives_motion) {
   GAUDI_ASSERT(delta.dot(force) > 1e-6);
 }
 
+GAUDI_TEST(rod_torque_graph_external_torque_drives_frame) {
+  auto R = asawa::rod::rod::create(make_force_loop_points());
+  const real lavg = R->lavg();
+  auto Rd = asawa::rod::dynamic::create(R, 0.25 * lavg, 2.5 * lavg, 0.25 * lavg);
+  auto rod_pos = std::make_shared<hepworth::block::rod_position_block>(R, Rd);
+  auto rod_quat = std::make_shared<hepworth::block::rod_quaternion_block>(R, Rd);
+
+  auto config =
+      hepworth::block::block_solver_builder<hepworth::block::rod_position_block,
+                                           hepworth::block::rod_quaternion_block>::create()
+          .with_blocks(rod_pos, rod_quat)
+          .dt(0.05)
+          .damping(0.0)
+          .iterations(1)
+          .build();
+
+  liblombardi::GraphContext ctx;
+  // Graph torque port is world-space (mirrors forces).
+  std::vector<vec3> tau(R->u().size(), vec3::Zero());
+  tau[0] = R->N2c()[0] * 50.0;
+  auto torques = ctx.create_node<const_vec3_node>(tau);
+  auto solver = ctx.create_node<
+      hepworth::block::block_solver_node<hepworth::block::rod_position_block,
+                                         hepworth::block::rod_quaternion_block>>(config);
+
+  ctx.link(torques->output(), solver->input_at<1>());
+
+  const quat u0 = R->u()[0];
+  ctx.run();
+  GAUDI_ASSERT(u0.angularDistance(R->u()[0]) > 1e-6);
+}
+
+GAUDI_TEST(rod_torque_local_axial_drives_frame) {
+  auto R = asawa::rod::rod::create(make_force_loop_points());
+  const real lavg = R->lavg();
+  auto Rd = asawa::rod::dynamic::create(R, 0.25 * lavg, 2.5 * lavg, 0.25 * lavg);
+  auto rod_pos = std::make_shared<hepworth::block::rod_position_block>(R, Rd);
+  auto rod_quat = std::make_shared<hepworth::block::rod_quaternion_block>(R, Rd);
+
+  // Local API: (M0, M1, M2) about (N0, N1, N2); M2 = axial.
+  rod_quat->with_torque_local([&]() {
+    std::vector<vec3> tau(R->u().size(), vec3::Zero());
+    tau[0] = vec3(0.0, 0.0, 50.0);
+    return tau;
+  });
+
+  auto config =
+      hepworth::block::block_solver_builder<hepworth::block::rod_position_block,
+                                           hepworth::block::rod_quaternion_block>::create()
+          .with_blocks(rod_pos, rod_quat)
+          .dt(0.05)
+          .damping(0.0)
+          .iterations(1)
+          .build();
+
+  liblombardi::GraphContext ctx;
+  ctx.create_node<hepworth::block::block_solver_node<hepworth::block::rod_position_block,
+                                                    hepworth::block::rod_quaternion_block>>(
+      config);
+
+  const quat u0 = R->u()[0];
+  ctx.run();
+  GAUDI_ASSERT(u0.angularDistance(R->u()[0]) > 1e-6);
+}
+
 } // namespace test
 } // namespace gaudi
 

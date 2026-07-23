@@ -91,8 +91,8 @@ void init_stretch_shear(const asawa::rod::rod &R,
 
 void init_bend_twist(const asawa::rod::rod &R,
                      std::vector<projection_constraint::ptr> &constraints,
-                     const real &w, std::vector<sim_block::ptr> blocks,
-                     bool skip = false) {
+                     const real &w_bend, const real &w_twist,
+                     std::vector<sim_block::ptr> blocks, bool skip = false) {
   int Ni = R.corner_count();
   auto verts = R.get_vert_range();
   const std::vector<quat> &q = R.__u;
@@ -101,8 +101,16 @@ void init_bend_twist(const asawa::rod::rod &R,
     if (R.length(verts[i]) < 1e-6)
       continue;
     asawa::rod::consec_t c = R.consec(verts[i]);
-    constraints.push_back(bend_twist::create({c[1], c[2], Ni}, q, w, blocks));
+    constraints.push_back(
+        bend_twist::create({c[1], c[2], Ni}, q, w_bend, w_twist, blocks));
   }
+}
+
+void init_bend_twist(const asawa::rod::rod &R,
+                     std::vector<projection_constraint::ptr> &constraints,
+                     const real &w, std::vector<sim_block::ptr> blocks,
+                     bool skip = false) {
+  init_bend_twist(R, constraints, w, w, blocks, skip);
 }
 
 void init_straight(const asawa::rod::rod &R,
