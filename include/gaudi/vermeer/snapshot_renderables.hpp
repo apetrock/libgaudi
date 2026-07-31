@@ -136,12 +136,13 @@ public:
     }
 
     const glm::vec3 default_color(1.0f, 0.45f, 0.15f);
-    for (size_t i = 1; i < snapshot.positions.size(); ++i) {
+    // Positions are edge pairs: (p0,p1), (p0,p1), ...
+    for (size_t i = 0; i + 1 < snapshot.positions.size(); i += 2) {
       const glm::vec3 color =
-          i - 1 < snapshot.colors.size() ? detail::to_glm_vec3(snapshot.colors[i - 1])
-                                         : default_color;
-      add_line({detail::to_glm_vec3(snapshot.positions[i - 1]),
-                detail::to_glm_vec3(snapshot.positions[i])},
+          i < snapshot.colors.size() ? detail::to_glm_vec3(snapshot.colors[i])
+                                     : default_color;
+      add_line({detail::to_glm_vec3(snapshot.positions[i]),
+                detail::to_glm_vec3(snapshot.positions[i + 1])},
                color, 0.018f);
     }
     _active = true;

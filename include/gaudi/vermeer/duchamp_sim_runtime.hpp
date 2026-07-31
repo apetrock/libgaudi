@@ -79,6 +79,23 @@ private:
     for (const auto &line : exported)
       frame_ptr->debug_lines.push_back(to_scene_line(line));
 
+    auto spheres = lewitt::logger::geometry::steal_spheres();
+    frame_ptr->debug_spheres.reserve(spheres.size());
+    for (const auto &s : spheres) {
+      frame_ptr->debug_spheres.push_back(
+          {glm::vec3(s.center.x, s.center.y, s.center.z), s.radius,
+           glm::vec3(s.color.x, s.color.y, s.color.z)});
+    }
+
+    auto tori = lewitt::logger::geometry::steal_tori();
+    frame_ptr->debug_tori.reserve(tori.size());
+    for (const auto &t : tori) {
+      frame_ptr->debug_tori.push_back(
+          {glm::vec3(t.center.x, t.center.y, t.center.z),
+           glm::vec3(t.axis.x, t.axis.y, t.axis.z), t.major_radius,
+           t.minor_radius, glm::vec3(t.color.x, t.color.y, t.color.z)});
+    }
+
     // Rod polyline is display data; bake into debug lines so render stays dump.
     if (frame_ptr->rod_polyline) {
       auto poly = lines_from_rod_snapshot(*frame_ptr->rod_polyline);

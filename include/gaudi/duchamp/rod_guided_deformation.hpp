@@ -19,12 +19,13 @@
 
 #include "gaudi/kusama/laplacian.hpp"
 #include "gaudi/calder/least_squares_fit.hpp"
-#include "gaudi/calder/tangent_point_integrators.hpp"
 
 #include "gaudi/asawa/primitive_objects.hpp"
 #include "gaudi/common.h"
 
+#include "braid_circle_bundle.hpp"
 #include "modules/knotted_surface.hpp"
+#include "modules/rod_forces.hpp"
 #include "utils/point_things.hpp"
 #include "utils/string_things.hpp"
 
@@ -45,20 +46,62 @@ namespace duchamp {
 
 using namespace asawa;
 
+enum class rod_guided_scene {
+  braid_circle, // closed braid on matching sphere shell
+  bunny_walk,   // bunny + silly_walk rod (legacy)
+  sphere_walk,  // sphere + silly_walk rod
+};
+
+struct rod_guided_config {
+  rod_guided_scene scene = rod_guided_scene::braid_circle;
+  braid_circle_config braid{};
+  silly_walk_config walk{
+      .i0 = 0,
+      .N_steps = 10000,
+      .thet = M_PI / 2.0,
+      .rotate = true,
+      .twist_amp = 1.00,
+      .twist_freq = 0.6,
+      .align = true,
+      .ca = vec3(0.05, 0.08, 2.3),
+  };
+  real rod_radius = 0.02;
+  int sphere_n = 192; // shell tessellation for sphere_walk
+  /// Dipole tunnel/weld cylinder radius = `dipole_radius_scale * rod->_r`.
+  real dipole_radius_scale = 3.0;
+  /// Rod tangent-point force. Set `w = 0` to disable.
+  /// `l0` multiplies knotted-surface eps; `p` is the TP power.
+  tangent_point_force_config tangent{.w = 0.0e-8, .l0 = 3.0, .p = 6.0};
+};
+
 ///////////////////////////////////////
 class rod_guided_deformation {
 public:
   typedef std::shared_ptr<rod_guided_deformation> ptr;
 
-  static ptr create() { return std::make_shared<rod_guided_deformation>(); }
+  static ptr create(const rod_guided_config &cfg = {}) {
+    return std::make_shared<rod_guided_deformation>(cfg);
+  }
 
-  rod_guided_deformation() {
-    //__M = load_cube();
-    //
-    const int n_sphere = 192;
-    __M = shell::load_sphere(1.0, n_sphere, n_sphere / 2);
-    //__M = shell::load_bunny();
-    //__M = shell::load_crab();
+  // Convenience: braid+circle bundle only.
+  static ptr create(const braid_circle_config &bundle_cfg) {
+    rod_guided_config cfg;
+    cfg.scene = rod_guided_scene::braid_circle;
+    cfg.braid = bundle_cfg;
+    return create(cfg);
+  }
+
+  explicit rod_guided_deformation(const rod_guided_config &cfg = {})
+      : _tangent(cfg.tangent), _dipole_radius_scale(cfg.dipole_radius_scale) {
+    if (cfg.scene == rod_guided_scene::braid_circle) {
+      const braid_circle_bundle bundle = make_braid_circle_bundle(cfg.braid);
+      __M = bundle.shell;
+      __R = bundle.rod;
+    } else if (cfg.scene == rod_guided_scene::bunny_walk) {
+      __M = shell::load_bunny();
+    } else {
+      __M = shell::load_sphere(1.0, cfg.sphere_n, cfg.sphere_n / 2);
+    }
 
     shell::triangulate(*__M);
     for (int i = 0; i < __M->face_count(); i++) {
@@ -68,35 +111,20 @@ public:
     }
 
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-    asawa::center(x, 2.0);
+    if (cfg.scene != rod_guided_scene::braid_circle) {
+      // Walk scenes: normalize bounds, then walk on the normalized mesh.
+      asawa::center(x, 2.0);
+      const std::vector<vec3> x_w = cfg.walk.run(*__M);
+      __R = rod::rod::create(x_w, false);
+      __R->_r = cfg.rod_radius;
+    }
+    // Braid+circle: keep matched sphere radius (no recenter/rescale).
 
-    /////////
-    // dynamic surface
-    /////////
-    real l0 = asawa::shell::avg_length(*__M, x);
-    real C = 3.0;
-    // real C = 2.0;
+    const real l0 = asawa::shell::avg_length(*__M, x);
+    const real C = 3.0;
     __surf = shell::dynamic::create(__M, C * l0, 2.5 * C * l0, C * l0);
 
-    /////////////////////
-    // Rod
-    /////////////////////
-    silly_walk_config walk_cfg{
-        .i0 = 0,
-        .N_steps = 10000,
-        .thet = M_PI / 2.0,
-        .rotate = true,
-        .twist_amp = 1.00,
-        .twist_freq = 0.6,
-        .align = true,
-        .ca = vec3(0.05, 0.08, 2.3),
-    };
-    std::vector<vec3> x_w = walk_cfg.run(*__M);
-    __R = rod::rod::create(x_w, false);
-    //__R->_update_frames(normals);
-
-    real lavg = 3.0 * l0;
-    __R->_r = 0.020;
+    const real lavg = std::max(__R->lavg(), real(1e-6));
     __Rd = rod::dynamic::create(__R, 0.35 * lavg, 2.0 * lavg, 0.25 * lavg);
 
     for (int i = 0; i < 5; i++) {
@@ -105,7 +133,9 @@ public:
     }
 
     _knotted_surface = knotted_surface_module::create(__M, __surf, __R, __Rd);
-    _knotted_surface->set_dipole_radius(2.0 * __R->_r); // independent of rod collision r
+    // Absolute dipole cylinder; knotted_surface treats <=0 as "unset" (legacy).
+    const real dipole_r = _dipole_radius_scale * __R->_r;
+    _knotted_surface->set_dipole_radius(dipole_r);
   };
 
   std::vector<vec3> calc_quadric_grad() {
@@ -147,32 +177,26 @@ public:
     return Nss;
   }
 
-#if 1
   std::vector<vec3> compute_tangent_point_gradient() {
-
     real eps = _knotted_surface->get_eps();
     std::vector<vec3> &x = __R->x();
     std::vector<real> l = __R->l0();
     std::vector<vec3> T = __R->N2c();
-    std::vector<vec3> xc = __R->xc();
 
-    std::vector<vec3> g0 =
-        calder::tangent_point_gradient(*__R, x, l, T, 3.0 * eps, 6.0);
-    for (int i = 0; i < g0.size(); i++) {
-      // gg::geometry_logger::line(x[i], x[i] + 1.0e-7 * g0[i],
-      //                           vec4(0.6, 0.0, 0.8, 1.0));
-      g0[i] *= 2.0e-6;
-    }
+    std::vector<vec3> g0 = calder::tangent_point_gradient(
+        *__R, x, l, T, _tangent.l0 * eps, _tangent.p);
+    for (vec3 &g : g0)
+      g *= _tangent.w;
     return g0;
   }
-#endif
 
   void step(int frame) {
     _knotted_surface->set_rod_offset(1.0 + 0.02 * real(frame));
     // walk(__surf->_Cc);
     if (frame < 1200) {
       _knotted_surface->init_step(_h);
-      //_knotted_surface->add_rod_force(compute_tangent_point_gradient());
+      if (_tangent.w != 0.0)
+        _knotted_surface->add_rod_force(compute_tangent_point_gradient());
       // _knotted_surface->add_shell_force(calc_quadric_grad());
       _knotted_surface->step(_h);
     }
@@ -188,6 +212,8 @@ public:
   }
   // std::map<index_t, index_t> _rod_adjacent_edges;
   knotted_surface_module::ptr _knotted_surface;
+  tangent_point_force_config _tangent;
+  real _dipole_radius_scale = 2.0;
 
   real _h = 0.05;
   shell::shell::ptr __M;

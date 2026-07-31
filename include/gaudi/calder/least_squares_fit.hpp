@@ -18,8 +18,11 @@
 #include "gaudi/albers/line_cylinder.hpp"
 #include "gaudi/albers/sphere.hpp"
 #include "gaudi/albers/darboux_cyclide.hpp"
+#include "gaudi/albers/darboux_medial_geometry.hpp"
 #include "gaudi/albers/circle.hpp"
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -49,6 +52,10 @@ namespace gaudi
     using rod_node_type = rod_bundle::Sum_Type::Node_Type;
     using shell_node_type = shell_bundle::Sum_Type::Node_Type;
     using data_vector = std::vector<calder::datum::ptr>;
+
+    // Stage-1 model for adaptive Darboux bandwidth R = 1/|κ|_max.
+    // Flip via cyclide_medial_params::stage1_radius (or shell_fit arg).
+    enum class stage1_radius_model { cyclide, quadric };
 
     template <typename M_TYPE>
     using weight_func = real (*)(int, int, const std::vector<calder::datum::ptr> &, typename M_TYPE::Sum_Type::Node_Type, const vec3 &, const vec3 &, const vec3 &, real, real);
@@ -110,6 +117,55 @@ namespace gaudi
       }
       const real convexity = std::max(real(0.0), dp.normalized().dot(Nj));
       return convexity * calc_inv_dist(dp, l0, p);
+    }
+
+    // Convex softmin: max(0, hat(dp)·Nj) * exp(-‖dp‖ / l0).
+    // Here l0 is a length scale (β = 1/l0). For per-query β, capture betas in a
+    // lambda instead (see darboux_cyclide_normal_constrained_adaptive_exp).
+    template <typename M_TYPE>
+    real soft_exp_convex_weight(int i, int j, //
+                                const std::vector<calder::datum::ptr> &data,
+                                typename M_TYPE::Sum_Type::Node_Type node_type, //
+                                const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p = 3.0)
+    {
+      (void)i;
+      (void)j;
+      (void)data;
+      (void)node_type;
+      (void)Ni;
+      (void)p;
+      const real dist = dp.norm();
+      if (dist < 1e-12)
+      {
+        return 0.0;
+      }
+      const real convexity = std::max(real(0.0), dp.normalized().dot(Nj));
+      const real beta = 1.0 / std::max(l0, real(1e-12));
+      return convexity * calc_exp_dist(dp, beta);
+    }
+
+    // Convex Gaussian: max(0, hat(dp)·Nj) * calc_gaussian(dp, l0).
+    // l0 is the Gaussian length scale σ. For per-query σ from R_inner, see
+    // darboux_cyclide_normal_constrained_adaptive_gaussian.
+    template <typename M_TYPE>
+    real soft_gaussian_convex_weight(int i, int j, //
+                                     const std::vector<calder::datum::ptr> &data,
+                                     typename M_TYPE::Sum_Type::Node_Type node_type, //
+                                     const vec3 &dp, const vec3 &Ni, const vec3 &Nj, real l0, real p = 3.0)
+    {
+      (void)i;
+      (void)j;
+      (void)data;
+      (void)node_type;
+      (void)Ni;
+      (void)p;
+      const real dist = dp.norm();
+      if (dist < 1e-12)
+      {
+        return 0.0;
+      }
+      const real convexity = std::max(real(0.0), dp.normalized().dot(Nj));
+      return convexity * calc_gaussian(dp, std::max(l0, real(1e-12)));
     }
 
     // Soft radial gate on the rod: down-weight samples whose displacement from
@@ -184,6 +240,8 @@ namespace gaudi
     GENERATE_WEIGHT_FUNCS(convex_weight)
     GENERATE_WEIGHT_FUNCS(inv_convex_weight)
     GENERATE_WEIGHT_FUNCS(soft_inv_convex_weight)
+    GENERATE_WEIGHT_FUNCS(soft_exp_convex_weight)
+    GENERATE_WEIGHT_FUNCS(soft_gaussian_convex_weight)
     // Rod-only: needs length-weighted tangents bound as datum[2].
     weight_func<rod_bundle> rod_inv_dist_tangent_plane_weight =
         inv_dist_tangent_plane_weight<rod_bundle>;
@@ -257,6 +315,8 @@ namespace gaudi
           });
       if (foot_normal_w >= 1e-8)
       {
+        // Relative foot tip-in: w_foot = foot_normal_w * Σ w_MLS at this query.
+        // So foot_normal_w=1 matches the neighborhood mass; not an absolute weight.
         for (size_t i = 0; i < p_pov.size(); ++i)
         {
           const real w_foot = foot_normal_w * collected_w[i];
@@ -772,18 +832,513 @@ namespace gaudi
                                        shell_soft_inv_convex_weight, w0);
     }
 
-    // Darboux shell MLS fit mode. Flip the active branch:
-    //   #if 1 / #elif 0  -> normal-constrained inv_dist (broader neighborhood)
-    //   #if 0 / #elif 1  -> convex-gated inv_dist (default, current behavior)
-    inline std::vector<vec14> darboux_cyclide_shell_fit(
+    // Stage-1 medial scale: convex-harmonic sphere → per-query inner radius.
+    inline std::vector<real> inner_radii_convex_sphere(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0, real p = 3.0)
+    {
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<real> areas = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < static_cast<int>(Ns.size()); ++i)
+      {
+        Ns[i] = areas[i] * Ns[i];
+      }
+      std::vector<vec4> S = generic_fit<albers::sphere, shell_bundle>(
+          M, Ns, p_pov, N_pov, l0, p, shell_soft_inv_convex_weight);
+
+      const real r_min = 0.25 * std::max(l0, real(1e-12));
+      const real r_max = 64.0 * std::max(l0, real(1e-12));
+      std::vector<real> radii(S.size(), l0);
+      for (int i = 0; i < static_cast<int>(S.size()); ++i)
+      {
+        real r = S[i][3];
+        if (!std::isfinite(r) || r < 1e-12)
+        {
+          r = l0;
+        }
+        radii[static_cast<size_t>(i)] = std::clamp(r, r_min, r_max);
+      }
+      return radii;
+    }
+
+    // R = 1 / |κ|_max from the shape operator W at the foot.
+    // Eigenvectors of W are the principal curvature directions (plus ~normal);
+    // the two largest |λ| are the principal curvatures; smallest |λ| ≈ normal.
+    inline real radius_from_shape_operator(const mat3 &W, real fallback)
+    {
+      if (!W.allFinite())
+      {
+        return fallback;
+      }
+      Eigen::SelfAdjointEigenSolver<mat3> es(W);
+      if (es.info() != Eigen::Success)
+      {
+        return fallback;
+      }
+      const vec3 ev = es.eigenvalues();
+      std::array<real, 3> kabs = {std::abs(ev[0]), std::abs(ev[1]),
+                                  std::abs(ev[2])};
+      std::sort(kabs.begin(), kabs.end(), std::greater<real>());
+      const real k_hi = kabs[0];
+      if (!(k_hi > 1e-12) || !std::isfinite(k_hi))
+      {
+        return fallback;
+      }
+      return 1.0 / k_hi;
+    }
+
+    inline real radius_from_cyclide_max_curvature(const albers::vec14 &Q,
+                                                  real fallback)
+    {
+      return radius_from_shape_operator(
+          albers::shape_operator_at(Q, vec3::Zero()), fallback);
+    }
+
+    // Stage-1 local jet: MLS quadric (soft convex + optional foot tip-in)
+    // → shape-op |κ|_max → R. More appropriate than a sphere bootstrap for
+    // curvature scale; foot tip-in matches the Darboux path.
+    inline real radius_from_quadric_max_curvature(const albers::vec10 &Q,
+                                                  real fallback)
+    {
+      // Q is in the MLS foot frame; evaluate jet at the origin.
+      const vec3 g = albers::quadric_grad(Q, vec3::Zero());
+      const mat3 H = albers::quadric_hessian(Q);
+      mat3 W = mat3::Zero();
+      albers::medial_generated::shape_operator_from_GH(g, H, W);
+      return radius_from_shape_operator(W, fallback);
+    }
+
+    inline std::vector<real> inner_radii_quadric_max_curvature(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0, real p = 3.0,
+        real foot_normal_w = 1e-2)
+    {
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<real> areas = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < static_cast<int>(Ns.size()); ++i)
+      {
+        Ns[i] = areas[i] * Ns[i];
+      }
+      const std::vector<albers::vec10> Q =
+          generic_fit<albers::quadric, shell_bundle>(
+              M, Ns, p_pov, N_pov, l0, p, shell_soft_inv_convex_weight,
+              foot_normal_w);
+
+      const real r_min = 0.25 * std::max(l0, real(1e-12));
+      const real r_max = 64.0 * std::max(l0, real(1e-12));
+      std::vector<real> radii(Q.size(), l0);
+      for (size_t i = 0; i < Q.size(); ++i)
+      {
+        real r = radius_from_quadric_max_curvature(Q[i], l0);
+        if (!std::isfinite(r) || r < 1e-12)
+        {
+          r = l0;
+        }
+        radii[i] = std::clamp(r, r_min, r_max);
+      }
+      return radii;
+    }
+
+    inline std::vector<real> inner_radii_quadric_max_curvature(
+        asawa::rod::rod &R, const std::vector<vec3> &Nr,
+        const std::vector<vec3> &p_pov, const std::vector<vec3> &N_pov, real l0,
+        real p = 3.0, real foot_normal_w = 1e-2)
+    {
+      std::vector<real> weights = R.l0();
+      std::vector<vec3> Ns = Nr;
+      for (int i = 0; i < static_cast<int>(Ns.size()); ++i)
+      {
+        Ns[i] = weights[i] * Nr[i];
+      }
+      const std::vector<albers::vec10> Q =
+          generic_fit<albers::quadric, rod_bundle>(
+              R, Ns, p_pov, N_pov, l0, p, rod_soft_inv_convex_weight,
+              foot_normal_w);
+
+      const real r_min = 0.25 * std::max(l0, real(1e-12));
+      const real r_max = 64.0 * std::max(l0, real(1e-12));
+      std::vector<real> radii(Q.size(), l0);
+      for (size_t i = 0; i < Q.size(); ++i)
+      {
+        real r = radius_from_quadric_max_curvature(Q[i], l0);
+        if (!std::isfinite(r) || r < 1e-12)
+        {
+          r = l0;
+        }
+        radii[i] = std::clamp(r, r_min, r_max);
+      }
+      return radii;
+    }
+
+    // Stage-1: seed-bandwidth cyclide (soft convex inv-dist) → R from max |κ|.
+    inline std::vector<real> inner_radii_cyclide_max_curvature(
         asawa::shell::shell &M, const std::vector<vec3> &p_pov,
         const std::vector<vec3> &N_pov, real l0, real p = 3.0,
         real w0 = 1e-2)
     {
-#if 0
-      return darboux_cyclide_normal_constrained(M, p_pov, N_pov, l0, p, w0);
+      const std::vector<albers::vec14> Q =
+          darboux_cyclide_normal_constrained_convexity(M, p_pov, N_pov, l0, p,
+                                                       w0);
+      const real r_min = 0.25 * std::max(l0, real(1e-12));
+      const real r_max = 64.0 * std::max(l0, real(1e-12));
+      std::vector<real> radii(Q.size(), l0);
+      for (size_t i = 0; i < Q.size(); ++i)
+      {
+        real r = radius_from_cyclide_max_curvature(Q[i], l0);
+        if (!std::isfinite(r) || r < 1e-12)
+        {
+          r = l0;
+        }
+        radii[i] = std::clamp(r, r_min, r_max);
+      }
+      return radii;
+    }
+
+    inline std::vector<real> inner_radii_cyclide_max_curvature(
+        asawa::rod::rod &R, const std::vector<vec3> &Nr,
+        const std::vector<vec3> &p_pov, const std::vector<vec3> &N_pov, real l0,
+        real p = 3.0, real foot_normal_w = 1e-2)
+    {
+      std::vector<real> weights = R.l0();
+      std::vector<vec3> Ns = Nr;
+      for (int i = 0; i < static_cast<int>(Ns.size()); ++i)
+      {
+        Ns[i] = weights[i] * Nr[i];
+      }
+      const std::vector<albers::vec14> Q =
+          generic_fit<albers::normal_constrained_darboux_cyclide, rod_bundle>(
+              R, Ns, p_pov, N_pov, l0, p, rod_soft_inv_convex_weight,
+              foot_normal_w);
+      const real r_min = 0.25 * std::max(l0, real(1e-12));
+      const real r_max = 64.0 * std::max(l0, real(1e-12));
+      std::vector<real> radii(Q.size(), l0);
+      for (size_t i = 0; i < Q.size(); ++i)
+      {
+        real r = radius_from_cyclide_max_curvature(Q[i], l0);
+        if (!std::isfinite(r) || r < 1e-12)
+        {
+          r = l0;
+        }
+        radii[i] = std::clamp(r, r_min, r_max);
+      }
+      return radii;
+    }
+
+    inline std::vector<real> inner_radii_convex_sphere(
+        asawa::rod::rod &R, const std::vector<vec3> &Nr,
+        const std::vector<vec3> &p_pov, const std::vector<vec3> &N_pov, real l0,
+        real p = 3.0)
+    {
+      std::vector<real> weights = R.l0();
+      std::vector<vec3> Ns = Nr;
+      for (int i = 0; i < static_cast<int>(Ns.size()); ++i)
+      {
+        Ns[i] = weights[i] * Nr[i];
+      }
+      std::vector<vec4> S = generic_fit<albers::sphere, rod_bundle>(
+          R, Ns, p_pov, N_pov, l0, p, rod_soft_inv_convex_weight);
+
+      const real r_min = 0.25 * std::max(l0, real(1e-12));
+      const real r_max = 64.0 * std::max(l0, real(1e-12));
+      std::vector<real> radii(S.size(), l0);
+      for (int i = 0; i < static_cast<int>(S.size()); ++i)
+      {
+        real r = S[i][3];
+        if (!std::isfinite(r) || r < 1e-12)
+        {
+          r = l0;
+        }
+        radii[static_cast<size_t>(i)] = std::clamp(r, r_min, r_max);
+      }
+      return radii;
+    }
+
+    // Stage-2: Darboux MLS with convex softmin e^{-β r}, β = beta_scale / R_inner.
+    // Same Barnes–Hut generic_fit path as other named fits.
+    std::vector<vec14> darboux_cyclide_normal_constrained_adaptive_exp(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0, real p = 3.0,
+        real w0 = 1e-2, real beta_scale = 1.0)
+    {
+      const std::vector<real> radii =
+          inner_radii_convex_sphere(M, p_pov, N_pov, l0, p);
+      std::vector<real> betas(radii.size(), 0.0);
+      for (size_t i = 0; i < radii.size(); ++i)
+      {
+        betas[i] = beta_scale / std::max(radii[i], real(1e-12));
+      }
+
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < static_cast<int>(Ns.size()); ++i)
+      {
+        Ns[i] = weights[i] * Ns[i];
+      }
+
+      auto weight = [betas](int i, int j,
+                            const std::vector<calder::datum::ptr> &data,
+                            shell_bundle::Sum_Type::Node_Type node_type,
+                            const vec3 &dp, const vec3 &Ni, const vec3 &Nj,
+                            real /*l0*/, real /*p*/) -> real
+      {
+        (void)j;
+        (void)data;
+        (void)node_type;
+        (void)Ni;
+        const real dist = dp.norm();
+        if (dist < 1e-12)
+        {
+          return 0.0;
+        }
+        const real convexity = std::max(real(0.0), dp.normalized().dot(Nj));
+        const real beta =
+            (i >= 0 && static_cast<size_t>(i) < betas.size()) ? betas[static_cast<size_t>(i)]
+                                                             : real(0.0);
+        return convexity * calc_exp_dist(dp, beta);
+      };
+
+      return generic_fit<albers::normal_constrained_darboux_cyclide,
+                         shell_bundle>(M, Ns, p_pov, N_pov, l0, p, weight, w0);
+    }
+
+    std::vector<vec14> darboux_cyclide_normal_constrained_adaptive_exp(
+        asawa::rod::rod &R, const std::vector<vec3> &Nr,
+        const std::vector<vec3> &p_pov, const std::vector<vec3> &N_pov, real l0,
+        real p = 3.0, real foot_normal_w = 1e-2, real beta_scale = 1.0)
+    {
+      const std::vector<real> radii =
+          inner_radii_convex_sphere(R, Nr, p_pov, N_pov, l0, p);
+      std::vector<real> betas(radii.size(), 0.0);
+      for (size_t i = 0; i < radii.size(); ++i)
+      {
+        betas[i] = beta_scale / std::max(radii[i], real(1e-12));
+      }
+
+      std::vector<real> weights = R.l0();
+      std::vector<vec3> Ns = Nr;
+      for (int i = 0; i < static_cast<int>(Ns.size()); ++i)
+      {
+        Ns[i] = weights[i] * Nr[i];
+      }
+
+      auto weight = [betas](int i, int j,
+                            const std::vector<calder::datum::ptr> &data,
+                            rod_bundle::Sum_Type::Node_Type node_type,
+                            const vec3 &dp, const vec3 &Ni, const vec3 &Nj,
+                            real /*l0*/, real /*p*/) -> real
+      {
+        (void)j;
+        (void)data;
+        (void)node_type;
+        (void)Ni;
+        const real dist = dp.norm();
+        if (dist < 1e-12)
+        {
+          return 0.0;
+        }
+        const real convexity = std::max(real(0.0), dp.normalized().dot(Nj));
+        const real beta =
+            (i >= 0 && static_cast<size_t>(i) < betas.size()) ? betas[static_cast<size_t>(i)]
+                                                             : real(0.0);
+        return convexity * calc_exp_dist(dp, beta);
+      };
+
+      return generic_fit<albers::normal_constrained_darboux_cyclide,
+                         rod_bundle>(R, Ns, p_pov, N_pov, l0, p, weight,
+                                     foot_normal_w);
+    }
+
+    // Stage-2: Darboux MLS with plain Gaussian, σ = radius_scale * R (no soft-convex).
+    std::vector<vec14> darboux_cyclide_normal_constrained_adaptive_gaussian_plain(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0,
+        const std::vector<real> &radii, real p = 3.0,
+        real foot_normal_w = 1e-2, real radius_scale = 1.0)
+    {
+      std::vector<real> sigmas(radii.size(), l0);
+      for (size_t i = 0; i < radii.size(); ++i)
+      {
+        sigmas[i] = std::max(radius_scale * radii[i], real(1e-12));
+      }
+
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < static_cast<int>(Ns.size()); ++i)
+      {
+        Ns[i] = weights[i] * Ns[i];
+      }
+
+      auto weight = [sigmas](int i, int j,
+                             const std::vector<calder::datum::ptr> &data,
+                             shell_bundle::Sum_Type::Node_Type node_type,
+                             const vec3 &dp, const vec3 &Ni, const vec3 &Nj,
+                             real /*l0*/, real /*p*/) -> real
+      {
+        (void)j;
+        (void)data;
+        (void)node_type;
+        (void)Ni;
+        (void)Nj;
+        const real sigma =
+            (i >= 0 && static_cast<size_t>(i) < sigmas.size())
+                ? sigmas[static_cast<size_t>(i)]
+                : real(1e-12);
+        return calc_gaussian(dp, sigma);
+      };
+
+      return generic_fit<albers::normal_constrained_darboux_cyclide,
+                         shell_bundle>(M, Ns, p_pov, N_pov, l0, p, weight,
+                                       foot_normal_w);
+    }
+
+    // Stage-2: Darboux MLS with convex Gaussian, σ = radius_scale * R.
+    // Radii supplied by caller (legacy stage-1 or aniso-quadric bootstrap).
+    std::vector<vec14> darboux_cyclide_normal_constrained_adaptive_gaussian(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0,
+        const std::vector<real> &radii, real p = 3.0,
+        real foot_normal_w = 1e-2, real radius_scale = 1.0)
+    {
+      std::vector<real> sigmas(radii.size(), l0);
+      for (size_t i = 0; i < radii.size(); ++i)
+      {
+        sigmas[i] = std::max(radius_scale * radii[i], real(1e-12));
+      }
+
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < static_cast<int>(Ns.size()); ++i)
+      {
+        Ns[i] = weights[i] * Ns[i];
+      }
+
+      auto weight = [sigmas](int i, int j,
+                             const std::vector<calder::datum::ptr> &data,
+                             shell_bundle::Sum_Type::Node_Type node_type,
+                             const vec3 &dp, const vec3 &Ni, const vec3 &Nj,
+                             real /*l0*/, real /*p*/) -> real
+      {
+        (void)j;
+        (void)data;
+        (void)node_type;
+        (void)Ni;
+        const real dist = dp.norm();
+        if (dist < 1e-12)
+        {
+          return 0.0;
+        }
+        const real convexity = std::max(real(0.0), dp.normalized().dot(Nj));
+        const real sigma =
+            (i >= 0 && static_cast<size_t>(i) < sigmas.size())
+                ? sigmas[static_cast<size_t>(i)]
+                : real(1e-12);
+        return convexity * calc_gaussian(dp, sigma);
+      };
+
+      return generic_fit<albers::normal_constrained_darboux_cyclide,
+                         shell_bundle>(M, Ns, p_pov, N_pov, l0, p, weight,
+                                       foot_normal_w);
+    }
+
+    // Stage-2 with R from stage-1 soft-convex max-|κ| (cyclide or quadric).
+    std::vector<vec14> darboux_cyclide_normal_constrained_adaptive_gaussian(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0, real p = 3.0,
+        real foot_normal_w = 1e-2, real radius_scale = 1.0,
+        stage1_radius_model stage1 = stage1_radius_model::cyclide)
+    {
+      const std::vector<real> radii =
+          (stage1 == stage1_radius_model::quadric)
+              ? inner_radii_quadric_max_curvature(M, p_pov, N_pov, l0, p,
+                                                 foot_normal_w)
+              : inner_radii_cyclide_max_curvature(M, p_pov, N_pov, l0, p,
+                                                 foot_normal_w);
+      return darboux_cyclide_normal_constrained_adaptive_gaussian(
+          M, p_pov, N_pov, l0, radii, p, foot_normal_w, radius_scale);
+    }
+
+    std::vector<vec14> darboux_cyclide_normal_constrained_adaptive_gaussian(
+        asawa::rod::rod &R, const std::vector<vec3> &Nr,
+        const std::vector<vec3> &p_pov, const std::vector<vec3> &N_pov, real l0,
+        real p = 3.0, real foot_normal_w = 1e-2, real radius_scale = 1.0,
+        stage1_radius_model stage1 = stage1_radius_model::cyclide)
+    {
+      const std::vector<real> radii =
+          (stage1 == stage1_radius_model::quadric)
+              ? inner_radii_quadric_max_curvature(R, Nr, p_pov, N_pov, l0, p,
+                                                 foot_normal_w)
+              : inner_radii_cyclide_max_curvature(R, Nr, p_pov, N_pov, l0, p,
+                                                 foot_normal_w);
+      std::vector<real> sigmas(radii.size(), l0);
+      for (size_t i = 0; i < radii.size(); ++i)
+      {
+        sigmas[i] = std::max(radius_scale * radii[i], real(1e-12));
+      }
+
+      std::vector<real> weights = R.l0();
+      std::vector<vec3> Ns = Nr;
+      for (int i = 0; i < static_cast<int>(Ns.size()); ++i)
+      {
+        Ns[i] = weights[i] * Nr[i];
+      }
+
+      auto weight = [sigmas](int i, int j,
+                             const std::vector<calder::datum::ptr> &data,
+                             rod_bundle::Sum_Type::Node_Type node_type,
+                             const vec3 &dp, const vec3 &Ni, const vec3 &Nj,
+                             real /*l0*/, real /*p*/) -> real
+      {
+        (void)j;
+        (void)data;
+        (void)node_type;
+        (void)Ni;
+        const real dist = dp.norm();
+        if (dist < 1e-12)
+        {
+          return 0.0;
+        }
+        const real convexity = std::max(real(0.0), dp.normalized().dot(Nj));
+        const real sigma =
+            (i >= 0 && static_cast<size_t>(i) < sigmas.size())
+                ? sigmas[static_cast<size_t>(i)]
+                : real(1e-12);
+        return convexity * calc_gaussian(dp, sigma);
+      };
+
+      return generic_fit<albers::normal_constrained_darboux_cyclide,
+                         rod_bundle>(R, Ns, p_pov, N_pov, l0, p, weight,
+                                     foot_normal_w);
+    }
+
+    // Darboux shell MLS fit mode. Flip the active branch:
+    //   #if 1  -> adaptive-gaussian (stage1_radius selects cyclide/quadric R)
+    //   #elif 1 -> adaptive-exp (β softmin; currently still sphere R unless flipped)
+    //   #elif  -> normal-constrained inv_dist
+    //   #else  -> convex-gated inv_dist
+    // For disc→aniso→torus bootstrap, call mls_jet_bootstrap.hpp::darboux_fit_bootstrapped.
+    inline std::vector<vec14> darboux_cyclide_shell_fit(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &N_pov, real l0, real p = 3.0,
+        real foot_normal_w = 1e-2, real radius_scale = 1.0,
+        stage1_radius_model stage1 = stage1_radius_model::cyclide)
+    {
+#if 1
+      return darboux_cyclide_normal_constrained_adaptive_gaussian(
+          M, p_pov, N_pov, l0, p, foot_normal_w, radius_scale, stage1);
+#elif 0
+      return darboux_cyclide_normal_constrained_adaptive_exp(
+          M, p_pov, N_pov, l0, p, foot_normal_w, radius_scale);
+#elif 0
+      return darboux_cyclide_normal_constrained(M, p_pov, N_pov, l0, p,
+                                               foot_normal_w);
 #else
-      return darboux_cyclide_normal_constrained_convexity(M, p_pov, N_pov, l0, p, w0);
+      return darboux_cyclide_normal_constrained_convexity(
+          M, p_pov, N_pov, l0, p, foot_normal_w);
 #endif
     }
 

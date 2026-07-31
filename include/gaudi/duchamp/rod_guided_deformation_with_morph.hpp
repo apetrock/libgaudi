@@ -715,7 +715,7 @@ namespace gaudi
           _knotted_surface->set_rod_pin_weight(4.0e-2);
           _knotted_surface->set_rod_strain_weight(1.0e-1);
           _knotted_surface->set_rod_bending_weight(5.0e-2);
-          _knotted_surface->set_rod_straight_weight(5.0e-2);
+          _knotted_surface->set_rod_min_kink_weight(5.0e-2);
           //_knotted_surface->set_rod_offset(10.0);
           // calc_torus_gradient();
           _knotted_surface->add_rod_force(calc_tangent_point_gradient(), 1.0e-7);

@@ -467,4 +467,8 @@ def emit_all(target: str) -> List[Tuple[str, str]]:
         out.append(("darboux_generated.hpp", emit_darboux_geometry()))
     if target in ("cyclide_smooth", "all"):
         out.append(("cyclide_smooth_generated.hpp", emit_cyclide_smooth()))
+    if target in ("shape_operator_fit", "all"):
+        from shape_operator_fit import emit_shape_operator_fit
+
+        out.append(("shape_operator_fit_generated.hpp", emit_shape_operator_fit()))
     return out

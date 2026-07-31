@@ -27,6 +27,11 @@ void point(const vec3 &p0, const vec4 &color) {
     wasm_geometry_logger::point(p0, color);
 }
 
+void sphere(const vec3 & /*center*/, real /*radius*/, const vec4 & /*color*/) {}
+
+void torus(const vec3 & /*center*/, const vec3 & /*axis*/, real /*major_radius*/,
+           real /*minor_radius*/, const vec4 & /*color*/) {}
+
 void clear() {
     wasm_geometry_logger::clear();
 }

@@ -15,7 +15,8 @@ namespace hepworth {
         class sim_block;
         class pinned;
         class stretch_shear;
-        class bend_twist;
+        class bend;
+        class twist;
         class rod_collision;
     }
 }

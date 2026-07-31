@@ -57,6 +57,11 @@ void point(const vec3 &p0, const vec4 &color) {
     s_point_colors.push_back(color);
 }
 
+void sphere(const vec3 & /*center*/, real /*radius*/, const vec4 & /*color*/) {}
+
+void torus(const vec3 & /*center*/, const vec3 & /*axis*/, real /*major_radius*/,
+           real /*minor_radius*/, const vec4 & /*color*/) {}
+
 void clear() {
     s_lines.clear();
     s_line_colors.clear();

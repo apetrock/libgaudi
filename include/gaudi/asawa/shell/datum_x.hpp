@@ -665,7 +665,7 @@ std::vector<real> divergence(shell &M, const std::vector<vec3> &g,
 }
 
 /// Stencil for per-face curvature fitting (quadric height field over neighbor face centers).
-enum class face_curvature_stencil { one_ring, butterfly };
+enum class face_curvature_stencil { one_ring, butterfly, two_ring };
 
 struct face_curvature_frame {
   vec3 n = vec3::UnitZ();
@@ -673,6 +673,25 @@ struct face_curvature_frame {
   vec3 t_max = vec3::UnitY();
   real k_min = 0;
   real k_max = 0;
+};
+
+/// Monge / height jet in foot frame: z ≈ a x² + b x y + c y² over (u,v), axis n.
+struct face_height_jet {
+  vec3 foot = vec3::Zero();
+  vec3 u = vec3::UnitX();
+  vec3 v = vec3::UnitY();
+  vec3 n = vec3::UnitZ();
+  real a = 0.0;
+  real b = 0.0;
+  real c = 0.0;
+  bool valid = false;
+
+  /// ∇F for F = dp·n − a s² − b s t − c t², with s=dp·u, t=dp·v (foot-relative dp).
+  vec3 grad_at_rel(const vec3 &dp) const {
+    const real s = dp.dot(u);
+    const real t = dp.dot(v);
+    return n - (2.0 * a * s + b * t) * u - (b * s + 2.0 * c * t) * v;
+  }
 };
 
 inline void face_tangent_basis_from_normal(const vec3 &n_in, vec3 *u_out,
@@ -687,34 +706,34 @@ inline void face_tangent_basis_from_normal(const vec3 &n_in, vec3 *u_out,
   *v_out = n.cross(*u_out).normalized();
 }
 
-/// Discrete principal frame via least-squares quadratic height field
-/// \(z \approx a x^2 + b x y + c y^2\) on face barycenters in the stencil
-/// (Rusinkiewicz-style jet on a triangle mesh; see Rusinkiewicz, 3DPVT 2004).
-inline face_curvature_frame face_curvature_frame_fit(
+inline std::vector<FaceId>
+face_curvature_stencil_faces(const shell &M, FaceId f,
+                             face_curvature_stencil stencil) {
+  if (stencil == face_curvature_stencil::one_ring)
+    return M.face_one_ring_face_ids(f);
+  if (stencil == face_curvature_stencil::two_ring)
+    return M.face_two_ring_face_ids(f);
+  CornerId c0 = M.fbegin(f);
+  return M.butterfly_face_ids(c0);
+}
+
+/// Fit Monge height jet at face center; also fills principal frame when possible.
+inline face_height_jet face_height_jet_fit(
     const shell &M, const std::vector<vec3> &x, FaceId f,
     face_curvature_stencil stencil = face_curvature_stencil::one_ring) {
-  face_curvature_frame out;
+  face_height_jet jet;
   if (M.fbegin(f) < 0 || M.fsize(f) != 3)
-    return out;
+    return jet;
 
-  std::vector<FaceId> stencil_faces;
-  if (stencil == face_curvature_stencil::one_ring)
-    stencil_faces = M.face_one_ring_face_ids(f);
-  else {
-    CornerId c0 = M.fbegin(f);
-    stencil_faces = M.butterfly_face_ids(c0);
-  }
-
-  vec3 c = face_center(M, f, x);
-  out.n = face_normal(M, f, x);
-  vec3 u_axis, v_axis;
-  face_tangent_basis_from_normal(out.n, &u_axis, &v_axis);
+  const std::vector<FaceId> stencil_faces =
+      face_curvature_stencil_faces(M, f, stencil);
+  jet.foot = face_center(M, f, x);
+  jet.n = face_normal(M, f, x);
+  face_tangent_basis_from_normal(jet.n, &jet.u, &jet.v);
 
   const int m = static_cast<int>(stencil_faces.size());
   if (m < 3) {
-    out.t_min = u_axis;
-    out.t_max = v_axis;
-    return out;
+    return jet;
   }
 
   Eigen::MatrixXd A(m, 3);
@@ -722,10 +741,10 @@ inline face_curvature_frame face_curvature_frame_fit(
   for (int i = 0; i < m; ++i) {
     FaceId fi = stencil_faces[static_cast<size_t>(i)];
     vec3 p = face_center(M, fi, x);
-    vec3 d = p - c;
-    real xi = d.dot(u_axis);
-    real yi = d.dot(v_axis);
-    real zi = d.dot(out.n);
+    vec3 d = p - jet.foot;
+    real xi = d.dot(jet.u);
+    real yi = d.dot(jet.v);
+    real zi = d.dot(jet.n);
     A(i, 0) = xi * xi;
     A(i, 1) = xi * yi;
     A(i, 2) = yi * yi;
@@ -735,27 +754,116 @@ inline face_curvature_frame face_curvature_frame_fit(
   Eigen::JacobiSVD<Eigen::MatrixXd> svd(
       A, Eigen::ComputeThinU | Eigen::ComputeThinV);
   Eigen::Vector3d coef = svd.solve(bz);
+  jet.a = coef(0);
+  jet.b = coef(1);
+  jet.c = coef(2);
+  jet.valid = std::isfinite(jet.a) && std::isfinite(jet.b) &&
+              std::isfinite(jet.c);
+  return jet;
+}
+
+/// Height jet at a vertex (foot = vertex, n = given normal).
+inline face_height_jet vertex_height_jet_fit(
+    const shell &M, const std::vector<vec3> &x, VertId vi, const vec3 &n_in,
+    face_curvature_stencil stencil = face_curvature_stencil::two_ring) {
+  face_height_jet jet;
+  const int vid = static_cast<int>(vi);
+  if (vid < 0 || M.vbegin(vi) < 0)
+    return jet;
+
+  std::set<FaceId> seed;
+  M.const_for_each_vertex(vi, [&](CornerId c, const shell &Mm) {
+    FaceId fi = Mm.face(c);
+    if (static_cast<int>(fi) >= 0)
+      seed.insert(fi);
+  });
+  if (seed.empty())
+    return jet;
+
+  std::set<FaceId> stencil_faces = seed;
+  if (stencil == face_curvature_stencil::two_ring ||
+      stencil == face_curvature_stencil::butterfly) {
+    for (FaceId f0 : seed) {
+      for (FaceId f1 : face_curvature_stencil_faces(M, f0, stencil)) {
+        if (static_cast<int>(f1) >= 0)
+          stencil_faces.insert(f1);
+      }
+    }
+  } else {
+    for (FaceId f0 : seed) {
+      for (FaceId f1 : M.face_one_ring_face_ids(f0)) {
+        if (static_cast<int>(f1) >= 0)
+          stencil_faces.insert(f1);
+      }
+    }
+  }
+
+  jet.foot = x[static_cast<size_t>(vid)];
+  jet.n = (n_in.norm() > 1e-12) ? n_in.normalized() : vec3::UnitZ();
+  face_tangent_basis_from_normal(jet.n, &jet.u, &jet.v);
+
+  const int m = static_cast<int>(stencil_faces.size());
+  if (m < 3)
+    return jet;
+
+  Eigen::MatrixXd A(m, 3);
+  Eigen::VectorXd bz(m);
+  int row = 0;
+  for (FaceId fi : stencil_faces) {
+    vec3 p = face_center(M, fi, x);
+    vec3 d = p - jet.foot;
+    real xi = d.dot(jet.u);
+    real yi = d.dot(jet.v);
+    real zi = d.dot(jet.n);
+    A(row, 0) = xi * xi;
+    A(row, 1) = xi * yi;
+    A(row, 2) = yi * yi;
+    bz(row) = zi;
+    ++row;
+  }
+
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(
+      A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  Eigen::Vector3d coef = svd.solve(bz);
+  jet.a = coef(0);
+  jet.b = coef(1);
+  jet.c = coef(2);
+  jet.valid = std::isfinite(jet.a) && std::isfinite(jet.b) &&
+              std::isfinite(jet.c);
+  return jet;
+}
+
+/// Discrete principal frame via least-squares quadratic height field
+/// \(z \approx a x^2 + b x y + c y^2\) on face barycenters in the stencil
+/// (Rusinkiewicz-style jet on a triangle mesh; see Rusinkiewicz, 3DPVT 2004).
+inline face_curvature_frame face_curvature_frame_fit(
+    const shell &M, const std::vector<vec3> &x, FaceId f,
+    face_curvature_stencil stencil = face_curvature_stencil::one_ring) {
+  face_curvature_frame out;
+  face_height_jet jet = face_height_jet_fit(M, x, f, stencil);
+  out.n = jet.n;
+  out.t_min = jet.u;
+  out.t_max = jet.v;
+  if (!jet.valid)
+    return out;
+
   Eigen::Matrix2d H;
-  H(0, 0) = 2.0 * coef(0);
-  H(0, 1) = coef(1);
-  H(1, 0) = coef(1);
-  H(1, 1) = 2.0 * coef(2);
+  H(0, 0) = 2.0 * jet.a;
+  H(0, 1) = jet.b;
+  H(1, 0) = jet.b;
+  H(1, 1) = 2.0 * jet.c;
 
   Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> es(H);
   if (es.info() != Eigen::Success) {
-    out.t_min = u_axis;
-    out.t_max = v_axis;
     return out;
   }
 
   Eigen::Vector2d ev0 = es.eigenvectors().col(0);
   Eigen::Vector2d ev1 = es.eigenvectors().col(1);
-  vec3 dir0 = (ev0[0] * u_axis + ev0[1] * v_axis).normalized();
-  vec3 dir1 = (ev1[0] * u_axis + ev1[1] * v_axis).normalized();
   out.k_min = es.eigenvalues()[0];
   out.k_max = es.eigenvalues()[1];
-  out.t_min = dir0;
-  out.t_max = dir1;
+  out.t_min = (ev0[0] * jet.u + ev0[1] * jet.v).normalized();
+  out.t_max = (ev1[0] * jet.u + ev1[1] * jet.v).normalized();
   return out;
 }
 

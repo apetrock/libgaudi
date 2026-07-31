@@ -73,7 +73,14 @@ def main() -> None:
     parser.add_argument("--cse", action="store_true", help="show CSE-reduced form with --inspect")
     parser.add_argument(
         "--emit",
-        choices=["kernels", "quadric", "darboux", "cyclide_smooth", "all"],
+        choices=[
+            "kernels",
+            "quadric",
+            "darboux",
+            "cyclide_smooth",
+            "shape_operator_fit",
+            "all",
+        ],
         default=None,
         help="write generated headers (default: kernels if no --inspect)",
     )

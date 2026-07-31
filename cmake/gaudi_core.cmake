@@ -26,6 +26,7 @@ add_library(gaudi::core ALIAS gaudi_core)
 
 target_include_directories(gaudi_core INTERFACE
     "${LIBGAUDI_ROOT}/include"
+    "${LIBGAUDI_ROOT}/ext"
     "${LIBGAUDI_ROOT}/ext/eigen"
     "${LIBGAUDI_ROOT}/ext/spectra/include"
     "${LIBGAUDI_ROOT}/scripts/sympy/generated"

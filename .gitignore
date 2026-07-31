@@ -121,4 +121,9 @@ public
 
 # Temporary folders
 tmp/
-temp/ 
+temp/
+
+# Knot Atlas RDF dumps (fetch via scripts/knots/fetch_katlas_rdf.py; ~45MB gz)
+assets/knots/katlas/*.rdf.gz
+assets/knots/katlas/*.rdf
+assets/knots/katlas/ht_index.json 

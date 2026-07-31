@@ -102,6 +102,20 @@ void point(const vec3 &p0, const vec4 &color) {
                                   kDebugPointRadius);
 }
 
+void sphere(const vec3 &center, real radius, const vec4 &color) {
+  lewitt::logger::geometry::sphere(to_glm_vec3(center),
+                                   static_cast<float>(radius),
+                                   to_glm_color(color));
+}
+
+void torus(const vec3 &center, const vec3 &axis, real major_radius,
+           real minor_radius, const vec4 &color) {
+  lewitt::logger::geometry::torus(to_glm_vec3(center), to_glm_vec3(axis),
+                                  static_cast<float>(major_radius),
+                                  static_cast<float>(minor_radius),
+                                  to_glm_color(color));
+}
+
 void clear() {
   lewitt::logger::geometry::clear();
 }

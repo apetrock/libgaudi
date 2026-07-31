@@ -8,6 +8,7 @@
 #include "gaudi/asawa/shell/operations.hpp"
 #include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/calder/least_squares_fit.hpp"
+#include "gaudi/calder/mls_jet_bootstrap.hpp"
 #include "gaudi/common.h"
 #include "gaudi/geometry_logger.hpp"
 #include "gaudi/kusama/cyclide_jet_smooth.hpp"
@@ -30,7 +31,17 @@ enum class medial_axis_display {
 struct cyclide_medial_params {
   real l0_scale = 0.1;
   real fit_p = 2.0;
-  real fit_w0 = 10.0; // foot-normal fraction of accumulated MLS weight (w_foot = fit_w0 * w_accum)
+  // Relative foot tip-in for MLS (quadric stage-1 and Darboux stage-2):
+  //   w_foot = fit_w0 * Σ w_MLS   (1.0 ≈ match neighborhood mass)
+  real fit_w0 = 1.0;
+  real radius_scale = 1.0; // Gaussian σ = radius_scale * R
+  // Stage-1 R = 1/|κ|_max from soft-convex MLS + foot tip-in.
+  // Flip to quadric to A/B bandwidth without touching stage-2.
+  calder::stage1_radius_model stage1_radius =
+      calder::stage1_radius_model::quadric;
+  // When true, use disc→aniso-quadric→torus-weighted Darboux bootstrap.
+  bool use_mls_bootstrap = false;
+  calder::mls_jet_bootstrap_params bootstrap;
   real normal_l0 = 0.35;
   real min_normal_alignment = -0.25;
   real medial_smooth_scale = 0.0;
@@ -41,9 +52,10 @@ struct cyclide_medial_params {
   real newton_step_scale = 1000.0;
   int probe_vertex = -1;
   kusama::cyclide_jet_smooth_params smooth;
-  bool enable_cyclide_smooth = true;
-  medial_axis_display display = medial_axis_display::SmoothedFitHessian;
-  //medial_axis_display display = medial_axis_display::MedialAxis;
+  // Temporarily off while investigating divergent medial sites.
+  bool enable_cyclide_smooth = false;
+  medial_axis_display display = medial_axis_display::MedialAxis;
+  //medial_axis_display display = medial_axis_display::SmoothedFitHessian;
   real hessian_frame_scale = 3.0;
   real hessian_line_radius = 0.004;
 };
@@ -783,9 +795,19 @@ compute_local_fit_cyclide_medial_candidates(
     return {};
   }
 
-  const std::vector<albers::vec14> fits =
-      calder::darboux_cyclide_shell_fit(M, x, vertex_normals, l0, params.fit_p,
-                                        params.fit_w0);
+  std::vector<albers::vec14> fits;
+  if (params.use_mls_bootstrap) {
+    calder::mls_jet_bootstrap_params bp = params.bootstrap;
+    bp.fit_p = params.fit_p;
+    bp.fit_w0 = params.fit_w0;
+    bp.radius_scale = params.radius_scale;
+    fits = calder::darboux_fit_bootstrapped(M, x, vertex_normals, l0, bp);
+  } else {
+    fits = calder::darboux_cyclide_shell_fit(M, x, vertex_normals, l0,
+                                             params.fit_p, params.fit_w0,
+                                             params.radius_scale,
+                                             params.stage1_radius);
+  }
 
   const real max_travel = params.max_travel_scale * avg_len;
   const real max_newton_step =
@@ -1067,12 +1089,21 @@ inline cyclide_medial_params default_cyclide_medial_demo_params() {
   params.fit_p = 3.0;
   params.normal_l0 = 2.0;
   params.min_normal_alignment = -0.5;
-  params.medial_smooth_scale = 8.0;
-  params.medial_smooth_blend = 1.0;
+  // Off while investigating raw ridge outliers (was MLS pipe smooth).
+  params.medial_smooth_scale = 0.0;
+  params.medial_smooth_blend = 0.0;
   params.max_iters = 100;
   params.tol = 1e-8;
   params.max_travel_scale = 1000.0;
   params.newton_step_scale = 1000.0;
+  // Stage-1 harmonic → R from |κ|_max → soft-convex × (Nj·∇T̂) × G(σ=R).
+  params.use_mls_bootstrap = true;
+  params.fit_p = 3.0;
+  params.fit_w0 = 1.0;
+  params.radius_scale = 1.0;
+  params.bootstrap.ablation =
+      calder::mls_bootstrap_ablation::harmonic_darboux_torus_normal_align;
+  params.bootstrap.torus_sign = albers::torus_sign_mode::pat_eq22;
   return params;
 }
 

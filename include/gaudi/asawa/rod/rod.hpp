@@ -247,14 +247,21 @@ public:
 
     vec3 dn0 = cn - c0;
     vec3 d0p = c0 - cp;
-    vec3 dd0 = dn0 - d0p;
 
-    // vec3 T = (dn0 + d0p).normalized();          // tan
-    // vec3 B = dn0.cross(d0p).normalized();       // norm
-    // vec3 N = T.cross(B).normalized();           // binorm
-    vec3 T = (dn0 + d0p).normalized();          // tan
-    vec3 B = (dn0 - d0p).cross(T).normalized(); // norm
-    vec3 N = T.cross(B).normalized();           // binorm
+    vec3 T = (dn0 + d0p);
+    if (T.norm() < 1e-14) {
+      T = (std::abs(dn0.norm()) > 1e-14) ? dn0 : d0p;
+    }
+    T.normalize();
+
+    vec3 B = (dn0 - d0p).cross(T);
+    if (B.norm() < 1e-10) {
+      // Nearly straight: pick any normal orthogonal to T.
+      vec3 arb = (std::abs(T[0]) < 0.9) ? vec3::UnitX() : vec3::UnitY();
+      B = T.cross(arb);
+    }
+    B.normalize();
+    vec3 N = T.cross(B).normalized();
 
     mat3 F;
     F.col(0) = B;
@@ -283,7 +290,7 @@ public:
   void _update_frames(const std::vector<vec3> &N_vec) {
     __u.clear();
     __u.resize(__corners_next.size(), quat::Identity());
-    for (int i = 0; i < __corners_next.size(); i++) {
+    for (int i = 0; i < static_cast<int>(__corners_next.size()); i++) {
       if (__corners_next[i] == -1)
         continue;
       auto idx = consec(corner_id(i));
@@ -294,59 +301,101 @@ public:
 
       vec3 dn0 = cn - c0;
       vec3 d0p = c0 - cp;
-      vec3 dd0 = dn0 - d0p;
 
-      vec3 T = (dn0 + d0p).normalized();         // tan
-      vec3 B = (N_vec[i]).cross(T).normalized(); // norm
+      vec3 T = (dn0 + d0p);
+      if (T.norm() < 1e-14) {
+        T = (dn0.norm() > 1e-14) ? dn0 : d0p;
+      }
+      T.normalize();
+
       vec3 N = N_vec[i];
+      if (!N.array().isFinite().all() || N.norm() < 1e-10) {
+        N = _get_frenet_mat(corner_id(i)).col(1);
+      }
+      N = (N - N.dot(T) * T);
+      if (N.norm() < 1e-10) {
+        N = _get_frenet_mat(corner_id(i)).col(1);
+      }
+      N.normalize();
+      vec3 B = N.cross(T).normalized();
+
       mat3 F;
       F.col(0) = B;
       F.col(1) = N;
       F.col(2) = T;
 
       __u[i] = quat(F).normalized();
-
       if (__u[i].coeffs().hasNaN()) {
-        std::cout << __PRETTY_FUNCTION__ << i << std::endl;
-        std::cout << dn0 << " " << d0p << " " << dd0 << std::endl;
-        std::cout << "F: " << F << std::endl;
-        exit(0);
+        __u[i] = _get_frenet(corner_id(i));
       }
     }
 
-    for (int i = 0; i < __corners_next.size(); i++) {
-      __o[i] = quat(0.0, 0.0, 0.0, 0.0);
-    }
-
-    // fix_frame();
+    __o.assign(__corners_next.size(), quat(0.0, 0.0, 0.0, 0.0));
   }
 
+  /// Bishop / parallel-transport frames along each connected component.
+  /// Walks `next`/`prev` (not corner index order) so multi-strand rods work.
   void _update_frames() {
-    __u.resize(__corners_next.size());
-    std::vector<vec3> N_vec(__corners_next.size());
-    vec3 N0 = _get_frenet_mat(corner_id(0)).col(1);
-    for (int i = 0; i < __corners_next.size(); i++) {
-      if (__corners_next[i] == -1)
+    const int n = static_cast<int>(__corners_next.size());
+    std::vector<vec3> N_vec(static_cast<size_t>(n), vec3::Zero());
+    std::vector<char> visited(static_cast<size_t>(n), 0);
+
+    for (int seed = 0; seed < n; ++seed) {
+      if (__corners_next[seed] < 0 || visited[static_cast<size_t>(seed)]) {
         continue;
-      auto idx = consec(corner_id(i));
-
-      vec3 cp = __x[idx[0]];
-      vec3 c0 = __x[idx[1]];
-      vec3 cn = __x[idx[2]];
-
-      vec3 dn0 = cn - c0;
-      vec3 d0p = c0 - cp;
-      vec3 dd0 = dn0 - d0p;
-      quat qi = Eigen::Quaterniond::FromTwoVectors(d0p, dn0);
-      if (qi.coeffs().hasNaN()) {
-        std::cout << __PRETTY_FUNCTION__ << i << std::endl;
-        std::cout << dn0 << " " << d0p << " " << dd0 << std::endl;
-        std::cout << qi << std::endl;
-        exit(0);
       }
-      N_vec[i] = N0;
-      N0 = qi * N0;
+
+      // Prefer an open endpoint; otherwise start at seed (closed loop).
+      CornerId start = corner_id(seed);
+      CornerId s = start;
+      for (;;) {
+        const CornerId p = prev(s);
+        if (p < corner_id(0) || p == start) {
+          break;
+        }
+        s = p;
+      }
+
+      vec3 N0 = _get_frenet_mat(s).col(1);
+      if (!N0.array().isFinite().all() || N0.norm() < 1e-10) {
+        auto idx = consec(s);
+        vec3 T = (__x[idx[2]] - __x[idx[0]]);
+        if (T.norm() < 1e-14) {
+          T = vec3::UnitX();
+        } else {
+          T.normalize();
+        }
+        vec3 arb = (std::abs(T[0]) < 0.9) ? vec3::UnitX() : vec3::UnitY();
+        N0 = T.cross(arb).normalized();
+      } else {
+        N0.normalize();
+      }
+
+      CornerId i = s;
+      do {
+        const int ii = static_cast<int>(i);
+        visited[static_cast<size_t>(ii)] = 1;
+        N_vec[static_cast<size_t>(ii)] = N0;
+
+        const CornerId j = next(i);
+        if (j < corner_id(0)) {
+          break;
+        }
+
+        auto idx = consec(i);
+        vec3 d0p = __x[idx[1]] - __x[idx[0]];
+        vec3 dn0 = __x[idx[2]] - __x[idx[1]];
+        if (d0p.norm() > 1e-14 && dn0.norm() > 1e-14) {
+          const quat qi =
+              quat::FromTwoVectors(d0p.normalized(), dn0.normalized());
+          if (!qi.coeffs().hasNaN()) {
+            N0 = qi * N0;
+          }
+        }
+        i = j;
+      } while (i != s && !visited[static_cast<size_t>(i)]);
     }
+
     _update_frames(N_vec);
   }
 

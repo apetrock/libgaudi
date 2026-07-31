@@ -629,6 +629,67 @@ GAUDI_TEST(calder_darboux_cyclide_convexity_fit_w0_foot_normal) {
   GAUDI_EXPECT(align_strong > 0.9);
 }
 
+GAUDI_TEST(calder_darboux_adaptive_gaussian_inner_radius_and_fit) {
+  const real major_radius = 1.25;
+  const real minor_radius = 0.35;
+  TorusMesh mesh = make_offset_torus_shell(
+      32, 16, major_radius, minor_radius,
+      make_torus_frame(vec3::Zero(), vec3::UnitZ()));
+  asawa::shell::shell &M = *mesh.shell;
+  const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+  const std::vector<vec3> N = asawa::shell::vertex_normals(M, x);
+  const real avg_len = asawa::shell::avg_length(M, x);
+  const real l0 = std::max(real(2.0) * avg_len, real(1e-12));
+
+  const int vi = static_cast<int>(x.size() / 2);
+  const std::vector<vec3> p_fit = {x[static_cast<size_t>(vi)]};
+  const std::vector<vec3> n_fit = {N[static_cast<size_t>(vi)]};
+
+  const std::vector<real> radii_c =
+      calder::inner_radii_cyclide_max_curvature(M, p_fit, n_fit, l0, 3.0, 1.0);
+  const std::vector<real> radii_q =
+      calder::inner_radii_quadric_max_curvature(M, p_fit, n_fit, l0, 3.0, 1.0);
+  GAUDI_ASSERT(radii_c.size() == 1);
+  GAUDI_ASSERT(radii_q.size() == 1);
+  GAUDI_EXPECT(std::isfinite(radii_c[0]));
+  GAUDI_EXPECT(std::isfinite(radii_q[0]));
+  GAUDI_EXPECT(radii_c[0] > 0.05 * minor_radius);
+  GAUDI_EXPECT(radii_c[0] < 8.0 * major_radius);
+  GAUDI_EXPECT(radii_q[0] > 0.05 * minor_radius);
+  GAUDI_EXPECT(radii_q[0] < 8.0 * major_radius);
+
+  const std::vector<albers::vec14> Qs =
+      calder::darboux_cyclide_normal_constrained_adaptive_gaussian(
+          M, p_fit, n_fit, l0, 3.0, 1.0, 1.0,
+          calder::stage1_radius_model::cyclide);
+  GAUDI_ASSERT(Qs.size() == 1);
+  GAUDI_EXPECT(Qs[0].allFinite());
+
+  const std::vector<albers::vec14> Qs_q =
+      calder::darboux_cyclide_normal_constrained_adaptive_gaussian(
+          M, p_fit, n_fit, l0, 3.0, 1.0, 1.0,
+          calder::stage1_radius_model::quadric);
+  GAUDI_ASSERT(Qs_q.size() == 1);
+  GAUDI_EXPECT(Qs_q[0].allFinite());
+
+  const vec3 g = albers::darboux_grad(Qs[0], vec3::Zero());
+  GAUDI_EXPECT(g.allFinite());
+  GAUDI_EXPECT(g.norm() > 1e-12);
+  const real align =
+      std::abs(g.normalized().dot(n_fit[0].normalized()));
+  GAUDI_EXPECT(align > 0.5);
+
+  const std::vector<albers::vec14> Q_shell =
+      calder::darboux_cyclide_shell_fit(M, p_fit, n_fit, l0, 3.0, 1.0, 1.0);
+  GAUDI_ASSERT(Q_shell.size() == 1);
+  GAUDI_EXPECT(Q_shell[0].allFinite());
+
+  std::cerr << "\n[calder_darboux_adaptive_gaussian]"
+            << " R_cyclide=" << radii_c[0] << " R_quadric=" << radii_q[0]
+            << " minor=" << minor_radius << " |g|=" << g.norm()
+            << " align=" << align << "\n";
+}
+
 } // namespace test
 } // namespace gaudi
 

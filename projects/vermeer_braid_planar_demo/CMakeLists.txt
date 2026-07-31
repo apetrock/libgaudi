@@ -1,0 +1,1 @@
+add_gaudi_vermeer_project(vermeer_braid_planar_demo SOURCES main.cpp)

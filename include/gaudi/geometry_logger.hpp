@@ -24,6 +24,9 @@ void line(const vec3 &p0, const vec3 &p1, const vec4 &color,
 void ext(const vec3 &mn, const vec3 &mx, const vec4 &col);
 void frame(const mat3 &M, const vec3 &c, double C);
 void point(const vec3 &p0, const vec4 &color);
+void sphere(const vec3 &center, real radius, const vec4 &color);
+void torus(const vec3 &center, const vec3 &axis, real major_radius,
+           real minor_radius, const vec4 &color);
 void clear();
 
 // Data access functions

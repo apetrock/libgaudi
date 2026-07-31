@@ -1,4 +1,4 @@
-#include "gaudi/duchamp/rod_constraints_solver_adapter.hpp"
+#include "gaudi/duchamp/rod_constraints_solver.hpp"
 #include "gaudi/vermeer/vermeer.hpp"
 
 int main() {

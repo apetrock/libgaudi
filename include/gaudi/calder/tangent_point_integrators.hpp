@@ -63,8 +63,9 @@ namespace gaudi
             vec3 Ni = Bi.cross(Ti).normalized();
             vec3 Nj = Bj.cross(Tj).normalized();
 
-            vec3 gj = calc_tangent_point_radius_grad(dp, Nj, l0, p);
-            vec3 gi = calc_tangent_point_radius_grad(-dp, Ni, l0, p);
+            // Rosenhead/Cauchy core: K = |N·dp|^p / (|dp|² + ε²)^p, ε = l0
+            vec3 gj = calc_tangent_point_radius_grad_cauchy(dp, Nj, l0, p);
+            vec3 gi = calc_tangent_point_radius_grad_cauchy(-dp, Ni, l0, p);
 
             return 0.5 * (wi * gi - wj * gj);
           });

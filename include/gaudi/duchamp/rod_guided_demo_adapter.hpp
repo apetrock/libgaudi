@@ -9,12 +9,26 @@ namespace duchamp {
 
 class rod_guided_demo_adapter : public demo_adapter<rod_guided_deformation> {
 public:
-  static ptr create() {
-    return std::make_shared<rod_guided_demo_adapter>();
+  static ptr create(const rod_guided_config &cfg = {}) {
+    return std::make_shared<rod_guided_demo_adapter>(cfg);
   }
 
-  rod_guided_demo_adapter()
-      : demo_adapter<rod_guided_deformation>(rod_guided_deformation::create(),
+  // Convenience overloads.
+  static ptr create(const braid_circle_config &braid_cfg) {
+    rod_guided_config cfg;
+    cfg.scene = rod_guided_scene::braid_circle;
+    cfg.braid = braid_cfg;
+    return create(cfg);
+  }
+
+  static ptr create_bunny_walk() {
+    rod_guided_config cfg;
+    cfg.scene = rod_guided_scene::bunny_walk;
+    return create(cfg);
+  }
+
+  explicit rod_guided_demo_adapter(const rod_guided_config &cfg = {})
+      : demo_adapter<rod_guided_deformation>(rod_guided_deformation::create(cfg),
                                              "rod_guided_deformation") {}
 
   std::optional<mesh_snapshot> shell_mesh() const override {

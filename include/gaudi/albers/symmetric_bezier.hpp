@@ -17,45 +17,51 @@
 namespace gaudi {
 namespace albers {
 
-struct mirror_frame {
+// Local frame for discrete screw / π-flip symmetry about the rod axis.
+// Pairing is central inversion through origin: p → 2o - p, which sends
+// (s, v_⊥) → (-s, -v_⊥) — ahead↔behind with lateral flip. That is the
+// stencil-level model of a half-turn screw about T (coil-like), not a
+// planar mirror (arch-like).
+struct screw_frame {
   vec3 origin = vec3::Zero();
-  vec3 e_T = vec3::UnitX();      // along-curve
-  vec3 n_mirror = vec3::UnitY(); // reflection normal (left/right)
-  vec3 n_plane = vec3::UnitZ();  // out-of-plane
+  vec3 e_T = vec3::UnitX(); // screw / sort axis (local tangent)
   real sigma[3] = {0, 0, 0};
   bool ok = false;
 };
 
-inline vec3 reflect_plane(const vec3 &p, const vec3 &origin, const vec3 &n) {
-  const vec3 nn = n.normalized();
-  const vec3 d = p - origin;
-  return p - 2.0 * d.dot(nn) * nn;
+inline vec3 screw_flip(const vec3 &p, const vec3 &origin) {
+  return 2.0 * origin - p;
 }
 
-inline std::array<real, 5> bernstein4(real t) {
+// π rotation about axis e_T through origin (orientation-preserving half-turn).
+// Alone this keeps the T-coordinate; compose with T-reversal (= screw_flip).
+inline vec3 rotate_pi_about_axis(const vec3 &p, const vec3 &origin,
+                                 const vec3 &e_T) {
+  const vec3 T = e_T.normalized();
+  const vec3 d = p - origin;
+  return origin + 2.0 * d.dot(T) * T - d;
+}
+
+inline std::array<real, 4> bernstein3(real t) {
   const real u = 1.0 - t;
   const real u2 = u * u;
   const real u3 = u2 * u;
-  const real u4 = u3 * u;
   const real t2 = t * t;
   const real t3 = t2 * t;
-  const real t4 = t3 * t;
-  return {u4, 4.0 * u3 * t, 6.0 * u2 * t2, 4.0 * u * t3, t4};
+  return {u3, 3.0 * u2 * t, 3.0 * u * t2, t3};
 }
 
-inline vec3 eval_quartic_bezier(const std::array<vec3, 5> &P, real t) {
-  const auto b = bernstein4(t);
-  return b[0] * P[0] + b[1] * P[1] + b[2] * P[2] + b[3] * P[3] + b[4] * P[4];
+inline vec3 eval_cubic_bezier(const std::array<vec3, 4> &P, real t) {
+  const auto b = bernstein3(t);
+  return b[0] * P[0] + b[1] * P[1] + b[2] * P[2] + b[3] * P[3];
 }
 
-// Centroid-PCA frame.
-// For a mild C-buckle the largest principal axis is left/right = mirror normal,
-// and is also the natural axis to sort along for t (open the arc left→right).
-// Cached T only disambiguates sign / continuity (and a secondary out-of-plane axis).
-inline mirror_frame mirror_plane_from_centroid_pca(
-    const std::vector<vec3> &points, const vec3 &T_cached,
-    real sep_ratio_min = 1.15) {
-  mirror_frame f;
+// Axis from cached tangent, refined by PCA (pick eigenvector closest to T).
+// Rejects near-isotropic clouds where the screw axis is ill-defined.
+inline screw_frame screw_frame_from_centroid_pca(const std::vector<vec3> &points,
+                                                 const vec3 &T_cached,
+                                                 real sep_ratio_min = 1.15) {
+  screw_frame f;
   if (points.size() < 3)
     return f;
 
@@ -76,7 +82,6 @@ inline mirror_frame mirror_plane_from_centroid_pca(
   if (es.info() != Eigen::Success)
     return f;
 
-  // Ascending eigenvalues: col(0) smallest.
   const vec3 s = es.eigenvalues();
   if (s.hasNaN() || s[2] < 1e-18)
     return f;
@@ -87,47 +92,45 @@ inline mirror_frame mirror_plane_from_centroid_pca(
   f.sigma[1] = s[1];
   f.sigma[2] = s[0];
 
+  // Need a dominant axis to serve as T; reject when the top two σ's are close
+  // (e.g. isotropic in-plane pentagon).
   const real r01 = f.sigma[0] / std::max(f.sigma[1], 1e-18);
-  const real r12 = f.sigma[1] / std::max(f.sigma[2], 1e-18);
-  if (r01 < sep_ratio_min || r12 < sep_ratio_min)
-    return f; // near-degenerate / isotropic-in-plane regime
+  if (r01 < sep_ratio_min)
+    return f;
 
-  // Largest variance → mirror normal (and sort axis for t).
-  f.n_mirror = e[2].normalized();
-  // Sign: prefer agreement with chord implied by T, else keep SVD sign.
   vec3 T = T_cached;
   if (T.norm() < 1e-12)
-    T = f.n_mirror;
+    T = points.back() - points.front();
+  if (T.norm() < 1e-12)
+    T = e[2];
   T.normalize();
-  if (f.n_mirror.dot(T) < 0.0)
-    f.n_mirror = -f.n_mirror;
 
-  // Sort / "tangent" axis for parameterization = mirror normal for open C.
-  f.e_T = f.n_mirror;
-
-  // Out-of-plane = smallest; bisector-ish = middle.
-  f.n_plane = e[0].normalized();
-  vec3 bitan = e[1].normalized();
-  if (f.e_T.cross(bitan).dot(f.n_plane) < 0.0)
-    f.n_plane = -f.n_plane;
-  (void)bitan;
-
+  int iT = 0;
+  real best = -1.0;
+  for (int i = 0; i < 3; ++i) {
+    const real a = std::abs(e[i].dot(T));
+    if (a > best) {
+      best = a;
+      iT = i;
+    }
+  }
+  f.e_T = (e[iT].dot(T) < 0.0 ? -e[iT] : e[iT]).normalized();
   f.ok = true;
   return f;
 }
 
-inline std::vector<vec3> symmetrize_points(const std::vector<vec3> &points,
-                                           const mirror_frame &f) {
+// Double the cloud by discrete screw pairing (central inversion through origin).
+inline std::vector<vec3> screw_symmetrize_points(const std::vector<vec3> &points,
+                                                 const screw_frame &f) {
   std::vector<vec3> cloud;
   cloud.reserve(points.size() * 2);
   for (const vec3 &p : points) {
     cloud.push_back(p);
-    cloud.push_back(reflect_plane(p, f.origin, f.n_mirror));
+    cloud.push_back(screw_flip(p, f.origin));
   }
   return cloud;
 }
 
-// Returns t in [0,1] parallel to cloud (same order). Fails → empty.
 inline std::vector<real> assign_t_by_tangent_projection(
     const std::vector<vec3> &cloud, const vec3 &origin, const vec3 &e_T) {
   std::vector<real> t(cloud.size(), 0.0);
@@ -149,7 +152,6 @@ inline std::vector<real> assign_t_by_tangent_projection(
     return {};
 
   for (size_t rank = 0; rank < keyed.size(); ++rank) {
-    // Use continuous normalized s (not rank) so duplicate projections share t.
     const real s = keyed[rank].first;
     t[keyed[rank].second] = (s - s0) / (s1 - s0);
   }
@@ -179,63 +181,60 @@ inline bool tangent_s_range(const std::vector<vec3> &cloud, const vec3 &origin,
   return std::abs(s_max - s_min) > 1e-14;
 }
 
-// Unconstrained quartic LS: min Σ ||B(t_j) - q_j||^2 over P0..P4 in R^3.
-inline bool fit_quartic_bezier(const std::vector<vec3> &cloud,
-                               const std::vector<real> &t,
-                               std::array<vec3, 5> &P_out) {
-  P_out = {vec3::Zero(), vec3::Zero(), vec3::Zero(), vec3::Zero(),
-           vec3::Zero()};
-  if (cloud.size() < 5 || cloud.size() != t.size())
+inline bool fit_cubic_bezier(const std::vector<vec3> &cloud,
+                             const std::vector<real> &t,
+                             std::array<vec3, 4> &P_out) {
+  P_out = {vec3::Zero(), vec3::Zero(), vec3::Zero(), vec3::Zero()};
+  if (cloud.size() < 4 || cloud.size() != t.size())
     return false;
 
-  // Normal equations: (B^T B) X = B^T Y, with 5 controls, 3 independent axes.
-  Eigen::Matrix<real, 5, 5> AtA = Eigen::Matrix<real, 5, 5>::Zero();
-  Eigen::Matrix<real, 5, 3> Atb = Eigen::Matrix<real, 5, 3>::Zero();
+  Eigen::Matrix<real, 4, 4> AtA = Eigen::Matrix<real, 4, 4>::Zero();
+  Eigen::Matrix<real, 4, 3> Atb = Eigen::Matrix<real, 4, 3>::Zero();
 
   for (size_t j = 0; j < cloud.size(); ++j) {
-    const auto b = bernstein4(t[j]);
-    for (int a = 0; a < 5; ++a) {
-      for (int c = 0; c < 5; ++c)
+    const auto b = bernstein3(t[j]);
+    for (int a = 0; a < 4; ++a) {
+      for (int c = 0; c < 4; ++c)
         AtA(a, c) += b[a] * b[c];
       Atb.row(a) += b[a] * cloud[j].transpose();
     }
   }
 
-  Eigen::LDLT<Eigen::Matrix<real, 5, 5>> ldlt(AtA);
+  Eigen::LDLT<Eigen::Matrix<real, 4, 4>> ldlt(AtA);
   if (ldlt.info() != Eigen::Success)
     return false;
-  Eigen::Matrix<real, 5, 3> X = ldlt.solve(Atb);
+  Eigen::Matrix<real, 4, 3> X = ldlt.solve(Atb);
   if (!X.allFinite())
     return false;
 
-  for (int i = 0; i < 5; ++i)
+  for (int i = 0; i < 4; ++i)
     P_out[i] = X.row(i).transpose();
   return true;
 }
 
 struct symmetric_bezier_fit {
-  mirror_frame frame;
-  std::array<vec3, 5> P = {vec3::Zero(), vec3::Zero(), vec3::Zero(),
-                           vec3::Zero(), vec3::Zero()};
+  screw_frame frame;
+  std::array<vec3, 4> P = {vec3::Zero(), vec3::Zero(), vec3::Zero(),
+                           vec3::Zero()};
   real s_min = 0.0;
   real s_max = 1.0;
   bool ok = false;
 
   vec3 eval_at_point(const vec3 &p) const {
     const real tt = tangent_t(p, frame.origin, frame.e_T, s_min, s_max);
-    return eval_quartic_bezier(P, tt);
+    return eval_cubic_bezier(P, tt);
   }
 };
 
-inline symmetric_bezier_fit fit_symmetric_quartic_bezier(
+inline symmetric_bezier_fit fit_symmetric_cubic_bezier(
     const std::vector<vec3> &points, const vec3 &T_cached,
     real sep_ratio_min = 1.15) {
   symmetric_bezier_fit out;
-  out.frame = mirror_plane_from_centroid_pca(points, T_cached, sep_ratio_min);
+  out.frame = screw_frame_from_centroid_pca(points, T_cached, sep_ratio_min);
   if (!out.frame.ok)
     return out;
 
-  const std::vector<vec3> cloud = symmetrize_points(points, out.frame);
+  const std::vector<vec3> cloud = screw_symmetrize_points(points, out.frame);
   if (!tangent_s_range(cloud, out.frame.origin, out.frame.e_T, out.s_min,
                        out.s_max))
     return out;
@@ -245,11 +244,18 @@ inline symmetric_bezier_fit fit_symmetric_quartic_bezier(
   if (t.empty())
     return out;
 
-  if (!fit_quartic_bezier(cloud, t, out.P))
+  if (!fit_cubic_bezier(cloud, t, out.P))
     return out;
 
   out.ok = true;
   return out;
+}
+
+// Alias kept for existing call sites.
+inline symmetric_bezier_fit fit_symmetric_quartic_bezier(
+    const std::vector<vec3> &points, const vec3 &T_cached,
+    real sep_ratio_min = 1.15) {
+  return fit_symmetric_cubic_bezier(points, T_cached, sep_ratio_min);
 }
 
 } // namespace albers

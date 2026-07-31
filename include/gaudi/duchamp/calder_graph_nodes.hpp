@@ -2,9 +2,11 @@
 #define __GAUDI_DUCHAMP_CALDER_GRAPH_NODES__
 
 #include <stdexcept>
+#include <utility>
 
 #include "gaudi/albers/line_cylinder.hpp"
 #include "gaudi/calder/least_squares_fit.hpp"
+#include "gaudi/calder/mls_jet_bootstrap.hpp"
 #include "gaudi/duchamp/body_datum.hpp"
 #include "gaudi/duchamp/field_graph_nodes.hpp"
 #include "gaudi/duchamp/medial_field_datums.hpp"
@@ -26,8 +28,15 @@ public:
   using NPovPortDef = liblombardi::PortDef<field_datum<vec3>, PortId::NPov>;
   using OutputPortDef = liblombardi::PortDef<cyclide_field_datum, PortId::Output>;
 
-  darboux_cyclide_fit_node(real l0, real fit_p = 3.0, real fit_w0 = 0.1)
-      : _l0(l0), _fit_p(fit_p), _fit_w0(fit_w0) {}
+  darboux_cyclide_fit_node(real l0, real fit_p = 3.0, real fit_w0 = 1.0,
+                           real radius_scale = 1.0,
+                           calder::stage1_radius_model stage1 =
+                               calder::stage1_radius_model::cyclide,
+                           bool use_mls_bootstrap = false,
+                           calder::mls_jet_bootstrap_params bootstrap = {})
+      : _l0(l0), _fit_p(fit_p), _fit_w0(fit_w0), _radius_scale(radius_scale),
+        _stage1(stage1), _use_mls_bootstrap(use_mls_bootstrap),
+        _bootstrap(std::move(bootstrap)) {}
 
   void compute() override {
     const auto body = get_datum<BodyPortDef>();
@@ -41,8 +50,18 @@ public:
       throw std::runtime_error("darboux_cyclide_fit_node: shell body required");
     }
     auto &M = static_cast<shell_body_handle &>(*body->handle).ref();
-    out->data() = calder::darboux_cyclide_shell_fit(
-        M, pov->data(), n_pov->data(), _l0, _fit_p, _fit_w0);
+    if (_use_mls_bootstrap) {
+      calder::mls_jet_bootstrap_params bp = _bootstrap;
+      bp.fit_p = _fit_p;
+      bp.fit_w0 = _fit_w0;
+      bp.radius_scale = _radius_scale;
+      out->data() = calder::darboux_fit_bootstrapped(M, pov->data(),
+                                                     n_pov->data(), _l0, bp);
+    } else {
+      out->data() = calder::darboux_cyclide_shell_fit(
+          M, pov->data(), n_pov->data(), _l0, _fit_p, _fit_w0, _radius_scale,
+          _stage1);
+    }
   }
 
   unsigned int port_count() const override { return 4; }
@@ -63,7 +82,11 @@ public:
 private:
   real _l0 = 1.0;
   real _fit_p = 3.0;
-  real _fit_w0 = 0.1;
+  real _fit_w0 = 1.0; // w_foot = _fit_w0 * Σ w_MLS
+  real _radius_scale = 1.0;
+  calder::stage1_radius_model _stage1 = calder::stage1_radius_model::cyclide;
+  bool _use_mls_bootstrap = false;
+  calder::mls_jet_bootstrap_params _bootstrap;
 };
 
 class darboux_cyclide_smooth_node : public liblombardi::Node {

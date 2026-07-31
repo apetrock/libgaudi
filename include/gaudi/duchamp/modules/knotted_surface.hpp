@@ -10,6 +10,7 @@
 
 #include "gaudi/hepworth/block/rod_constraints.hpp"
 #include "gaudi/hepworth/block/rod_constraints_init.hpp"
+#include "gaudi/hepworth/block/aesthetic/rod_aesthetic_constraints_init.hpp"
 
 #include "gaudi/hepworth/block/shell_constraints.hpp"
 #include "gaudi/hepworth/block/shell_constraints_init.hpp"
@@ -123,17 +124,18 @@ namespace gaudi
                       hepworth::block::select_blocks<1, 2>(ctx));
                 })
                 .with_recompute([this](hepworth::block::solver_context &ctx) {
-                  if (_config.w_rod_straight <= 0.0)
+                  if (_config.w_rod_min_kink <= 0.0)
                     return;
-                  hepworth::block::init_straight(
-                      *__R, ctx.constraints, _config.w_rod_straight,
-                      hepworth::block::select_blocks<2>(ctx));
+                  hepworth::block::init_min_kink(
+                      *__R, ctx.constraints, _config.w_rod_min_kink,
+                      hepworth::block::select_blocks<1>(ctx));
                 })
                 .with_recompute([this](hepworth::block::solver_context &ctx) {
-                  if (_config.w_rod_bending <= 0.0)
+                  if (_config.w_rod_bend <= 0.0 && _config.w_rod_twist <= 0.0)
                     return;
                   hepworth::block::init_bend_twist(
-                      *__R, ctx.constraints, _config.w_rod_bending,
+                      *__R, ctx.constraints, _config.w_rod_bend,
+                      _config.w_rod_twist,
                       hepworth::block::select_blocks<2>(ctx));
                 })
                 .with_recompute([this](hepworth::block::solver_context &ctx) {
@@ -1029,8 +1031,14 @@ namespace gaudi
       void set_shell_strain_weight(real w) { _config.w_shell_strain = w; }
       void set_shell_bending_weight(real w) { _config.w_shell_bending = w; }
       void set_rod_strain_weight(real w) { _config.w_rod_strain = w; }
-      void set_rod_bending_weight(real w) { _config.w_rod_bending = w; }
-      void set_rod_straight_weight(real w) { _config.w_rod_straight = w; }
+      void set_rod_bend_weight(real w) { _config.w_rod_bend = w; }
+      void set_rod_twist_weight(real w) { _config.w_rod_twist = w; }
+      // Alias: sets bend and twist equally (legacy name).
+      void set_rod_bending_weight(real w) {
+        _config.w_rod_bend = w;
+        _config.w_rod_twist = w;
+      }
+      void set_rod_min_kink_weight(real w) { _config.w_rod_min_kink = w; }
 
       void set_rod_pin_weight(const real &w) { _config.w_rod_pin = w; }
       void set_rod_weld_weight(real w) { _config.w_rod_weld = w; }
@@ -1121,14 +1129,15 @@ namespace gaudi
       bool _helicity_constraint = false;
       struct
       {
-        real w_helicity = 1.0e-1;
-        real w_willmore = 5e-1;
-        real w_area = 1e-2;
-        real w_shell_strain = 1.0e-2;
-        real w_shell_bending = 2.0e-1;
-        real w_rod_straight = 1.0e-2;
+        real w_helicity = 0.0e-1;
+        real w_willmore = 1e-0;
+        real w_area = 5e-2;
+        real w_shell_strain = 1.0e-1;
+        real w_shell_bending = 5.0e-2;
+        real w_rod_min_kink = 1.0e-2; // 3rd-diff / min-jerk fairing on positions
         real w_rod_strain = 1.0e-1;
-        real w_rod_bending = 4.0e-1;
+        real w_rod_bend = 4.0e-1;
+        real w_rod_twist = 4.0e-1;
         real w_rod_weld = 1.0;
         real w_shell_weld = 1.0;
         real w_tunnel_orientation = 0.01; // triangle_dipole_tunneling (face N)
@@ -1140,9 +1149,10 @@ namespace gaudi
         real darboux_fit_p0 = 3.0;       // κ_inv_dist power
         real darboux_fit_p1 = 8.0;       // sin(φ) radial-gate power
         // Soft tip-in of mesh N at query: w_foot = foot_normal_w * Σ w_MLS.
-        // Encourages ∇D ∥ N (and D≈0) at the vert — pipe tangent to the shell.
-        real darboux_foot_normal_w = 10.0;
-        bool darboux_smooth = true;      // kusama jet-smooth Q on mesh (as medial)
+        // 1.0 ≈ match neighborhood mass (not an absolute weight).
+        real darboux_foot_normal_w = 1.0;
+        // Off while investigating divergent sites (was kusama one-ring jet-smooth).
+        bool darboux_smooth = false;      // kusama jet-smooth Q on mesh (as medial)
         kusama::cyclide_jet_smooth_params darboux_smooth_params{
             .wi = 0.5,               // weaker anchor → more neighbor agreement
             .alpha_G = 2.0,          // gradient (C1) match across edges

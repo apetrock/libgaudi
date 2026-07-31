@@ -10,7 +10,6 @@
 #include "gaudi/hepworth/block/generic_constraints_init.hpp"
 #include "gaudi/hepworth/block/rod_constraints_init.hpp"
 #include "gaudi/hepworth/block/shell_constraints_init.hpp"
-#include "gaudi/hepworth/block/symmetric_bezier_constraint.hpp"
 #include "gaudi/hepworth/block/sim_block.hpp"
 #include "gaudi/hepworth/block/solver_composition.hpp"
 #include "gaudi/hepworth/blocks/rod_position_block.hpp"
@@ -106,6 +105,15 @@ inline constraint_recompute_fn make_rod_stretch_shear_recompute(asawa::rod::rod:
 }
 
 template <size_t... Is>
+inline constraint_recompute_fn make_rod_edge_stretch_recompute(
+    asawa::rod::rod::ptr rod, real w) {
+  return [rod, w](solver_context &ctx) {
+    init_edge_stretch(*rod, ctx.constraints, rod->l0(), w,
+                      select_blocks<Is...>(ctx));
+  };
+}
+
+template <size_t... Is>
 inline constraint_recompute_fn make_rod_smooth_recompute(asawa::rod::rod::ptr rod,
                                                          real w) {
   return [rod, w](solver_context &ctx) {
@@ -114,20 +122,29 @@ inline constraint_recompute_fn make_rod_smooth_recompute(asawa::rod::rod::ptr ro
 }
 
 template <size_t... Is>
-inline constraint_recompute_fn make_rod_symmetric_bezier_recompute(
-    asawa::rod::rod::ptr rod, real w) {
+inline constraint_recompute_fn make_rod_min_kink_recompute(asawa::rod::rod::ptr rod,
+                                                           real w) {
   return [rod, w](solver_context &ctx) {
-    init_symmetric_bezier(*rod, ctx.constraints, w, select_blocks<Is...>(ctx));
+    init_min_kink(*rod, ctx.constraints, w, select_blocks<Is...>(ctx));
   };
 }
 
 template <size_t... Is>
-inline constraint_recompute_fn make_rod_bend_twist_recompute(asawa::rod::rod::ptr rod,
-                                                             real w_bend,
-                                                             real w_twist) {
-  return [rod, w_bend, w_twist](solver_context &ctx) {
+inline constraint_recompute_fn make_rod_squad_smooth_recompute(
+    asawa::rod::rod::ptr rod, real w) {
+  return [rod, w](solver_context &ctx) {
+    init_squad_smooth(*rod, ctx.constraints, w, select_blocks<Is...>(ctx));
+  };
+}
+
+template <size_t... Is>
+inline constraint_recompute_fn make_rod_bend_twist_recompute(
+    asawa::rod::rod::ptr rod, real w_bend, real w_twist,
+    index_t free_hinge_i = -1, real free_twist_w = 0.0) {
+  return [rod, w_bend, w_twist, free_hinge_i, free_twist_w](solver_context &ctx) {
     init_bend_twist(*rod, ctx.constraints, w_bend, w_twist,
-                    select_blocks<Is...>(ctx), false);
+                    select_blocks<Is...>(ctx), false, free_hinge_i,
+                    free_twist_w);
   };
 }
 
@@ -148,13 +165,19 @@ inline constraint_recompute_fn make_rod_collisions_recompute(
 }
 
 // IPos then IQuat: fans into the right sub-packs for stretch / bend / collision.
+// free_hinge_i >= 0: that hinge gets free_twist_w instead of twist_w (throwaway
+// twist dump for closed rings). Bend stays at bend_w.
+// stretch_w: Cosserat stretch–shear (set 0 to omit those rows).
+// edge_stretch_w: position-only 1D rest-length spring (set 0 to omit).
 template <size_t IPos, size_t IQuat>
-inline constraint_bundle make_rod_physics_bundle(asawa::rod::rod::ptr rod,
-                                                 asawa::rod::dynamic::ptr dynamic,
-                                                 real stretch_w, real bend_w,
-                                                 real twist_w, real collision_w) {
+inline constraint_bundle make_rod_physics_bundle(
+    asawa::rod::rod::ptr rod, asawa::rod::dynamic::ptr dynamic, real stretch_w,
+    real bend_w, real twist_w, real collision_w, index_t free_hinge_i = -1,
+    real free_twist_w = 0.0, real edge_stretch_w = 0.0) {
   return {make_rod_stretch_shear_recompute<IPos, IQuat>(rod, stretch_w),
-          make_rod_bend_twist_recompute<IQuat>(rod, bend_w, twist_w),
+          make_rod_edge_stretch_recompute<IPos>(rod, edge_stretch_w),
+          make_rod_bend_twist_recompute<IQuat>(rod, bend_w, twist_w,
+                                               free_hinge_i, free_twist_w),
           make_rod_collisions_recompute<IPos>(rod, dynamic, collision_w)};
 }
 

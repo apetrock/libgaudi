@@ -8,6 +8,8 @@
 #include "gaudi/duchamp/demo_trait.hpp"
 #include "gaudi/vermeer/scene_frame.hpp"
 #include "lewitt/debug_line_buffer.hpp"
+#include "lewitt/debug_sphere_buffer.hpp"
+#include "lewitt/debug_torus_buffer.hpp"
 #include "lewitt/geometry_logger.h"
 
 namespace gaudi {
@@ -21,18 +23,19 @@ lines_from_rod_snapshot(const duchamp::rod_snapshot &snapshot) {
   }
 
   const glm::vec3 default_color(1.0f, 0.45f, 0.15f);
-  for (size_t i = 1; i < snapshot.positions.size(); ++i) {
+  // Positions are edge pairs: (p0,p1), (p0,p1), ...
+  for (size_t i = 0; i + 1 < snapshot.positions.size(); i += 2) {
     lewitt::debug_line_buffer::line entry{};
-    entry.p0 = glm::vec3(static_cast<float>(snapshot.positions[i - 1].x()),
-                         static_cast<float>(snapshot.positions[i - 1].y()),
-                         static_cast<float>(snapshot.positions[i - 1].z()));
-    entry.p1 = glm::vec3(static_cast<float>(snapshot.positions[i].x()),
+    entry.p0 = glm::vec3(static_cast<float>(snapshot.positions[i].x()),
                          static_cast<float>(snapshot.positions[i].y()),
                          static_cast<float>(snapshot.positions[i].z()));
-    if (i - 1 < snapshot.colors.size()) {
-      entry.color = glm::vec3(static_cast<float>(snapshot.colors[i - 1].x()),
-                              static_cast<float>(snapshot.colors[i - 1].y()),
-                              static_cast<float>(snapshot.colors[i - 1].z()));
+    entry.p1 = glm::vec3(static_cast<float>(snapshot.positions[i + 1].x()),
+                         static_cast<float>(snapshot.positions[i + 1].y()),
+                         static_cast<float>(snapshot.positions[i + 1].z()));
+    if (i < snapshot.colors.size()) {
+      entry.color = glm::vec3(static_cast<float>(snapshot.colors[i].x()),
+                              static_cast<float>(snapshot.colors[i].y()),
+                              static_cast<float>(snapshot.colors[i].z()));
     } else {
       entry.color = default_color;
     }
@@ -91,6 +94,49 @@ inline void sync_debug_line_buffer(const duchamp::demo_trait &demo,
 inline std::vector<std::weak_ptr<lewitt::debug_line_buffer>>
 debug_line_weak_refs(const std::vector<lewitt::debug_line_buffer::ptr> &buffers) {
   std::vector<std::weak_ptr<lewitt::debug_line_buffer>> refs;
+  refs.reserve(buffers.size());
+  for (const auto &buffer : buffers) {
+    refs.push_back(buffer);
+  }
+  return refs;
+}
+
+inline void apply_scene_debug_spheres(const std::vector<scene_debug_sphere> &src,
+                                      lewitt::debug_sphere_buffer &buffer) {
+  std::vector<lewitt::debug_sphere_buffer::sphere> spheres;
+  spheres.reserve(src.size());
+  for (const auto &s : src) {
+    spheres.push_back({s.center, s.radius, s.color});
+  }
+  buffer.set_spheres(spheres);
+}
+
+inline void apply_scene_debug_tori(const std::vector<scene_debug_torus> &src,
+                                   lewitt::debug_torus_buffer &buffer) {
+  std::vector<lewitt::debug_torus_buffer::torus> tori;
+  tori.reserve(src.size());
+  for (const auto &t : src) {
+    tori.push_back(
+        {t.center, t.axis, t.major_radius, t.minor_radius, t.color});
+  }
+  buffer.set_tori(tori);
+}
+
+inline std::vector<std::weak_ptr<lewitt::debug_sphere_buffer>>
+debug_sphere_weak_refs(
+    const std::vector<lewitt::debug_sphere_buffer::ptr> &buffers) {
+  std::vector<std::weak_ptr<lewitt::debug_sphere_buffer>> refs;
+  refs.reserve(buffers.size());
+  for (const auto &buffer : buffers) {
+    refs.push_back(buffer);
+  }
+  return refs;
+}
+
+inline std::vector<std::weak_ptr<lewitt::debug_torus_buffer>>
+debug_torus_weak_refs(
+    const std::vector<lewitt::debug_torus_buffer::ptr> &buffers) {
+  std::vector<std::weak_ptr<lewitt::debug_torus_buffer>> refs;
   refs.reserve(buffers.size());
   for (const auto &buffer : buffers) {
     refs.push_back(buffer);

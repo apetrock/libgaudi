@@ -6,6 +6,7 @@
 #include "gaudi/test/pyramid_datum_tests.hpp"
 #include "gaudi/test/calder_winding_tests.hpp"
 #include "gaudi/test/darboux_cyclide_tests.hpp"
+#include "gaudi/test/mls_jet_bootstrap_tests.hpp"
 #include "gaudi/calder/shell_area_conservation_test.hpp"
 #include "gaudi/calder/rod_length_conservation_test.hpp"
 #include "gaudi/test/rod_dynamic_tests.hpp"
@@ -23,6 +24,7 @@
 #include "gaudi/test/rod_mesh_snapshot_tests.hpp"
 #include "gaudi/test/dipole_tunneling_tests.hpp"
 #include "gaudi/test/symmetric_bezier_tests.hpp"
+#include "gaudi/test/windychien_braid_tests.hpp"
 #include "liblombardi_tests.cpp"
 
 int main() {

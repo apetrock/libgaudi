@@ -34,49 +34,83 @@ void init_smooth(const asawa::rod::rod &rod,
   }
 }
 
-#if 1
-void init_helicity(const asawa::rod::rod &rod,
+// 5-corner window {i-2..i+2}. Skip incomplete stencils (open ends); closed rods
+// cover all corners. Same gather for min_kink (positions) and squad_smooth (quats).
+inline bool gather_five_corner_window(const asawa::rod::rod &rod,
+                                      asawa::rod::CornerId c,
+                                      std::array<index_t, 5> &ids) {
+  using asawa::rod::CornerId;
+  const CornerId im1 = rod.prev(c);
+  if (im1 < 0)
+    return false;
+  const CornerId im2 = rod.prev(im1);
+  if (im2 < 0)
+    return false;
+  const CornerId ip1 = rod.next(c);
+  if (ip1 < 0)
+    return false;
+  const CornerId ip2 = rod.next(ip1);
+  if (ip2 < 0)
+    return false;
+  ids = {im2, im1, c, ip1, ip2};
+  return true;
+}
+
+void init_min_kink(const asawa::rod::rod &rod,
                    std::vector<projection_constraint::ptr> &constraints,
                    const real &w, std::vector<sim_block::ptr> blocks) {
   using asawa::rod::corner_id;
-  using asawa::rod::CornerId;
-
-  for (int i = 0; i < rod.corner_count(); i++) {
-    CornerId ci = corner_id(i);
-    CornerId ip0 = rod.prev(ci);
-    if (ip0 < 0)
+  if (w <= 0.0)
+    return;
+  for (int i = 0; i < rod.corner_count(); ++i) {
+    std::array<index_t, 5> ids;
+    if (!gather_five_corner_window(rod, corner_id(i), ids))
       continue;
-    CornerId ip1 = rod.prev(ip0);
-    if (ip1 < 0)
-      continue;
-    CornerId ip2 = rod.prev(ip1);
-    if (ip2 < 0)
-      continue;
-    CornerId ip3 = rod.prev(ip2);
-    if (ip3 < 0)
-      continue;
-    CornerId in0 = rod.next(ci);
-    if (in0 < 0)
-      continue;
-    CornerId in1 = rod.next(in0);
-    if (in1 < 0)
-      continue;
-    CornerId in2 = rod.next(in1);
-    if (in2 < 0)
-      continue;
-    CornerId in3 = rod.next(in2);
-    if (in3 < 0)
-      continue;
-    constraints.push_back(helicitiy::create(
-        {ci, ip3, ip2, ip1, ip0, ci, in0, in1, in2, in3}, w, blocks));
+    constraints.push_back(min_kink::create(
+        {ids[0], ids[1], ids[2], ids[3], ids[4]}, w, blocks));
   }
 }
-#endif
+
+void init_squad_smooth(const asawa::rod::rod &rod,
+                       std::vector<projection_constraint::ptr> &constraints,
+                       const real &w, std::vector<sim_block::ptr> blocks) {
+  using asawa::rod::corner_id;
+  if (w <= 0.0)
+    return;
+  for (int i = 0; i < rod.corner_count(); ++i) {
+    std::array<index_t, 5> ids;
+    if (!gather_five_corner_window(rod, corner_id(i), ids))
+      continue;
+    constraints.push_back(squad_smooth::create(
+        {ids[0], ids[1], ids[2], ids[3], ids[4]}, w, blocks));
+  }
+}
+
+void init_edge_stretch(const asawa::rod::rod &R,
+                       std::vector<projection_constraint::ptr> &constraints,
+                       const std::vector<real> &l0, const real &w,
+                       std::vector<sim_block::ptr> blocks) {
+  if (w <= 0.0)
+    return;
+  auto verts = R.get_vert_range();
+  for (auto i : verts) {
+    asawa::rod::consec_t c = R.consec(i);
+    if (c[2] < 0)
+      continue;
+    if (l0[i] < 1e-6)
+      continue;
+    constraints.push_back(
+        edge_stretch::create({c[1], c[2]}, w, l0[i], blocks));
+  }
+}
 
 void init_stretch_shear(const asawa::rod::rod &R,
                         std::vector<projection_constraint::ptr> &constraints,
                         const std::vector<real> &l0, const real &w,
                         std::vector<sim_block::ptr> blocks) {
+  // w <= 0: skip Cosserat stretch/shear rows entirely (use edge_stretch instead).
+  if (w <= 0.0)
+    return;
   int Ni = R.corner_count();
   auto verts = R.get_vert_range();
   for (auto i : verts) {
@@ -89,21 +123,55 @@ void init_stretch_shear(const asawa::rod::rod &R,
   }
 }
 
-void init_bend_twist(const asawa::rod::rod &R,
-                     std::vector<projection_constraint::ptr> &constraints,
-                     const real &w_bend, const real &w_twist,
-                     std::vector<sim_block::ptr> blocks, bool skip = false) {
+void init_bend(const asawa::rod::rod &R,
+               std::vector<projection_constraint::ptr> &constraints,
+               const real &w_bend, std::vector<sim_block::ptr> blocks,
+               bool skip = false) {
+  if (w_bend <= 0.0)
+    return;
   int Ni = R.corner_count();
   auto verts = R.get_vert_range();
   const std::vector<quat> &q = R.__u;
-  int N = skip ? verts.size() - 1 : verts.size();
+  int N = skip ? static_cast<int>(verts.size()) - 1
+               : static_cast<int>(verts.size());
   for (int i = 0; i < N; i++) {
     if (R.length(verts[i]) < 1e-6)
       continue;
     asawa::rod::consec_t c = R.consec(verts[i]);
-    constraints.push_back(
-        bend_twist::create({c[1], c[2], Ni}, q, w_bend, w_twist, blocks));
+    constraints.push_back(bend::create({c[1], c[2], Ni}, q, w_bend, blocks));
   }
+}
+
+void init_twist(const asawa::rod::rod &R,
+                std::vector<projection_constraint::ptr> &constraints,
+                const real &w_twist, std::vector<sim_block::ptr> blocks,
+                bool skip = false, index_t free_hinge_i = -1,
+                real free_twist_w = 0.0) {
+  int Ni = R.corner_count();
+  auto verts = R.get_vert_range();
+  const std::vector<quat> &q = R.__u;
+  int N = skip ? static_cast<int>(verts.size()) - 1
+               : static_cast<int>(verts.size());
+  for (int i = 0; i < N; i++) {
+    if (R.length(verts[i]) < 1e-6)
+      continue;
+    const real wt =
+        (free_hinge_i >= 0 && verts[i] == free_hinge_i) ? free_twist_w : w_twist;
+    if (wt <= 0.0)
+      continue;
+    asawa::rod::consec_t c = R.consec(verts[i]);
+    constraints.push_back(twist::create({c[1], c[2], Ni}, q, wt, blocks));
+  }
+}
+
+// Emits independent bend + twist constraints (decoupled PD weights).
+void init_bend_twist(const asawa::rod::rod &R,
+                     std::vector<projection_constraint::ptr> &constraints,
+                     const real &w_bend, const real &w_twist,
+                     std::vector<sim_block::ptr> blocks, bool skip = false,
+                     index_t free_hinge_i = -1, real free_twist_w = 0.0) {
+  init_bend(R, constraints, w_bend, blocks, skip);
+  init_twist(R, constraints, w_twist, blocks, skip, free_hinge_i, free_twist_w);
 }
 
 void init_bend_twist(const asawa::rod::rod &R,

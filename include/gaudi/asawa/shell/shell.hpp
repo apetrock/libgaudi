@@ -209,6 +209,29 @@ public:
     return out;
   }
 
+  /// Faces within graph distance ≤ 2 under face-1-ring adjacency.
+  void face_two_ring_face_ids(FaceId f, std::vector<FaceId> &out) const {
+    std::set<FaceId> seen;
+    std::vector<FaceId> ring1 = face_one_ring_face_ids(f);
+    for (FaceId f1 : ring1) {
+      if (static_cast<int>(f1) >= 0)
+        seen.insert(f1);
+      std::vector<FaceId> ring2;
+      face_one_ring_face_ids(f1, ring2);
+      for (FaceId f2 : ring2) {
+        if (static_cast<int>(f2) >= 0)
+          seen.insert(f2);
+      }
+    }
+    out.assign(seen.begin(), seen.end());
+  }
+
+  std::vector<FaceId> face_two_ring_face_ids(FaceId f) const {
+    std::vector<FaceId> out;
+    face_two_ring_face_ids(f, out);
+    return out;
+  }
+
   CornerId fbegin(FaceId id) const { return corner_id(__face_begin[id]); }
   CornerId fend(FaceId id) const { return prev(corner_id(__face_begin[id])); }
 

@@ -22,6 +22,20 @@ struct scene_debug_line {
   float radius = 0.01f;
 };
 
+struct scene_debug_sphere {
+  glm::vec3 center{0.0f};
+  float radius = 0.05f;
+  glm::vec3 color{1.0f, 0.2f, 0.2f};
+};
+
+struct scene_debug_torus {
+  glm::vec3 center{0.0f};
+  glm::vec3 axis{0.0f, 0.0f, 1.0f};
+  float major_radius = 1.0f;
+  float minor_radius = 0.25f;
+  glm::vec3 color{0.2f, 0.85f, 1.0f};
+};
+
 // CPU snapshot published by the sim worker; render thread uploads only this.
 struct SceneFrame {
   int sim_frame = 0;
@@ -29,6 +43,8 @@ struct SceneFrame {
   std::optional<duchamp::mesh_snapshot> rod;
   std::optional<duchamp::rod_snapshot> rod_polyline;
   std::vector<scene_debug_line> debug_lines;
+  std::vector<scene_debug_sphere> debug_spheres;
+  std::vector<scene_debug_torus> debug_tori;
 };
 
 // Single-slot handoff: sim waits for a free slot, then publishes; render take

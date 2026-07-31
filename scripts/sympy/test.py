@@ -440,3 +440,41 @@ def test_emit_cyclide_smooth_header():
     assert "cyclide_smooth_neighbor_grad" in text
     assert "Q0[0]" in text
     assert "Q[0]" not in text or "Q0[0]" in text
+
+
+def test_mk_quad_W_rows_numeric_parity():
+    """vech(P H P) == M(n) @ Q for random unit n and Q."""
+    import numpy as np
+    import sympy as sp
+    from sympy import Matrix
+    from shape_operator_fit import mk_quad_W_rows_symbolic
+    from quadric import H_expr, Q as Qi
+
+    rng = np.random.default_rng(0)
+    n_np = rng.normal(size=3)
+    n_np /= np.linalg.norm(n_np)
+    nx, ny, nz = sp.symbols("nx ny nz", real=True)
+    n = Matrix([nx, ny, nz])
+    Msym = mk_quad_W_rows_symbolic(n)
+    M = np.array(
+        Msym.subs({nx: n_np[0], ny: n_np[1], nz: n_np[2]}), dtype=float
+    )
+
+    q = rng.normal(size=10)
+    H = np.array(H_expr().subs({Qi[i]: q[i] for i in range(10)}), dtype=float)
+    P = np.eye(3) - np.outer(n_np, n_np)
+    Php = P @ H @ P
+    vech = np.array(
+        [Php[0, 0], Php[1, 1], Php[2, 2], Php[0, 1], Php[0, 2], Php[1, 2]]
+    )
+    got = M @ q
+    assert np.linalg.norm(got - vech) < 1e-9
+
+
+def test_generated_shape_operator_fit_header():
+    path = ROOT / "generated" / "shape_operator_fit_generated.hpp"
+    if not path.exists():
+        pytest.skip("run generate.py --emit shape_operator_fit first")
+    text = path.read_text()
+    assert "mk_quad_W_rows" in text
+    assert "mk_darboux_W_rows" in text

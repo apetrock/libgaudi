@@ -41,7 +41,7 @@ inline mesh_snapshot make_rod_mesh_snapshot(const asawa::rod::rod &rod,
   const std::vector<vec3> &x = rod.x();
   const std::vector<quat> &u = rod.u();
   const int Nc = section_count;
-  const real radius = 0.5 * rod._r;
+  const real radius = rod._r;
 
   matX section(3, Nc);
   for (int i = 0; i < Nc; ++i) {
@@ -90,9 +90,22 @@ inline mesh_snapshot make_rod_mesh_snapshot(const asawa::rod::rod &rod,
 
 inline rod_snapshot make_rod_snapshot(const asawa::rod::rod &rod,
                                       const vec3 &color) {
+  // Emit one segment per rod edge (via next), as position pairs.
+  // Debug-line conversion strides by 2 — do not assume corner-index order.
   rod_snapshot snapshot;
-  snapshot.positions = rod.x();
-  snapshot.colors.assign(snapshot.positions.size(), color);
+  snapshot.positions.reserve(rod.corner_count() * 2);
+  snapshot.colors.reserve(rod.corner_count() * 2);
+  for (size_t i = 0; i < rod.corner_count(); ++i) {
+    const auto ci = asawa::rod::corner_id(static_cast<int>(i));
+    const auto cj = rod.next(ci);
+    if (cj < asawa::rod::corner_id(0)) {
+      continue;
+    }
+    snapshot.positions.push_back(rod.x()[i]);
+    snapshot.positions.push_back(rod.x()[static_cast<size_t>(cj)]);
+    snapshot.colors.push_back(color);
+    snapshot.colors.push_back(color);
+  }
   return snapshot;
 }
 

@@ -64,6 +64,18 @@ namespace gaudi
       return -p * distpm1 / denom2 * dx / dist;
     };
 
+    // PAT-style softmin / screened-Laplace kernel: exp(-β‖dp‖).
+    // beta <= 0 → zero weight (disabled).
+    real calc_exp_dist(vec3 dp, real beta)
+    {
+      if (!(beta > 0.0))
+      {
+        return 0.0;
+      }
+      const real dist = dp.norm();
+      return std::exp(-beta * dist);
+    }
+
     // calc w/dw but using gaussian kernel instead of std laplace
     real calc_gaussian(vec3 dx, real l)
     {
@@ -177,6 +189,50 @@ namespace gaudi
 
       return dk;
     };
+
+    /// Rosenhead / Cauchy filament TP density (N held fixed in ∇):
+    ///   K = |N·dp|^p / (|dp|² + ε²)^p
+    /// With rod N ∥ dp_⊥ this is ρ^p / (ρ² + s² + ε²)^p.
+    inline real calc_tangent_point_inverse_radius_cauchy(const vec3 &dp,
+                                                        const vec3 &N,
+                                                        const real &eps,
+                                                        const real &p) {
+      const real f = std::abs(N.dot(dp));
+      const real R2eps = dp.squaredNorm() + eps * eps;
+      return std::pow(f, p) / std::pow(R2eps, p);
+    }
+
+    /// Exact ∇_dp of calc_tangent_point_inverse_radius_cauchy (N constant):
+    ///   ∇K = p K ( Px / |Px|² - 2 dp / (|dp|² + ε²) ),  Px = (N·dp) N
+    inline vec3 calc_tangent_point_radius_grad_cauchy(const vec3 &dp,
+                                                     const vec3 &N,
+                                                     const real &eps,
+                                                     const real &p) {
+      const real ndp = N.dot(dp);
+      const vec3 Px = ndp * N;
+      const real f2 = Px.squaredNorm(); // = ndp² for |N|=1
+      if (f2 < real(1.0e-32))
+        return vec3::Zero();
+
+      const real R2eps = dp.squaredNorm() + eps * eps;
+      const real k = std::pow(f2, real(0.5) * p) / std::pow(R2eps, p);
+      return p * k * (Px / f2 - real(2.0) * dp / R2eps);
+    }
+
+    // PAT-style Mahalanobis length from principal curvatures (mesh-free):
+    //   M = (κ_min²⟨dp,e_min⟩² + κ_max²⟨dp,e_max⟩² + ε²⟨dp,n⟩²)^{1/2}
+    inline real calc_mahalanobis_curvature(const vec3 &dp, real k_min,
+                                           real k_max, const vec3 &e_min,
+                                           const vec3 &e_max, const vec3 &n,
+                                           real eps = 1e-3) {
+      const real s_min = dp.dot(e_min);
+      const real s_max = dp.dot(e_max);
+      const real s_n = dp.dot(n);
+      const real m2 = k_min * k_min * s_min * s_min +
+                      k_max * k_max * s_max * s_max +
+                      eps * eps * s_n * s_n;
+      return std::sqrt(std::max(m2, real(0.0)));
+    }
 
   } // namespace calder
 } // namespace gaudi

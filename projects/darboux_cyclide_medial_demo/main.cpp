@@ -40,8 +40,9 @@ gaudi::duchamp::cyclide_medial_params demo_params() {
   params.fit_p = 3.0;
   params.normal_l0 = 2.0;
   params.min_normal_alignment = -0.5;
-  params.medial_smooth_scale = 8.0;
-  params.medial_smooth_blend = 1.0;
+  // Off while investigating raw ridge outliers (was MLS pipe smooth).
+  params.medial_smooth_scale = 0.0;
+  params.medial_smooth_blend = 0.0;
   params.max_iters = 100;
   params.tol = 1e-8;
   params.max_travel_scale = 1000.0;

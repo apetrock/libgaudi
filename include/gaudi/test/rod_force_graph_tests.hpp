@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "gaudi/asawa/rod/rod.hpp"
-#include "gaudi/duchamp/rod_force_nodes.hpp"
+#include "gaudi/duchamp/modules/rod_forces.hpp"
 #include "gaudi/hepworth/blocks/rod_position_block.hpp"
 #include "gaudi/hepworth/blocks/rod_quaternion_block.hpp"
 #include "gaudi/hepworth/constraints/bundles.hpp"

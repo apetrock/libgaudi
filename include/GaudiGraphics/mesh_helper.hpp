@@ -158,7 +158,7 @@ void fillBuffer_ref(asawa::rod::rod &R, gg::BufferObjectPtr obj,
   std::vector<gaudi::vec3> circ;
   int Nc = 32;
   matX x_sect(3, Nc);
-  double r = 0.5 * R._r;
+  double r = R._r;
   for (int i = 0; i < Nc; i++) {
     double thet = double(i) / double(Nc) * 2.0 * M_PI;
     double x = r * cos(thet);

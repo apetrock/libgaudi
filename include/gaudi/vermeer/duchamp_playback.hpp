@@ -8,13 +8,17 @@
 namespace gaudi {
 namespace vermeer {
 
-// Shared run-harness playback state (Space toggles pause, '.' steps one frame).
-// paused / step_once / sim_frame are atomic for the sim worker thread.
+// Shared run-harness playback state (Space toggles pause, '.' steps one frame,
+// 'O' OBJ dump, 'C' toggles manual vs auto camera framing).
 struct duchamp_playback {
   std::atomic<bool> paused{false};
   bool space_was_down = false;
   bool period_was_down = false;
+  bool o_was_down = false;
+  bool c_was_down = false;
   std::atomic<bool> step_once{false};
+  std::atomic<bool> export_obj_once{false};
+  std::atomic<bool> toggle_camera_manual{false};
   bool title_shows_paused = false;
   std::atomic<int> sim_frame{0};
 
@@ -45,6 +49,16 @@ inline void poll_playback_input(duchamp_playback &pb, GLFWwindow *window) {
   } else {
     pb.period_was_down = false;
   }
+
+  const bool o_key = glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS;
+  if (o_key && !pb.o_was_down)
+    pb.export_obj_once = true;
+  pb.o_was_down = o_key;
+
+  const bool c_key = glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS;
+  if (c_key && !pb.c_was_down)
+    pb.toggle_camera_manual = true;
+  pb.c_was_down = c_key;
 
   const bool paused_now = pb.paused.load();
   if (paused_now != pb.title_shows_paused) {

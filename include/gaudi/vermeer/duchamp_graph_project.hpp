@@ -11,6 +11,8 @@
 #include "gaudi/vermeer/duchamp_mesh_scene.hpp"
 #include "gaudi/vermeer/duchamp_playback.hpp"
 #include "gaudi/vermeer/duchamp_sim_runtime.hpp"
+#include "gaudi/vermeer/bbox_framing.hpp"
+#include "gaudi/vermeer/obj_dump.hpp"
 #include "gaudi/vermeer/scene_frame.hpp"
 #include "lewitt/debug_line_buffer.hpp"
 #include "lewitt/gpu_session.hpp"
@@ -23,9 +25,10 @@ template <typename PipelineT>
 class duchamp_graph_project : public lewitt::project_renderer {
 public:
   explicit duchamp_graph_project(duchamp::demo_trait::ptr demo,
-                                 std::shared_ptr<duchamp_playback> playback = nullptr)
+                                 std::shared_ptr<duchamp_playback> playback = nullptr,
+                                 bbox_framing_config framing_cfg = {})
       : _playback(std::move(playback)), _runtime(std::move(demo), _playback),
-        _debug_lines(lewitt::debug_line_buffer::create()) {}
+        _debug_lines(lewitt::debug_line_buffer::create()), _framing(framing_cfg) {}
 
   ~duchamp_graph_project() override { _runtime.stop(); }
 
@@ -61,13 +64,25 @@ public:
     if (_playback)
       poll_playback_input(*_playback, ctx.window);
 
+    if (_playback && _playback->toggle_camera_manual.exchange(false))
+      _framing.toggle_manual();
+
     const bool live = ctx.scene && ctx.scene->camera_animating();
     if (auto next = _runtime.channel().take_latest(_seen_generation)) {
       apply_frame(ctx, *next);
       _last_frame = std::move(next);
+      if (ctx.scene && ctx.scene->get_camera() && _last_frame) {
+        const float sim_t =
+            static_cast<float>(_last_frame->sim_frame) / 30.0f;
+        _framing.on_capture(*ctx.scene->get_camera(), *_last_frame, sim_t);
+        ctx.scene->sync_camera_uniforms(ctx.queue);
+      }
       if (!live)
         _pipeline.request_record_frame();
     }
+
+    if (_playback && _last_frame && _runtime.demo())
+      maybe_dump_scene_obj(*_playback, *_last_frame, _runtime.demo()->name());
   }
 
   void render(lewitt::gpu_context &ctx,
@@ -103,6 +118,7 @@ protected:
   lewitt::debug_line_buffer::ptr _debug_lines;
   std::shared_ptr<const SceneFrame> _last_frame;
   uint64_t _seen_generation = 0;
+  bbox_framing_controller _framing;
 };
 
 } // namespace vermeer
