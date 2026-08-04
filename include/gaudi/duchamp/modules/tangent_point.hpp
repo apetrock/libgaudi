@@ -87,26 +87,9 @@ public:
     std::vector<vec3> &x = asawa::get_vec_data(M, 0);
     std::vector<vec3> Nv = asawa::shell::vertex_normals(M, x);
     std::vector<real> w = asawa::shell::vertex_areas(M, x);
-    real p0 = 6.0;
-    real p1 = 2.0;
-    std::vector<vec3> Gv =
-        calder::tangent_point_gradient(M, x, w, Nv, 0.1 * _eps, p0);
-
-    std::vector<vec3> Gf = asawa::shell::vert_to_face<vec3>(M, x, Gv);
-    std::vector<vec3> Gs = calder::smoothed_gradient(M, x, Gf, 4.0 * _eps, p1);
-
-    std::vector<real> Kv =
-        calder::tangent_point_energy(M, x, w, Nv, 0.1 * _eps, p0);
-    std::vector<real> Kf = asawa::shell::vert_to_face<real>(M, x, Kv);
-    std::vector<vec3> Ks = calder::gradient_scalar(M, x, Kf, 4.0 * _eps, p1);
-    std::vector<vec3> G(Ks.size(), vec3::Zero());
-    for (int i = 0; i < G.size(); i++) {
-      // G[i] = Gs[i] - Ks[i];
-      // geometry_logger::line(x[i], x[i] + 1e-8 * Gs[i], vec4(0.0, 1.0, 1.0, 1.0));
-      // geometry_logger::line(x[i], x[i] - 1e-8 * Ks[i], vec4(1.0, 0.0, 1.0, 1.0));
-      G[i] = Gs[i] - Ks[i];
-    }
-    return G;
+    return calder::tangent_point_harmonic_gradient(M, x, w, Nv, 0.1 * _eps,
+                                                   /*p0=*/6.0, 4.0 * _eps,
+                                                   /*p1=*/2.0);
   }
 
   virtual void step(real h) {

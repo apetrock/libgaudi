@@ -219,6 +219,134 @@ namespace gaudi
       return p * k * (Px / f2 - real(2.0) * dp / R2eps);
     }
 
+    /// Stable log-sum-exp softmax: τ log(e^{a/τ}+e^{b/τ}).
+    /// Stages: r = tan_point; rs = soft_floor(r); f = density(rs)
+    /// (from scripts/sympy/tangent_point_soft.py)
+    inline real tp_softmax(real a, real b, real tau) {
+      const real M = std::max(a, b);
+      return M + tau * std::log(std::exp((a - M) / tau) +
+                                std::exp((b - M) / tau));
+    }
+
+    /// Geometric TP radius R = |dp|² / (2 |N·dp|).
+    inline real tan_point_radius(const vec3 &dp, const vec3 &N) {
+      const real f = std::abs(N.dot(dp));
+      const real g2 = dp.squaredNorm();
+      if (!(f > real(1.0e-16)) || !(g2 > real(1.0e-32)))
+        return real(0.0);
+      return real(0.5) * g2 / f;
+    }
+
+    /// Soft contact floor: rs = softmax_τ(r, R_min) ≈ max(r, R_min).
+    inline real soft_floor_radius(real r, real R_min, real tau) {
+      return tp_softmax(r, R_min, tau);
+    }
+
+    /// Classic density f = (1/rs)^p.
+    inline real soft_tp_density(real rs, real p) {
+      return std::pow(real(1.0) / rs, p);
+    }
+
+    /// ∂softmax(a,b)/∂a (stable).
+    inline real soft_floor_dr(real a, real b, real tau) {
+      const real inv_tau = real(1.0) / tau;
+      const real M = std::max(a, b);
+      const real ea = std::exp((a - M) * inv_tau);
+      const real eb = std::exp((b - M) * inv_tau);
+      return ea / (ea + eb);
+    }
+
+    /// ∂²softmax(a,b)/∂a² = w(1-w)/τ.
+    inline real soft_floor_d2r(real a, real b, real tau) {
+      const real w = soft_floor_dr(a, b, tau);
+      return w * (real(1.0) - w) / tau;
+    }
+
+    /// ∇_dp R for R = |dp|²/(2|N·dp|) (N fixed).
+    inline vec3 tan_point_radius_grad(const vec3 &dp, const vec3 &N) {
+      const real f_s = N.dot(dp);
+      const real f = std::abs(f_s);
+      const real g2 = dp.squaredNorm();
+      if (f < real(1.0e-16) || g2 < real(1.0e-32))
+        return vec3::Zero();
+      const real sgn = (f_s >= real(0.0)) ? real(1.0) : real(-1.0);
+      return (real(2.0) * f * dp - g2 * (sgn * N)) / (real(2.0) * f * f);
+    }
+
+    /// ∇²_dp R for R = |dp|²/(2 N·dp) on the N·dp > 0 chart:
+    ///   H = I/f_s − (dp⊗N + N⊗dp)/f_s² + (|dp|² N⊗N)/f_s³
+    inline mat3 tan_point_radius_hess(const vec3 &dp, const vec3 &N) {
+      const real f_s = N.dot(dp);
+      const real g2 = dp.squaredNorm();
+      if (!(std::abs(f_s) > real(1.0e-16)) || !(g2 > real(1.0e-32)))
+        return mat3::Zero();
+      const vec3 Ns = (f_s >= real(0.0)) ? N : vec3(-N);
+      const real fs = std::abs(f_s);
+      mat3 H = mat3::Identity() / fs;
+      H.noalias() -= (dp * Ns.transpose() + Ns * dp.transpose()) / (fs * fs);
+      H.noalias() += (g2 * (Ns * Ns.transpose())) / (fs * fs * fs);
+      return H;
+    }
+
+    /// Softmax-floor TP density f = density(soft_floor(tan_point)).
+    inline real calc_tangent_point_radius_soft(const vec3 &dp, const vec3 &N,
+                                              real R_min, real tau, real p) {
+      if (!(R_min > 0.0) || !(tau > 0.0))
+        return real(0.0);
+      const real r = tan_point_radius(dp, N);
+      if (!(r > 0.0))
+        return real(0.0);
+      const real rs = soft_floor_radius(r, R_min, tau);
+      return soft_tp_density(rs, p);
+    }
+
+    /// ∇_dp f (N fixed). ∇f = f'(r) ∇r.
+    inline vec3 calc_tangent_point_radius_gradient_soft(const vec3 &dp,
+                                                       const vec3 &N,
+                                                       real R_min, real tau,
+                                                       real p) {
+      if (!(R_min > 0.0) || !(tau > 0.0))
+        return vec3::Zero();
+      const real r = tan_point_radius(dp, N);
+      if (!(r > 0.0))
+        return vec3::Zero();
+      const real rs = soft_floor_radius(r, R_min, tau);
+      const real f = soft_tp_density(rs, p);
+      const real w = soft_floor_dr(r, R_min, tau);
+      const real df_dr = (-p * f / rs) * w;
+      const vec3 g = df_dr * tan_point_radius_grad(dp, N);
+      if (!std::isfinite(g[0]) || !std::isfinite(g[1]) || !std::isfinite(g[2]))
+        return vec3::Zero();
+      return g;
+    }
+
+    /// Full Hess_dp f (N fixed): H = f''(r) (∇r)(∇r)ᵀ + f'(r) ∇²r
+    inline mat3 calc_tangent_point_radius_hessian_soft(const vec3 &dp,
+                                                      const vec3 &N,
+                                                      real R_min, real tau,
+                                                      real p) {
+      if (!(R_min > 0.0) || !(tau > 0.0))
+        return mat3::Zero();
+      const real r = tan_point_radius(dp, N);
+      if (!(r > 0.0))
+        return mat3::Zero();
+      const real rs = soft_floor_radius(r, R_min, tau);
+      const real f = soft_tp_density(rs, p);
+      const real w = soft_floor_dr(r, R_min, tau);
+      const real w2 = soft_floor_d2r(r, R_min, tau);
+      const real df_drs = -p * f / rs;
+      const real d2f_drs2 = p * (p + real(1.0)) * f / (rs * rs);
+      const real df_dr = df_drs * w;
+      const real d2f_dr2 = d2f_drs2 * w * w + df_drs * w2;
+      const vec3 gr = tan_point_radius_grad(dp, N);
+      const mat3 Hr = tan_point_radius_hess(dp, N);
+      mat3 H = d2f_dr2 * (gr * gr.transpose()) + df_dr * Hr;
+      if (!std::isfinite(H(0, 0)) || !std::isfinite(H(1, 1)) ||
+          !std::isfinite(H(2, 2)))
+        return mat3::Zero();
+      return H;
+    }
+
     // PAT-style Mahalanobis length from principal curvatures (mesh-free):
     //   M = (κ_min²⟨dp,e_min⟩² + κ_max²⟨dp,e_max⟩² + ε²⟨dp,n⟩²)^{1/2}
     inline real calc_mahalanobis_curvature(const vec3 &dp, real k_min,

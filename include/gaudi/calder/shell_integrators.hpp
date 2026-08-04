@@ -36,9 +36,10 @@ namespace gaudi
     std::vector<T>
     integrate_over_shell(asawa::shell::shell &M, const std::vector<vec3> &p_pov,
                          Shell_Bind_Fcn bind_fcn = nullptr,
-                         Shell_Compute_Fcn<T> compute_fcn = nullptr)
+                         Shell_Compute_Fcn<T> compute_fcn = nullptr,
+                         real bh_eps = 0.25)
     {
-
+      // bh_eps <= 0 forces leaves-only (opening never accepts BRANCH).
       std::vector<vec3> &x = asawa::get_vec_data(M, 0);
       std::vector<index_t> face_vert_ids = M.get_face_vert_ids();
       std::vector<index_t> face_map = M.get_face_map();
@@ -71,7 +72,7 @@ namespace gaudi
             vec3 pj = com->get_node_com(j);
             return compute_fcn(i, j, pi, pj, data, node_type, tree);
           },
-          0.25, false);
+          bh_eps, false);
       return us;
     }
 
@@ -88,9 +89,10 @@ namespace gaudi
 
       static std::vector<T> integrate(Manifold_Type &M, const std::vector<vec3> &p_pov,
                                       Bind_Fcn bind_fcn = nullptr,
-                                      Compute_Fcn compute_fcn = nullptr)
+                                      Compute_Fcn compute_fcn = nullptr,
+                                      real bh_eps = 0.25)
       {
-        return integrate_over_shell<T>(M, p_pov, bind_fcn, compute_fcn);
+        return integrate_over_shell<T>(M, p_pov, bind_fcn, compute_fcn, bh_eps);
       }
     };
 

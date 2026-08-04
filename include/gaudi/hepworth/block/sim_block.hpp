@@ -119,6 +119,42 @@ public:
   std::vector<vec3> _x_prev;
 };
 
+/// Ephemeral target velocity: x += h·v_ext (no h²·f, no v_state carryover).
+class vec3_velocity_block : public sim_block {
+public:
+  typedef std::shared_ptr<vec3_velocity_block> ptr;
+  static ptr create(std::vector<vec3> &M, std::vector<vec3> &x,
+                    std::vector<vec3> &v_ext) {
+    return std::make_shared<vec3_velocity_block>(M, x, v_ext);
+  }
+
+  vec3_velocity_block(std::vector<vec3> &M, std::vector<vec3> &x,
+                      std::vector<vec3> &v_ext)
+      : _M(M), _x(x), _v_ext(v_ext) {}
+  virtual ~vec3_velocity_block() {}
+
+  virtual void map_to_x(vecX &q) { sim_block::map_to_x<3, vec3>(_x, q); }
+  virtual void map_mass(vecX &q) { sim_block::map_to_x<3, vec3>(_M, q); }
+
+  virtual void map_from_x(const vecX &q, const real & /*h*/,
+                          const real & /*damp*/) {
+    sim_block::map_from_x(q, _x);
+  }
+
+  virtual void integrate_inertia(const real &h) {
+    _x_prev = _x;
+    for (size_t i = 0; i < _v_ext.size(); ++i)
+      _x[i] += h * _v_ext[i];
+  }
+
+  virtual index_t get_offset_idx(index_t ii) const { return _offset + 3 * ii; };
+
+  std::vector<vec3> &_x;
+  std::vector<vec3> &_v_ext;
+  std::vector<vec3> &_M;
+  std::vector<vec3> _x_prev;
+};
+
 class quat_block : public sim_block {
 public:
   typedef std::shared_ptr<quat_block> ptr;

@@ -67,6 +67,14 @@ public:
   void set_config(config_type config) { _config = std::move(config); }
   const config_type &config() const { return _config; }
 
+  /// Mutate outer step without rebuilding the constraint graph.
+  void set_dt(real h) { _config.dt = h; }
+  real dt() const { return _config.dt; }
+  void set_damping(real d) { _config.damping = d; }
+  real damping() const { return _config.damping; }
+  void set_iterations(int n) { _config.iterations = n; }
+  int iterations() const { return _config.iterations; }
+
   void compute() override { compute_impl(std::make_index_sequence<N>{}); }
 
   unsigned int port_count() const override { return static_cast<unsigned int>(N); }

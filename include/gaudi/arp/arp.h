@@ -20,7 +20,7 @@ a Dadaist and an abstract artist.
 // Barnes-Hut path always needs the radix tree, so hash_tree.hpp is included
 // unconditionally; the legacy header is pulled in as the fallback backend.
 
-//#define USE_HASH
+#define USE_HASH
 
 #include "gaudi/arp/hash_tree.hpp"
 

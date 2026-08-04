@@ -34,10 +34,12 @@ namespace gaudi
     std::vector<T> integrate_over_rod(asawa::rod::rod &R,
                                       const std::vector<vec3> &p_pov,
                                       Rod_Bind_Fcn bind_fcn = nullptr,
-                                      Rod_Compute_Fcn<T> compute_fcn = nullptr)
+                                      Rod_Compute_Fcn<T> compute_fcn = nullptr,
+                                      real bh_eps = 0.25)
     {
       // Use vertex positions (__x), not edge midpoints (xc). Adjacency is
       // (i, next(i)), so leaves are the true rod edges that attributes bind to.
+      // bh_eps <= 0 forces leaves-only (opening never accepts BRANCH).
       const std::vector<vec3> &x = R.x();
 
       std::vector<index_t> edge_verts = R.get_edge_vert_ids();
@@ -58,6 +60,9 @@ namespace gaudi
           {
             auto simplex = tree.leaf_simplex(j);
             vec3 x0 = simplex[0], x1 = simplex[1];
+
+            if((x0 - x1).norm() < 1e-8) return z::zero<T>();
+
             vec3 pj = va::project_on_line(x0, x1, pi);
             return compute_fcn(i, j, pi, pj, data, node_type, tree);
           },
@@ -70,7 +75,7 @@ namespace gaudi
             vec3 pj = 0.5 * (ext[0] + ext[1]);
             return compute_fcn(i, j, pi, pj, data, node_type, tree);
           },
-          0.25, false);
+          bh_eps, false);
       return us;
     }
 
@@ -87,11 +92,61 @@ namespace gaudi
 
       static std::vector<T> integrate(Manifold_Type &M, const std::vector<vec3> &p_pov,
                                       Bind_Fcn bind_fcn = nullptr,
-                                      Compute_Fcn compute_fcn = nullptr)
+                                      Compute_Fcn compute_fcn = nullptr,
+                                      real bh_eps = 0.25)
       {
-        return integrate_over_rod<T>(M, p_pov, bind_fcn, compute_fcn);
+        return integrate_over_rod<T>(M, p_pov, bind_fcn, compute_fcn, bh_eps);
       }
     };
+
+    /// MLS-smoothed vector field (shell `smoothed_gradient` rod port).
+    inline std::vector<vec3> smoothed_gradient(asawa::rod::rod &R,
+                                               const std::vector<vec3> &p_pov,
+                                               const std::vector<vec3> &omega,
+                                               real l0, real p = 3.0) {
+      (void)p;
+      std::vector<real> weights = R.l0();
+      return integrate_over_rod<vec3>(
+          R, p_pov,
+          [&omega, &weights](const std::vector<index_t> &edge_ids,
+                             Rod_Sum_Type &sum) {
+            sum.bind(calder::scalar_datum::create(edge_ids, weights));
+            sum.bind(calder::vec3_datum::create(edge_ids, omega));
+          },
+          [l0](const index_t /*i*/, const index_t j, const vec3 &pi,
+               const vec3 &pj, const std::vector<calder::datum::ptr> &data,
+               Rod_Sum_Type::Node_Type node_type,
+               const Rod_Sum_Type::Tree & /*tree*/) -> vec3 {
+            (void)get_data<real>(node_type, j, 0, data);
+            vec3 w = get_data<vec3>(node_type, j, 1, data);
+            vec3 dp = pj - pi;
+            real kappa = calc_gaussian(dp, l0);
+            // Match shell smoothed_gradient: kappa * omega (area bound for pyramid).
+            return kappa * w;
+          });
+    }
+
+    /// ∇ of an MLS-smoothed scalar (shell `gradient_scalar` rod port).
+    inline std::vector<vec3> gradient_scalar(asawa::rod::rod &R,
+                                             const std::vector<vec3> &p_pov,
+                                             const std::vector<real> &omega,
+                                             real l0, real p = 3.0) {
+      (void)p;
+      return integrate_over_rod<vec3>(
+          R, p_pov,
+          [&omega](const std::vector<index_t> &edge_ids, Rod_Sum_Type &sum) {
+            sum.bind(calder::scalar_datum::create(edge_ids, omega));
+          },
+          [l0](const index_t /*i*/, const index_t j, const vec3 &pi,
+               const vec3 &pj, const std::vector<calder::datum::ptr> &data,
+               Rod_Sum_Type::Node_Type node_type,
+               const Rod_Sum_Type::Tree & /*tree*/) -> vec3 {
+            real w = get_data<real>(node_type, j, 0, data);
+            vec3 dp = pj - pi;
+            vec3 dkappa = calc_d_gaussian(dp, l0);
+            return -dkappa * w;
+          });
+    }
 
     template <typename T>
     std::vector<T> mls_avg(asawa::rod::rod &R, const std::vector<T> &v,

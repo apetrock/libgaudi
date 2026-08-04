@@ -415,8 +415,9 @@ public:
       if (l > _Cs) {
         split_edge(ci);
       }
-
+      //std::cout << l << " " << _Cc << std::endl;
       if (l < _Cc && jp > -1) {
+        //std::cout << "collapsing: " << ci << std::endl;
         collapse_edge(ci);
       }
     }

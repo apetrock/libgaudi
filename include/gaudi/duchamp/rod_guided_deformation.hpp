@@ -54,7 +54,11 @@ enum class rod_guided_scene {
 
 struct rod_guided_config {
   rod_guided_scene scene = rod_guided_scene::braid_circle;
-  braid_circle_config braid{};
+  braid_circle_config braid{
+    .use_plain_weave = true,
+    .weave_strands =25,
+    .weave_frames = 25
+  };
   silly_walk_config walk{
       .i0 = 0,
       .N_steps = 10000,
@@ -71,7 +75,7 @@ struct rod_guided_config {
   real dipole_radius_scale = 3.0;
   /// Rod tangent-point force. Set `w = 0` to disable.
   /// `l0` multiplies knotted-surface eps; `p` is the TP power.
-  tangent_point_force_config tangent{.w = 0.0e-8, .l0 = 3.0, .p = 6.0};
+  tangent_point_force_config tangent{.w = 0.0e-9, .l0 = 3.0, .p = 6.0};
 };
 
 ///////////////////////////////////////

@@ -3,5 +3,6 @@
 
 #include "gaudi/hepworth/blocks/rod_position_block.hpp"
 #include "gaudi/hepworth/blocks/rod_quaternion_block.hpp"
+#include "gaudi/hepworth/blocks/rod_velocity_block.hpp"
 
 #endif // __GAUDI_HEPWORTH_ROD_BLOCK__
