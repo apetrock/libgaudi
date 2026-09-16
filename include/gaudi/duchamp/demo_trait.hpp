@@ -30,6 +30,9 @@ public:
 
   virtual void step(int frame) = 0;
   virtual void reset() = 0;
+  /// Debug overlay (pins, forces, etc.). Called before step() so viz appears even
+  /// when the solver is slow. Default: no-op.
+  virtual void debug_draw() {}
   virtual int frame_count() const = 0;
   virtual double time_seconds() const = 0;
   virtual std::string name() const = 0;

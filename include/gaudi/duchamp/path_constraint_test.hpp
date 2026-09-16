@@ -187,8 +187,8 @@ public:
 
     auto sdf = get_sdf(frame);
 
-    std::vector<real> dists = sdf->distance(__R->__x);
-    std::vector<real> w(__R->__x.size(), 0);
+    std::vector<real> dists = sdf->distance(__R->x());
+    std::vector<real> w(__R->x().size(), 0);
     std::vector<vec3> xc = __R->xc();
     std::vector<vec3> N = __R->N0c();
     auto verts = __R->get_vert_range();
@@ -221,11 +221,11 @@ public:
 
     auto sdf = get_sdf(frame);
 
-    std::vector<real> dists = sdf->distance(__R->__x);
-    std::vector<vec3> gdists = sdf->grad_distance(__R->__x);
-    std::vector<vec3> f(__R->__x.size(), vec3::Zero());
+    std::vector<real> dists = sdf->distance(__R->x());
+    std::vector<vec3> gdists = sdf->grad_distance(__R->x());
+    std::vector<vec3> f(__R->x().size(), vec3::Zero());
     std::vector<vec3> xc = __R->xc();
-    for (int i = 0; i < __R->__x.size(); i++) {
+    for (int i = 0; i < __R->x().size(); i++) {
       if (dists[i] > 0.0) {
         f[i] = -dists[i] * gdists[i];
       }
@@ -253,24 +253,24 @@ public:
 
 
   void step_dynamics(int frame) {
-    std::cout << "frame: " << frame << ", size: " << __R->__x.size()
+    std::cout << "frame: " << frame << ", size: " << __R->x().size()
               << std::endl;
     hepworth::block::projection_solver solver;
 
     std::vector<hepworth::projection_constraint::ptr> constraints;
 
-    std::vector<real> &l0 = __R->__l0;
+    std::vector<real> &l0 = __R->l0();
 
     real h = 0.05;
-    std::vector<vec3> f(__R->__v.size(), vec3::Zero()); 
+    std::vector<vec3> f(__R->v().size(), vec3::Zero()); 
     // std::vector<vec3> fr = compute_coulomb_gradient();
     // std::vector<vec3> fr = compute_null_coulomb_gradient();
     //std::vector<vec3> fr = compute_tangent_point_gradient();
     //f = 1e-6 * fr;  // Add rotation torque to the forces
     hepworth::vec3_block::ptr x =
-        hepworth::vec3_block::create(__R->__M, __R->__x, __R->__v, f);
+        hepworth::vec3_block::create(__R->M(), __R->x(), __R->v(), f);
     hepworth::quat_block::ptr u =
-        hepworth::quat_block::create(__R->__J, __R->__u, __R->__o);
+        hepworth::quat_block::create(__R->J(), __R->u(), __R->o());
     pin_endpoints(constraints, {x});  // Commented out to allow free rotation
     // hepworth::rod::init_smooth(*__R, constraints, 0.2);
 

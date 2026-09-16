@@ -125,9 +125,15 @@ private:
   void apply_frame(lewitt::gpu_context &ctx, const SceneFrame &frame) {
     LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_project::apply_frame");
     _scene.apply_snapshots(frame.shell, frame.rod, ctx.device);
-    apply_scene_debug_lines(frame.debug_lines, *_debug_lines);
-    apply_scene_debug_spheres(frame.debug_spheres, *_debug_spheres);
-    apply_scene_debug_tori(frame.debug_tori, *_debug_tori);
+    if (!frame.debug_lines.empty()) {
+      apply_scene_debug_lines(frame.debug_lines, *_debug_lines);
+    }
+    if (!frame.debug_spheres.empty()) {
+      apply_scene_debug_spheres(frame.debug_spheres, *_debug_spheres);
+    }
+    if (!frame.debug_tori.empty()) {
+      apply_scene_debug_tori(frame.debug_tori, *_debug_tori);
+    }
     _debug_lines->upload(ctx.device);
     _debug_spheres->upload(ctx.device);
     _debug_tori->upload(ctx.device);

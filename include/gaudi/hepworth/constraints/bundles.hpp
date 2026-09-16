@@ -7,6 +7,10 @@
 #include "gaudi/asawa/rod/rod.hpp"
 #include "gaudi/asawa/shell/asset_loader.hpp"
 #include "gaudi/duchamp/fields.hpp"
+#include "gaudi/hepworth/block/block_geometry.hpp"
+#include "gaudi/hepworth/block/slab_prism_init.hpp"
+#include "gaudi/hepworth/block/projection_diagnostics.hpp"
+#include "gaudi/hepworth/block/slab_prism_log.hpp"
 #include "gaudi/hepworth/block/generic_constraints_init.hpp"
 #include "gaudi/hepworth/block/rod_constraints_init.hpp"
 #include "gaudi/hepworth/block/shell_constraints_init.hpp"
@@ -19,6 +23,20 @@ namespace gaudi {
 namespace hepworth {
 namespace block {
 
+namespace detail {
+
+template <size_t... Is>
+inline std::vector<vec3>
+shell_positions_for_ctx(shell_position_block::ptr shell, solver_context &ctx) {
+  ctx.shell_mesh = shell->mesh.get();
+  auto blocks = select_blocks<Is...>(ctx);
+  if (blocks.empty())
+    return shell->xs->get();
+  return gather_shell_positions(*shell->mesh, blocks[0], pack_block_q(blocks));
+}
+
+} // namespace detail
+
 // Solver-step wrappers around init_* in shell/rod constraints_init.
 // Keep init there for direct use (knotted_surface, tests); bundles route
 // joint-matrix blocks via select_blocks<Is...>(ctx).
@@ -27,7 +45,8 @@ template <size_t... Is>
 inline constraint_recompute_fn make_shell_stretch_recompute(shell_position_block::ptr shell,
                                                             real w) {
   return [shell, w](solver_context &ctx) {
-    init_triangle_strain(*shell->mesh, ctx.constraints, shell->xs->get(), w,
+    const std::vector<vec3> x = detail::shell_positions_for_ctx<Is...>(shell, ctx);
+    init_triangle_strain(*shell->mesh, ctx.constraints, x, w,
                          select_blocks<Is...>(ctx));
   };
 }
@@ -36,9 +55,62 @@ template <size_t... Is>
 inline constraint_recompute_fn make_shell_bending_recompute(shell_position_block::ptr shell,
                                                             real w) {
   return [shell, w](solver_context &ctx) {
-    init_bending(*shell->mesh, ctx.constraints, shell->xs->get(), w,
+    const std::vector<vec3> x = detail::shell_positions_for_ctx<Is...>(shell, ctx);
+    init_bending(*shell->mesh, ctx.constraints, x, w,
                  select_blocks<Is...>(ctx));
   };
+}
+
+template <size_t... Is>
+inline constraint_recompute_fn make_shell_arap_recompute(shell_position_block::ptr shell,
+                                                         real w) {
+  return [shell, w](solver_context &ctx) {
+    const std::vector<vec3> x = detail::shell_positions_for_ctx<Is...>(shell, ctx);
+    init_arap(*shell->mesh, ctx.constraints, x, w,
+              select_blocks<Is...>(ctx));
+  };
+}
+
+template <size_t... Is>
+inline constraint_recompute_fn make_shell_cubification_recompute(
+    shell_position_block::ptr shell, index_t iN_rest, index_t iN_goal, real w,
+    real lambda) {
+  return [shell, iN_rest, iN_goal, w, lambda](solver_context &ctx) {
+    const std::vector<vec3> x = detail::shell_positions_for_ctx<Is...>(shell, ctx);
+    const std::vector<vec3> &N_rest =
+        asawa::get_vec_data(*shell->mesh, iN_rest);
+    const std::vector<vec3> &N_goal =
+        asawa::get_vec_data(*shell->mesh, iN_goal);
+    init_cubification(*shell->mesh, ctx.constraints, x, N_rest,
+                      N_goal, w, lambda, select_blocks<Is...>(ctx));
+  };
+}
+
+template <size_t... Is>
+inline constraint_bundle make_shell_cubification_bundle(
+    shell_position_block::ptr shell, index_t iN_rest, index_t iN_goal, real w,
+    real lambda) {
+  return {
+      make_shell_cubification_recompute<Is...>(shell, iN_rest, iN_goal, w,
+                                               lambda)};
+}
+
+template <size_t... Is>
+inline constraint_recompute_fn make_shell_pin_recompute(shell_position_block::ptr shell,
+                                                        real w) {
+  return [shell, w](solver_context &ctx) {
+    ctx.shell_mesh = shell->mesh.get();
+    if (!(w > 0.0))
+      return;
+    init_pinned(*shell->mesh, ctx.constraints, shell->xs->get(), w,
+                select_blocks<Is...>(ctx));
+  };
+}
+
+template <size_t... Is>
+inline constraint_bundle make_shell_pin_bundle(shell_position_block::ptr shell,
+                                                real w) {
+  return {make_shell_pin_recompute<Is...>(shell, w)};
 }
 
 template <size_t... Is>
@@ -54,7 +126,8 @@ inline constraint_recompute_fn make_shell_laplacian_recompute(
     shell_position_block::ptr shell, real w, laplacian_mode mode,
     laplacian_stencil stencil) {
   return [shell, w, mode, stencil](solver_context &ctx) {
-    init_laplacian(*shell->mesh, ctx.constraints, shell->xs->get(), mode, stencil, w,
+    const std::vector<vec3> x = detail::shell_positions_for_ctx<Is...>(shell, ctx);
+    init_laplacian(*shell->mesh, ctx.constraints, x, mode, stencil, w,
                    select_blocks<Is...>(ctx));
   };
 }
@@ -67,10 +140,35 @@ inline constraint_bundle make_shell_laplacian_bundle(
 }
 
 template <size_t... Is>
+inline constraint_recompute_fn make_shell_slab_prism_recompute(
+    shell_position_block::ptr shell, slab_pierce_config pierce_cfg,
+    slab_prism_config prism_cfg) {
+  return [shell, pierce_cfg, prism_cfg](solver_context &ctx) {
+    if (!(prism_cfg.w_twist > 0.0 || prism_cfg.w_field > 0.0 ||
+          prism_cfg.w_phi > 0.0 || prism_cfg.w_rbf > 0.0 ||
+          prism_cfg.w_bulk > 0.0))
+      return;
+    ctx.shell_mesh = shell->mesh.get();
+    // Rebuild every solver step from the live mesh. Pierce/foot ids are baked
+    // into constraints; remesh pack permutes verts even when count is unchanged.
+    init_slab_prism_constraints(*shell->mesh, ctx.constraints, pierce_cfg,
+                                prism_cfg, select_blocks<Is...>(ctx), ctx);
+  };
+}
+
+template <size_t... Is>
+inline constraint_bundle make_shell_slab_prism_bundle(
+    shell_position_block::ptr shell, slab_pierce_config pierce_cfg,
+    slab_prism_config prism_cfg) {
+  return {make_shell_slab_prism_recompute<Is...>(shell, pierce_cfg, prism_cfg)};
+}
+
+template <size_t... Is>
 inline constraint_recompute_fn make_shell_area_recompute(shell_position_block::ptr shell,
                                                          real w, area_mode mode) {
   return [shell, w, mode](solver_context &ctx) {
-    init_area(*shell->mesh, ctx.constraints, shell->xs->get(), w,
+    const std::vector<vec3> x = detail::shell_positions_for_ctx<Is...>(shell, ctx);
+    init_area(*shell->mesh, ctx.constraints, x, w,
               select_blocks<Is...>(ctx), mode);
   };
 }

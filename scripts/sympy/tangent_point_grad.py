@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
-"""Verify calc_tangent_point_radius_grad against SymPy ∂k/∂dp.
+"""Verify TP grads / dump Hessians.
 
-Kernel (weight_functions.hpp):
-  k = |P dp|^p / (|dp|^{2p} + l0^p),   P = N Nᵀ,  |N| = 1
+Regularized method (weight_functions.hpp):
+  E0 = |P dp|^p / |dp|^{2p}
+  ∇_reg = p k0 ( Px/(|Px|²+l0²) - 2 dp/(|dp|²+l0²) )   # Reg after differentiation
+  H_reg = Jac(∇_reg)
 
-C++ closed form used in production:
-  dk = p k ( Px/(Px·Px + l0²) - 2 dp/(dp·dp + l0²) )
+Exact-of-k (harmonic leaf / Armijo scalar density):
+  k = |P dp|^p / (|dp|^{2p} + l0^p)
+  ∇k / Hess(k) from sympy
 
 Run:
   python3 scripts/sympy/tangent_point_grad.py
+  python3 scripts/sympy/tangent_point_grad.py --dump-hess
+  python3 scripts/sympy/tangent_point_grad.py --dump-hess-reg
 """
 
 from __future__ import annotations
+
+import argparse
 
 import numpy as np
 import sympy as sp
@@ -155,7 +162,99 @@ def show_symbolic_difference() -> None:
     sp.pprint(sp.simplify(exact - cpp))
 
 
+def dump_hessian_cpp() -> str:
+    """Exact Hess of k=(N·dp)^p/(|dp|^{2p}+l0^p) on N·dp>0 chart → pasteable C++."""
+    x, y, z = sp.symbols("x y z", real=True)
+    nx, ny, nz = sp.symbols("nx ny nz", real=True)
+    l0, p = sp.symbols("l0 p", positive=True)
+    dp = sp.Matrix([x, y, z])
+    N = sp.Matrix([nx, ny, nz])
+    f = N.dot(dp)
+    g2 = dp.dot(dp)
+    k = f**p / (g2**p + l0**p)
+    H = sp.hessian(k, [x, y, z])
+    flat = [H[i, j] for i in range(3) for j in range(3)]
+    repl, red = sp.cse(flat)
+    lines = [
+        "inline mat3 calc_tangent_point_radius_hessian_chart(",
+        "    const vec3 &dp, const vec3 &N, const real &l0, const real &p) {",
+        "  // generated: python3 scripts/sympy/tangent_point_grad.py --dump-hess",
+        "  const real x = dp[0], y = dp[1], z = dp[2];",
+        "  const real nx = N[0], ny = N[1], nz = N[2];",
+    ]
+    for s, e in repl:
+        lines.append(f"  const real {s} = {sp.cxxcode(e)};")
+    lines.append("  mat3 H;")
+    idx = 0
+    for i in range(3):
+        for j in range(3):
+            lines.append(f"  H({i},{j}) = {sp.cxxcode(red[idx])};")
+            idx += 1
+    lines.append(
+        "  if (!std::isfinite(H(0,0)) || !std::isfinite(H(1,1)) || "
+        "!std::isfinite(H(2,2)))"
+    )
+    lines.append("    return mat3::Zero();")
+    lines.append("  return H;")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def dump_hessian_reg_cpp() -> str:
+    """Jac of Reg(∇E0) on N·dp>0 chart → pasteable C++."""
+    x, y, z = sp.symbols("x y z", real=True)
+    nx, ny, nz = sp.symbols("nx ny nz", real=True)
+    l0, p = sp.symbols("l0 p", positive=True)
+    dp = sp.Matrix([x, y, z])
+    N = sp.Matrix([nx, ny, nz])
+    f = N.dot(dp)
+    r2 = dp.dot(dp)
+    k0 = f**p / r2**p
+    Px = f * N
+    grad_reg = p * k0 * (Px / (f**2 + l0**2) - 2 * dp / (r2 + l0**2))
+    H = sp.Matrix(
+        [[sp.diff(grad_reg[i], v) for v in (x, y, z)] for i in range(3)]
+    )
+    flat = [H[i, j] for i in range(3) for j in range(3)]
+    repl, red = sp.cse(flat, symbols=sp.numbered_symbols("x"))
+    lines = [
+        "inline mat3 calc_tangent_point_radius_hessian_reg_chart(",
+        "    const vec3 &dp, const vec3 &N, const real &l0, const real &p) {",
+        "  // generated: python3 scripts/sympy/tangent_point_grad.py --dump-hess-reg",
+        "  const real x = dp[0], y = dp[1], z = dp[2];",
+        "  const real nx = N[0], ny = N[1], nz = N[2];",
+    ]
+    for s, e in repl:
+        lines.append(f"  const real {s} = {sp.cxxcode(e)};")
+    lines.append("  mat3 H;")
+    idx = 0
+    for i in range(3):
+        for j in range(3):
+            lines.append(f"  H({i}, {j}) = {sp.cxxcode(red[idx])};")
+            idx += 1
+    lines.append(
+        "  if (!std::isfinite(H(0, 0)) || !std::isfinite(H(1, 1)) || "
+        "!std::isfinite(H(2, 2)))"
+    )
+    lines.append("    return mat3::Zero();")
+    lines.append("  return H;")
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dump-hess", action="store_true",
+                    help="print pasteable exact H(k) C++")
+    ap.add_argument("--dump-hess-reg", action="store_true",
+                    help="print pasteable Jac(Reg(∇E0)) C++")
+    args = ap.parse_args()
+    if args.dump_hess:
+        print(dump_hessian_cpp())
+        return
+    if args.dump_hess_reg:
+        print(dump_hessian_reg_cpp())
+        return
     numeric_check()
     print()
     show_symbolic_difference()

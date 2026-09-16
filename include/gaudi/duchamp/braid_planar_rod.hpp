@@ -27,7 +27,7 @@ namespace detail {
 
 inline asawa::rod::CornerId insert_vert(asawa::rod::rod &R, const vec3 &p) {
   const asawa::rod::CornerId id = R.insert_edge();
-  R.corner_verts().push_back(p);
+  R.x()[id] = p;
   return id;
 }
 

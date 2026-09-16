@@ -150,6 +150,42 @@ segment_segment_proximity(const vec3 &xA0, const vec3 &xA1, //
   return result;
 }
 
+/// True if edge B lies in the one-ring of either endpoint of edge A:
+/// spokes at those vertices *and* opposite (link) edges of incident faces.
+/// Adjacent-in-ring pairs often share no vertex, so a shared-vertex test is
+/// not enough.
+inline bool edges_share_one_ring(const shell &M, CornerId cA, CornerId cB) {
+  const index_t eB = static_cast<index_t>(cB) / 2;
+  const VertId a0 = M.vert(cA);
+  const VertId a1 = M.vert(M.other(cA));
+  const VertId b0 = M.vert(cB);
+  const VertId b1 = M.vert(M.other(cB));
+  if (a0 == b0 || a0 == b1 || a1 == b0 || a1 == b1)
+    return true;
+
+  auto ring_has_edge = [&](VertId v) {
+    if (static_cast<index_t>(v) < 0)
+      return false;
+    bool hit = false;
+    M.const_for_each_vertex(v, [&](CornerId ci, const shell &m) {
+      if (hit)
+        return;
+      const CornerId ca = ci;
+      const CornerId cb = m.next(ci);
+      const CornerId cc = m.next(cb);
+      if (static_cast<index_t>(ca) < 0 || static_cast<index_t>(cb) < 0 ||
+          static_cast<index_t>(cc) < 0)
+        return;
+      if (static_cast<index_t>(ca) / 2 == eB ||
+          static_cast<index_t>(cb) / 2 == eB ||
+          static_cast<index_t>(cc) / 2 == eB)
+        hit = true;
+    });
+    return hit;
+  };
+  return ring_has_edge(a0) || ring_has_edge(a1);
+}
+
 std::mt19937_64 rng;
 std::uniform_real_distribution<real> unif(0.0, 1.0);
 
@@ -736,11 +772,13 @@ public:
 
     std::vector<std::array<index_t, 2>> collected(edge_verts_t.size() / 2,
                                                   {-1, -1});
+    // Signed edge count: OpenMP trip math on `i < size_t; i += 2` underflows
+    // unsigned and aborts under -fsanitize=unsigned-integer-overflow.
+    const int n_edges = static_cast<int>(edge_verts_t.size() / 2);
 #pragma omp parallel for
-    for (int i = 0; i < edge_verts_t.size(); i += 2) {
-      index_t e0 = i / 2;
+    for (int e0 = 0; e0 < n_edges; ++e0) {
       index_t c0 = edge_map_t[e0];
-      collected[i / 2] = {c0, -1};
+      collected[static_cast<size_t>(e0)] = {c0, -1};
 
       const edge_slice<decltype(edge_view)> edge(edge_view, e0);
       std::vector<index_t> nbrs = edge_tree_->find_neighbors(edge, tol);
@@ -749,6 +787,11 @@ public:
       real best_d = std::numeric_limits<real>::max();
       for (index_t e1 : nbrs) {
         if (e0 >= e1)
+          continue;
+
+        index_t c1c = edge_map_m[e1];
+        if (c0 >= 0 && c1c >= 0 &&
+            edges_share_one_ring(*__M, corner_id(c0), corner_id(c1c)))
           continue;
 
         index_t vT0 = edge_verts_t[2 * e0 + 0];
@@ -767,7 +810,7 @@ public:
       }
       if (best_e >= 0 && c0 >= 0) {
         index_t c1 = edge_map_m[best_e];
-        collected[i / 2] = {c0, c1};
+        collected[static_cast<size_t>(e0)] = {c0, c1};
       }
     }
     return collected;
@@ -792,10 +835,11 @@ public:
         const_cast<std::vector<index_t> &>(verts_t));
 
     std::vector<std::array<index_t, 2>> collected(verts_t.size(), {-1, -1});
+    const int n_verts = static_cast<int>(verts_t.size());
 #pragma omp parallel for
-    for (int i = 0; i < verts_t.size(); i++) {
+    for (int i = 0; i < n_verts; i++) {
       index_t iv = verts_map_t[i];
-      collected[i] = {iv, -1};
+      collected[static_cast<size_t>(i)] = {iv, -1};
 
       const point_slice<decltype(point_view)> point(point_view, i);
       std::vector<index_t> nbrs = face_tree_->find_neighbors(point, tol);

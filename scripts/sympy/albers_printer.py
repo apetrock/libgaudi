@@ -471,4 +471,14 @@ def emit_all(target: str) -> List[Tuple[str, str]]:
         from shape_operator_fit import emit_shape_operator_fit
 
         out.append(("shape_operator_fit_generated.hpp", emit_shape_operator_fit()))
+    if target in ("slab_field", "all"):
+        from slab_field_energy import emit_slab_field_energy
+
+        out.append(("slab_field_energy_generated.hpp", emit_slab_field_energy()))
+    if target in ("slab_cap_solid_angle", "all"):
+        from slab_cap_solid_angle import emit_cap_solid_angle_generated
+
+        out.append(
+            ("slab_cap_solid_angle_generated.hpp", emit_cap_solid_angle_generated())
+        )
     return out

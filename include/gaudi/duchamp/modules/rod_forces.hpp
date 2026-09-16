@@ -15,7 +15,9 @@
 #include "gaudi/calder/tangent_point_integrators.hpp"
 #include "gaudi/common.h"
 #include "gaudi/duchamp/field_nodes.hpp"
-#include "gaudi/duchamp/modules/soft_tp_newton.hpp"
+#include "gaudi/duchamp/modules/tp_config.hpp"
+#include "gaudi/duchamp/modules/tp_energies.hpp"
+#include "gaudi/duchamp/modules/tp_line_search.hpp"
 #include "gaudi/duchamp/utils/sdf.hpp"
 #include "gaudi/geometry_logger.hpp"
 #include "liblombardi/graph_context.hpp"
@@ -25,58 +27,7 @@ namespace gaudi {
 namespace duchamp {
 
 // --- Shared sub-configs (composed by demo configs) ---------------------------
-
-struct tangent_point_force_config {
-  real w = 0.0;
-  real l0 = 1.0;
-  real p = 6.0;
-};
-
-/// Softmax-floor TP force (no Cauchy ℓ₀). Classic density k=(1/R̃)^p.
-/// Teeth: R_min_frac / tau_frac (of rod radius / R_min). Absolute >0 overrides.
-struct soft_tangent_point_force_config {
-  real w = 1.0e-6;
-  real p = 6.0;
-  /// Contact floor as fraction of rod radius (length units).
-  real R_min_frac = 1.0;
-  /// LSE temperature as fraction of resolved R_min (smaller ⇒ harder floor).
-  real tau_frac = 0.1;
-  /// Absolute overrides (used only when > 0).
-  real R_min = 0.0;
-  real tau = 0.0;
-  soft_tp_mode mode = soft_tp_mode::gradient;
-  soft_tp_newton_config newton{}; ///< used when mode == newton
-};
-
-/// Resolve soft TP length scales from rod radius + teeth fractions.
-inline void resolve_soft_tangent_scales(soft_tangent_point_force_config &cfg,
-                                        real rod_radius) {
-  const real r = std::max(rod_radius, real(1e-6));
-  if (!(cfg.R_min > 0.0))
-    cfg.R_min = std::max(cfg.R_min_frac, real(1e-6)) * r;
-  if (!(cfg.tau > 0.0))
-    cfg.tau = std::max(cfg.tau_frac, real(1e-6)) * cfg.R_min;
-}
-
-/// Product-rule TP force: Gs - Ks (damps singularity vs raw gradient).
-/// l0: sharp TP kernel (local reaction); l1: harmonic smooth length over neighbors.
-struct harmonic_tangent_point_force_config {
-  real w = 0.0;
-  real l0 = 0.1;        ///< sharp TP kernel length / Cc (shell: 0.1·Cc)
-  real l1 = 4.0;        ///< harmonic smooth length / Cc (shell: 4·Cc)
-  real p0 = 6.0;        ///< TP power on sharp kernel
-  real p1 = 2.0;        ///< smooth / scalar-grad power on l1 neighborhood
-  real smooth_l0 = 0.0; ///< absolute smooth length; >0 overrides l1·Cc
-};
-
-enum class tangent_point_type { regularized, soft, harmonic };
-
-struct tangent_point_solver_config {
-  tangent_point_type type = tangent_point_type::soft;
-  tangent_point_force_config regularized{};
-  soft_tangent_point_force_config soft{};
-  harmonic_tangent_point_force_config harmonic{};
-};
+// TP configs live in tp_config.hpp
 
 struct vortex_force_config {
   real w = 0.0;
@@ -132,10 +83,10 @@ struct rod_physics_config {
 
 inline std::vector<vec3> compute_boundary_gradients(const asawa::rod::rod &rod,
                                                     const sdf_base &sdf) {
-  const std::vector<real> dists = sdf.distance(rod.__x);
-  const std::vector<vec3> gdists = sdf.grad_distance(rod.__x);
-  std::vector<vec3> f(rod.__x.size(), vec3::Zero());
-  for (int i = 0; i < static_cast<int>(rod.__x.size()); ++i) {
+  const std::vector<real> dists = sdf.distance(rod.x());
+  const std::vector<vec3> gdists = sdf.grad_distance(rod.x());
+  std::vector<vec3> f(rod.x().size(), vec3::Zero());
+  for (int i = 0; i < static_cast<int>(rod.x().size()); ++i) {
     if (dists[i] > 0.0)
       f[i] = -dists[i] * gdists[i];
   }
@@ -170,6 +121,94 @@ compute_tangent_point_gradient(asawa::rod::rod &rod,
 }
 
 inline std::vector<vec3>
+compute_cauchy_tangent_point_gradient(asawa::rod::rod &rod,
+                                      const asawa::rod::dynamic &dynamic,
+                                      real l0_mul = 1.0, real p = 6.0) {
+  const real eps = dynamic._Cc;
+  const std::vector<vec3> &x = rod.x();
+  const std::vector<real> l = rod.l0();
+  const std::vector<vec3> T = rod.N2c();
+  auto forces =
+      calder::tangent_point_gradient_cauchy(rod, x, l, T, l0_mul * eps, p);
+  for (auto &f : forces)
+    f *= -1.0;
+  return forces;
+}
+
+inline std::vector<vec3> compute_cauchy_tangent_point_gradient(
+    asawa::rod::rod &rod, const asawa::rod::dynamic &dynamic,
+    const cauchy_tangent_point_force_config &cfg) {
+  auto forces =
+      compute_cauchy_tangent_point_gradient(rod, dynamic, cfg.l0, cfg.p);
+  if (cfg.w != 1.0) {
+    for (auto &f : forces)
+      f *= cfg.w;
+  }
+  return forces;
+}
+
+inline std::vector<vec3>
+compute_cauchy_agree_tangent_point_gradient(asawa::rod::rod &rod,
+                                            const asawa::rod::dynamic &dynamic,
+                                            real l0_mul = 1.0, real p = 6.0,
+                                            real lam = 0.5) {
+  const real eps = dynamic._Cc;
+  const std::vector<vec3> &x = rod.x();
+  const std::vector<real> l = rod.l0();
+  const std::vector<vec3> T = rod.N2c();
+  auto forces = calder::tangent_point_gradient_cauchy_agree(
+      rod, x, l, T, l0_mul * eps, p, lam);
+  for (auto &f : forces)
+    f *= -1.0;
+  return forces;
+}
+
+inline std::vector<vec3> compute_cauchy_agree_tangent_point_gradient(
+    asawa::rod::rod &rod, const asawa::rod::dynamic &dynamic,
+    const cauchy_agree_tangent_point_force_config &cfg) {
+  auto forces = compute_cauchy_agree_tangent_point_gradient(
+      rod, dynamic, cfg.l0, cfg.p, cfg.lam);
+  if (cfg.w != 1.0) {
+    for (auto &f : forces)
+      f *= cfg.w;
+  }
+  return forces;
+}
+
+/// drive = w0 · (−slide_leaf) + w1 · (−cauchy_leaf) = −(w0·slide + w1·cauchy).
+inline std::vector<vec3> compute_surface_slide_tangent_point_gradient(
+    asawa::rod::rod &rod, const asawa::rod::dynamic &dynamic,
+    const surface_slide_tangent_point_force_config &cfg) {
+  const real eps = dynamic._Cc;
+  const std::vector<vec3> &x = rod.x();
+  const std::vector<real> l = rod.l0();
+  const std::vector<vec3> T = rod.N2c();
+
+  std::vector<vec3> forces;
+  if (cfg.w1 != real(0.0)) {
+    forces = calder::tangent_point_gradient_cauchy(rod, x, l, T,
+                                                   cfg.l0 * eps, cfg.p);
+    if (cfg.w1 != real(1.0)) {
+      for (auto &f : forces)
+        f *= cfg.w1;
+    }
+  } else {
+    forces.assign(x.size(), vec3::Zero());
+  }
+
+  if (cfg.w0 != real(0.0)) {
+    auto slide = calder::tangent_point_surface_slide(rod, x, l, T);
+    const real s = cfg.w0;
+    for (size_t i = 0; i < forces.size(); ++i)
+      forces[i] += s * slide[i];
+  }
+
+  for (auto &f : forces)
+    f *= -1.0;
+  return forces;
+}
+
+inline std::vector<vec3>
 compute_soft_tangent_point_gradient(asawa::rod::rod &rod,
                                     const asawa::rod::dynamic & /*dynamic*/,
                                     real R_min, real tau, real p = 6.0,
@@ -187,80 +226,47 @@ compute_soft_tangent_point_gradient(asawa::rod::rod &rod,
 inline std::vector<vec3>
 compute_soft_tangent_point_displacement(
     asawa::rod::rod &rod, const asawa::rod::dynamic &dynamic,
-    const soft_tangent_point_force_config &cfg, real step_h = 0.0) {
+    const soft_tangent_point_force_config &cfg, real step_h = 0.0,
+    const tp_line_search_config & /*ls*/ = {}) {
   soft_tangent_point_force_config resolved = cfg;
   resolve_soft_tangent_scales(resolved, rod._r);
   const real h = (step_h > 0.0) ? step_h : real(1.0e-2);
   const real h2 = h * h;
-  switch (resolved.mode) {
-  case soft_tp_mode::newton:
-    return compute_soft_tp_newton_displacement(rod, resolved.R_min, resolved.tau,
-                                               resolved.p, resolved.w, h,
-                                               resolved.newton);
-  case soft_tp_mode::hessian_force:
-    return compute_soft_tp_hessian_displacement(rod, resolved.R_min, resolved.tau,
-                                                resolved.p, resolved.w, h);
-  default: {
-    auto forces = compute_soft_tangent_point_gradient(
-        rod, dynamic, resolved.R_min, resolved.tau, resolved.p, real(0.0));
-    if (resolved.w != 1.0) {
-      for (auto &f : forces)
-        f *= resolved.w;
-    }
+  auto forces = compute_soft_tangent_point_gradient(
+      rod, dynamic, resolved.R_min, resolved.tau, resolved.p, real(0.0));
+  if (resolved.w != 1.0) {
     for (auto &f : forces)
-      f *= h2;
-    return forces;
+      f *= resolved.w;
   }
-  }
+  for (auto &f : forces)
+    f *= h2;
+  return forces;
 }
 
 inline std::vector<vec3>
 compute_soft_tangent_point_velocity(
     asawa::rod::rod &rod, const asawa::rod::dynamic &dynamic,
-    const soft_tangent_point_force_config &cfg, real step_h = 0.0) {
+    const soft_tangent_point_force_config &cfg, real step_h = 0.0,
+    const tp_line_search_config & /*ls*/ = {}) {
   soft_tangent_point_force_config resolved = cfg;
   resolve_soft_tangent_scales(resolved, rod._r);
-  const real h = (step_h > 0.0) ? step_h : real(1.0e-2);
-  switch (resolved.mode) {
-  case soft_tp_mode::newton:
-    return compute_soft_tp_newton_velocity(rod, resolved.R_min, resolved.tau,
-                                           resolved.p, resolved.w, h,
-                                           resolved.newton);
-  case soft_tp_mode::hessian_force:
-    return compute_soft_tp_hessian_velocity(rod, resolved.R_min, resolved.tau,
-                                            resolved.p, resolved.w, h);
-  default: {
-    auto forces = compute_soft_tangent_point_gradient(
-        rod, dynamic, resolved.R_min, resolved.tau, resolved.p, real(0.0));
-    if (resolved.w != 1.0) {
-      for (auto &f : forces)
-        f *= resolved.w;
-    }
-    return forces;
+  auto forces = compute_soft_tangent_point_gradient(
+      rod, dynamic, resolved.R_min, resolved.tau, resolved.p, real(0.0));
+  if (resolved.w != 1.0) {
+    for (auto &f : forces)
+      f *= resolved.w;
   }
-  }
+  return forces;
 }
 
 inline std::vector<vec3>
 compute_soft_tangent_point_gradient(asawa::rod::rod &rod,
                                     const asawa::rod::dynamic &dynamic,
                                     const soft_tangent_point_force_config &cfg,
-                                    real step_h = 0.0) {
+                                    real /*step_h*/ = 0.0,
+                                    const tp_line_search_config & /*ls*/ = {}) {
   soft_tangent_point_force_config resolved = cfg;
   resolve_soft_tangent_scales(resolved, rod._r);
-  const real h = (step_h > 0.0) ? step_h : real(1.0e-2);
-  const real h2 = std::max(h * h, real(1e-20));
-  if (resolved.mode == soft_tp_mode::newton)
-    return compute_soft_tp_newton_force(rod, resolved.R_min, resolved.tau,
-                                        resolved.p, resolved.w, h,
-                                        resolved.newton);
-  if (resolved.mode == soft_tp_mode::hessian_force) {
-    std::vector<vec3> disp = compute_soft_tp_hessian_displacement(
-        rod, resolved.R_min, resolved.tau, resolved.p, resolved.w, h);
-    for (auto &d : disp)
-      d /= h2;
-    return disp;
-  }
   auto forces = compute_soft_tangent_point_gradient(
       rod, dynamic, resolved.R_min, resolved.tau, resolved.p, real(0.0));
   if (resolved.w != 1.0) {
@@ -289,10 +295,12 @@ compute_harmonic_tangent_point_gradient(asawa::rod::rod &rod,
 
 inline std::vector<vec3> compute_harmonic_tangent_point_gradient(
     asawa::rod::rod &rod, const asawa::rod::dynamic &dynamic,
-    const harmonic_tangent_point_force_config &cfg) {
-  const real cc = std::max(dynamic._Cc, real(1e-16));
+    const harmonic_tangent_point_force_config &cfg_in) {
+  harmonic_tangent_point_force_config cfg = cfg_in;
+  resolve_harmonic_tangent_scales(cfg, rod._r, dynamic._Cc);
+  const real eps = dynamic._Cc;
   const real smooth_mul =
-      cfg.smooth_l0 > 0.0 ? cfg.smooth_l0 / cc : cfg.l1;
+      cfg.smooth_l0 > 0.0 ? cfg.smooth_l0 / std::max(eps, real(1e-16)) : cfg.l1;
   auto forces = compute_harmonic_tangent_point_gradient(
       rod, dynamic, cfg.l0, cfg.p0, cfg.p1, smooth_mul);
   if (cfg.w != 1.0) {
@@ -807,8 +815,10 @@ public:
 
   soft_tangent_point_gradient_node(
       asawa::rod::rod::ptr rod, asawa::rod::dynamic::ptr dynamic,
-      const soft_tangent_point_force_config &cfg = {})
-      : _rod(std::move(rod)), _dynamic(std::move(dynamic)), _cfg(cfg) {}
+      const soft_tangent_point_force_config &cfg = {},
+      const tp_line_search_config &ls = {})
+      : _rod(std::move(rod)), _dynamic(std::move(dynamic)), _cfg(cfg),
+        _line_search(ls) {}
 
   void set_step_h(real h) { _step_h = h; }
   void set_displacement_output(bool displacement) {
@@ -820,13 +830,13 @@ public:
     auto out = get_datum<OutputPortDef>();
     if (_velocity_output) {
       out->data() = compute_soft_tangent_point_velocity(
-          *_rod, *_dynamic, _cfg, _step_h);
+          *_rod, *_dynamic, _cfg, _step_h, _line_search);
     } else if (_displacement_output) {
       out->data() = compute_soft_tangent_point_displacement(
-          *_rod, *_dynamic, _cfg, _step_h);
+          *_rod, *_dynamic, _cfg, _step_h, _line_search);
     } else {
       out->data() = compute_soft_tangent_point_gradient(
-          *_rod, *_dynamic, _cfg, _step_h);
+          *_rod, *_dynamic, _cfg, _step_h, _line_search);
     }
   }
 
@@ -841,6 +851,7 @@ private:
   asawa::rod::rod::ptr _rod;
   asawa::rod::dynamic::ptr _dynamic;
   soft_tangent_point_force_config _cfg;
+  tp_line_search_config _line_search{};
   real _step_h = 0.0;
   bool _displacement_output = false;
   bool _velocity_output = false;
@@ -892,12 +903,138 @@ private:
   bool _velocity_output = false;
 };
 
-/// Active TP gradient node + unified drive API (regularized / soft / harmonic).
+class cauchy_tangent_point_gradient_node : public liblombardi::Node {
+public:
+  using ptr = std::shared_ptr<cauchy_tangent_point_gradient_node>;
+
+  enum class PortId { Output = 0 };
+  using OutputPortDef = liblombardi::PortDef<field_datum<vec3>, PortId::Output>;
+
+  cauchy_tangent_point_gradient_node(
+      asawa::rod::rod::ptr rod, asawa::rod::dynamic::ptr dynamic,
+      const cauchy_tangent_point_force_config &cfg = {})
+      : _rod(std::move(rod)), _dynamic(std::move(dynamic)), _cfg(cfg) {}
+
+  void set_step_h(real h) { _step_h = h; }
+  void set_velocity_output(bool velocity) { _velocity_output = velocity; }
+
+  void compute() override {
+    auto out = get_datum<OutputPortDef>();
+    out->data() =
+        compute_cauchy_tangent_point_gradient(*_rod, *_dynamic, _cfg);
+    if (!_velocity_output && _step_h > 0.0) {
+      const real h2 = _step_h * _step_h;
+      for (auto &f : out->data())
+        f *= h2;
+    }
+  }
+
+  unsigned int port_count() const override { return 1; }
+
+  liblombardi::PortRef<cauchy_tangent_point_gradient_node, OutputPortDef>
+  output() {
+    return {*this};
+  }
+
+private:
+  asawa::rod::rod::ptr _rod;
+  asawa::rod::dynamic::ptr _dynamic;
+  cauchy_tangent_point_force_config _cfg;
+  real _step_h = 0.0;
+  bool _velocity_output = false;
+};
+
+class cauchy_agree_tangent_point_gradient_node : public liblombardi::Node {
+public:
+  using ptr = std::shared_ptr<cauchy_agree_tangent_point_gradient_node>;
+
+  enum class PortId { Output = 0 };
+  using OutputPortDef = liblombardi::PortDef<field_datum<vec3>, PortId::Output>;
+
+  cauchy_agree_tangent_point_gradient_node(
+      asawa::rod::rod::ptr rod, asawa::rod::dynamic::ptr dynamic,
+      const cauchy_agree_tangent_point_force_config &cfg = {})
+      : _rod(std::move(rod)), _dynamic(std::move(dynamic)), _cfg(cfg) {}
+
+  void set_step_h(real h) { _step_h = h; }
+  void set_velocity_output(bool velocity) { _velocity_output = velocity; }
+
+  void compute() override {
+    auto out = get_datum<OutputPortDef>();
+    out->data() =
+        compute_cauchy_agree_tangent_point_gradient(*_rod, *_dynamic, _cfg);
+    if (!_velocity_output && _step_h > 0.0) {
+      const real h2 = _step_h * _step_h;
+      for (auto &f : out->data())
+        f *= h2;
+    }
+  }
+
+  unsigned int port_count() const override { return 1; }
+
+  liblombardi::PortRef<cauchy_agree_tangent_point_gradient_node, OutputPortDef>
+  output() {
+    return {*this};
+  }
+
+private:
+  asawa::rod::rod::ptr _rod;
+  asawa::rod::dynamic::ptr _dynamic;
+  cauchy_agree_tangent_point_force_config _cfg;
+  real _step_h = 0.0;
+  bool _velocity_output = false;
+};
+
+class surface_slide_tangent_point_gradient_node : public liblombardi::Node {
+public:
+  using ptr = std::shared_ptr<surface_slide_tangent_point_gradient_node>;
+
+  enum class PortId { Output = 0 };
+  using OutputPortDef = liblombardi::PortDef<field_datum<vec3>, PortId::Output>;
+
+  surface_slide_tangent_point_gradient_node(
+      asawa::rod::rod::ptr rod, asawa::rod::dynamic::ptr dynamic,
+      const surface_slide_tangent_point_force_config &cfg = {})
+      : _rod(std::move(rod)), _dynamic(std::move(dynamic)), _cfg(cfg) {}
+
+  void set_step_h(real h) { _step_h = h; }
+  void set_velocity_output(bool velocity) { _velocity_output = velocity; }
+
+  void compute() override {
+    auto out = get_datum<OutputPortDef>();
+    out->data() =
+        compute_surface_slide_tangent_point_gradient(*_rod, *_dynamic, _cfg);
+    if (!_velocity_output && _step_h > 0.0) {
+      const real h2 = _step_h * _step_h;
+      for (auto &f : out->data())
+        f *= h2;
+    }
+  }
+
+  unsigned int port_count() const override { return 1; }
+
+  liblombardi::PortRef<surface_slide_tangent_point_gradient_node, OutputPortDef>
+  output() {
+    return {*this};
+  }
+
+private:
+  asawa::rod::rod::ptr _rod;
+  asawa::rod::dynamic::ptr _dynamic;
+  surface_slide_tangent_point_force_config _cfg;
+  real _step_h = 0.0;
+  bool _velocity_output = false;
+};
+
+/// Active TP gradient node + unified drive API.
 struct tangent_point_drive {
   tangent_point_type type = tangent_point_type::soft;
   tangent_point_gradient_node::ptr regularized;
   soft_tangent_point_gradient_node::ptr soft;
   harmonic_tangent_point_gradient_node::ptr harmonic;
+  cauchy_tangent_point_gradient_node::ptr cauchy;
+  cauchy_agree_tangent_point_gradient_node::ptr cauchy_agree;
+  surface_slide_tangent_point_gradient_node::ptr surface_slide;
 
   static tangent_point_drive
   create(liblombardi::GraphContext &graph, asawa::rod::rod::ptr rod,
@@ -913,11 +1050,25 @@ struct tangent_point_drive {
     case tangent_point_type::soft:
       resolve_soft_tangent_scales(cfg.soft, rod_radius);
       out.soft = graph.create_node<soft_tangent_point_gradient_node>(
-          rod, dynamic, cfg.soft);
+          rod, dynamic, cfg.soft, cfg.line_search);
       break;
     case tangent_point_type::harmonic:
       out.harmonic = graph.create_node<harmonic_tangent_point_gradient_node>(
           rod, dynamic, cfg.harmonic);
+      break;
+    case tangent_point_type::cauchy:
+      out.cauchy = graph.create_node<cauchy_tangent_point_gradient_node>(
+          rod, dynamic, cfg.cauchy);
+      break;
+    case tangent_point_type::cauchy_agree:
+      out.cauchy_agree =
+          graph.create_node<cauchy_agree_tangent_point_gradient_node>(
+              rod, dynamic, cfg.cauchy_agree);
+      break;
+    case tangent_point_type::surface_slide:
+      out.surface_slide =
+          graph.create_node<surface_slide_tangent_point_gradient_node>(
+              rod, dynamic, cfg.surface_slide);
       break;
     }
     return out;
@@ -935,6 +1086,15 @@ struct tangent_point_drive {
     case tangent_point_type::harmonic:
       graph.link(harmonic->output(), solver_in);
       break;
+    case tangent_point_type::cauchy:
+      graph.link(cauchy->output(), solver_in);
+      break;
+    case tangent_point_type::cauchy_agree:
+      graph.link(cauchy_agree->output(), solver_in);
+      break;
+    case tangent_point_type::surface_slide:
+      graph.link(surface_slide->output(), solver_in);
+      break;
     }
   }
 
@@ -948,6 +1108,15 @@ struct tangent_point_drive {
       break;
     case tangent_point_type::harmonic:
       harmonic->set_step_h(h);
+      break;
+    case tangent_point_type::cauchy:
+      cauchy->set_step_h(h);
+      break;
+    case tangent_point_type::cauchy_agree:
+      cauchy_agree->set_step_h(h);
+      break;
+    case tangent_point_type::surface_slide:
+      surface_slide->set_step_h(h);
       break;
     }
   }
@@ -963,6 +1132,15 @@ struct tangent_point_drive {
     case tangent_point_type::harmonic:
       harmonic->set_velocity_output(velocity);
       break;
+    case tangent_point_type::cauchy:
+      cauchy->set_velocity_output(velocity);
+      break;
+    case tangent_point_type::cauchy_agree:
+      cauchy_agree->set_velocity_output(velocity);
+      break;
+    case tangent_point_type::surface_slide:
+      surface_slide->set_velocity_output(velocity);
+      break;
     }
   }
 
@@ -977,6 +1155,15 @@ struct tangent_point_drive {
     case tangent_point_type::harmonic:
       harmonic->compute();
       break;
+    case tangent_point_type::cauchy:
+      cauchy->compute();
+      break;
+    case tangent_point_type::cauchy_agree:
+      cauchy_agree->compute();
+      break;
+    case tangent_point_type::surface_slide:
+      surface_slide->compute();
+      break;
     }
   }
 
@@ -989,6 +1176,19 @@ struct tangent_point_drive {
     case tangent_point_type::soft:
       return soft
           ->get_datum<soft_tangent_point_gradient_node::OutputPortDef>()
+          ->data();
+    case tangent_point_type::cauchy:
+      return cauchy
+          ->get_datum<cauchy_tangent_point_gradient_node::OutputPortDef>()
+          ->data();
+    case tangent_point_type::cauchy_agree:
+      return cauchy_agree
+          ->get_datum<cauchy_agree_tangent_point_gradient_node::OutputPortDef>()
+          ->data();
+    case tangent_point_type::surface_slide:
+      return surface_slide
+          ->get_datum<
+              surface_slide_tangent_point_gradient_node::OutputPortDef>()
           ->data();
     default:
       return harmonic

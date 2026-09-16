@@ -617,7 +617,13 @@ void apply_inverse_permutation(const std::vector<index_t> &iperm,
   }
 }
 
-void pack(shell &M) {
+void pack(shell &M, GeometryChannels &channels);
+
+void pack(shell &M) { pack(M, M.channels()); }
+
+/// Pack topology + channel pool together. Prefer this when channels are
+/// explicit; \c pack(shell&) forwards here.
+void pack(shell &M, GeometryChannels &channels) {
 
   std::cout << "*--- packing ---*" << std::endl;
 
@@ -646,6 +652,7 @@ void pack(shell &M) {
     std::cout << std::endl;
   };
 
+  // old_to_new via get_pack_permutation: perm[new]=old; iperm[old]=new.
   std::vector<index_t> vperm = get_pack_permutation<1>(M.vert_begin());
   std::vector<index_t> viperm = inverse_permutation(vperm);
 
@@ -654,7 +661,7 @@ void pack(shell &M) {
   size_t Nv = calc_new_size(M.vert_begin());
   M.vert_begin().resize(Nv);
   std::cout << "permute verts: " << Nv << std::endl;
-  for (auto d : M.get_data()) {
+  for (auto d : channels.pool()) {
     if (d->type() == asawa::VERTEX) {
       d->permute(vperm);
       d->resize(Nv);
@@ -669,7 +676,7 @@ void pack(shell &M) {
   size_t Nf = calc_new_size(M.face_begin());
   M.face_begin().resize(Nf);
   std::cout << "permute faces: " << Nf << std::endl;
-  for (auto d : M.get_data()) {
+  for (auto d : channels.pool()) {
     if (d->type() == FACE) {
       d->permute(fperm);
       d->resize(Nf);
@@ -713,7 +720,7 @@ void pack(shell &M) {
     cperm_half[i / 2] = cperm[i] / 2;
   }
 
-  for (auto d : M.get_data()) {
+  for (auto d : channels.pool()) {
 
     if (d->type() == EDGE) {
       std::cout << "edge" << std::endl;

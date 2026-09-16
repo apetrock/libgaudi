@@ -17,6 +17,7 @@
 #include "gaudi/define_create_func.h"
 #include "gaudi/duchamp/dipole_tunneling_geometry.hpp"
 #include "gaudi/geometry_logger.hpp"
+#include "gaudi/hepworth/block/block_geometry.hpp"
 #include "gaudi/hepworth/block/block_constraint.hpp"
 #include "gaudi/hepworth/block/solver_composition.hpp"
 #include "gaudi/hepworth/blocks/rod_position_block.hpp"
@@ -37,6 +38,16 @@ class dipole_weld : public hepworth::block::block_constraint {
 public:
   DEFINE_CREATE_FUNC(dipole_weld)
 
+  dipole_weld(const std::vector<index_t> &ids, real r, real wm, real wr,
+              std::vector<hepworth::sim_block::ptr> blocks)
+      : hepworth::block::block_constraint(ids, 0.0, blocks),
+        _r(r),
+        _wm(wm),
+        _wr(wr) {
+    assert(ids.size() == 3);
+    assert(blocks.size() == 2);
+  }
+
   dipole_weld(const std::vector<index_t> &ids, const vec3 &Nr0, const vec3 &Nr1,
               const vec3 &Nm, real r, real wm, real wr,
               std::vector<hepworth::sim_block::ptr> blocks)
@@ -49,6 +60,23 @@ public:
         _wr(wr) {
     assert(ids.size() == 3);
     assert(blocks.size() == 2);
+    _rest_initialized = true;
+  }
+
+  void init_rest(const vecX &q, hepworth::block::solver_context &ctx) override {
+    if (_rest_initialized)
+      return;
+    if (ctx.rod_normals && _ids[1] < static_cast<index_t>(ctx.rod_normals->size()))
+      _Nr0 = (*ctx.rod_normals)[static_cast<size_t>(_ids[1])];
+    if (ctx.rod_normals && _ids[2] < static_cast<index_t>(ctx.rod_normals->size()))
+      _Nr1 = (*ctx.rod_normals)[static_cast<size_t>(_ids[2])];
+    if (ctx.shell_mesh) {
+      const std::vector<vec3> x = hepworth::block::gather_shell_positions(
+          *ctx.shell_mesh, _blocks[0], q);
+      _Nm = asawa::shell::vert_normal(*ctx.shell_mesh,
+                                      asawa::shell::vert_id(_ids[0]), x);
+    }
+    _rest_initialized = true;
   }
 
   virtual std::string name() { return "dipole_weld"; }
@@ -121,6 +149,17 @@ class triangle_dipole_tunneling : public hepworth::block::block_constraint {
 public:
   DEFINE_CREATE_FUNC(triangle_dipole_tunneling)
 
+  triangle_dipole_tunneling(const std::vector<index_t> &ids, index_t rid0,
+                            index_t rid1, real r, real w,
+                            std::vector<hepworth::sim_block::ptr> blocks)
+      : hepworth::block::block_constraint(ids, w, blocks),
+        _r(r),
+        _rid0(rid0),
+        _rid1(rid1) {
+    assert(ids.size() == 3);
+    assert(blocks.size() == 2);
+  }
+
   triangle_dipole_tunneling(const std::vector<index_t> &ids, const std::vector<vec3> &x,
                             index_t rid0, index_t rid1, const vec3 &Nr0, const vec3 &Nr1,
                             real r, real w, std::vector<hepworth::sim_block::ptr> blocks)
@@ -138,6 +177,23 @@ public:
     _d0 = p1 - p0;
     _d1 = p2 - p0;
     _N0 = safe_normalized(_d0.cross(_d1), vec3::UnitZ());
+    _rest_initialized = true;
+  }
+
+  void init_rest(const vecX &q, hepworth::block::solver_context &ctx) override {
+    if (_rest_initialized)
+      return;
+    const vec3 p0 = _blocks[0]->get_vec3(_ids[0], q);
+    const vec3 p1 = _blocks[0]->get_vec3(_ids[1], q);
+    const vec3 p2 = _blocks[0]->get_vec3(_ids[2], q);
+    _d0 = p1 - p0;
+    _d1 = p2 - p0;
+    _N0 = safe_normalized(_d0.cross(_d1), vec3::UnitZ());
+    if (ctx.rod_normals && _rid0 < static_cast<index_t>(ctx.rod_normals->size()))
+      _Nr0 = (*ctx.rod_normals)[static_cast<size_t>(_rid0)];
+    if (ctx.rod_normals && _rid1 < static_cast<index_t>(ctx.rod_normals->size()))
+      _Nr1 = (*ctx.rod_normals)[static_cast<size_t>(_rid1)];
+    _rest_initialized = true;
   }
 
   virtual std::string name() { return "triangle_dipole_tunneling"; }
@@ -382,17 +438,15 @@ inline void init_dipole_clearance(
       const auto tri = shell.get_tri(fid);
       if (do_tunnel) {
         constraints.push_back(triangle_dipole_tunneling::create(
-            std::vector<index_t>({tri[0], tri[1], tri[2]}), x, vr0, vr1,
-            Nr[vr0], Nr[vr1], r, w_tunnel, blocks));
+            std::vector<index_t>({tri[0], tri[1], tri[2]}), vr0, vr1, r,
+            w_tunnel, blocks));
       }
       if (do_weld) {
         for (index_t vi : tri) {
           if (!weld_seen.insert({vi, vr0, vr1}).second)
             continue;
           constraints.push_back(dipole_weld::create(
-              std::vector<index_t>({vi, vr0, vr1}), Nr[vr0], Nr[vr1],
-              asawa::shell::vert_normal(shell, asawa::shell::vert_id(vi), x), r,
-              wm, wr, blocks));
+              std::vector<index_t>({vi, vr0, vr1}), r, wm, wr, blocks));
         }
       }
     };
@@ -458,17 +512,15 @@ inline void init_dipole_clearance_brute(
         const auto tri = shell.get_tri(fid);
         if (do_tunnel) {
           constraints.push_back(triangle_dipole_tunneling::create(
-              std::vector<index_t>({tri[0], tri[1], tri[2]}), x, v0, v1, Nr[v0],
-              Nr[v1], r, w_tunnel, blocks));
+              std::vector<index_t>({tri[0], tri[1], tri[2]}), v0, v1, r,
+              w_tunnel, blocks));
         }
         if (do_weld) {
           for (index_t vi : tri) {
             if (!weld_seen.insert({vi, v0, v1}).second)
               continue;
             constraints.push_back(dipole_weld::create(
-                std::vector<index_t>({vi, v0, v1}), Nr[v0], Nr[v1],
-                asawa::shell::vert_normal(shell, asawa::shell::vert_id(vi), x),
-                r, wm, wr, blocks));
+                std::vector<index_t>({vi, v0, v1}), r, wm, wr, blocks));
           }
         }
       }

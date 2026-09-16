@@ -131,14 +131,14 @@ void init_bend(const asawa::rod::rod &R,
     return;
   int Ni = R.corner_count();
   auto verts = R.get_vert_range();
-  const std::vector<quat> &q = R.__u;
   int N = skip ? static_cast<int>(verts.size()) - 1
                : static_cast<int>(verts.size());
   for (int i = 0; i < N; i++) {
     if (R.length(verts[i]) < 1e-6)
       continue;
     asawa::rod::consec_t c = R.consec(verts[i]);
-    constraints.push_back(bend::create({c[1], c[2], Ni}, q, w_bend, blocks));
+    constraints.push_back(
+        bend::create({c[1], c[2], Ni}, w_bend, blocks));
   }
 }
 
@@ -149,7 +149,6 @@ void init_twist(const asawa::rod::rod &R,
                 real free_twist_w = 0.0) {
   int Ni = R.corner_count();
   auto verts = R.get_vert_range();
-  const std::vector<quat> &q = R.__u;
   int N = skip ? static_cast<int>(verts.size()) - 1
                : static_cast<int>(verts.size());
   for (int i = 0; i < N; i++) {
@@ -160,7 +159,8 @@ void init_twist(const asawa::rod::rod &R,
     if (wt <= 0.0)
       continue;
     asawa::rod::consec_t c = R.consec(verts[i]);
-    constraints.push_back(twist::create({c[1], c[2], Ni}, q, wt, blocks));
+    constraints.push_back(
+        twist::create({c[1], c[2], Ni}, wt, blocks));
   }
 }
 
@@ -201,7 +201,7 @@ void init_angle(const asawa::rod::rod &R,
                 const vec3 &z, const real &phi, const real &w,
                 std::vector<sim_block::ptr> blocks) {
   int Ni = R.corner_count();
-  const std::vector<vec3> &x = R.__x;
+  const std::vector<vec3> &x = R.x();
   auto verts = R.get_vert_range();
   for (auto i : verts) {
     if (R.length(i) < 1e-8)
@@ -254,7 +254,7 @@ void init_collisions(asawa::rod::rod &R, asawa::rod::dynamic &dynamic,
                      real K = 1.0, int chain_sep = 2, real geom_margin = 0.1,
                      real r_override = -1.0) {
   using asawa::rod::corner_id;
-  const std::vector<vec3> &x = R.__x;
+  const std::vector<vec3> &x = R.x();
   // True seg-seg gate (AABB false positives can have midpoints ≫ R apart).
   // Note: va::distance_Segment_Segment returns *squared* distance in d[0].
   const real r = (r_override < 0.0) ? R._r : r_override;
@@ -289,6 +289,7 @@ void init_collisions(asawa::rod::rod &R, asawa::rod::dynamic &dynamic,
     }
   }
 }
+
 } // namespace block
 } // namespace hepworth
 } // namespace gaudi

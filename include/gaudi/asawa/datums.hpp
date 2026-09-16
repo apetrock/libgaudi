@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstddef>
+#include <type_traits>
 
 #include <iostream>
 #include <memory.h>
@@ -12,13 +13,15 @@
 #include "shell/datum_x.hpp"
 #include "shell/shell.hpp"
 
-#include "rod/rod.hpp"
-
 #ifndef __ASAWA_DATUM__
 #define __ASAWA_DATUM__
 namespace gaudi {
 
 namespace asawa {
+
+namespace rod {
+class rod;
+}
 
 enum prim_type {
   VERTEX,
@@ -62,6 +65,14 @@ public:
 
   virtual void flip(const shell::shell &M, const index_t &i){};
 
+  /// Rod topology hooks (corner-indexed). Default: no-op on base.
+  virtual void rod_split(rod::rod & /*R*/, index_t /*c_prev*/, index_t /*c0*/,
+                         index_t /*c1*/, index_t /*c_next*/,
+                         index_t /*c_new*/) {}
+  virtual void rod_collapse(rod::rod & /*R*/, index_t /*c_prev*/,
+                            index_t /*c0*/, index_t /*c1*/,
+                            index_t /*c_next*/) {}
+
   virtual void calc(const rod::rod &R, const index_t &i, const index_t &prim_id,
                     const real &C, const std::vector<index_t> &vals) = 0;
 
@@ -77,7 +88,11 @@ public:
   const prim_type &type() { return __type; };
 
   prim_type __type;
+  /// Index in the owning GeometryChannels / topology pool. Set at insert.
+  index_t slot_id = -1;
 };
+
+using datum_ptr = datum::ptr;
 
 template <typename TYPE> struct datum_t : public datum {
 public:
@@ -93,6 +108,7 @@ public:
 
   std::vector<TYPE> &data() { return __data; }
   const std::vector<TYPE> &data() const { return __data; }
+  std::vector<TYPE> &data_mut() { return __data; }
   virtual size_t size() { return __data.size(); };
 
   virtual void calc(const shell::shell &M, const index_t &i,
@@ -112,8 +128,12 @@ public:
     }
 
     else if (__type == EDGE || __type == FACE) {
-      TYPE v0 = __data[vals[0]];
-      __data[i] = C * v0;
+      if constexpr (std::is_same_v<TYPE, quat>) {
+        __data[i] = __data[vals[0]];
+      } else {
+        TYPE v0 = __data[vals[0]];
+        __data[i] = C * v0;
+      }
     }
   }
 
@@ -193,6 +213,36 @@ public:
     __data[i] = vavg;
   }
 
+  virtual void rod_split(rod::rod & /*R*/, index_t /*c_prev*/, index_t c0,
+                         index_t c1, index_t /*c_next*/, index_t c_new) override {
+    ensure_index(c_new);
+    if constexpr (std::is_same_v<TYPE, quat>) {
+      this->__data[c_new] = va::slerp(this->__data[c0], this->__data[c1], 0.5f);
+    } else {
+      this->__data[c_new] =
+          va::mix(real(0.5), this->__data[c0], this->__data[c1]);
+    }
+  }
+
+  virtual void rod_collapse(rod::rod & /*R*/, index_t c_prev, index_t /*c0*/,
+                            index_t c1, index_t /*c_next*/) override {
+    if (c_prev < 0)
+      return;
+    ensure_index(c1);
+    if constexpr (std::is_same_v<TYPE, quat>) {
+      this->__data[c1] =
+          va::slerp(this->__data[c_prev], this->__data[c1], 0.5f);
+    } else {
+      this->__data[c1] =
+          va::mix(real(0.5), this->__data[c_prev], this->__data[c1]);
+    }
+  }
+
+  void ensure_index(index_t i) {
+    if (i >= static_cast<index_t>(__data.size()))
+      __data.resize(static_cast<size_t>(i) + 1, z::zero<TYPE>());
+  }
+
   virtual void flip(const shell::shell &M, const index_t &i) {}
 
   virtual void do_alloc(const size_t &sz) {
@@ -260,6 +310,18 @@ public:
 
 using scalar_datum = datum_t<real>;
 using vec3_datum = datum_t<vec3>;
+using vec4_datum = datum_t<vec4>;
+using quat_datum = datum_t<quat>;
+
+template <>
+inline void datum_t<quat>::calc(const rod::rod & /*R*/, const index_t &i,
+                                const index_t & /*prim_id*/, const real & /*C*/,
+                                const std::vector<index_t> &vals) {
+  if (vals.empty())
+    return;
+  ensure_index(i);
+  __data[i] = __data[vals[0]];
+}
 
 std::vector<real> &get_real_data(shell::shell &M, index_t h) {
   return static_pointer_cast<scalar_datum>(M.get_datum(h))->data();
@@ -278,6 +340,42 @@ template <typename T> index_t init_vert_datum(shell::shell &M, T v0) {
   return M.insert_datum(adata);
 }
 
+template <typename T>
+std::vector<T> &channel_data(GeometryChannels &ch, index_t slot) {
+  return static_pointer_cast<datum_t<T>>(ch.get(slot))->data();
+}
+
+template <typename T>
+const std::vector<T> &channel_data(const GeometryChannels &ch, index_t slot) {
+  return static_pointer_cast<datum_t<T>>(ch.get(slot))->data();
+}
+
+template <typename T>
+std::vector<T> &channel_data(GeometryChannels &ch, const std::string &name) {
+  return static_pointer_cast<datum_t<T>>(ch.get(name))->data();
+}
+
+inline std::vector<vec3> &velocity(GeometryChannels &ch) {
+  return channel_data<vec3>(ch, ch.velocity_slot());
+}
+
+inline const std::vector<vec3> &velocity(const GeometryChannels &ch) {
+  return channel_data<vec3>(ch, ch.velocity_slot());
+}
+
+} // namespace asawa
+
+namespace asawa {
+namespace shell {
+
+inline index_t shell::insert_datum(datum_ptr datum) {
+  const index_t id = __channels.insert(datum);
+  if (datum)
+    datum->slot_id = id;
+  return id;
+}
+
+} // namespace shell
 } // namespace asawa
 } // namespace gaudi
 #endif

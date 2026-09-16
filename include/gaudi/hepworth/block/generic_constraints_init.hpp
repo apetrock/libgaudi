@@ -31,7 +31,7 @@ void init_pinned(const asawa::shell::shell &shell,
                  std::vector<sim_block::ptr> blocks) {
   for (int iv = 0; iv < shell.vert_count(); iv++) {
     constraints.push_back(
-        pinned::create(std::vector<index_t>({iv}), x[iv], w, blocks));
+        pinned::create(std::vector<index_t>({iv}), w, blocks));
   }
 }
 
@@ -41,7 +41,7 @@ void init_pinned(const asawa::rod::rod &R,
                  std::vector<sim_block::ptr> blocks) {
   for (int iv = 0; iv < R.corner_count(); iv++) {
     constraints.push_back(
-        pinned::create(std::vector<index_t>({iv}), x[iv], w, blocks));
+        pinned::create(std::vector<index_t>({iv}), w, blocks));
   }
 }
 

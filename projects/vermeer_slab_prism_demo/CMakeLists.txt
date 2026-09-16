@@ -1,0 +1,1 @@
+add_gaudi_vermeer_project(vermeer_slab_prism_demo SOURCES main.cpp)

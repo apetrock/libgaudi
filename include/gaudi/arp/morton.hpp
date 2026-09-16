@@ -131,21 +131,23 @@ struct MortonCode {
 
     if (delta_scaled >= 0) {
       uint64_t carry = static_cast<uint64_t>(delta_scaled);
-      for (size_t i = NumWords; i-- > 0;) {
-        const uint64_t wi = static_cast<uint64_t>(out.words[i]);
+      for (int i = static_cast<int>(NumWords) - 1; i >= 0; --i) {
+        const uint64_t wi = static_cast<uint64_t>(out.words[static_cast<size_t>(i)]);
         const uint64_t add = carry & 0xFFFFFFFFULL;
         const uint64_t sum = wi + add;
-        out.words[i] = static_cast<uint32_t>(sum & 0xFFFFFFFFULL);
+        out.words[static_cast<size_t>(i)] =
+            static_cast<uint32_t>(sum & 0xFFFFFFFFULL);
         carry = (carry >> 32) + (sum >> 32);
       }
     } else {
       uint64_t sub = static_cast<uint64_t>(-delta_scaled);
       uint64_t borrow = 0;
-      for (size_t i = NumWords; i-- > 0;) {
-        const uint64_t wi = static_cast<uint64_t>(out.words[i]);
+      for (int i = static_cast<int>(NumWords) - 1; i >= 0; --i) {
+        const uint64_t wi = static_cast<uint64_t>(out.words[static_cast<size_t>(i)]);
         const uint64_t to_sub = (sub & 0xFFFFFFFFULL) + borrow;
         const uint64_t diff = wi - to_sub;
-        out.words[i] = static_cast<uint32_t>(diff & 0xFFFFFFFFULL);
+        out.words[static_cast<size_t>(i)] =
+            static_cast<uint32_t>(diff & 0xFFFFFFFFULL);
         borrow = (wi < to_sub) ? 1ULL : 0ULL;
         sub >>= 32;
       }

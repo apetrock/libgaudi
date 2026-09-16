@@ -30,6 +30,26 @@ inline mesh_snapshot make_shell_mesh_snapshot(asawa::shell::shell &mesh,
   return snapshot;
 }
 
+/// Per-vertex RGBA colors (vec4 alpha ignored; mapped to rgb for snapshot).
+inline mesh_snapshot make_shell_mesh_snapshot(asawa::shell::shell &mesh,
+                                              const std::vector<vec4> &colors) {
+  mesh_snapshot snapshot;
+  snapshot.positions = asawa::get_vec_data(mesh, 0);
+
+  const std::vector<index_t> face_vert_ids = mesh.get_face_vert_ids(true);
+  snapshot.indices.reserve(face_vert_ids.size());
+  std::transform(face_vert_ids.begin(), face_vert_ids.end(),
+                 std::back_inserter(snapshot.indices),
+                 [](index_t idx) { return static_cast<uint32_t>(idx); });
+
+  const size_t n = snapshot.positions.size();
+  snapshot.colors.resize(n, vec3(0.7, 0.7, 0.7));
+  for (size_t i = 0; i < n && i < colors.size(); ++i) {
+    snapshot.colors[i] = colors[i].head<3>();
+  }
+  return snapshot;
+}
+
 inline mesh_snapshot make_rod_mesh_snapshot(const asawa::rod::rod &rod,
                                             const vec3 &color,
                                             int section_count = 32) {

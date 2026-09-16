@@ -160,17 +160,31 @@ namespace gaudi
 
     void log_v(vec3 pi, real e) {}
 
+    /// Like \ref mls_avg, but each face contributes with \p face_weights[i]
+    /// (set 0 to exclude). Used to fair prior cylinder (c, r) without
+    /// re-integrating surface points/normals.
     template <typename T>
-    std::vector<T> mls_avg(asawa::shell::shell &M, const std::vector<T> &v,
-                           const std::vector<vec3> &p_pov, real l0, real p = 3.0)
+    std::vector<T> mls_avg_weighted(asawa::shell::shell &M,
+                                    const std::vector<T> &v,
+                                    const std::vector<real> &face_weights,
+                                    const std::vector<vec3> &p_pov, real l0,
+                                    real p = 3.0)
     {
-      const std::vector<vec3> &x = asawa::get_vec_data(M, 0);
-
+      (void)p;
       std::vector<real> sums(p_pov.size(), 0.0);
-      std::vector<real> weights = asawa::shell::face_areas(M, x);
+      const size_t nV = v.size();
       std::vector<T> wV(v);
-      for (int i = 0; i < v.size(); i++)
+      std::vector<real> weights = face_weights;
+      if (weights.size() < nV)
+        weights.resize(nV, 0.0);
+      for (size_t i = 0; i < nV; ++i)
       {
+        if (!std::isfinite(weights[i]) || weights[i] <= 0.0)
+        {
+          weights[i] = 0.0;
+          wV[i] = T();
+          continue;
+        }
         wV[i] *= weights[i];
       }
 
@@ -182,14 +196,17 @@ namespace gaudi
             sum.bind(calder::datum_t<T>::create(face_ids, wV));
             sum.bind(calder::datum_t<real>::create(face_ids, weights));
           },
-          [l0, &sums, p](const index_t i, const index_t j,
-                         const vec3 &pi, const vec3 &pj,
-                         const std::vector<calder::datum::ptr> &data,
-                         Shell_Sum_Type::Node_Type node_type,
-                         const Shell_Sum_Type::Tree &tree) -> T
+          [l0, &sums](const index_t i, const index_t j, const vec3 &pi,
+                      const vec3 &pj,
+                      const std::vector<calder::datum::ptr> &data,
+                      Shell_Sum_Type::Node_Type node_type,
+                      const Shell_Sum_Type::Tree &tree) -> T
           {
+            (void)tree;
             T e = get_data<T>(node_type, j, 0, data);
             real w = get_data<real>(node_type, j, 1, data);
+            if (w <= 0.0)
+              return T();
 
             vec3 dp = pj - pi;
             real kappa = calc_gaussian(dp, l0);
@@ -197,15 +214,22 @@ namespace gaudi
             sums[i] += w * kappa;
             return kappa * e;
           });
-#if 1
-      for (int i = 0; i < p_pov.size(); i++)
+      for (int i = 0; i < static_cast<int>(p_pov.size()); i++)
       {
         if (sums[i] < 1e-16)
           continue;
         us[i] /= sums[i];
       }
-#endif
       return us;
+    }
+
+    template <typename T>
+    std::vector<T> mls_avg(asawa::shell::shell &M, const std::vector<T> &v,
+                           const std::vector<vec3> &p_pov, real l0, real p = 3.0)
+    {
+      const std::vector<vec3> &x = asawa::get_vec_data(M, 0);
+      return mls_avg_weighted(M, v, asawa::shell::face_areas(M, x), p_pov, l0,
+                              p);
     }
 
     template <typename KERNEL_FUNC>

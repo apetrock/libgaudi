@@ -478,3 +478,11 @@ def test_generated_shape_operator_fit_header():
     text = path.read_text()
     assert "mk_quad_W_rows" in text
     assert "mk_darboux_W_rows" in text
+
+
+def test_slab_field_energy_grad_matches_fd():
+    from slab_field_energy import energy_at_sample, fd_check
+
+    E, grad = energy_at_sample()
+    err = fd_check(E, grad)
+    assert err < 1e-5

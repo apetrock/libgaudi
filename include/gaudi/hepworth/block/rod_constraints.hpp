@@ -277,12 +277,12 @@ public:
   stretch_shear(const std::vector<index_t> &ids, const real &w, const real &l0,
                 std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _l0(l0), _w1(w), _w2(w) {}
-  
+
   // New dual-weight constructor
   stretch_shear(const std::vector<index_t> &ids, const real &w1, const real &w2, const real &l0,
                 std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w1, blocks), _l0(l0), _w1(w1), _w2(w2) {}
-  
+
   virtual std::string name() { return typeid(*this).name(); }
 
   virtual void project(const vecX &q, vecX &p) {
@@ -421,15 +421,35 @@ class bend : public block_constraint {
 public:
   typedef std::shared_ptr<bend> ptr;
 
+  static ptr create(const std::vector<index_t> &ids, const real &w,
+                    std::vector<sim_block::ptr> blocks) {
+    return std::make_shared<bend>(ids, w, blocks);
+  }
+
   static ptr create(const std::vector<index_t> &ids, const std::vector<quat> &u,
                     const real &w, std::vector<sim_block::ptr> blocks) {
     return std::make_shared<bend>(ids, u, w, blocks);
   }
 
+  bend(const std::vector<index_t> &ids, const real &w,
+       std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks) {}
+
   bend(const std::vector<index_t> &ids, const std::vector<quat> &u, const real &w,
        std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks) {
     _O = detail::rest_relative(u, ids[0], ids[1]);
+    _rest_initialized = true;
+  }
+
+  void init_rest(const vecX &q, solver_context &ctx) override {
+    (void)ctx;
+    if (_rest_initialized)
+      return;
+    quat ui = _blocks[0]->get_quat(_ids[0], q);
+    quat uj = _blocks[0]->get_quat(_ids[1], q);
+    _O = ui.inverse() * uj;
+    _rest_initialized = true;
   }
 
   virtual std::string name() { return typeid(*this).name(); }
@@ -472,15 +492,35 @@ class twist : public block_constraint {
 public:
   typedef std::shared_ptr<twist> ptr;
 
+  static ptr create(const std::vector<index_t> &ids, const real &w,
+                    std::vector<sim_block::ptr> blocks) {
+    return std::make_shared<twist>(ids, w, blocks);
+  }
+
   static ptr create(const std::vector<index_t> &ids, const std::vector<quat> &u,
                     const real &w, std::vector<sim_block::ptr> blocks) {
     return std::make_shared<twist>(ids, u, w, blocks);
   }
 
+  twist(const std::vector<index_t> &ids, const real &w,
+        std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks) {}
+
   twist(const std::vector<index_t> &ids, const std::vector<quat> &u, const real &w,
         std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks) {
     _O = detail::rest_relative(u, ids[0], ids[1]);
+    _rest_initialized = true;
+  }
+
+  void init_rest(const vecX &q, solver_context &ctx) override {
+    (void)ctx;
+    if (_rest_initialized)
+      return;
+    quat ui = _blocks[0]->get_quat(_ids[0], q);
+    quat uj = _blocks[0]->get_quat(_ids[1], q);
+    _O = ui.inverse() * uj;
+    _rest_initialized = true;
   }
 
   virtual std::string name() { return typeid(*this).name(); }

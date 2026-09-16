@@ -1,12 +1,80 @@
 # Place PDFs in this directory (optional; large files may be gitignored).
+# Searchable index: MANIFEST.md (tags + brief summaries). Rule: .cursor/rules/reference-papers.mdc
+# Fetch helper: scripts/fetch_reference_papers.sh
 
 # Stein et al. 2020 — A Simple Discretization of the Vector Dirichlet Energy
 # DOI: https://doi.org/10.1111/cgf.14070
 # Preprint PDF: https://ddg.math.uni-goettingen.de/pub/vector-dirichlet.pdf
 # Local copy: stein2020-vector-dirichlet-energy.pdf (fetched 2026-04-13)
 
+# Stein, Grinspun, Crane 2018a — Developability of Triangle Meshes
+# (cited by Cubic Stylization as related geometric flow)
+# Project: https://www.cs.cmu.edu/~kmcrane/Projects/DiscreteDevelopable/
+# PDF: https://www.cs.cmu.edu/~kmcrane/Projects/DiscreteDevelopable/paper.pdf
+# arXiv: https://arxiv.org/pdf/1804.07232.pdf
+# DOI: https://doi.org/10.1145/3197517.3201303
+# Local copy: stein2018-developability-triangle-meshes.pdf (fetched 2026-08-25)
+
+# Liu & Jacobson 2019 — Cubic Stylization
+# Project: https://www.dgp.toronto.edu/projects/cubic-stylization/
+# arXiv PDF: https://arxiv.org/pdf/1910.02926.pdf
+# Hi-res project PDF: https://www.dgp.toronto.edu/projects/cubic-stylization/cubicStyle_high.pdf
+# Local: liu2019-cubic-stylization.pdf, liu2019-cubic-stylization-hires.pdf
+
+# Chao, Pinkall, Sanan, Schröder 2010 — A Simple Geometric Model for Elastic Deformations
+# PDF: https://multires.caltech.edu/pubs/GeomElastic.pdf
+# DOI: https://doi.org/10.1145/1833349.1778775
+# Local: chao2010-geometric-elastic-deformations.pdf
+
+# Crane et al. — Repulsive Curves / Repulsive Surfaces
+# https://www.cs.cmu.edu/~kmcrane/Projects/RepulsiveCurves/RepulsiveCurves.pdf
+# https://www.cs.cmu.edu/~kmcrane/Projects/RepulsiveSurfaces/RepulsiveSurfaces.pdf
+# Local: crane2021-repulsive-curves.pdf, crane2021-repulsive-surfaces.pdf
+
+# Gillespie — Harnack Tracing / Integer Coordinates
+# https://markjgillespie.com/Research/harnack-tracing/HarnackTracing.pdf
+# https://markjgillespie.com/Research/integer-coordinates/integer_coordinates.pdf
+# Local: gillespie-harnack-tracing.pdf, gillespie-integer-coordinates.pdf
+
+# Feng et al. — Points as Tori
+# https://nzfeng.github.io/research/PointsAsTori/PointsAsTori.pdf
+# Local: feng-points-as-tori.pdf
+
+# Minarčík — Surface Untangling
+# https://minarcik.com/SurfaceUntangling.pdf
+# Local: minarcik-surface-untangling.pdf
+
 # Knöppel et al. 2013 — Globally Optimal Direction Fields (optional, Option 1)
 # https://www.cs.cmu.edu/~kmcrane/Projects/GloballyOptimalDirectionFields/
 
 # Rusinkiewicz 2004 — Estimating curvatures on triangle meshes (quadric / jets)
 # https://gfx.cs.princeton.edu/proj/trimesh2/
+
+# Barill et al. 2018 — Fast Winding Numbers for Soups and Clouds
+# Local: fast-winding-numbers-for-soups-and-clouds-siggraph-2018-barill-et-al.pdf
+
+# Jacobson et al. 2013 — Robust Inside-Outside Segmentation using Generalized Winding Numbers
+# Local: robust-inside-outside-segmentation-using-generalized-winding-numbers-siggraph-2013-jacobson-et-al.pdf
+
+# Kim & Delaney 2013 — Subspace Fluid Re-Simulation
+# Local: KimDelaney2013.pdf
+
+# Cui et al. — Spiral-Spectral Fluid Simulation
+# Local: SpiralSpectralFluids.pdf
+
+# Liu et al. 2013 — Fast Simulation of Mass-Spring Systems
+# Local: Liu-FSM-2013-11.pdf
+
+# Shen, O'Brien, Shewchuk 2004 — Interpolating and Approximating Implicit Surfaces from Polygon Soup
+# Local: Shen-IAI-2004-08.pdf
+
+# Turk & O'Brien 1999 — Variational Implicit Surfaces (GT tech report GIT-GVU-99-15)
+# PDF: https://repository.gatech.edu/server/api/core/bitstreams/ebf3251d-156b-4cbc-8b49-0317de363ed7/content
+# Journal follow-up: Modelling with implicit surfaces that interpolate (TOG 2002)
+# DOI: https://doi.org/10.1145/588272.588279
+# Local: turk1999-variational-implicit-surfaces.pdf (fetched 2026-09-07)
+
+# Dennis & Hannay 2005 — Geometry of Călugăreanu's theorem
+# arXiv: https://arxiv.org/pdf/math-ph/0503012
+# DOI: https://doi.org/10.1098/rspa.2005.1527
+# Local: dennis2005-geometry-calugareanu.pdf (from Downloads / arXiv, 2026-09-12)

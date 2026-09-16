@@ -34,7 +34,8 @@ shell::ptr load_obj(const std::string &name) {
 
   return M;
 }
-shell::ptr load_bunny() { return load_obj("assets/bunny.obj"); }
+shell::ptr load_bunny() { return load_obj("assets/models/obj/bunny.obj"); }
+shell::ptr load_skull() { return load_obj("assets/models/obj/vhm_skull.obj"); }
 shell::ptr load_messer() { return load_obj("assets/messer.obj"); }
 shell::ptr load_crab() { return load_obj("assets/blue-crab-low.obj"); }
 

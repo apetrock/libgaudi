@@ -5,6 +5,7 @@
 #include <Eigen/Dense>
 #include "gaudi/common.h"
 #include "gaudi/albers/ncls.hpp"
+#include <cmath>
 // stub: but least squares shape functions here
 // sphere, cylinder, etc.
 
@@ -151,6 +152,23 @@ namespace gaudi
           const mat3 H = mk_circle_H(x);
           accumulate_hessian_block2(hessian_weight_, w, H, S, A, b);
         }
+      }
+
+      /// Soft prior on algebraic circle coeffs from an existing (c₂d, r).
+      /// Keeps center (z₀,z₁) and radius (via z₂ = r² − |c|²) as fit DOFs
+      /// without surface point/normal residuals.
+      void accumulate_prior(real w, const vec2 &c2, real r)
+      {
+        if (w <= 0.0 || !std::isfinite(r) || r <= 0.0)
+          return;
+        if (!c2.allFinite())
+          return;
+        vec3 z;
+        z[0] = c2[0];
+        z[1] = c2[1];
+        z[2] = r * r - c2.squaredNorm();
+        A += w * mat3::Identity();
+        b += w * z;
       }
 
       vec3 solve()

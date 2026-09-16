@@ -324,10 +324,8 @@ public:
 
   // ── energy gradient methods ─────────────────────────────────────────
 
-  // E = w(x) * F(x)
-  // dE/dx = dw/dx * F(x) + w(x) * dF/dx
-  //       = Ks            + Gs
-  // G = Gs - Ks
+  // Mollified TP gradient: product rule / IBP ⇒ G = Gs + Ks (not Gs − Ks).
+  //   Gs = κ ∗ ∇E_reg,  Ks = (∇κ) ∗ E_reg;  under IBP, Ks ≈ Gs.
   std::vector<vec3>
   compute_gradient_tangent_point(asawa::shell::shell &M,
                                  const std::vector<vec3> &x) {
@@ -352,7 +350,7 @@ public:
     int Nv_count = static_cast<int>(Ks.size());
     std::vector<vec3> G(Nv_count, vec3::Zero());
     for (int i = 0; i < Nv_count; i++) {
-      G[i] = Gs[i] - Ks[i];
+      G[i] = Gs[i] + Ks[i];
     }
     return G;
   }

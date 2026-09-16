@@ -1,0 +1,1 @@
+add_gaudi_vermeer_project(vermeer_medial_axis_estimation_demo SOURCES main.cpp)

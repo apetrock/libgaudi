@@ -499,6 +499,12 @@ namespace gaudi
     }
 
     template <>
+    inline Eigen::Matrix<double, 8, 1> zero<Eigen::Matrix<double, 8, 1>>()
+    {
+      return Eigen::Matrix<double, 8, 1>::Zero();
+    }
+
+    template <>
     inline Eigen::Matrix<double, 3, 1> one<Eigen::Matrix<double, 3, 1>>()
     {
       return Eigen::Matrix<double, 3, 1>(1, 1, 1);
@@ -527,6 +533,11 @@ namespace gaudi
       Eigen::Matrix<double, 4, 3> m = Eigen::Matrix<double, 4, 3>::Zero();
       // m << 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
       return m;
+    }
+    template <>
+    inline Eigen::Quaternion<double> zero<Eigen::Quaternion<double>>()
+    {
+      return Eigen::Quaternion<double>::Identity();
     }
   } // namespace z
 

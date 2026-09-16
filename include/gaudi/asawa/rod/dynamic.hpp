@@ -126,90 +126,13 @@ public:
   dynamic(rod::ptr R, real Cc, real Cs, real Cm)
       : _Cc(Cc), _Cs(Cs), _Cm(Cm), __R(R) {
     edge_verts_ = __R->get_edge_vert_ids();
-    edge_set_.emplace(__R->__x, edge_verts_);
+    edge_set_.emplace(__R->x(), edge_verts_);
     bvh_tree = arp::bvh_tree<2>::create(*edge_set_);
   }
 
   void set_collapse_threshold(real Cc) { _Cc = Cc; }
   void set_stretch_threshold(real Cs) { _Cs = Cs; }
   void set_bridge_threshold(real Cm) { _Cm = Cm; }
-
-  template <typename T>
-  void set(const index_t &cnew, const T &xnew, std::vector<T> &x) {
-    if (cnew >= x.size()) {
-      x.push_back(xnew);
-    } else {
-      x[cnew] = xnew;
-    }
-  }
-
-  template <typename T> T avg(index_t c0, index_t c1, const std::vector<T> &x) {
-    T x0 = x[c0];
-    T x1 = x[c1];
-    T xnew = 0.5 * (x0 + x1);
-    return xnew;
-  }
-
-  void interp(index_t c0, index_t c1, index_t cnew, std::vector<real> &x) {
-    real xnew = avg<real>(c0, c1, x);
-    set<real>(cnew, xnew, x);
-  }
-
-  void interp(index_t c0, index_t c1, index_t cnew, std::vector<vec3> &x) {
-    vec3 xnew = avg<vec3>(c0, c1, x);
-    set<vec3>(cnew, xnew, x);
-  }
-
-  void interp(index_t cp, index_t c0, index_t c1, index_t c2, index_t cnew,
-              std::vector<vec3> &x) {
-
-    if (cp < 0 || c2 < 0) {
-      vec3 xnew = avg<vec3>(c0, c1, x);
-      set<vec3>(cnew, xnew, x);
-    } else {
-      vec3 xp = x[cp];
-      vec3 x0 = x[c0];
-      vec3 x1 = x[c1];
-      vec3 x2 = x[c2];
-      vec3 xnew = va::catmull_rom(xp, x0, x1, x2, 0.5);
-      set<vec3>(cnew, xnew, x);
-    }
-  }
-
-  void interp(index_t c0, index_t c1, index_t cnew, std::vector<vec4> &x) {
-    vec4 xnew = avg<vec4>(c0, c1, x);
-    set<vec4>(cnew, xnew, x);
-  }
-
-  void interp(index_t c0, index_t c1, index_t cnew, std::vector<quat> &x) {
-    quat x0 = x[c0];
-    quat x1 = x[c1];
-    quat xnew = va::slerp(x0, x1, 0.5);
-    // quat xnew = va::exp_slerp(x0, x1, 0.5);
-    set<quat>(cnew, xnew, x);
-  }
-
-  void interp_l(index_t c0, index_t c1, index_t cnew, std::vector<real> &z) {
-
-    vec3 x0 = __R->__x[c0];
-    vec3 x1 = __R->__x[c1];
-    vec3 xn = __R->__x[cnew];
-    real l10 = (x1 - x0).norm();
-    real ln0 = (xn - x0).norm();
-    real l1n = (x1 - xn).norm();
-    real lnew = ln0 + l1n;
-
-    real l0 = z[c0];
-    // real r = 0.0;
-    // real l = va::mix(r, l0, lnew);
-    //  std::cout << " interp: " << (ln0 + l1n) / l10 << " " << ln0 / l10 << " "
-    //            << l1n / l10 << std::endl;
-
-    // set<real>(c0, ln0 / l10 * l, z);
-    // set<real>(cnew, l1n / l10 * l, z);
-    set<real>(c0, ln0 / l10 * l0, z);
-    set<real>(cnew, l1n / l10 * l0, z);
-  }
 
   void split_edge(CornerId c00) {
     CornerId c10 = __R->next(c00);
@@ -219,15 +142,9 @@ public:
     __R->link(c00, cnew);
     __R->link(cnew, c10);
 
-    interp(c01, c00, c10, c11, cnew, __R->__x);
-    // interp(c00, c10, cnew, __R->__x);
-    interp(c00, c10, cnew, __R->__v);
-    interp(c00, c10, cnew, __R->__u);
-    interp(c00, c10, cnew, __R->__o);
-    interp(c00, c10, cnew, __R->__M);
-    interp(c00, c10, cnew, __R->__J);
-    interp_l(c00, c10, cnew, __R->__l0);
-    interp(c00, c10, cnew, __R->__t);
+    for (auto &d : __R->get_data()) {
+      d->rod_split(*__R, c01, c00, c10, c11, cnew);
+    }
   }
 
   void collapse_edge(CornerId c00) {
@@ -240,16 +157,9 @@ public:
     __R->set_next(c00, corner_id(-1));
     __R->set_prev(c00, corner_id(-1));
 
-    interp(c01, c10, c10, __R->__x);
-    // interp(c00, c10, cnew, __R->__x);
-
-    interp(c01, c10, c10, __R->__v);
-    interp(c01, c10, c10, __R->__u);
-    interp(c01, c10, c10, __R->__o);
-    interp(c01, c10, c10, __R->__M);
-    interp(c01, c10, c10, __R->__J);
-    interp_l(c01, c10, c10, __R->__l0);
-    interp(c01, c10, c10, __R->__t);
+    for (auto &d : __R->get_data()) {
+      d->rod_collapse(*__R, c01, c00, c10, c11);
+    }
   }
 
 #if 1
@@ -356,14 +266,14 @@ public:
     if (edge_verts_.empty()) {
       edge_verts_ = R.get_edge_vert_ids();
     }
-    return {R.__x[edge_verts_[2 * edge_id + 0]],
-            R.__x[edge_verts_[2 * edge_id + 1]]};
+    return {R.x()[edge_verts_[2 * edge_id + 0]],
+            R.x()[edge_verts_[2 * edge_id + 1]]};
   }
 
   std::array<index_t, 2> get_edge_ids(const index_t &i) {
     if (!edge_set_) {
       edge_verts_ = __R->get_edge_vert_ids();
-      edge_set_.emplace(__R->__x, edge_verts_);
+      edge_set_.emplace(__R->x(), edge_verts_);
     }
     return edge_set_->tuple_ids(i);
   }
@@ -381,7 +291,7 @@ public:
   vector<std::array<index_t, 2>>
   get_internal_collisions(const real &offset = 1.0) {
     rod &R = *__R;
-    std::vector<vec3> &x = R.__x;
+    std::vector<vec3> &x = R.x();
     const std::vector<index_t> &edge_verts = R.get_edge_vert_ids();
     edge_view_type edges(x, edge_verts);
     std::vector<std::array<index_t, 2>> raw =
@@ -409,8 +319,8 @@ public:
       CornerId jp = __R->prev(ci);
       if (jn < 0 || jp < 0)
         continue;
-      vec3 q0 = __R->__x[i];
-      vec3 q1 = __R->__x[jn];
+      vec3 q0 = __R->x()[i];
+      vec3 q1 = __R->x()[jn];
       real l = (q1 - q0).norm();
       if (l > _Cs) {
         split_edge(ci);
@@ -425,7 +335,7 @@ public:
     __R->update_mass();
     __R->update_lengths();
     edge_verts_ = __R->get_edge_vert_ids();
-    edge_set_.emplace(__R->__x, edge_verts_);
+    edge_set_.emplace(__R->x(), edge_verts_);
     bvh_tree->update(*edge_set_);
   }
 

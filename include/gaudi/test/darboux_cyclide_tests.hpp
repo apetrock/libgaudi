@@ -9,7 +9,6 @@
 #include "gaudi/test/darboux_cyclide_torus_fixture.hpp"
 #include "gaudi/calder/integrators.hpp"
 #include "gaudi/calder/least_squares_fit.hpp"
-#include "gaudi/duchamp/darboux_cyclide_medial.hpp"
 #include "gaudi/test/test.hpp"
 
 #include <algorithm>
@@ -514,54 +513,6 @@ GAUDI_TEST(calder_darboux_cyclide_fits_canonical_torus_vertices) {
 
   GAUDI_ASSERT(checked > 0);
   GAUDI_EXPECT(mean_alignment > 0.90);
-}
-
-GAUDI_TEST(duchamp_cyclide_medial_newton_offset_torus) {
-  const TorusFrame frame =
-      make_torus_frame(vec3(0.7, -0.45, 0.3), vec3(0.25, 0.65, 0.9));
-  TorusMesh torus = make_offset_torus_shell(36, 20, 1.25, 0.35, frame);
-  asawa::shell::shell &M = *torus.shell;
-  const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
-  const std::vector<vec3> vertex_normals = asawa::shell::vertex_normals(M, x);
-  const real avg_len = asawa::shell::avg_length(M, x);
-  duchamp::cyclide_medial_params params;
-  duchamp::cyclide_medial_stats stats;
-  albers::vec14 Q;
-  auto cands = duchamp::compute_single_fit_cyclide_medial_candidates(
-      M, 0, params, &stats, &Q);
-
-  int outside = 0;
-  int outside_accepted = 0;
-  int outside_rejected = 0;
-  int crazy_travel = 0;
-  const vec3 fit_origin = x[0];
-  const real max_travel = params.max_travel_scale * avg_len;
-  for (const auto &cand : cands) {
-    const vec3 local_start = x[cand.vertex] - fit_origin;
-    if (albers::eval_darboux(Q, local_start) > params.tol) {
-      ++outside;
-      if (cand.accepted) {
-        ++outside_accepted;
-      } else {
-        ++outside_rejected;
-      }
-    }
-    if (cand.accepted && cand.travel > max_travel) {
-      ++crazy_travel;
-    }
-  }
-
-  std::cerr << "\n[duchamp_cyclide_medial_newton_offset_torus]"
-            << " accepted=" << stats.accepted << " rejected=" << stats.rejected
-            << " avg_travel=" << stats.avg_travel
-            << " avg_residual=" << stats.avg_residual
-            << " outside=" << outside << " outside_accepted=" << outside_accepted
-            << " outside_rejected=" << outside_rejected
-            << " crazy_travel=" << crazy_travel << "\n";
-
-  GAUDI_EXPECT(stats.accepted > 0);
-  GAUDI_ASSERT(!cands.empty());
-  GAUDI_EXPECT(crazy_travel == 0);
 }
 
 GAUDI_TEST(calder_darboux_cyclide_convexity_fit_w0_foot_normal) {

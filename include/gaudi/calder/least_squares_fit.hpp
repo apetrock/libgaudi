@@ -605,6 +605,8 @@ namespace gaudi
       // 2D circle regression from:
       // https://www.scribd.com/document/14819165/Regressions-coniques-quadriques-circulaire-spherique
       // with added normal constraint
+      //
+      // Legacy kernel: inverse-distance with a single global length scale l0.
 
       const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
       std::vector<vec3> Nv = asawa::shell::vertex_normals(M, x);
@@ -714,6 +716,254 @@ namespace gaudi
         out[i][6] = r;
       }
 
+      return out;
+    }
+
+    /// Cylinder MLS with per-query Gaussian kernels.
+    /// \p sigmas[i] is the Gaussian length scale σ for query i (typically half
+    /// the local pierce / medial thickness). Frame estimation uses the mean σ.
+    std::vector<vec7> cylinder_gaussian(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &n_pov, const std::vector<real> &sigmas,
+        real p = 3.0)
+    {
+      assert(sigmas.size() == p_pov.size());
+      assert(n_pov.size() == p_pov.size());
+
+      const std::vector<vec3> &x = asawa::const_get_vec_data(M, 0);
+      std::vector<vec3> Nv = asawa::shell::vertex_normals(M, x);
+      std::vector<real> weights = asawa::shell::face_areas(M, x);
+
+      real sigma_mean = 0.0;
+      int sigma_n = 0;
+      for (real s : sigmas) {
+        if (std::isfinite(s) && s > 0.0) {
+          sigma_mean += s;
+          ++sigma_n;
+        }
+      }
+      const real l0_frame =
+          sigma_n > 0 ? std::max(sigma_mean / real(sigma_n), real(1e-12))
+                      : real(1e-12);
+
+      std::vector<mat3> Fn =
+          normal_covariant_frame(M, p_pov, n_pov, l0_frame, p);
+      std::vector<mat3> Fnv = normal_covariant_frame(M, x, Nv, l0_frame, p);
+      std::vector<vec3> Yv(x.size(), vec3::Zero());
+      for (int i = 0; i < static_cast<int>(x.size()); i++) {
+        Yv[i] = Fnv[i].col(2);
+      }
+      std::vector<vec3> Yf = asawa::shell::vert_to_face<vec3>(M, x, Yv);
+
+      std::vector<albers::constrained_circle> accum(p_pov.size());
+      std::vector<vec3> Ns = asawa::shell::face_normals(M, x);
+      for (int i = 0; i < static_cast<int>(Ns.size()); i++) {
+        Ns[i] = weights[i] * Ns[i];
+        Yf[i] = weights[i] * Yf[i].normalized();
+      }
+
+      integrate_over_shell<real>(
+          M, p_pov,
+          [&](const std::vector<index_t> &face_ids, Shell_Sum_Type &sum) {
+            sum.bind(calder::scalar_datum::create(face_ids, weights));
+            sum.bind(calder::vec3_datum::create(face_ids, Ns));
+            sum.bind(calder::vec3_datum::create(face_ids, Yf));
+          },
+          [&](const index_t i, const index_t j, const vec3 &pi, const vec3 &pj,
+              const std::vector<calder::datum::ptr> &data,
+              Shell_Sum_Type::Node_Type node_type,
+              const Shell_Sum_Type::Tree &tree) -> real {
+            (void)tree;
+            real wj = get_data<real>(node_type, j, 0, data);
+            vec3 Nj = get_data<vec3>(node_type, j, 1, data);
+            vec3 Yj = get_data<vec3>(node_type, j, 2, data);
+            Yj = Yj.normalized();
+            Nj = Nj.normalized();
+
+            vec3 Ni = n_pov[i];
+            mat3 Fi = Fn[i];
+            mat23 P;
+            P.row(0) = Fi.col(0);
+            P.row(1) = Fi.col(1);
+            vec3 Yi = Fi.col(2);
+            vec3 dp = pj - pi;
+
+            vec2 dp2 = P * dp;
+            vec2 Nj2 = P * Nj;
+            vec2 Ni2 = P * Ni;
+            Nj2 = Nj2.normalized();
+            Ni2 = Ni2.normalized();
+            if (dp2.dot(Ni2) > 0) {
+              return 0.0;
+            }
+
+            const real sigma =
+                std::max(sigmas[static_cast<size_t>(i)], real(1e-12));
+            const real kappa = calc_gaussian(dp, sigma);
+            const real Yij = pow(Yi.dot(Yj), 2.0);
+            const real w = Yij * wj * kappa;
+            accum[i].accumulate(w, dp2, Nj2);
+            return 0.0;
+          });
+
+      std::vector<vec7> out(p_pov.size(), vec7::Zero());
+      for (int i = 0; i < static_cast<int>(accum.size()); i++) {
+        vec3 xi = p_pov[i];
+        mat3 Fi = Fn[i];
+        vec3 Ni = Fi.col(2);
+        mat23 P;
+        P.row(0) = Fi.col(0);
+        P.row(1) = Fi.col(1);
+
+        vec3 z = accum[i].solve();
+        vec2 z2 = z.segment(0, 2);
+        vec3 cen = xi + P.transpose() * z2;
+        real r = sqrt(z[0] * z[0] + z[1] * z[1] + z[2]);
+
+        out[i].segment(0, 3) = cen;
+        out[i].segment(3, 3) = Ni;
+        out[i][6] = r;
+      }
+      return out;
+    }
+
+    /// Second-pass cylinder MLS: fair prior (c, a, r) fields.
+    /// Axis at each query is held fixed (\p axes_pov); neighbor priors contribute
+    /// algebraic (c₂d, r) rows — not mesh point/normal residuals — so C and R
+    /// remain the circle DOFs orthogonal to the fixed axis.
+    /// Gaussian weight is in fitted-center space: κ = G(cᵢ − cⱼ) with
+    /// query bandwidth σᵢ = radius_scale · rᵢ (cylinder-space units, not edge l0).
+    std::vector<vec7> cylinder_fair_from_priors(
+        asawa::shell::shell &M, const std::vector<vec3> &p_pov,
+        const std::vector<vec3> &axes_pov, const std::vector<vec3> &c_prior,
+        const std::vector<real> &r_prior, const std::vector<real> &prior_weight,
+        real radius_scale)
+    {
+      const size_t nQ = p_pov.size();
+      std::vector<vec7> out(nQ, vec7::Zero());
+      if (nQ == 0)
+        return out;
+      assert(axes_pov.size() == nQ);
+      assert(c_prior.size() >= nQ);
+      assert(r_prior.size() >= nQ);
+      assert(prior_weight.size() >= nQ);
+
+      const real rad_scale = std::max(radius_scale, real(1e-12));
+
+      // Area/validity-weighted fields for BH-safe aggregation.
+      std::vector<real> w_face(nQ, 0.0);
+      std::vector<vec3> c_w(nQ, vec3::Zero());
+      std::vector<real> r_w(nQ, 0.0);
+      std::vector<vec3> a_w(nQ, vec3::Zero());
+      std::vector<mat3> Fn(nQ, mat3::Identity());
+      for (size_t i = 0; i < nQ; ++i) {
+        const real w = prior_weight[i];
+        if (!std::isfinite(w) || w <= 0.0)
+          continue;
+        if (!c_prior[i].allFinite() || !axes_pov[i].allFinite() ||
+            axes_pov[i].squaredNorm() < 1e-24 || !std::isfinite(r_prior[i]) ||
+            r_prior[i] <= 1e-8)
+          continue;
+        w_face[i] = w;
+        c_w[i] = w * c_prior[i];
+        r_w[i] = w * r_prior[i];
+        a_w[i] = w * axes_pov[i].normalized();
+
+        vec3 a = axes_pov[i].normalized();
+        vec3 t = (std::abs(a.dot(vec3::UnitX())) < 0.9) ? vec3::UnitX()
+                                                        : vec3::UnitY();
+        vec3 e0 = a.cross(t).normalized();
+        vec3 e1 = a.cross(e0);
+        Fn[i].col(0) = e0;
+        Fn[i].col(1) = e1;
+        Fn[i].col(2) = a;
+      }
+
+      std::vector<albers::constrained_circle> accum(nQ);
+      integrate_over_shell<real>(
+          M, p_pov,
+          [&](const std::vector<index_t> &face_ids, Shell_Sum_Type &sum) {
+            sum.bind(calder::scalar_datum::create(face_ids, w_face));
+            sum.bind(calder::vec3_datum::create(face_ids, c_w));
+            sum.bind(calder::scalar_datum::create(face_ids, r_w));
+            sum.bind(calder::vec3_datum::create(face_ids, a_w));
+          },
+          [&](const index_t i, const index_t j, const vec3 &pi, const vec3 &pj,
+              const std::vector<calder::datum::ptr> &data,
+              Shell_Sum_Type::Node_Type node_type,
+              const Shell_Sum_Type::Tree &tree) -> real {
+            (void)tree;
+            (void)pj; // surface COM unused; kernel is in fitted-center space
+            const real wj = get_data<real>(node_type, j, 0, data);
+            if (wj <= 1e-16)
+              return 0.0;
+            vec3 cj = get_data<vec3>(node_type, j, 1, data) / wj;
+            const real rj = get_data<real>(node_type, j, 2, data) / wj;
+            vec3 aj = get_data<vec3>(node_type, j, 3, data);
+            if (!cj.allFinite() || !aj.allFinite() || aj.squaredNorm() < 1e-24 ||
+                !std::isfinite(rj) || rj <= 1e-8)
+              return 0.0;
+            aj.normalize();
+
+            const mat3 &Fi = Fn[static_cast<size_t>(i)];
+            const vec3 ai = Fi.col(2);
+            if (ai.squaredNorm() < 1e-24)
+              return 0.0;
+
+            const real axis_agree = ai.dot(aj);
+            const real Yij = axis_agree * axis_agree;
+            if (Yij < 1e-8)
+              return 0.0;
+
+            // Kernel in fitted-center space: w ∝ G(cᵢ − cⱼ), σᵢ ∝ rᵢ.
+            const size_t ii = static_cast<size_t>(i);
+            const vec3 &ci = c_prior[ii];
+            const real ri = r_prior[ii];
+            if (!ci.allFinite() || !std::isfinite(ri) || ri <= 1e-8)
+              return 0.0;
+            const real sigma_i = std::max(rad_scale * ri, real(1e-12));
+            const vec3 dp = cj - ci;
+            const real kappa = calc_gaussian(dp, sigma_i);
+            const real w = Yij * wj * kappa;
+            if (w <= 0.0)
+              return 0.0;
+
+            mat23 P;
+            P.row(0) = Fi.col(0);
+            P.row(1) = Fi.col(1);
+            const vec2 c2 = P * (cj - pi);
+            accum[ii].accumulate_prior(w, c2, rj);
+            return 0.0;
+          });
+
+      for (size_t i = 0; i < nQ; ++i) {
+        const mat3 &Fi = Fn[i];
+        const vec3 ai = Fi.col(2);
+        if (ai.squaredNorm() < 1e-24)
+          continue;
+        if (accum[i].A.squaredNorm() < 1e-24) {
+          if (w_face[i] > 0.0) {
+            out[i].segment(0, 3) = c_prior[i];
+            out[i].segment(3, 3) = ai;
+            out[i][6] = r_prior[i];
+          }
+          continue;
+        }
+        const vec3 z = accum[i].solve();
+        if (!z.allFinite())
+          continue;
+        const vec2 z2 = z.segment(0, 2);
+        mat23 P;
+        P.row(0) = Fi.col(0);
+        P.row(1) = Fi.col(1);
+        const vec3 cen = p_pov[i] + P.transpose() * z2;
+        const real r2 = z[0] * z[0] + z[1] * z[1] + z[2];
+        if (!cen.allFinite() || !std::isfinite(r2) || r2 <= 1e-16)
+          continue;
+        out[i].segment(0, 3) = cen;
+        out[i].segment(3, 3) = ai;
+        out[i][6] = std::sqrt(r2);
+      }
       return out;
     }
 

@@ -353,6 +353,161 @@ inline Eigen::VectorXd solve_curvature_guided_vector_dirichlet(
   return solve_guided_vector_dirichlet(L, mass_diag, g, lambda);
 }
 
+/// Guidance from per-edge 3D tangent vectors (e.g. medial axes at edge midpoints).
+inline Eigen::VectorXd build_edge_vector_guidance(
+    const asawa::shell::shell &M, const std::vector<vec3> &x,
+    const std::vector<asawa::shell::CornerId> &dof_to_corner,
+    const std::vector<std::vector<asawa::shell::FaceId>> &edge_incident_faces,
+    const std::vector<vec3> &edge_dirs_3d) {
+  const int nE = static_cast<int>(dof_to_corner.size());
+  Eigen::VectorXd g = Eigen::VectorXd::Zero(2 * nE);
+  const size_t n_dir = edge_dirs_3d.size();
+  for (int e = 0; e < nE; ++e) {
+    asawa::shell::CornerId c = dof_to_corner[static_cast<size_t>(e)];
+    if (static_cast<int>(c) < 0)
+      continue;
+    if (static_cast<size_t>(e) >= n_dir)
+      continue;
+    vec3 d = edge_dirs_3d[static_cast<size_t>(e)];
+    if (!d.allFinite() || d.squaredNorm() < 1e-24)
+      continue;
+    const vec3 n_avg =
+        edge_average_normal(M, x, edge_incident_faces[static_cast<size_t>(e)]);
+    d = project_to_tangent_plane(d, n_avg);
+    const real dn = d.norm();
+    if (dn < 1e-14)
+      continue;
+    d /= dn;
+    const vec3 e_par = edge_cr_parallel_3d(M, c, x);
+    const vec3 e_perp = edge_cr_perp_3d(M, c, x, n_avg);
+    g(e) = d.dot(e_par);
+    g(e + nE) = d.dot(e_perp);
+  }
+  return g;
+}
+
+/// Average solved edge CR field onto faces as unit tangent vectors.
+inline std::vector<vec3> edge_dof_field_to_face_dirs(
+    const asawa::shell::shell &M, const std::vector<vec3> &x,
+    const std::vector<int> &slot_map, int nE,
+    const std::vector<asawa::shell::CornerId> &dof_to_corner,
+    const std::vector<vec3> &edge_n_unit, const Eigen::VectorXd &u) {
+  const int nF = static_cast<int>(M.face_count());
+  std::vector<vec3> out(static_cast<size_t>(nF), vec3::Zero());
+  if (nE <= 0 || u.size() != 2 * nE)
+    return out;
+
+  for (asawa::shell::FaceId fi : M.get_face_range(true)) {
+    if (M.fsize(fi) != 3)
+      continue;
+    const int fid = static_cast<int>(fi);
+    if (fid < 0 || fid >= nF)
+      continue;
+    vec3 nT = asawa::shell::face_normal(M, fi, x);
+    if (nT.squaredNorm() < 1e-24)
+      continue;
+    nT.normalize();
+    vec3 acc = vec3::Zero();
+    int n_ok = 0;
+    M.const_for_each_face_tri(
+        fi, [&](asawa::shell::CornerId c0, asawa::shell::CornerId c1,
+                asawa::shell::CornerId c2, const asawa::shell::shell &Ms) {
+          const asawa::shell::CornerId ce[3] = {c0, c1, c2};
+          for (int k = 0; k < 3; ++k) {
+            const int slot = static_cast<int>(ce[k]) / 2;
+            if (slot < 0 || slot >= static_cast<int>(slot_map.size()))
+              continue;
+            const int e = slot_map[static_cast<size_t>(slot)];
+            if (e < 0 || e >= nE)
+              continue;
+            asawa::shell::CornerId c = dof_to_corner[static_cast<size_t>(e)];
+            if (static_cast<int>(c) < 0)
+              continue;
+            const vec3 &n_e = edge_n_unit[static_cast<size_t>(e)];
+            vec3 W =
+                edge_guidance_vector_3d(Ms, c, x, n_e, u(e), u(e + nE));
+            W = project_to_tangent_plane(W, nT);
+            if (W.squaredNorm() < 1e-24)
+              continue;
+            acc += W.normalized();
+            ++n_ok;
+          }
+        });
+    if (n_ok <= 0)
+      continue;
+    acc = project_to_tangent_plane(acc, nT);
+    if (acc.squaredNorm() > 1e-24)
+      out[static_cast<size_t>(fid)] = acc.normalized();
+  }
+  return out;
+}
+
+/// Midpoints + area-averaged normals for each compact edge DOF.
+inline void collect_edge_midpoints_normals(
+    const asawa::shell::shell &M, const std::vector<vec3> &x, int nE,
+    const std::vector<asawa::shell::CornerId> &dof_to_corner,
+    const std::vector<std::vector<asawa::shell::FaceId>> &edge_incident_faces,
+    std::vector<vec3> &p_edge, std::vector<vec3> &n_edge) {
+  p_edge.assign(static_cast<size_t>(nE), vec3::Zero());
+  n_edge.assign(static_cast<size_t>(nE), vec3::UnitZ());
+  for (int e = 0; e < nE; ++e) {
+    asawa::shell::CornerId c = dof_to_corner[static_cast<size_t>(e)];
+    if (static_cast<int>(c) < 0)
+      continue;
+    const vec3 &xa = x[M.vert(c)];
+    const vec3 &xb = x[M.vert(M.next(c))];
+    p_edge[static_cast<size_t>(e)] = 0.5 * (xa + xb);
+    n_edge[static_cast<size_t>(e)] =
+        edge_average_normal(M, x, edge_incident_faces[static_cast<size_t>(e)]);
+  }
+}
+
+/// Comb a per-edge 3D guidance field with Stein vector Dirichlet, return face dirs.
+inline std::vector<vec3> comb_edge_vector_field_to_faces(
+    asawa::shell::shell &M, const std::vector<vec3> &x,
+    const std::vector<vec3> &edge_dirs_3d, real lambda,
+    bool apply_sign_coherence = true) {
+  if (!M.verts_are_dense_packed()) {
+    throw std::runtime_error(
+        "comb_edge_vector_field_to_faces: vertices must be dense-packed");
+  }
+  std::vector<int> slot_map;
+  const int nE = build_compact_edge_dof_map(M, slot_map);
+  std::vector<vec3> empty(static_cast<size_t>(M.face_count()), vec3::Zero());
+  if (nE <= 0)
+    return empty;
+
+  Eigen::SparseMatrix<real> L = build_vector_dirichlet_energy(M, x, nullptr);
+  if (L.rows() != 2 * nE)
+    throw std::runtime_error("comb_edge_vector_field_to_faces: L size mismatch");
+
+  std::vector<asawa::shell::CornerId> dof_to_corner;
+  build_dof_to_corner(M, slot_map, nE, dof_to_corner);
+  std::vector<std::vector<asawa::shell::FaceId>> edge_incident;
+  build_edge_incident_faces(M, slot_map, nE, edge_incident);
+
+  Eigen::VectorXd g = build_edge_vector_guidance(M, x, dof_to_corner,
+                                                 edge_incident, edge_dirs_3d);
+
+  std::vector<vec3> edge_n(static_cast<size_t>(nE), vec3::UnitZ());
+  for (int e = 0; e < nE; ++e)
+    edge_n[static_cast<size_t>(e)] =
+        edge_average_normal(M, x, edge_incident[static_cast<size_t>(e)]);
+
+  if (apply_sign_coherence) {
+    std::vector<std::vector<edge_triangle_link>> adj;
+    build_edge_triangle_adjacency(M, slot_map, nE, adj);
+    orient_edge_guidance_sign_coherence(M, x, nE, dof_to_corner, edge_n, adj,
+                                        g);
+  }
+
+  Eigen::VectorXd mass_diag =
+      build_edge_barycentric_mass_diagonal(M, x, nE, dof_to_corner);
+  Eigen::VectorXd u = solve_guided_vector_dirichlet(L, mass_diag, g, lambda);
+  return edge_dof_field_to_face_dirs(M, x, slot_map, nE, dof_to_corner, edge_n,
+                                     u);
+}
+
 } // namespace kusama
 } // namespace gaudi
 

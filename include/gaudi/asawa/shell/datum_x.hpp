@@ -450,15 +450,23 @@ std::vector<TYPE> vert_to_face(const shell &M, const std::vector<vec3> &x,
 
 template <typename TYPE>
 std::vector<TYPE> face_to_vert(const shell &M, const std::vector<TYPE> &x) {
+  // Must be vert_count()-sized and indexed by absolute vert id — same layout as
+  // x/v/mass in the integrator. Using get_vert_range().size() under-allocates
+  // whenever there are holes and leaves dead slots uninitialized.
   auto range = M.get_vert_range();
-  std::vector<TYPE> vals(range.size());
-  int i = 0;
+  std::vector<TYPE> vals(M.vert_count(), z::zero<TYPE>());
   for (auto vi : range) {
     TYPE c = z::zero<TYPE>();
-    M.const_for_each_vertex(vert_id(vi), [&c, &x](CornerId c0, const shell &M) {
-      c += 0.33333 * x[M.face(c0)];
+    real w = 0.0;
+    M.const_for_each_vertex(vert_id(vi), [&](CornerId c0, const shell &M) {
+      const index_t fi = static_cast<index_t>(M.face(c0));
+      if (fi < 0 || static_cast<size_t>(fi) >= x.size())
+        return;
+      c += x[fi];
+      w += real(1.0);
     });
-    vals[vi] = c;
+    if (w > real(0.0))
+      vals[vi] = c / w;
   }
   return vals;
 }

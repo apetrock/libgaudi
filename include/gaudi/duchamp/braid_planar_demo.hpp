@@ -16,7 +16,8 @@
 #include "gaudi/duchamp/demo_trait.hpp"
 #include "gaudi/duchamp/modules/ccd_step.hpp"
 #include "gaudi/duchamp/modules/rod_forces.hpp"
-#include "gaudi/duchamp/modules/rod_savitzky_golay.hpp"
+#include "gaudi/duchamp/modules/tp_energies.hpp"
+#include "gaudi/duchamp/modules/tp_line_search.hpp"
 #include "gaudi/hepworth/blocks/rod_position_block.hpp"
 #include "gaudi/hepworth/blocks/rod_velocity_block.hpp"
 #include "gaudi/hepworth/constraints/bundles.hpp"
@@ -41,53 +42,47 @@ struct braid_planar_demo_config {
   real rod_radius = 0.01;
   bool show_planar_graph = true;
 
-  real edge_stretch_w = 1.0e-4;
-  real smooth_w = 1.0e-3;
-  real min_kink_w = 1.0e-3;
+  real edge_stretch_w = 1.0e-5;
+  real smooth_w = 1.0e-4;
+  real min_kink_w = 1.0e-4;
   real collision_w = 1.0;
   real dt = 0.05;
   real damping = 0.5;
   int iterations = 20;
 
   tangent_point_solver_config tp{
-      .type = tangent_point_type::soft,
+      //.type = tangent_point_type::cauchy,
       //.type = tangent_point_type::regularized,
       //.type = tangent_point_type::harmonic,
-      .regularized = {.w = 1.0, .l0 = 1.0, .p = 6.0},
-      .soft = {.w = 1.0e-1,
-               .p = 6.0,
-               .R_min_frac = 0.1,
-               .tau_frac = 1.0,
-               //.mode = soft_tp_mode::gradient,
-               .mode = soft_tp_mode::hessian_force,
-               //.mode = soft_tp_mode::newton,
-               .newton = {
-                   .mode = soft_tp_newton_mode::full_step,
-                   //.mode = soft_tp_newton_mode::single_iter,
-                   .newton_iters = 3,
-                   .verbose = true}},
-      .harmonic = {.w = 1.0e-1,
-                   .l0 = 1.0,  ///< sharp local TP (shell: 0.1·Cc)
-                   .l1 = 1.0,  ///< harmonic smooth over neighbors (shell: 4·Cc)
-                   .p0 = 6.0,
-                   .p1 = 3.0}};
+      //.type = tangent_point_type::cauchy_agree,
+      .type = tangent_point_type::surface_slide,
+
+      .regularized = {.w = 1.0, .l0 = 1.0, .p = 3.0},
+      .soft = {.w = 1.0, .p = 6.0, .R_min_frac = 0.1, .tau_frac = 1.0},
+      .harmonic = {.w = 1.0, .l0 = 0.001, .l1 = 4.0, .p0 = 6.0, .p1 = 2.0},
+      .cauchy = {.w = 1.0, .l0 = 0.5, .p = 3.0},
+      .cauchy_agree = {.w = 1.0, .l0 = 0.00001, .p = 2.0, .lam = 0.1},
+      .surface_slide = {.w0 = 1.0, .w1 = 0.001, .l0 = 0.2, .p = 3.0},
+      .line_search = {.alpha_min = 1.0e-7,
+                      .alpha_max = 0.0,
+                      .fallback_alpha = 0.0,
+                      .trust_frac_lavg = 1.0,
+                      .shrink = 0.5,
+                      .max_backtracks = 32,
+                      .verbose = false},
+      .peak_scale = 1.0,
+      .ccd_dx_max_frac = 0.1,
+      .ccd = {.dx_max = 0.0, .dt_max = 0.05, .dt_min = 1.0e-8, .max_substeps = 16},
+      .neighborhood = {.cfl_frac = 0.4,
+                       .agg = cfl_agg_mode::hard_min,
+                       .gate_frac = 0.1,
+                       .use_envelope = true,
+                       .chain_skip_hops = 8}};
 
   bool use_velocity_block = true;
-
-  /// Savitzky–Golay smooth of TP drive along each strand (before CCD / dx cap).
-  rod_sg_filter_config sg_filter{
-      .enable = false,
-      .window = 8,
-      .poly_order = 4};
-
-  /// CCD substep sizing (geometry only — does not rescale TP drive).
-  ccd_config ccd{.dx_max = 0.01, .dt_max = 0.05,  .max_substeps=16};
-  /// dx_max ≤ 0 ⇒ ccd_dx_max_frac · lavg at init.
-  real ccd_dx_max_frac = 0.01;
-  ccd_neighborhood_config neighborhood{};
   bool ccd_enable = true;
   bool ccd_verbose = true;
-  bool show_tp_gradients = false; ///< draw SG-smoothed drive before CCD
+  bool show_tp_gradients = false;
 };
 
 inline const braid_planar_demo_config k_braid_planar_demo_default{};
@@ -154,13 +149,13 @@ public:
     _rod_pos = std::make_shared<hepworth::block::rod_position_block>(__R, __Rd);
     _rod_vel = std::make_shared<hepworth::block::rod_velocity_block>(__R, __Rd);
 
-    _ccd_dx_max_explicit = (_cfg.ccd.dx_max > 0.0);
-    ccd_config ccd = _cfg.ccd;
+    _ccd_dx_max_explicit = (_cfg.tp.ccd.dx_max > 0.0);
+    ccd_config ccd = _cfg.tp.ccd;
     if (ccd.dt_max <= 0.0)
       ccd.dt_max = _cfg.dt;
-    if (!_ccd_dx_max_explicit && _cfg.ccd_dx_max_frac > 0.0)
-      ccd.dx_max = _cfg.ccd_dx_max_frac * lavg;
-    ccd.neighborhood = _cfg.neighborhood;
+    if (!_ccd_dx_max_explicit && _cfg.tp.ccd_dx_max_frac > 0.0)
+      ccd.dx_max = _cfg.tp.ccd_dx_max_frac * lavg;
+    ccd.neighborhood = _cfg.tp.neighborhood;
     if (ccd.neighborhood.radius <= 0.0)
       ccd.neighborhood.radius = _cfg.rod_radius;
     if (ccd.neighborhood.dt_max <= 0.0)
@@ -235,10 +230,10 @@ public:
 
   void step(int frame) {
     auto sync_dx_max = [this]() {
-      if (_ccd_dx_max_explicit || !(_cfg.ccd_dx_max_frac > 0.0))
+      if (_ccd_dx_max_explicit || !(_cfg.tp.ccd_dx_max_frac > 0.0))
         return;
       const real lavg = std::max(__R->lavg(), real(1e-6));
-      _ccd.dx_max = _cfg.ccd_dx_max_frac * lavg;
+      _ccd.dx_max = _cfg.tp.ccd_dx_max_frac * lavg;
     };
 
     auto refresh_tp = [this](real h) {
@@ -250,31 +245,30 @@ public:
       return _tp.data();
     };
 
-    auto filter_drive = [this](std::vector<vec3> &drive) {
-      rod_sg_filter_field(*__R, drive, _cfg.sg_filter);
-    };
-
     auto draw_drive = [this](const std::vector<vec3> &drive) {
       if (_cfg.show_tp_gradients)
         draw_rod_drive_field(*__R, drive);
     };
 
-    auto scale_drive_to_dx_max = [this](std::vector<vec3> &drive, real h) {
-      if (_cfg.use_velocity_block) {
-        _ccd_breakdown.drive_scale =
-            ccd_scale_field_to_dx_max(drive, _ccd.dx_max, _ccd.eps);
-      } else {
-        _ccd_breakdown.drive_scale =
-            ccd_scale_force_to_dx_max(drive, h, _ccd.dx_max, _ccd.eps);
+    auto peak_scale_drive = [this](std::vector<vec3> &drive) {
+      if (!(_cfg.tp.peak_scale > 0.0)) {
+        _ccd_breakdown.drive_scale = 1.0;
+        return;
       }
+      const real peak = ccd_peak_norm(drive);
+      if (!(peak > _ccd.eps) || !std::isfinite(peak)) {
+        _ccd_breakdown.drive_scale = 1.0;
+        return;
+      }
+      const real alpha = real(1.0) / (_cfg.tp.peak_scale * peak);
+      for (vec3 &a : drive)
+        a *= alpha;
+      _ccd_breakdown.drive_scale = alpha;
     };
 
-    auto prepare_drive = [this, &filter_drive, &draw_drive,
-                          &scale_drive_to_dx_max](std::vector<vec3> &drive,
-                                                  real h) {
-      filter_drive(drive);
+    auto prepare_drive = [&draw_drive, &peak_scale_drive](std::vector<vec3> &drive) {
+      peak_scale_drive(drive);
       draw_drive(drive);
-      scale_drive_to_dx_max(drive, h);
     };
 
     auto run_solver = [this](real dti) {
@@ -309,62 +303,176 @@ public:
 
     if (!_cfg.ccd_enable) {
       refresh_tp(_cfg.dt);
-      prepare_drive(mutable_drive_field(), _cfg.dt);
+      prepare_drive(mutable_drive_field());
       run_solver(_cfg.dt);
       __Rd->step();
       __Rd->step();
       __Rd->step();
       __R->_update_frames();
-    } else {
-      std::cout << "[braid CCD] begin frame=" << frame << std::endl;
-      int sub_i = 0;
+      return;
+    }
 
-      _ccd_stats = ccd_step(
-          _cfg.dt,
-          [this, &sync_dx_max, &refresh_tp, &mutable_drive_field, &prepare_drive,
-           &run_solver, &sub_i, &log_ccd_diag, frame](real accum) -> real {
-            sync_dx_max();
-            const real h = (_ccd_stats.last_dti > 0.0) ? _ccd_stats.last_dti
-                                                       : _cfg.dt;
-            refresh_tp(h);
+    std::cout << "[braid CCD] begin frame=" << frame
+              << " schedule=fill_alpha" << std::endl;
+
+    real alpha_star = 0.0;
+    real alpha_left = 0.0;
+    real E0_frame = 0.0;
+    real E_star = 0.0;
+    std::vector<vec3> frozen_disp;
+    bool have_frozen = false;
+
+    {
+      tp_curvature_propose prop =
+          tp_propose_curvature_step(*__R, *__Rd, _cfg.tp);
+      frozen_disp = std::move(prop.displacement);
+      const tp_line_search_result &ls = prop.ls;
+      alpha_star = ls.alpha;
+      E0_frame = ls.E0;
+      E_star = ls.E_accepted;
+      alpha_left = ccd_peak_norm(frozen_disp);
+      have_frozen = true;
+      if (_cfg.ccd_verbose) {
+        std::cout << "[braid α*] frame=" << frame << " alpha=" << alpha_star
+                  << " |δ|_peak=" << alpha_left << " E0=" << ls.E0
+                  << " E*=" << ls.E_accepted
+                  << " dE_ray=" << (ls.E_accepted - ls.E0)
+                  << " backtracks=" << ls.n_backtracks
+                  << " fallback=" << (ls.used_fallback ? 1 : 0)
+                  << " propose_ms=" << prop.propose_ms << std::endl;
+      }
+    }
+
+    const real target = std::max(alpha_left, _ccd.eps);
+    int sub_i = 0;
+
+    _ccd_stats = ccd_step(
+        target,
+        [this, &sync_dx_max, &mutable_drive_field, &run_solver, &sub_i,
+         &log_ccd_diag, frame, &alpha_left, &frozen_disp,
+         &have_frozen](real /*accum*/) -> real {
+          if (alpha_left <= _ccd.eps)
+            return 0.0;
+
+          sync_dx_max();
+          const real h = std::max(_cfg.dt, real(1e-20));
+
+          if (have_frozen) {
             std::vector<vec3> &drive = mutable_drive_field();
-            prepare_drive(drive, h);
-            real dti = 0.0;
+            drive = frozen_disp;
             if (_cfg.use_velocity_block) {
-              dti = ccd_velocity(*__R, drive, _ccd, &_ccd_stats.last,
-                                 &_ccd_breakdown);
+              const real h_safe = std::max(h, real(1e-20));
+              for (auto &a : drive)
+                a /= h_safe;
             } else {
-              _ccd_breakdown.drive = ccd_field_stats_vec(drive);
-              ccd_diagnose_rod(*__R, &_ccd_breakdown.rod_x);
-              dti = ccd_force(*__R, drive, h, _ccd, &_ccd_stats.last);
-              _ccd_breakdown.dt_geom = _ccd_stats.last.dt;
-              _ccd_breakdown.dt = dti;
+              const real h2 = std::max(h * h, real(1e-20));
+              for (auto &a : drive)
+                a /= h2;
             }
-            log_ccd_diag("pre", frame, sub_i, dti);
+            real bite_cap = _ccd.dx_max;
+            if (alpha_left > 0.0) {
+              if (!(bite_cap > 0.0) || alpha_left < bite_cap)
+                bite_cap = alpha_left;
+            }
+            if (bite_cap > 0.0) {
+              if (_cfg.use_velocity_block) {
+                const real h_safe = std::max(h, real(1e-20));
+                _ccd_breakdown.drive_scale = ccd_scale_field_to_dx_max(
+                    drive, bite_cap / h_safe, _ccd.eps);
+              } else {
+                _ccd_breakdown.drive_scale = ccd_scale_force_to_dx_max(
+                    drive, h, bite_cap, _ccd.eps);
+              }
+            }
+            if (_cfg.show_tp_gradients)
+              draw_rod_drive_field(*__R, drive);
+          }
 
-            if (!(dti > 0.0) || !std::isfinite(dti))
-              dti = _cfg.dt - accum;
-            dti = ccd_residual_dt(dti, _cfg.dt, accum);
-            const bool at_floor =
-                (_ccd.dt_min > 0.0 && dti <= _ccd.dt_min + _ccd.eps);
-            if (at_floor)
-              dti = _cfg.dt - accum;
-
-            run_solver(dti);
-            __Rd->step();
-            __R->_update_frames();
-
+          std::vector<vec3> &drive = mutable_drive_field();
+          real dti = 0.0;
+          if (_cfg.use_velocity_block) {
+            dti = ccd_velocity(*__R, drive, _ccd, &_ccd_stats.last,
+                               &_ccd_breakdown);
+          } else {
+            _ccd_breakdown.drive = ccd_field_stats_vec(drive);
             ccd_diagnose_rod(*__R, &_ccd_breakdown.rod_x);
-            log_ccd_diag("post", frame, sub_i, dti);
-            ++sub_i;
-            return dti;
-          },
-          _ccd);
+            dti = ccd_force(*__R, drive, h, _ccd, &_ccd_stats.last);
+            _ccd_breakdown.dt_geom = _ccd_stats.last.dt;
+            _ccd_breakdown.dt = dti;
+          }
+          log_ccd_diag("pre", frame, sub_i, dti);
 
-      std::cout << "[braid CCD] frame=" << frame
-                << " substeps=" << _ccd_stats.substeps
-                << " accum=" << _ccd_stats.dt_accum << "/" << _cfg.dt
-                << " dti=" << _ccd_stats.last_dti << std::endl;
+          if (!(dti > 0.0) || !std::isfinite(dti))
+            return 0.0;
+
+          real peak_disp = 0.0;
+          if (_cfg.use_velocity_block)
+            peak_disp = dti * ccd_peak_norm(drive);
+          else
+            peak_disp = (dti * dti) * ccd_peak_norm(drive);
+
+          const bool null_bite =
+              (peak_disp <= _ccd.eps ||
+               (_ccd.dt_min > 0.0 && dti <= _ccd.dt_min + _ccd.eps &&
+                _ccd_breakdown.dt_geom <= _ccd.eps));
+          if (null_bite) {
+            alpha_left = 0.0;
+            if (_cfg.ccd_verbose) {
+              std::cout << "[braid α*] abort null bite dti=" << dti
+                        << " dt_geom=" << _ccd_breakdown.dt_geom
+                        << " bite_peak=" << peak_disp << std::endl;
+            }
+            return 0.0;
+          }
+
+          run_solver(dti);
+          __Rd->step();
+          __R->_update_frames();
+
+          if (have_frozen) {
+            const real peak0 = ccd_peak_norm(frozen_disp);
+            if (peak0 > _ccd.eps && peak_disp > _ccd.eps) {
+              const real frac = std::min(real(1.0), peak_disp / peak0);
+              for (auto &a : frozen_disp)
+                a *= (real(1.0) - frac);
+              alpha_left = ccd_peak_norm(frozen_disp);
+            } else {
+              alpha_left = 0.0;
+            }
+            if (_cfg.ccd_verbose) {
+              std::cout << "[braid α*] alpha_left=" << alpha_left
+                        << " bite_peak=" << peak_disp << std::endl;
+            }
+          }
+
+          ccd_diagnose_rod(*__R, &_ccd_breakdown.rod_x);
+          log_ccd_diag("post", frame, sub_i, dti);
+          ++sub_i;
+
+          if (!(peak_disp > _ccd.eps))
+            return 0.0;
+          return peak_disp;
+        },
+        _ccd);
+
+    std::cout << "[braid CCD] frame=" << frame
+              << " substeps=" << _ccd_stats.substeps
+              << " accum=" << _ccd_stats.dt_accum << "/" << target
+              << " dti=" << _ccd_stats.last_dti << " alpha*=" << alpha_star
+              << " alpha_left=" << alpha_left << std::endl;
+
+    if (_cfg.ccd_verbose && have_frozen) {
+      const real E_tp_post = tp_energy(*__R, *__Rd, _cfg.tp);
+      const real dE_frame = E_tp_post - E0_frame;
+      const real dE_prev =
+          _have_E_prev_post ? (E_tp_post - _E_prev_post) : real(0.0);
+      std::cout << "[braid E] frame=" << frame << " E0=" << E0_frame
+                << " E*=" << E_star << " Epost=" << E_tp_post
+                << " dE_ray=" << (E_star - E0_frame)
+                << " dE_frame=" << dE_frame << " dE_prev=" << dE_prev
+                << (dE_frame > 0.0 ? " ASCENT" : "") << std::endl;
+      _E_prev_post = E_tp_post;
+      _have_E_prev_post = true;
     }
   }
 
@@ -390,6 +498,8 @@ private:
   ccd_step_stats _ccd_stats{};
   ccd_dt_breakdown _ccd_breakdown{};
   bool _ccd_dx_max_explicit = false;
+  real _E_prev_post = 0.0;
+  bool _have_E_prev_post = false;
 };
 
 class braid_planar_demo_adapter : public demo_adapter<braid_planar_demo> {

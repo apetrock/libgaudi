@@ -126,6 +126,142 @@ namespace gaudi
           });
     }
 
+    /// MLS-smoothed scalar field (κ ∗ ω).
+    inline std::vector<real> smoothed_scalar(asawa::rod::rod &R,
+                                             const std::vector<vec3> &p_pov,
+                                             const std::vector<real> &omega,
+                                             real l0, real p = 3.0) {
+      (void)p;
+      return integrate_over_rod<real>(
+          R, p_pov,
+          [&omega](const std::vector<index_t> &edge_ids, Rod_Sum_Type &sum) {
+            sum.bind(calder::scalar_datum::create(edge_ids, omega));
+          },
+          [l0](const index_t /*i*/, const index_t j, const vec3 &pi,
+               const vec3 &pj, const std::vector<calder::datum::ptr> &data,
+               Rod_Sum_Type::Node_Type node_type,
+               const Rod_Sum_Type::Tree & /*tree*/) -> real {
+            real w = get_data<real>(node_type, j, 0, data);
+            vec3 dp = pj - pi;
+            return calc_gaussian(dp, l0) * w;
+          });
+    }
+
+    /// One BH walk: f_k = W(ℓ_k) ∗ ω for ℓ_k = l0 · 2^k, k = 0..n_octaves-1.
+    /// Unnormalized (raw κ∗ω). Prefer mls_scalar_octaves for partition-of-unity.
+    /// Returns per-POV Eigen vec8 (only first n_octaves entries used; n ≤ 8).
+    inline std::vector<Eigen::Matrix<real, 8, 1>>
+    smoothed_scalar_octaves(asawa::rod::rod &R, const std::vector<vec3> &p_pov,
+                            const std::vector<real> &omega, real l0,
+                            int n_octaves, real bh_eps = 0.25) {
+      using oct8 = Eigen::Matrix<real, 8, 1>;
+      const int n_oct = std::clamp(n_octaves, 1, 8);
+      std::vector<real> lengths(static_cast<size_t>(n_oct));
+      real lk = std::max(l0, real(1e-16));
+      for (int k = 0; k < n_oct; ++k) {
+        lengths[static_cast<size_t>(k)] = lk;
+        lk *= real(2.0);
+      }
+
+      return integrate_over_rod<oct8>(
+          R, p_pov,
+          [&omega](const std::vector<index_t> &edge_ids, Rod_Sum_Type &sum) {
+            sum.bind(calder::scalar_datum::create(edge_ids, omega));
+          },
+          [n_oct, &lengths](const index_t /*i*/, const index_t j, const vec3 &pi,
+                            const vec3 &pj,
+                            const std::vector<calder::datum::ptr> &data,
+                            Rod_Sum_Type::Node_Type node_type,
+                            const Rod_Sum_Type::Tree & /*tree*/) -> oct8 {
+            const real w = get_data<real>(node_type, j, 0, data);
+            const vec3 dp = pj - pi;
+            oct8 out = oct8::Zero();
+            for (int k = 0; k < n_oct; ++k)
+              out[k] = calc_gaussian(dp, lengths[static_cast<size_t>(k)]) * w;
+            return out;
+          },
+          bh_eps);
+    }
+
+    /// MLS / partition-of-unity octaves:
+    ///   f_k[i] = (κ_k ∗ (ℓ₀ ω))_i / (κ_k ∗ ℓ₀)_i
+    /// so each scale is a true local average (no spatially varying gain).
+    inline std::vector<Eigen::Matrix<real, 8, 1>>
+    mls_scalar_octaves(asawa::rod::rod &R, const std::vector<vec3> &p_pov,
+                       const std::vector<real> &omega, real l0, int n_octaves,
+                       real bh_eps = 0.25) {
+      using oct8 = Eigen::Matrix<real, 8, 1>;
+      const int n_oct = std::clamp(n_octaves, 1, 8);
+      std::vector<real> lengths(static_cast<size_t>(n_oct));
+      real lk = std::max(l0, real(1e-16));
+      for (int k = 0; k < n_oct; ++k) {
+        lengths[static_cast<size_t>(k)] = lk;
+        lk *= real(2.0);
+      }
+
+      std::vector<real> weights = R.l0();
+      std::vector<real> w_omega(omega);
+      const size_t n_w = std::min(w_omega.size(), weights.size());
+      for (size_t i = 0; i < n_w; ++i)
+        w_omega[i] *= weights[i];
+
+      std::vector<oct8> mass(p_pov.size(), oct8::Zero());
+      std::vector<oct8> us = integrate_over_rod<oct8>(
+          R, p_pov,
+          [&w_omega, &weights](const std::vector<index_t> &edge_ids,
+                               Rod_Sum_Type &sum) {
+            sum.bind(calder::scalar_datum::create(edge_ids, w_omega));
+            sum.bind(calder::scalar_datum::create(edge_ids, weights));
+          },
+          [n_oct, &lengths, &mass](const index_t i, const index_t j,
+                                   const vec3 &pi, const vec3 &pj,
+                                   const std::vector<calder::datum::ptr> &data,
+                                   Rod_Sum_Type::Node_Type node_type,
+                                   const Rod_Sum_Type::Tree & /*tree*/) -> oct8 {
+            const real wo = get_data<real>(node_type, j, 0, data);
+            const real w = get_data<real>(node_type, j, 1, data);
+            const vec3 dp = pj - pi;
+            oct8 out = oct8::Zero();
+            for (int k = 0; k < n_oct; ++k) {
+              const real kappa =
+                  calc_gaussian(dp, lengths[static_cast<size_t>(k)]);
+              mass[static_cast<size_t>(i)][k] += kappa * w;
+              out[k] = kappa * wo;
+            }
+            return out;
+          },
+          bh_eps);
+
+      for (size_t i = 0; i < us.size(); ++i) {
+        for (int k = 0; k < n_oct; ++k) {
+          const real m = mass[i][k];
+          us[i][k] = (m > real(1e-16)) ? us[i][k] / m : real(0.0);
+        }
+      }
+      return us;
+    }
+
+    /// Band residuals R_k = rms(f_k − f_{k+1}) over POVs; size n_octaves-1.
+    inline std::vector<real>
+    octave_band_rms(const std::vector<Eigen::Matrix<real, 8, 1>> &f,
+                    int n_octaves) {
+      const int n_oct = std::clamp(n_octaves, 1, 8);
+      std::vector<real> R(static_cast<size_t>(std::max(n_oct - 1, 0)),
+                          real(0.0));
+      if (f.empty() || n_oct < 2)
+        return R;
+      const real inv_n = real(1.0) / real(f.size());
+      for (int k = 0; k < n_oct - 1; ++k) {
+        real acc = 0.0;
+        for (const auto &fi : f) {
+          const real d = fi[k] - fi[k + 1];
+          acc += d * d;
+        }
+        R[static_cast<size_t>(k)] = std::sqrt(acc * inv_n);
+      }
+      return R;
+    }
+
     /// ∇ of an MLS-smoothed scalar (shell `gradient_scalar` rod port).
     inline std::vector<vec3> gradient_scalar(asawa::rod::rod &R,
                                              const std::vector<vec3> &p_pov,
@@ -145,6 +281,44 @@ namespace gaudi
             vec3 dp = pj - pi;
             vec3 dkappa = calc_d_gaussian(dp, l0);
             return -dkappa * w;
+          });
+    }
+
+    /// Convolution Hess·v extras from κ(π_i−π_j) T_j / κ G_j (leaf κ only).
+    ///   (Hess_κ·δdp)∗T + (δκ)∗G + (∇_i κ)(G·v)
+    /// with δdp=v_j−v_i, δκ=(∂κ/∂dp)·δdp, ∇_i κ=−∂κ/∂dp.
+    /// Caller adds κ∗(H_T v) via smoothed_gradient.
+    inline std::vector<vec3>
+    mollifier_hessian_vec(asawa::rod::rod &R, const std::vector<vec3> &p_pov,
+                          const std::vector<real> &T,
+                          const std::vector<vec3> &G,
+                          const std::vector<vec3> &v_pov, real l0) {
+      return integrate_over_rod<vec3>(
+          R, p_pov,
+          [&T, &G, &v_pov](const std::vector<index_t> &edge_ids,
+                           Rod_Sum_Type &sum) {
+            sum.bind(calder::scalar_datum::create(edge_ids, T));
+            sum.bind(calder::vec3_datum::create(edge_ids, G));
+            sum.bind(calder::vec3_datum::create(edge_ids, v_pov));
+          },
+          [l0, &v_pov](const index_t i, const index_t j, const vec3 &pi,
+                       const vec3 &pj,
+                       const std::vector<calder::datum::ptr> &data,
+                       Rod_Sum_Type::Node_Type node_type,
+                       const Rod_Sum_Type::Tree & /*tree*/) -> vec3 {
+            const real Tj = get_data<real>(node_type, j, 0, data);
+            const vec3 Gj = get_data<vec3>(node_type, j, 1, data);
+            const vec3 vj = get_data<vec3>(node_type, j, 2, data);
+            const vec3 vi = v_pov[i];
+            const vec3 dp = pj - pi;
+            const vec3 ddp = vj - vi;
+            const vec3 dkappa = calc_d_gaussian(dp, l0);
+            const mat3 Hkappa = calc_d2_gaussian(dp, l0);
+            // ∇_i κ = −∂κ/∂dp;  δ(∇_i κ) = −H_κ δdp
+            const vec3 d_grad_kappa = -(Hkappa * ddp);
+            const real d_kappa = dkappa.dot(ddp);
+            const real dT = Gj.dot(vj); // δT_j ≈ G_j · v_j
+            return d_grad_kappa * Tj + (-dkappa) * dT + d_kappa * Gj;
           });
     }
 
@@ -302,8 +476,8 @@ namespace gaudi
                                  real p = 4.0, bool normalize = true)
     {
 
-      std::vector<vec3> &x = R.__x;
-      std::vector<quat> &q = R.__u;
+      std::vector<vec3> &x = R.x();
+      std::vector<quat> &q = R.u();
 
       vec3 u0 = vec3(0.0, 0.0, 1.0);
       std::vector<vec3> ue;

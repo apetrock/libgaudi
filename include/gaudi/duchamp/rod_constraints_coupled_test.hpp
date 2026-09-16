@@ -129,18 +129,18 @@ public:
 
     for (int k = 0; k < __R.size(); k++) {
       std::cout << "frame: " << frame << " rod " << k
-                << " size: " << __R[k]->__x.size() << std::endl;
+                << " size: " << __R[k]->x().size() << std::endl;
       asawa::rod::rod::ptr R = __R[k];
-      std::vector<real> &l0 = R->__l0;
+      std::vector<real> &l0 = R->l0();
 
       real s_vol = 4.0 / 3.0 * M_PI * pow(bnd[k], 3.0);
       real r_vol = R->get_total_volume();
       real t0 = t0k[k];
       real att = t0 + (t1 - t0) / (1.0 + exp(-tk[k] * (r_vol)));
-      std::vector<vec3> f(R->__v.size(), vec3::Zero());
+      std::vector<vec3> f(R->v().size(), vec3::Zero());
 
-      for (int i = 0; i < R->__x.size(); i++) {
-        vec3 dx = R->__x[i] - cens[k];
+      for (int i = 0; i < R->x().size(); i++) {
+        vec3 dx = R->x()[i] - cens[k];
         real xn = dx.norm();
         if (xn > bnd[k]) {
           f[i] = -0.02 * (xn - bnd[k]) / h / h * dx;
@@ -149,9 +149,9 @@ public:
       }
 
       hepworth::vec3_block::ptr x =
-          hepworth::vec3_block::create(R->__M, R->__x, R->__v, f);
+          hepworth::vec3_block::create(R->M(), R->x(), R->v(), f);
       hepworth::quat_block::ptr u =
-          hepworth::quat_block::create(R->__J, R->__u, R->__o);
+          hepworth::quat_block::create(R->J(), R->u(), R->o());
 
       blocks.push_back(x);
       blocks.push_back(u);
@@ -183,7 +183,6 @@ public:
         hepworth::block::init_angle(*R, constraints, vec3(0.0, 0.0, 1.0),
                                     0.23 * M_PI, 0.1, {u});
       } else {
-        // hepworth::block::init_helicity(*R, constraints, 0.01, {x});
       }
 #endif
       hepworth::block::init_collisions(*R, *__Rd[k], constraints, 2.0, {x, x});

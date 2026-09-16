@@ -318,12 +318,36 @@ def cmd_test(args):
 
 def cmd_run(args):
     profile, target = resolve_target(args.target)
+    forward = list(args.forward or [])
+    if forward and forward[0] == "--":
+        forward = forward[1:]
+    # argparse REMAINDER can swallow flags after the target; pull them back.
+    cleaned = []
+    i = 0
+    while i < len(forward):
+        a = forward[i]
+        if a == "--asan":
+            args.asan = True
+        elif a == "--no-record":
+            args.no_record = True
+        elif a == "--debug":
+            args.debug = True
+        elif a == "--record-path" and i + 1 < len(forward):
+            args.record_path = forward[i + 1]
+            i += 1
+        elif a.startswith("--record-path="):
+            args.record_path = a.split("=", 1)[1]
+        else:
+            cleaned.append(a)
+        i += 1
+    forward = cleaned
+
     _warn_debug_with_asan(args.debug, args.asan)
     config = effective_config(profile, args.debug, args.asan)
     rc = build(profile, target, config, args.asan)
     if rc != 0:
         sys.exit(rc)
-    forward = list(args.forward or [])
+
     if getattr(args, "shift_fraction", None) is not None:
         forward = ["--shift-fraction", str(args.shift_fraction)] + forward
 

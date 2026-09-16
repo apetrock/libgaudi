@@ -589,7 +589,7 @@ namespace gaudi
 
         hepworth::block::projection_solver solver;
         std::vector<hepworth::projection_constraint::ptr> constraints;
-        std::vector<vec3> f(__R->__v.size(), vec3::Zero());
+        std::vector<vec3> f(__R->v().size(), vec3::Zero());
         std::vector<vec3> fr = calc_tangent_point_gradient();
         for (int i = 0; i < x_r.size(); i++)
         {
@@ -599,9 +599,9 @@ namespace gaudi
         // capture before
         std::vector<vec3> x_r_0 = x_r;
         hepworth::vec3_block::ptr Xr =
-            hepworth::vec3_block::create(__R->__M, __R->__x, __R->__v, f);
+            hepworth::vec3_block::create(__R->M(), __R->x(), __R->v(), f);
         hepworth::quat_block::ptr Ur =
-            hepworth::quat_block::create(__R->__J, __R->__u, __R->__o);
+            hepworth::quat_block::create(__R->J(), __R->u(), __R->o());
 
         hepworth::block::init_smooth(*__R, constraints, 0.2, {Xr});
         hepworth::block::init_stretch_shear(*__R, constraints, l_r, 1e-3, {Xr, Ur});
@@ -704,8 +704,6 @@ namespace gaudi
           real offset = 1.0;
           offset = min(1.0 + 20.0 * t, 20.0);
           std::cout << "offset: " << offset << std::endl;
-          //_knotted_surface->set_helicity_constraint(true);
-          //_knotted_surface->set_helicity_weight(2.0e-1);
           _knotted_surface->set_rod_offset(offset);
           _knotted_surface->set_willmore_weight(2.0e-1);
           _knotted_surface->set_area_weight(2.0e-1);

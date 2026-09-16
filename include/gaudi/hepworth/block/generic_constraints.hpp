@@ -20,9 +20,24 @@ class pinned : public block_constraint {
 public:
   DEFINE_CREATE_FUNC(pinned)
 
+  pinned(const std::vector<index_t> &ids, const real &w,
+         std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks) {}
+
   pinned(const std::vector<index_t> &ids, const vec3 &p, const real &w,
          std::vector<sim_block::ptr> blocks)
-      : block_constraint(ids, w, blocks), _p(p) {}
+      : block_constraint(ids, w, blocks), _p(p) {
+    _rest_initialized = true;
+  }
+
+  void init_rest(const vecX &q, solver_context &ctx) override {
+    (void)ctx;
+    if (_rest_initialized)
+      return;
+    _p = _blocks[0]->get_vec3(_ids[0], q);
+    _rest_initialized = true;
+  }
+
   virtual std::string name() { return "pinned"; }
   virtual void project(const vecX &q, vecX &p) {
     index_t i = this->_ids[0];

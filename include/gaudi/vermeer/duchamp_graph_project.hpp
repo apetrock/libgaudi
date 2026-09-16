@@ -107,7 +107,9 @@ protected:
   void apply_frame(lewitt::gpu_context &ctx, const SceneFrame &frame) {
     LEWITT_PERF_SCOPE_PATH("gaudi::vermeer::duchamp_graph_project::apply_frame");
     _scene.apply_snapshots(frame.shell, frame.rod, ctx.device);
-    apply_scene_debug_lines(frame.debug_lines, *_debug_lines);
+    if (!frame.debug_lines.empty()) {
+      apply_scene_debug_lines(frame.debug_lines, *_debug_lines);
+    }
     _debug_lines->upload(ctx.device);
   }
 

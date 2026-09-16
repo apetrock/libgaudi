@@ -63,7 +63,11 @@ def inspect_symbols(name: Optional[str], use_cse: bool) -> None:
 def emit_targets(target: str, out_dir: Path) -> None:
     for filename, body in emit_all(target):
         path = out_dir / filename
-        write_header(path, body)
+        if filename == "slab_cap_solid_angle_generated.hpp":
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body)
+        else:
+            write_header(path, body)
         print(f"Wrote {path}")
 
 
@@ -79,6 +83,8 @@ def main() -> None:
             "darboux",
             "cyclide_smooth",
             "shape_operator_fit",
+            "slab_field",
+            "slab_cap_solid_angle",
             "all",
         ],
         default=None,

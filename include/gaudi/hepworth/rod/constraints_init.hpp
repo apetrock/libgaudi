@@ -36,39 +36,6 @@ void init_smooth(const asawa::rod::rod &rod,
     constraints.push_back(smooth::create({ci, ip, in}, w));
   }
 }
-#if 1
-void init_helicity(const asawa::rod::rod &rod,
-                   std::vector<projection_constraint::ptr> &constraints,
-                   const real &w) {
-  using asawa::rod::corner_id;
-  using asawa::rod::CornerId;
-
-  for (int i = 0; i < rod.corner_count(); i++) {
-    CornerId ci = corner_id(i);
-    CornerId ip0 = rod.prev(ci);
-    if (ip0 < 0)
-      continue;
-    CornerId ip1 = rod.prev(ip0);
-    if (ip1 < 0)
-      continue;
-    CornerId ip2 = rod.prev(ip1);
-    if (ip2 < 0)
-      continue;
-    CornerId in0 = rod.next(ci);
-    if (in0 < 0)
-      continue;
-    CornerId in1 = rod.next(in0);
-    if (in1 < 0)
-      continue;
-    CornerId in2 = rod.next(in1);
-    if (in2 < 0)
-      continue;
-    constraints.push_back(
-        cylinder::create({ci, ip2, ip1, ip0, ci, in0, in1, in2}, 1.25));
-  }
-}
-#endif
-
 void init_stretch_shear(const asawa::rod::rod &rod,
                         std::vector<projection_constraint::ptr> &constraints,
                         const std::vector<real> &l0, const real &w) {
@@ -108,7 +75,7 @@ void init_angle(const asawa::rod::rod &rod,
 void init_collisions(asawa::rod::rod &rod, asawa::rod::dynamic &dynamic,
                      std::vector<projection_constraint::ptr> &constraints,
                      const real &w) {
-  const std::vector<vec3> &x = rod.__x;
+  const std::vector<vec3> &x = rod.x();
   vector<std::array<index_t, 2>> collisions = dynamic.get_internal_collisions();
   for (auto &c2 : collisions) {
     if (c2[0] > -1) {

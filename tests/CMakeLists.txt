@@ -19,6 +19,16 @@ target_link_libraries(spectral_smoke PRIVATE gaudi::core gaudi::headless)
 gaudi_msvc_disable_parallel_cl_writers(spectral_smoke)
 add_test(NAME spectral_smoke COMMAND spectral_smoke)
 
+add_executable(slab_prism_smoke slab_prism_smoke.cpp)
+target_include_directories(slab_prism_smoke PRIVATE ${CMAKE_SOURCE_DIR}/ext/liblombardi/include)
+target_link_libraries(slab_prism_smoke PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(slab_prism_smoke)
+add_test(NAME slab_prism_smoke COMMAND slab_prism_smoke)
+
+add_executable(pierce_audit pierce_audit_main.cpp)
+target_link_libraries(pierce_audit PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(pierce_audit)
+
 add_executable(anisotropic_cotan_smoke anisotropic_cotan_smoke.cpp)
 target_link_libraries(anisotropic_cotan_smoke PRIVATE gaudi::core gaudi::headless)
 gaudi_msvc_disable_parallel_cl_writers(anisotropic_cotan_smoke)

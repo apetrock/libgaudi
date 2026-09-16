@@ -147,11 +147,11 @@ public:
     if (!this->__sdf)
       load_sdf();
 
-    std::vector<real> dists = __sdf->distance(R.__x);
-    std::vector<vec3> gdists = __sdf->grad_distance(R.__x);
-    std::vector<vec3> f(R.__x.size(), vec3::Zero());
+    std::vector<real> dists = __sdf->distance(R.x());
+    std::vector<vec3> gdists = __sdf->grad_distance(R.x());
+    std::vector<vec3> f(R.x().size(), vec3::Zero());
 
-    for (int i = 0; i < R.__x.size(); i++) {
+    for (int i = 0; i < R.x().size(); i++) {
 
       // lets see if we can hollow out the sdf...
       real d = dists[i];
@@ -161,7 +161,7 @@ public:
       vec3 fi = d * gdists[i];
 
 #if 0
-      vec3 x = R.__x[i];
+      vec3 x = R.x()[i];
       if (d > 0.0) {
         geometry_logger::line(x, x - fi, vec4(0.0, 1.0, 0.0, 1.0));
       } else {
@@ -235,11 +235,11 @@ public:
     std::vector<hepworth::sim_block::ptr> blocks;
 
     for (int k = 0; k < __R.size(); k++) {
-      std::cout << "rod " << k << " size: " << __R[k]->__x.size() << std::endl;
+      std::cout << "rod " << k << " size: " << __R[k]->x().size() << std::endl;
       asawa::rod::rod::ptr R = __R[k];
-      std::vector<real> &l0 = R->__l0;
+      std::vector<real> &l0 = R->l0();
 
-      std::vector<vec3> f(R->__v.size(), vec3::Zero());
+      std::vector<vec3> f(R->v().size(), vec3::Zero());
 
       int t_start = 1200;
       int t_end = 1500;
@@ -257,14 +257,14 @@ public:
       }
 
       hepworth::vec3_block::ptr x =
-          hepworth::vec3_block::create(R->__M, R->__x, R->__v, f);
+          hepworth::vec3_block::create(R->M(), R->x(), R->v(), f);
       hepworth::quat_block::ptr u =
-          hepworth::quat_block::create(R->__J, R->__u, R->__o);
+          hepworth::quat_block::create(R->J(), R->u(), R->o());
 
       blocks.push_back(x);
       blocks.push_back(u);
 
-      std::vector<real> dists = __sdf->distance(R->__x);
+      std::vector<real> dists = __sdf->distance(R->x());
       auto verts = R->get_vert_range();
       for (auto i : verts) {
         asawa::rod::consec_t c = R->consec(i);

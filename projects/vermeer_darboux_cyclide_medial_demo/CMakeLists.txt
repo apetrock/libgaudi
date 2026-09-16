@@ -1,1 +1,0 @@
-add_gaudi_vermeer_project(vermeer_darboux_cyclide_medial_demo SOURCES main.cpp)

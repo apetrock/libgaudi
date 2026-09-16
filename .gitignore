@@ -49,7 +49,8 @@ Makefile
 *.dll
 
 # Asset exceptions (committed test models, despite *.obj above)
-!assets/bunny.obj
+!assets/models/obj/
+!assets/models/obj/**
 
 # WebAssembly files
 *.wasm

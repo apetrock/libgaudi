@@ -31,8 +31,8 @@ void init_coupling_collisions(
     std::vector<projection_constraint::ptr> &constraints, const real &w,
     std::vector<sim_block::ptr> blocks) {
 
-  const std::vector<vec3> &x0 = rod0.__x;
-  const std::vector<vec3> &x1 = rod1.__x;
+  const std::vector<vec3> &x0 = rod0.x();
+  const std::vector<vec3> &x1 = rod1.x();
   std::vector<index_t> edge_verts_0 = rod0.get_edge_vert_ids();
 
   vector<std::array<index_t, 4>> collisions =

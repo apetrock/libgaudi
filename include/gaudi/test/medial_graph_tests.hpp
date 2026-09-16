@@ -14,7 +14,6 @@
 #include "gaudi/duchamp/body_datum.hpp"
 #include "gaudi/duchamp/calder_graph_nodes.hpp"
 #include "gaudi/duchamp/field_graph_nodes.hpp"
-#include "gaudi/duchamp/darboux_cyclide_medial.hpp"
 #include "gaudi/duchamp/medial_graph_nodes.hpp"
 #include "gaudi/duchamp/medial_search_helpers.hpp"
 #include "gaudi/test/test.hpp"

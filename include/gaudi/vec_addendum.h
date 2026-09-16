@@ -69,6 +69,13 @@ namespace va
     return (y - x) * f + x;
   }
 
+  template <class Tf>
+  inline Eigen::Quaternion<double> mix(Tf f, const Eigen::Quaternion<double> &x0,
+                                       const Eigen::Quaternion<double> &x1)
+  {
+    return x0.slerp(static_cast<double>(f), x1);
+  }
+
   template <class Tf, class Tv>
   inline Tv mix(Tf f, const Tv &x0, const Tv &x1)
   {
@@ -677,6 +684,13 @@ T solidAngle(const VEC3<T> &pi, const VEC3<T> &p0, const VEC3<T> &p1,
     T out = acos(ABab);
     return out;
   };
+
+  //project v1 ont0 v0
+  template <typename T>
+  inline VEC3<T> project_vec(const VEC3<T> &v0, const VEC3<T> &v1)
+  {
+    return v1.dot(v0) / v0.dot(v0) * v0;
+  }
 
   template <typename T>
   inline VEC3<T> project_on_line(const VEC3<T> &v0, const VEC3<T> &v1,

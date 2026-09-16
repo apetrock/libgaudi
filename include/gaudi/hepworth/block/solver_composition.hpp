@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/common.h"
 #include "gaudi/hepworth/block/sim_block.hpp"
 #include "gaudi/hepworth/block/solver.hpp"
@@ -23,6 +24,9 @@ struct solver_context {
   real dt = 0.01;
   real damping = 0.5;
   int iterations = 10;
+
+  asawa::shell::shell *shell_mesh = nullptr;
+  const std::vector<vec3> *rod_normals = nullptr;
 };
 
 template <size_t... Is>
@@ -116,7 +120,7 @@ inline void solve_solver_step(block_solver_config<DofBlocks...> &config,
   }
 
   solver.set_constraints(ctx.constraints);
-  solver.step(ctx.blocks, ctx.dt, ctx.damping, ctx.iterations);
+  solver.step(ctx.blocks, ctx.dt, ctx.damping, ctx.iterations, &ctx);
 }
 
 template <typename... DofBlocks>

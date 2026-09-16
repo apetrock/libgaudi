@@ -14,6 +14,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "gaudi/asawa/geometry_channels.hpp"
 #include "gaudi/asawa/shell/shell_id.hpp"
 
 #ifndef __ASAWA_SHELL__
@@ -91,15 +92,18 @@ public:
     }
   }
 
-  index_t insert_datum(datum_ptr datum) {
-    __data.push_back(datum);
-    return __data.size() - 1;
-  }
-  /*incomplete data, bummer*/
-  datum_ptr &get_datum(index_t i) { return __data[i]; }
-  const datum_ptr &const_get_datum(index_t i) const { return __data[i]; }
+  // Defined in datums.hpp once datum is complete (stamps slot_id).
+  index_t insert_datum(datum_ptr datum);
 
-  std::vector<datum_ptr> &get_data() { return __data; }
+  datum_ptr &get_datum(index_t i) { return __channels.get(i); }
+  const datum_ptr &const_get_datum(index_t i) const {
+    return __channels.get(i);
+  }
+
+  std::vector<datum_ptr> &get_data() { return __channels.pool(); }
+  const std::vector<datum_ptr> &get_data() const { return __channels.pool(); }
+  GeometryChannels &channels() { return __channels; }
+  const GeometryChannels &channels() const { return __channels; }
 
   size_t vert_count() const { return __vert_begin.size(); }
 
@@ -769,7 +773,7 @@ public:
 
   std::vector<index_t> __vert_begin;
   std::vector<index_t> __face_begin;
-  std::vector<datum_ptr> __data;
+  GeometryChannels __channels;
 };
 } // namespace shell
 } // namespace asawa

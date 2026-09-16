@@ -139,8 +139,8 @@ public:
 
     auto sdf = get_sdf(frame);
     
-    std::vector<real> dists = sdf->distance(__R->__x);
-    std::vector<real> w(__R->__x.size(), 0);
+    std::vector<real> dists = sdf->distance(__R->x());
+    std::vector<real> w(__R->x().size(), 0);
     std::vector<vec3> xc = __R->xc();
     std::vector<vec3> N = __R->N0c();
     auto verts = __R->get_vert_range();
@@ -173,11 +173,11 @@ public:
 
     auto sdf = get_sdf(frame);
     
-    std::vector<real> dists = sdf->distance(__R->__x);
-    std::vector<vec3> gdists = sdf->grad_distance(__R->__x);
-    std::vector<vec3> f(__R->__x.size(), vec3::Zero());
+    std::vector<real> dists = sdf->distance(__R->x());
+    std::vector<vec3> gdists = sdf->grad_distance(__R->x());
+    std::vector<vec3> f(__R->x().size(), vec3::Zero());
     std::vector<vec3> xc = __R->xc();
-    for (int i = 0; i < __R->__x.size(); i++) {
+    for (int i = 0; i < __R->x().size(); i++) {
       if (dists[i] > 0.0) {
         f[i] = -dists[i] * gdists[i];
       }
@@ -199,16 +199,16 @@ public:
   void step_dynamics(int frame) {
     if (should_trace_frame(frame)) {
       std::cerr << "[rod_constraints] step_dynamics begin frame=" << frame
-                << " verts=" << __R->__x.size() << std::endl;
+                << " verts=" << __R->x().size() << std::endl;
     }
     hepworth::block::projection_solver solver;
 
     std::vector<hepworth::projection_constraint::ptr> constraints;
 
-    std::vector<real> &l0 = __R->__l0;
+    std::vector<real> &l0 = __R->l0();
     std::vector<real> lp(l0);
     real h = 0.05;
-    std::vector<vec3> f(__R->__v.size(), vec3::Zero());
+    std::vector<vec3> f(__R->v().size(), vec3::Zero());
     // std::vector<vec3> fr = compute_coulomb_gradient();
     // std::vector<vec3> fr = compute_null_coulomb_gradient();
     std::vector<vec3> fr = compute_tangent_point_gradient();
@@ -225,9 +225,9 @@ public:
     f = 1.0 * fb + 1e-6 * fr;
 
     hepworth::vec3_block::ptr x =
-        hepworth::vec3_block::create(__R->__M, __R->__x, __R->__v, f);
+        hepworth::vec3_block::create(__R->M(), __R->x(), __R->v(), f);
     hepworth::quat_block::ptr u =
-        hepworth::quat_block::create(__R->__J, __R->__u, __R->__o);
+        hepworth::quat_block::create(__R->J(), __R->u(), __R->o());
     if (should_trace_frame(frame)) {
       std::cerr << "[rod_constraints] sim blocks created" << std::endl;
     }
@@ -238,7 +238,6 @@ public:
       }
 
       //std::cout << " lt0 / lt: " << _lt0 / lt << " w: " << wl << std::endl;
-      //hepworth::block::init_helicity(*__R, constraints, 1e-0*wl, {x});
       //hepworth::block::init_angle(*__R, constraints, vec3(0.0, 0.0, 1.0),
       //                            0.25 * M_PI, 0.1, {u});
       

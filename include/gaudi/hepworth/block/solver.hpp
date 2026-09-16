@@ -4,15 +4,16 @@
 
 #include "gaudi/sparse_solver.h"
 
+#include "projection_diagnostics.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cxxabi.h>
-
-#include <iostream>
-#include <memory.h>
+#include <functional>
+#include <memory>
 #include <numeric>
 #include <ostream>
 #include <stdio.h>
@@ -30,6 +31,51 @@
 namespace gaudi {
 namespace hepworth {
 namespace block {
+
+struct solver_context;
+
+namespace detail {
+
+inline size_t hash_triplets(const std::vector<trip> &triplets) {
+  size_t h = triplets.size();
+  for (const trip &t : triplets) {
+    h ^= std::hash<int>()(static_cast<int>(t.row())) + 0x9e3779b9 + (h << 6) +
+         (h >> 2);
+    h ^= std::hash<int>()(static_cast<int>(t.col())) + 0x9e3779b9 + (h << 6) +
+         (h >> 2);
+    h ^= std::hash<double>()(t.value()) + 0x9e3779b9 + (h << 6) + (h >> 2);
+  }
+  return h;
+}
+
+inline real mass_diagonal_sum(const matS &M) {
+  real sum = 0.0;
+  for (int k = 0; k < M.outerSize(); ++k) {
+    for (matS::InnerIterator it(M, k); it; ++it) {
+      if (it.row() == it.col())
+        sum += it.value();
+    }
+  }
+  return sum;
+}
+
+struct linear_system_cache_key {
+  int nm = 0;
+  index_t a_rows = 0;
+  size_t constraint_count = 0;
+  size_t triplet_hash = 0;
+  real h = 0.0;
+  real mass_sum = 0.0;
+
+  bool operator==(const linear_system_cache_key &o) const {
+    return nm == o.nm && a_rows == o.a_rows &&
+           constraint_count == o.constraint_count &&
+           triplet_hash == o.triplet_hash && h == o.h && mass_sum == o.mass_sum;
+  }
+};
+
+} // namespace detail
+
 class projection_solver {
 public:
   projection_solver() {}
@@ -43,14 +89,15 @@ public:
     std::vector<trip> triplets;
     for (int i = 0; i < M.rows(); i++) {
       real Mi = M[i] < 1e-8 ? 1e-8 : M[i];
-      triplets.push_back(trip(i, i, M[i]));
+      triplets.push_back(trip(i, i, Mi));
     }
     __M = matS(M.size(), M.size());
     __M.setFromTriplets(triplets.begin(), triplets.end());
   }
 
   void step(std::vector<sim_block::ptr> &blocks, const real &h = 0.01,
-            const real &damping = 0.5, const int &ITS = 50) {
+            const real &damping = 0.5, const int &ITS = 50,
+            solver_context *rest_ctx = nullptr) {
 
     vecX q;
     vecX s;
@@ -58,6 +105,19 @@ public:
 
     for (auto &block : blocks) {
       block->map_to_x(q);
+    }
+
+    if (rest_ctx) {
+      for (int i = 0; i < static_cast<int>(_constraints.size()); i++) {
+        if (auto bc =
+                std::dynamic_pointer_cast<block_constraint>(_constraints[i])) {
+          if (!bc->rest_initialized())
+            bc->init_rest(q, *rest_ctx);
+        }
+      }
+    }
+
+    for (auto &block : blocks) {
       block->integrate_inertia(h);
       block->map_to_x(s);
     }
@@ -75,69 +135,63 @@ public:
       constraint->fill_A(id0, triplets);
     }
 
-    matS A(id0, Nm);
-    matS &M = __M;
-    M *= 1.0 / h / h;
-    std::cout << "Nm: " << Nm << std::endl;
-    std::cerr << "[projection_solver] setFromTriplets..." << std::endl;
-    std::cerr.flush();
-    A.setFromTriplets(triplets.begin(), triplets.end());
-    std::cerr << "[projection_solver] A nnz=" << A.nonZeros() << std::endl;
-    std::cerr.flush();
-    std::cerr << "[projection_solver] computing AtA = A^T * A (heavy)..."
-              << std::endl;
-    std::cerr.flush();
-    matS AtA = A.transpose() * A;
-    std::cerr << "[projection_solver] AtA nnz=" << AtA.nonZeros() << std::endl;
-    std::cerr.flush();
-    std::cerr << "[projection_solver] MAtA = M + AtA..." << std::endl;
-    std::cerr.flush();
-    matS MAtA = M + AtA;
-    std::cerr << "[projection_solver] MAtA nnz=" << MAtA.nonZeros() << std::endl;
-    std::cerr.flush();
+    const detail::linear_system_cache_key key{
+        Nm,
+        id0,
+        _constraints.size(),
+        detail::hash_triplets(triplets),
+        h,
+        detail::mass_diagonal_sum(__M),
+    };
 
-#if 0
-    if (!MAtA.isApprox(MAtA.transpose())) {
-      throw std::runtime_error("Possibly non semi-positive definitie matrix!");
-    }
-    vecX z = vecX::Zero(MAtA.rows());
-    if ((MAtA * z).hasNaN()) {
-      std::cout << "MAtA has NaN" << std::endl;
-      exit(0);
-    }
-    for (int i = 0; i < MAtA.rows(); i++) {
-      if (MAtA.coeff(i, i) < 1e-9) {
-        std::cout << "MAtA has zero diagonal" << std::endl;
-        exit(0);
+    const bool diag = projection_diag_enabled();
+    matS A;
+    m_solver *S = nullptr;
+
+    if (_cache_valid && key == _cache_key) {
+      if (diag)
+        projection_diag_log("linear_system cache hit");
+      A = _cache_A;
+      S = _cache_solver.get();
+    } else {
+      if (diag)
+        projection_diag_log("linear_system cache miss");
+      A = matS(id0, Nm);
+      matS M = __M;
+      M *= 1.0 / h / h;
+      if (diag) {
+        projection_diag_log("setFromTriplets...");
+        std::cout << "Nm: " << Nm << std::endl;
       }
+      A.setFromTriplets(triplets.begin(), triplets.end());
+      if (diag)
+        log_matrix_report("A", diagnose_sparse(A));
+      matS AtA = A.transpose() * A;
+      if (diag)
+        log_matrix_report("AtA", diagnose_sparse(AtA));
+      matS MAtA = M + AtA;
+      if (diag)
+        log_matrix_report("MAtA", diagnose_sparse(MAtA));
+
+      _cache_solver = std::make_unique<m_solver>(MAtA);
+      _cache_A = A;
+      _cache_AtA = AtA;
+      _cache_MAtA = MAtA;
+      _cache_key = key;
+      _cache_valid = true;
+      S = _cache_solver.get();
     }
-#endif
 
-    std::cout << "A   sum: " << A.sum() << std::endl;
-    std::cout << "AtA sum: " << AtA.sum() << std::endl;
-    std::cout << "M sum: " << M.sum() << std::endl;
-    std::cout << "MAtA sum: " << MAtA.sum() << std::endl;
-    std::cout << "A: " << A.rows() << "x" << A.cols()
-              << " nnz=" << A.nonZeros() << std::endl;
-    std::cout << "MAtA: " << MAtA.rows() << "x" << MAtA.cols()
-              << " nnz=" << MAtA.nonZeros() << std::endl;
-    std::cout.flush();
-    std::cerr << "[projection_solver] constructing m_solver(MAtA)..."
-              << std::endl;
-    std::cerr.flush();
-
-    m_solver S(MAtA);
-
-    std::cerr << "[projection_solver] m_solver ready, success=" << S.success()
-              << std::endl;
-    std::cerr.flush();
-    if (!S.success()) {
+    if (!S->success()) {
       std::cout << "Solve failed, attempting normalization" << std::endl;
+      matS MAtA = _cache_MAtA;
       Eigen::SparseMatrix<double> I(MAtA.rows(), MAtA.cols());
       MAtA += 1e-6 * I;
-      S.compute(MAtA);
+      _cache_solver = std::make_unique<m_solver>(MAtA);
+      _cache_MAtA = MAtA;
+      S = _cache_solver.get();
     }
-    if (!S.success()) {
+    if (!S->success()) {
       std::cout << "Solve failed" << std::endl;
       return;
     }
@@ -145,41 +199,10 @@ public:
     vecX p = vecX::Zero(id0);
     vecX q0 = q;
     for (int k = 0; k < ITS; k++) {
-      if (k == 0 || k % 10 == 0) {
-        std::cerr << "[projection_solver] outer iter k=" << k << "/"
-                  << (ITS - 1) << std::endl;
-        std::cerr.flush();
-      }
       p.setZero();
-      int ii = 0;
-//#pragma omp parallel for
-      if (k == 0) {
-        std::cerr << "[projection_solver] project: " << _constraints.size()
-                  << " constraints..." << std::endl;
-        std::cerr.flush();
-      }
       for (int i = 0; i < _constraints.size(); i++) {
         auto &constraint = _constraints[i];
         constraint->project(q, p);
-#if 0
-      if (i < _constraints.size() - 1) {
-          index_t id0 = _constraints[i]->_id0;
-          index_t id1 = _constraints[i + 1]->_id0;
-          vecX pi = p.segment(id0, id1 - id0);
-          if (pi.hasNaN()) {
-            std::cout << i << " " << _constraints.size() << std::endl;
-            std::cout << "q has NaN: "
-                      << "ii - " << id0 << " " << id1 - id0 << " " << p.size()
-                      << " " << constraint->name() << std::endl;
-            exit(0);
-          }
-        }
-#endif
-        ii++;
-      }
-      if (k == 0) {
-        std::cerr << "[projection_solver] project done" << std::endl;
-        std::cerr.flush();
       }
       if (q.hasNaN()) {
         std::cout << "q has NaN" << std::endl;
@@ -189,57 +212,46 @@ public:
         std::cout << "p has NaN" << std::endl;
       }
 
-      if (k % 10 == 0)
+      if (diag && (k == 0 || k % 10 == 0))
         std::cout << "k: " << k << " -pnorm: " << p.norm() << std::endl;
 
-      if (k == 0) {
-        std::cerr << "[projection_solver] forming rhs b = M*s + A^T*p..."
-                  << std::endl;
-        std::cerr.flush();
-      }
+      matS M = __M;
+      M *= 1.0 / h / h;
       vecX b = M * s + A.transpose() * p;
-      if (k == 0) {
-        std::cerr << "[projection_solver] calling S.solve (k=" << k << ")..."
-                  << std::endl;
-        std::cerr.flush();
-      }
 
-      q = S.solve(b);
-
-      if (k == 0) {
-        std::cerr << "[projection_solver] S.solve returned k=" << k << std::endl;
-        std::cerr.flush();
-      }
+      q = S->solve(b);
 
       real dq = (q - q0).norm();
       if (dq < 1e-8)
         break;
       q0 = q;
 
-      if (k % 10 == 0)
+      if (diag && k % 10 == 0)
         std::cout << "k: " << k << " -norms: "
                   << " q-q0: " << dq << std::endl;
-
-      // q = qi + dq.min(bnd).max(-bnd);
     }
 
-    std::cerr << "[projection_solver] outer loop finished, map_from_x..."
-              << std::endl;
-    std::cerr.flush();
     for (auto &block : blocks) {
       block->map_from_x(q, h, damping);
     }
-    std::cerr << "[projection_solver] step() complete" << std::endl;
-    std::cerr.flush();
   }
 
   void
   set_constraints(const std::vector<projection_constraint::ptr> &constraints) {
+    _cache_valid = false;
     _constraints = constraints;
   }
 
   matS __M;
   std::vector<projection_constraint::ptr> _constraints;
+
+private:
+  bool _cache_valid = false;
+  detail::linear_system_cache_key _cache_key;
+  matS _cache_A;
+  matS _cache_AtA;
+  matS _cache_MAtA;
+  std::unique_ptr<m_solver> _cache_solver;
 }; // class projection_solver
 } // namespace block
 } // namespace hepworth

@@ -49,7 +49,7 @@ inline std::filesystem::path repo_root() {
 #endif
 }
 
-/// Resolve a repo-relative path (e.g. "assets/bunny.obj") by searching
+/// Resolve a repo-relative path (e.g. "assets/models/obj/bunny.obj") by searching
 /// several candidate locations.  Throws std::runtime_error with a
 /// diagnostic listing on failure.
 inline std::filesystem::path resolve_path(const std::string &name) {

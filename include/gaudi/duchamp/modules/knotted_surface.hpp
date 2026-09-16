@@ -10,7 +10,6 @@
 
 #include "gaudi/hepworth/block/rod_constraints.hpp"
 #include "gaudi/hepworth/block/rod_constraints_init.hpp"
-#include "gaudi/hepworth/block/aesthetic/rod_aesthetic_constraints_init.hpp"
 
 #include "gaudi/hepworth/block/shell_constraints.hpp"
 #include "gaudi/hepworth/block/shell_constraints_init.hpp"
@@ -86,11 +85,6 @@ namespace gaudi
                 .with_blocks(_shell, _rod, _rod_quat)
                 .with_presolve([this](hepworth::block::solver_context &) {
                   __R->update_lengths();
-                  if (_helicity_constraint) {
-                    std::vector<real> &lr = __R->l0();
-                    for (real &l : lr)
-                      l *= 1.02;
-                  }
                   // Stash once per step for dipole constraints / forces.
                   refresh_dipole_cache();
                 })
@@ -110,6 +104,8 @@ namespace gaudi
                     return;
                   if (_dipole_Nr.size() != __R->x().size())
                     return;
+                  ctx.shell_mesh = __M.get();
+                  ctx.rod_normals = &_dipole_Nr;
                   dipole_tunneling::init_dipole_clearance(
                       *__M, *__Rd, ctx.constraints, _shell_xs->get(), __R->x(),
                       _dipole_Nr, _tunnel_r, _config.w_tunnel_orientation,
@@ -137,13 +133,6 @@ namespace gaudi
                       *__R, ctx.constraints, _config.w_rod_bend,
                       _config.w_rod_twist,
                       hepworth::block::select_blocks<2>(ctx));
-                })
-                .with_recompute([this](hepworth::block::solver_context &ctx) {
-                  if (!_helicity_constraint || _config.w_helicity <= 0.0)
-                    return;
-                  hepworth::block::init_helicity(
-                      *__R, ctx.constraints, _config.w_helicity,
-                      hepworth::block::select_blocks<1>(ctx));
                 })
                 .with_recompute([this](hepworth::block::solver_context &ctx) {
                   auto blocks = hepworth::block::select_blocks<2>(ctx);
@@ -180,6 +169,7 @@ namespace gaudi
                 .with_recompute([this](hepworth::block::solver_context &ctx) {
                   if (_config.w_shell_strain <= 0.0)
                     return;
+                  ctx.shell_mesh = __M.get();
                   hepworth::block::init_triangle_strain(
                       *__M, ctx.constraints, _shell_xs->get(),
                       _config.w_shell_strain,
@@ -188,6 +178,7 @@ namespace gaudi
                 .with_recompute([this](hepworth::block::solver_context &ctx) {
                   if (_config.w_shell_bending <= 0.0)
                     return;
+                  ctx.shell_mesh = __M.get();
                   hepworth::block::init_bending(
                       *__M, ctx.constraints, _shell_xs->get(),
                       _config.w_shell_bending,
@@ -196,6 +187,7 @@ namespace gaudi
                 .with_recompute([this](hepworth::block::solver_context &ctx) {
                   if (_config.w_willmore <= 0.0)
                     return;
+                  ctx.shell_mesh = __M.get();
                   const auto atten = force_attenuation_verts();
                   const auto we =
                       edge_weights_from_vert_attenuation(*__M, atten,
@@ -207,12 +199,14 @@ namespace gaudi
                 .with_recompute([this](hepworth::block::solver_context &ctx) {
                   if (_config.w_area <= 0.0)
                     return;
+                  ctx.shell_mesh = __M.get();
                   init_weighted_area(*__M, ctx.constraints, _config.w_area,
                                      hepworth::block::select_blocks<0>(ctx));
                 })
                 .with_recompute([this](hepworth::block::solver_context &ctx) {
                   if (!_shell_collisions)
                     return;
+                  ctx.shell_mesh = __M.get();
                   const real eps = 0.5 * _eps;
                   auto blocks = hepworth::block::select_blocks<0>(ctx);
                   hepworth::block::init_pnt_tri_collisions(
@@ -234,7 +228,7 @@ namespace gaudi
       std::vector<vec3> get_rod_normals_from_surface(asawa::rod::rod &R, asawa::shell::shell &M,
                                                      real eps)
       {
-        std::vector<vec3> &xr = __R->__x;
+        std::vector<vec3> &xr = __R->x();
         std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
         std::vector<vec3> Nf = asawa::shell::face_normals(M, x);
         std::vector<vec3> Nr = calder::mls_avg<vec3>(M, Nf, xr, eps, 2.0);
@@ -899,9 +893,9 @@ namespace gaudi
       void assert_nan(index_t k)
       {
         (void)k;
-        for (int i = 0; i < __R->__u.size(); ++i)
+        for (int i = 0; i < __R->u().size(); ++i)
         {
-          if (__R->__u[i].coeffs().hasNaN())
+          if (__R->u()[i].coeffs().hasNaN())
           {
             std::cerr << "nan at " << i << std::endl;
             exit(0);
@@ -1024,8 +1018,6 @@ namespace gaudi
         _frame++;
       }
 
-      void set_helicity_constraint(bool b) { _helicity_constraint = b; }
-      void set_helicity_weight(real w) { _config.w_helicity = w; }
       void set_willmore_weight(real w) { _config.w_willmore = w; }
       void set_area_weight(real w) { _config.w_area = w; }
       void set_shell_strain_weight(real w) { _config.w_shell_strain = w; }
@@ -1126,10 +1118,8 @@ namespace gaudi
       bool _repel_rods = true;
       bool _shell_collisions = true;
       bool _pin_rod = true;
-      bool _helicity_constraint = false;
       struct
       {
-        real w_helicity = 0.0e-1;
         real w_willmore = 1e-0;
         real w_area = 5e-2;
         real w_shell_strain = 1.0e-1;

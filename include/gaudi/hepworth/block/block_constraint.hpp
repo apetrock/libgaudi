@@ -26,6 +26,8 @@ namespace gaudi {
 namespace hepworth {
 namespace block {
 
+struct solver_context;
+
 class block_constraint : public projection_constraint {
 public:
   DEFINE_CREATE_FUNC(block_constraint)
@@ -40,8 +42,21 @@ public:
   block_constraint(const std::vector<index_t> &ids, const real &w,
                    std::vector<sim_block::ptr> blocks)
       : _blocks(blocks), projection_constraint(ids, w) {}
+
+  /// Bake rest geometry once from the undeformed configuration `q`.
+  /// projection_solver calls this before integrate_inertia on first use only.
+  virtual void init_rest(const vecX &q_rest, solver_context &ctx) {
+    (void)q_rest;
+    (void)ctx;
+  }
+
+  bool rest_initialized() const { return _rest_initialized; }
+
   virtual std::string name() { return typeid(*this).name(); }
   std::vector<sim_block::ptr> _blocks;
+
+protected:
+  bool _rest_initialized = false;
 };
 
 } // namespace block

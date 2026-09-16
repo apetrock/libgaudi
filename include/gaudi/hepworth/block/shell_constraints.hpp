@@ -45,10 +45,25 @@ class edge_strain : public block_constraint {
 public:
   DEFINE_CREATE_FUNC(edge_strain)
 
+  edge_strain(const std::vector<index_t> &ids, const real &w,
+              std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks) {}
+
   edge_strain(const std::vector<index_t> &ids, const std::vector<vec3> &x,
               const real &w, std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks) {
     _l = (x[_ids[1]] - x[_ids[0]]).norm();
+    _rest_initialized = true;
+  }
+
+  void init_rest(const vecX &q, solver_context &ctx) override {
+    (void)ctx;
+    if (_rest_initialized)
+      return;
+    const vec3 q0 = _blocks[0]->get_vec3(_ids[0], q);
+    const vec3 q1 = _blocks[0]->get_vec3(_ids[1], q);
+    _l = (q1 - q0).norm();
+    _rest_initialized = true;
   }
 
   virtual std::string name() { return "edge_strain"; }
@@ -103,22 +118,33 @@ class triangle_strain : public block_constraint {
 public:
   DEFINE_CREATE_FUNC(triangle_strain)
 
+  triangle_strain(const std::vector<index_t> &ids, real rangeMin, real rangeMax,
+                  real w, std::vector<sim_block::ptr> blocks, bool zero = false)
+      : block_constraint(ids, w, blocks), _rangeMin(rangeMin),
+        _rangeMax(rangeMax), _zero(zero) {
+    assert(ids.size() == 3);
+  }
+
   triangle_strain(const std::vector<index_t> &ids, const std::vector<vec3> &x,
                   real rangeMin, real rangeMax, real w,
                   std::vector<sim_block::ptr> blocks, bool zero = false)
       : block_constraint(ids, w, blocks), _rangeMin(rangeMin),
-        _rangeMax(rangeMax) {
+        _rangeMax(rangeMax), _zero(zero) {
     assert(ids.size() == 3);
-    mat32 edges, P;
-    edges.col(0) = x[_ids[1]] - x[_ids[0]];
-    edges.col(1) = x[_ids[2]] - x[_ids[0]];
-    P.col(0) = edges.col(0).normalized();
-    P.col(1) =
-        (edges.col(1) - edges.col(1).dot(P.col(0)) * P.col(0)).normalized();
-    _rest = (P.transpose() * edges).inverse();
-    real A = (P.transpose() * edges).determinant() / 2.0f;
-    _w *= std::sqrt(std::abs(A));
+    bake_rest_from_pos(
+        [&](index_t vi) { return x[static_cast<size_t>(vi)]; });
+    _rest_initialized = true;
   }
+
+  void init_rest(const vecX &q, solver_context &ctx) override {
+    (void)ctx;
+    if (_rest_initialized)
+      return;
+    bake_rest_from_pos([&](index_t vi) { return _blocks[0]->get_vec3(vi, q); });
+    _rest_initialized = true;
+  }
+
+  virtual std::string name() { return "triangle_strain"; }
 
   virtual void project(const vecX &q, vecX &p) {
     mat32 edges, P;
@@ -168,9 +194,179 @@ public:
 
   real _rangeMax = 1.0;
   real _rangeMin = 0.0;
+  bool _zero = false;
 
   mat2 _rest;
+
+private:
+  template <typename PosAt>
+  void bake_rest_from_pos(const PosAt &pos_at) {
+    mat32 edges, P;
+    edges.col(0) = pos_at(_ids[1]) - pos_at(_ids[0]);
+    edges.col(1) = pos_at(_ids[2]) - pos_at(_ids[0]);
+    P.col(0) = edges.col(0).normalized();
+    P.col(1) =
+        (edges.col(1) - edges.col(1).dot(P.col(0)) * P.col(0)).normalized();
+    _rest = (P.transpose() * edges).inverse();
+    real A = (P.transpose() * edges).determinant() / 2.0f;
+    _w *= std::sqrt(std::abs(A));
+  }
 };
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+#if 1
+class anisotropic_triangle_strain : public block_constraint {
+public:
+  DEFINE_CREATE_FUNC(anisotropic_triangle_strain)
+
+  anisotropic_triangle_strain(const std::vector<index_t> &ids,
+                              const vec3 &axial_dir, const vec2 &growth, real w,
+                              std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _axial_dir(axial_dir),
+        _growth(growth) {
+    assert(ids.size() == 3);
+  }
+
+  anisotropic_triangle_strain(const std::vector<index_t> &ids,
+                              const std::vector<vec3> &x, const vec3 &axial_dir,
+                              const vec2 &growth, real w,
+                              std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _axial_dir(axial_dir),
+        _growth(growth) {
+    assert(ids.size() == 3);
+    bake_rest_from_pos(
+        [&](index_t vi) { return x[static_cast<size_t>(vi)]; });
+    _rest_initialized = true;
+  }
+
+  void init_rest(const vecX &q, solver_context &ctx) override {
+    (void)ctx;
+    if (_rest_initialized)
+      return;
+    bake_rest_from_pos([&](index_t vi) { return _blocks[0]->get_vec3(vi, q); });
+    _rest_initialized = true;
+  }
+
+  virtual std::string name() { return "anisotropic_triangle_strain"; }
+
+  // Same Aq/p convention as triangle_strain: both live in F-space.
+  // Aq ≈ w * P * F_current, p = w * P * F_target with
+  // F_target = R_aniso * diag(sx,sy) * R_aniso^T (identity when sx=sy=1).
+  virtual void project(const vecX &q, vecX &p) {
+    mat32 P;
+    vec3 q0 = _blocks[0]->get_vec3(_ids[0], q);
+    vec3 q1 = _blocks[0]->get_vec3(_ids[1], q);
+    vec3 q2 = _blocks[0]->get_vec3(_ids[2], q);
+    if (!triangle_uv_frame(q0, q1, q2, P)) {
+      p.block(_id0 + 0, 0, 3, 1).setZero();
+      p.block(_id0 + 3, 0, 3, 1).setZero();
+      return;
+    }
+
+    mat2 F_target = material_stretch(P);
+    mat32 PF = P * F_target;
+    p.block(_id0 + 0, 0, 3, 1) = _w * PF.col(0);
+    p.block(_id0 + 3, 0, 3, 1) = _w * PF.col(1);
+  }
+
+  virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
+    _id0 = id0;
+    int n = 2;
+    index_t i0 = _blocks[0]->get_offset_idx(this->_ids[0]);
+    index_t i1 = _blocks[0]->get_offset_idx(this->_ids[1]);
+    index_t i2 = _blocks[0]->get_offset_idx(this->_ids[2]);
+
+    for (int i = 0; i < n; ++i) {
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(_id0 + 3 * i + ax, i0 + ax,
+                                -_w * (_rest(0, i) + _rest(1, i))));
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(_id0 + 3 * i + ax, i1 + ax, _w * _rest(0, i)));
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(_id0 + 3 * i + ax, i2 + ax, _w * _rest(1, i)));
+    }
+    id0 += 3 * n;
+  }
+
+  vec3 _axial_dir = vec3::UnitX();
+  vec2 _growth = vec2::Ones(); // absolute stretch sx,sy
+  mat2 _rest = mat2::Identity(); // (P^T edges)^{-1}, same as triangle_strain
+
+private:
+  static bool triangle_uv_frame(const vec3 &q0, const vec3 &q1, const vec3 &q2,
+                                mat32 &P) {
+    vec3 e0 = q1 - q0;
+    vec3 e1 = q2 - q0;
+    if (e0.norm() < 1e-12 || e1.norm() < 1e-12)
+      return false;
+    P.col(0) = e0.normalized();
+    vec3 e1t = e1 - e1.dot(P.col(0)) * P.col(0);
+    if (e1t.norm() < 1e-12)
+      return false;
+    P.col(1) = e1t.normalized();
+    return true;
+  }
+
+  mat2 material_stretch(const mat32 &P) const {
+    const real sx = std::clamp(_growth.x(), real(0.5), real(3.0));
+    const real sy = std::clamp(_growth.y(), real(0.5), real(3.0));
+    if (std::abs(sx - 1.0) < 1e-12 && std::abs(sy - 1.0) < 1e-12)
+      return mat2::Identity();
+
+    vec3 n = P.col(0).cross(P.col(1));
+    if (n.squaredNorm() < 1e-24)
+      return mat2::Identity();
+    n.normalize();
+    vec3 axial = _axial_dir - _axial_dir.dot(n) * n;
+    if (axial.squaredNorm() < 1e-24)
+      axial = P.col(0);
+    else
+      axial.normalize();
+    vec3 hoop = n.cross(axial);
+    if (hoop.squaredNorm() < 1e-24)
+      hoop = P.col(1);
+    else
+      hoop.normalize();
+
+    mat2 R_aniso;
+    R_aniso.col(0) << axial.dot(P.col(0)), axial.dot(P.col(1));
+    R_aniso.col(1) << hoop.dot(P.col(0)), hoop.dot(P.col(1));
+    if (std::abs(R_aniso.determinant()) < 1e-12)
+      return mat2::Identity();
+
+    mat2 D = mat2::Identity();
+    D(0, 0) = sx;
+    D(1, 1) = sy;
+    return R_aniso * D * R_aniso.transpose();
+  }
+
+  template <typename PosAt>
+  void bake_rest_from_pos(const PosAt &pos_at) {
+    mat32 edges, P;
+    const vec3 q0 = pos_at(_ids[0]);
+    const vec3 q1 = pos_at(_ids[1]);
+    const vec3 q2 = pos_at(_ids[2]);
+    edges.col(0) = q1 - q0;
+    edges.col(1) = q2 - q0;
+    if (!triangle_uv_frame(q0, q1, q2, P)) {
+      _rest = mat2::Identity();
+      return;
+    }
+    mat2 G = P.transpose() * edges;
+    if (std::abs(G.determinant()) < 1e-12) {
+      _rest = mat2::Identity();
+      return;
+    }
+    _rest = G.inverse();
+    real A = G.determinant() / 2.0f;
+    _w *= std::sqrt(std::abs(A));
+  }
+};
+
+
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -182,22 +378,33 @@ class area : public block_constraint {
 public:
   DEFINE_CREATE_FUNC(area)
 
+  area(const std::vector<index_t> &ids, real rangeMin, real rangeMax, real w,
+       std::vector<sim_block::ptr> blocks, bool zero = false)
+      : block_constraint(ids, w, blocks), _rangeMin(rangeMin),
+        _rangeMax(rangeMax), _zero(zero) {
+    assert(ids.size() == 3);
+  }
+
   area(const std::vector<index_t> &ids, const std::vector<vec3> &x,
        real rangeMin, real rangeMax, real w, std::vector<sim_block::ptr> blocks,
        bool zero = false)
       : block_constraint(ids, w, blocks), _rangeMin(rangeMin),
         _rangeMax(rangeMax), _zero(zero) {
     assert(ids.size() == 3);
-    mat32 edges, P;
-    edges.col(0) = x[_ids[1]] - x[_ids[0]];
-    edges.col(1) = x[_ids[2]] - x[_ids[0]];
-    P.col(0) = edges.col(0).normalized();
-    P.col(1) =
-        (edges.col(1) - edges.col(1).dot(P.col(0)) * P.col(0)).normalized();
-    _rest = (P.transpose() * edges).inverse();
-    real A = (P.transpose() * edges).determinant() / 2.0f;
-    _w *= std::sqrt(std::abs(A));
+    bake_rest_from_pos(
+        [&](index_t vi) { return x[static_cast<size_t>(vi)]; });
+    _rest_initialized = true;
   }
+
+  void init_rest(const vecX &q, solver_context &ctx) override {
+    (void)ctx;
+    if (_rest_initialized)
+      return;
+    bake_rest_from_pos([&](index_t vi) { return _blocks[0]->get_vec3(vi, q); });
+    _rest_initialized = true;
+  }
+
+  virtual std::string name() { return "area"; }
 
   virtual void project(const vecX &q, vecX &p) {
     mat32 edges, P;
@@ -263,6 +470,20 @@ public:
   real _rangeMin = 0.0;
 
   mat2 _rest;
+
+private:
+  template <typename PosAt>
+  void bake_rest_from_pos(const PosAt &pos_at) {
+    mat32 edges, P;
+    edges.col(0) = pos_at(_ids[1]) - pos_at(_ids[0]);
+    edges.col(1) = pos_at(_ids[2]) - pos_at(_ids[0]);
+    P.col(0) = edges.col(0).normalized();
+    P.col(1) =
+        (edges.col(1) - edges.col(1).dot(P.col(0)) * P.col(0)).normalized();
+    _rest = (P.transpose() * edges).inverse();
+    real A = (P.transpose() * edges).determinant() / 2.0f;
+    _w *= std::sqrt(std::abs(A));
+  }
 };
 #endif
 
@@ -372,20 +593,39 @@ void one_ring_fill_A(const index_t &id0, const real &w, //
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+/// Bouaziz-style ARAP shortcut (closed form, no SVD): one-ring weighted edge
+/// sum vf = Σ k dq; project so ||target|| matches rest ||_vg||
+/// (p ∝ vf * ||_vg||² / ||vf||²). Same cotan one-ring stencil as classic ARAP.
 class bending : public block_constraint {
 public:
   DEFINE_CREATE_FUNC(bending)
+
+  bending(const std::vector<index_t> &ids, const std::vector<real> &edge_weights,
+          const real &w, std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {}
 
   bending(const std::vector<index_t> &ids,
           const std::vector<real> &edge_weights, const std::vector<vec3> &x,
           const real &w, std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {
     _vg = vec3::Zero();
-    // todo:: calculate area/cotans here.
     one_ring_iter(ids, edge_weights, x,
                   [&](const index_t &j, const real &k, const vec3 &dq,
                       const vec3 &N) { _vg += k * dq; });
+    _rest_initialized = true;
   }
+
+  void init_rest(const vecX &q, solver_context &ctx) override {
+    (void)ctx;
+    if (_rest_initialized)
+      return;
+    _vg = vec3::Zero();
+    one_ring_iter(_ids, _edge_weights, q, *_blocks[0],
+                  [&](const index_t &j, const real &k, const vec3 &dq,
+                      const vec3 &N) { _vg += k * dq; });
+    _rest_initialized = true;
+  }
+
   virtual std::string name() { return "bending"; }
 
   virtual void project(const vecX &q, vecX &p) {
@@ -428,9 +668,217 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+/// Classic per-vertex ARAP (Sorkine–Alexa / Chao spokes): fit R ∈ SO(3) by
+/// Procrustes SVD on weighted spoke edges, then project each spoke to R d_rest.
+/// Cubic stylization extends the local step with ℓ¹ on R n̂ (ADMM); use this
+/// as the base ARAP rows.
+class arap : public block_constraint {
+public:
+  DEFINE_CREATE_FUNC(arap)
+
+  arap(const std::vector<index_t> &ids, const std::vector<real> &edge_weights,
+       const real &w, std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {
+    assert(ids.size() >= 2);
+    assert(edge_weights.size() + 1 == ids.size());
+    _d_rest.resize(edge_weights.size());
+  }
+
+  arap(const std::vector<index_t> &ids, const std::vector<real> &edge_weights,
+       const std::vector<vec3> &x, const real &w,
+       std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {
+    assert(ids.size() >= 2);
+    assert(edge_weights.size() + 1 == ids.size());
+    _d_rest.resize(edge_weights.size());
+    bake_spokes_from_pos(
+        [&](index_t vi) { return x[static_cast<size_t>(vi)]; });
+    _rest_initialized = true;
+  }
+
+  void init_rest(const vecX &q, solver_context &ctx) override {
+    (void)ctx;
+    if (_rest_initialized)
+      return;
+    bake_spokes_from_pos([&](index_t vi) { return _blocks[0]->get_vec3(vi, q); });
+    _rest_initialized = true;
+  }
+
+  virtual std::string name() { return "arap"; }
+
+  virtual void project(const vecX &q, vecX &p) {
+    const vec3 q0 = _blocks[0]->get_vec3(_ids[0], q);
+    mat3 M = mat3::Zero();
+    for (size_t k = 0; k < _edge_weights.size(); ++k) {
+      const real wk = _edge_weights[k];
+      const vec3 dq = _blocks[0]->get_vec3(_ids[k + 1], q) - q0;
+      M += wk * dq * _d_rest[k].transpose();
+    }
+
+    Eigen::JacobiSVD<mat3> svd(M, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    mat3 U = svd.matrixU();
+    mat3 V = svd.matrixV();
+    mat3 R = U * V.transpose();
+    if (R.determinant() < real(0.0)) {
+      U.col(2) *= real(-1.0);
+      R = U * V.transpose();
+    }
+
+    for (size_t k = 0; k < _edge_weights.size(); ++k) {
+      const real wk = _edge_weights[k];
+      p.block(_id0 + static_cast<index_t>(3 * k), 0, 3, 1) =
+          _w * wk * (R * _d_rest[k]);
+    }
+  }
+
+  virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
+    _id0 = id0;
+    const index_t ii = _blocks[0]->get_offset_idx(_ids[0]);
+    for (size_t k = 0; k < _edge_weights.size(); ++k) {
+      const real wk = _edge_weights[k];
+      const index_t jj = _blocks[0]->get_offset_idx(_ids[k + 1]);
+      const index_t row = id0;
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(row + ax, ii + ax, -_w * wk));
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(row + ax, jj + ax, _w * wk));
+      id0 += 3;
+    }
+  }
+
+  std::vector<real> _edge_weights;
+  std::vector<vec3> _d_rest;
+
+private:
+  template <typename PosAt>
+  void bake_spokes_from_pos(const PosAt &pos_at) {
+    const vec3 x0 = pos_at(_ids[0]);
+    for (size_t k = 0; k < _edge_weights.size(); ++k)
+      _d_rest[k] = pos_at(_ids[k + 1]) - x0;
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+/// ARAP spokes + normal tip-in for cubic stylization (Liu–Jacobson style).
+/// Local Procrustes:
+///   M = Σ w_ij d̃ dᵀ + λ_tip N_goal N_restᵀ
+/// then p_j = w · w_ij · R · d_rest. Goals are typically axis-quantized once.
+class arap_normal_align : public block_constraint {
+public:
+  DEFINE_CREATE_FUNC(arap_normal_align)
+
+  arap_normal_align(const std::vector<index_t> &ids,
+                    const std::vector<real> &edge_weights, const vec3 &N_rest,
+                    const vec3 &N_goal, const real &w, real lambda_tip,
+                    std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _edge_weights(edge_weights),
+        _N_rest(N_rest), _N_goal(N_goal), _lambda_tip(lambda_tip) {
+    assert(ids.size() >= 2);
+    assert(edge_weights.size() + 1 == ids.size());
+    _d_rest.resize(edge_weights.size());
+    if (_N_rest.squaredNorm() > real(1e-24))
+      _N_rest.normalize();
+    if (_N_goal.squaredNorm() > real(1e-24))
+      _N_goal.normalize();
+  }
+
+  arap_normal_align(const std::vector<index_t> &ids,
+                    const std::vector<real> &edge_weights,
+                    const std::vector<vec3> &x, const vec3 &N_rest,
+                    const vec3 &N_goal, const real &w, real lambda_tip,
+                    std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _edge_weights(edge_weights),
+        _N_rest(N_rest), _N_goal(N_goal), _lambda_tip(lambda_tip) {
+    assert(ids.size() >= 2);
+    assert(edge_weights.size() + 1 == ids.size());
+    _d_rest.resize(edge_weights.size());
+    const vec3 x0 = x[ids[0]];
+    for (size_t k = 0; k < edge_weights.size(); ++k)
+      _d_rest[k] = x[ids[k + 1]] - x0;
+    if (_N_rest.squaredNorm() > real(1e-24))
+      _N_rest.normalize();
+    if (_N_goal.squaredNorm() > real(1e-24))
+      _N_goal.normalize();
+    _rest_initialized = true;
+  }
+
+  void init_rest(const vecX &q, solver_context &ctx) override {
+    (void)ctx;
+    if (_rest_initialized)
+      return;
+    const vec3 x0 = _blocks[0]->get_vec3(_ids[0], q);
+    for (size_t k = 0; k < _edge_weights.size(); ++k)
+      _d_rest[k] = _blocks[0]->get_vec3(_ids[k + 1], q) - x0;
+    _rest_initialized = true;
+  }
+
+  virtual std::string name() { return "arap_normal_align"; }
+
+  virtual void project(const vecX &q, vecX &p) {
+    const vec3 q0 = _blocks[0]->get_vec3(_ids[0], q);
+    mat3 M = mat3::Zero();
+    for (size_t k = 0; k < _edge_weights.size(); ++k) {
+      const real wk = _edge_weights[k];
+      const vec3 dq = _blocks[0]->get_vec3(_ids[k + 1], q) - q0;
+      M += wk * dq * _d_rest[k].transpose();
+    }
+    if (_lambda_tip > real(0.0) && _N_rest.squaredNorm() > real(1e-24) &&
+        _N_goal.squaredNorm() > real(1e-24)) {
+      M += _lambda_tip * _N_goal * _N_rest.transpose();
+    }
+
+    Eigen::JacobiSVD<mat3> svd(M, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    mat3 U = svd.matrixU();
+    mat3 V = svd.matrixV();
+    mat3 R = U * V.transpose();
+    if (R.determinant() < real(0.0)) {
+      U.col(2) *= real(-1.0);
+      R = U * V.transpose();
+    }
+
+    for (size_t k = 0; k < _edge_weights.size(); ++k) {
+      const real wk = _edge_weights[k];
+      p.block(_id0 + static_cast<index_t>(3 * k), 0, 3, 1) =
+          _w * wk * (R * _d_rest[k]);
+    }
+  }
+
+  virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
+    _id0 = id0;
+    const index_t ii = _blocks[0]->get_offset_idx(_ids[0]);
+    for (size_t k = 0; k < _edge_weights.size(); ++k) {
+      const real wk = _edge_weights[k];
+      const index_t jj = _blocks[0]->get_offset_idx(_ids[k + 1]);
+      const index_t row = id0;
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(row + ax, ii + ax, -_w * wk));
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(row + ax, jj + ax, _w * wk));
+      id0 += 3;
+    }
+  }
+
+  std::vector<real> _edge_weights;
+  std::vector<vec3> _d_rest;
+  vec3 _N_rest = vec3::UnitZ();
+  vec3 _N_goal = vec3::UnitZ();
+  real _lambda_tip = 0.0;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
 class laplacian : public block_constraint {
 public:
   DEFINE_CREATE_FUNC(laplacian)
+
+  static ptr create(const std::vector<index_t> &ids,
+                    const std::vector<real> &edge_weights, const real &w,
+                    std::vector<sim_block::ptr> blocks) {
+    return std::make_shared<laplacian>(ids, edge_weights, w, blocks);
+  }
 
   static ptr create(const std::vector<index_t> &ids,
                     const std::vector<real> &edge_weights,
@@ -440,9 +888,19 @@ public:
   }
 
   laplacian(const std::vector<index_t> &ids,
+            const std::vector<real> &edge_weights, const real &w,
+            std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {
+    _rest_initialized = true;
+  }
+
+  laplacian(const std::vector<index_t> &ids,
             const std::vector<real> &edge_weights, const std::vector<vec3> &x,
             const real &w, std::vector<sim_block::ptr> blocks)
-      : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {}
+      : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {
+    (void)x;
+    _rest_initialized = true;
+  }
   virtual std::string name() { return "laplacian"; }
 
   virtual void project(const vecX &q, vecX &p) {
@@ -465,9 +923,19 @@ public:
   DEFINE_CREATE_FUNC(willmore)
 
   willmore(const std::vector<index_t> &ids,
+           const std::vector<real> &edge_weights, const real &w,
+           std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {
+    _rest_initialized = true;
+  }
+
+  willmore(const std::vector<index_t> &ids,
            const std::vector<real> &edge_weights, const std::vector<vec3> &x,
            const real &w, std::vector<sim_block::ptr> blocks)
-      : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {}
+      : block_constraint(ids, w, blocks), _edge_weights(edge_weights) {
+    (void)x;
+    _rest_initialized = true;
+  }
   virtual std::string name() { return "willmore"; }
 
   void set_align_normal(vec3 N) {
@@ -686,6 +1154,25 @@ public:
                 std::vector<sim_block::ptr> blocks)
       : block_constraint(ids, w, blocks), _align(false),
         _N_align(vec3::Zero()) {}
+
+  void init_rest(const vecX &q, solver_context &ctx) override {
+    (void)ctx;
+    if (_rest_initialized)
+      return;
+    const vec3 qi0 = _blocks[0]->get_vec3(_ids[0], q);
+    const vec3 qi1 = _blocks[0]->get_vec3(_ids[1], q);
+    const vec3 qj0 = _blocks[0]->get_vec3(_ids[2], q);
+    const vec3 qj1 = _blocks[0]->get_vec3(_ids[3], q);
+    const vec3 d00 = qi1 - qi0;
+    const vec3 d01 = qi1 - qj0;
+    const vec3 d10 = qj1 - qi0;
+    const vec3 d11 = qj1 - qj0;
+    const vec3 N0 = d00.cross(d01).normalized();
+    const vec3 N1 = d11.cross(d10).normalized();
+    _N_align = (N0 + N1).normalized();
+    _align = true;
+    _rest_initialized = true;
+  }
 
   void set_align_normal(vec3 N) {
     _align = true;

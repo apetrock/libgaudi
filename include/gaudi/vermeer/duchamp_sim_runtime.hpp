@@ -114,6 +114,8 @@ private:
     // the starting scene without waiting on (or skipping past) step 0.
     if (_running.load(std::memory_order_acquire)) {
       geometry_logger::clear();
+      if (_demo)
+        _demo->debug_draw();
       const int frame0 =
           _playback ? _playback->sim_frame.load(std::memory_order_relaxed)
                     : _fallback_frame;
@@ -121,8 +123,6 @@ private:
     }
 
     while (_running.load(std::memory_order_acquire)) {
-      // Don't start the next (expensive) step until render has taken the last
-      // frame — otherwise the worker busy-loops and starves the main thread.
       if (!_channel.wait_to_produce())
         break;
       if (!_running.load(std::memory_order_acquire))
@@ -141,8 +141,19 @@ private:
 
       geometry_logger::clear();
       if (_demo)
+        _demo->debug_draw();
+      _channel.publish(capture_frame(frame));
+
+      if (!_channel.wait_to_produce())
+        break;
+      if (!_running.load(std::memory_order_acquire))
+        break;
+
+      if (_demo)
         _demo->step(frame);
 
+      if (_demo)
+        _demo->debug_draw();
       _channel.publish(capture_frame(frame));
 
       if (_playback) {

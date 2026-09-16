@@ -153,7 +153,7 @@ void fillBuffer_ref(asawa::rod::rod &R, gg::BufferObjectPtr obj,
                     colorRGB col = colorRGB(1.0, 0.5, 0.5, 0.5)) {
   using namespace nanogui;
 
-  const std::vector<gaudi::vec3> &x = R.__x;
+  const std::vector<gaudi::vec3> &x = R.x();
 
   std::vector<gaudi::vec3> circ;
   int Nc = 32;
@@ -180,7 +180,7 @@ void fillBuffer_ref(asawa::rod::rod &R, gg::BufferObjectPtr obj,
     gaudi::vec3 x0 = x[i];
     auto idx = R.consec(gaudi::asawa::rod::corner_id(i));
 
-    gaudi::quat qi = R.__u[i];
+    gaudi::quat qi = R.u()[i];
     // gaudi::quat dq = qi * q0;
 
     Eigen::Matrix3d Q = qi.toRotationMatrix();
