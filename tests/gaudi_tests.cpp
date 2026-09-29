@@ -28,6 +28,11 @@
 #include "gaudi/test/dipole_tunneling_tests.hpp"
 #include "gaudi/test/symmetric_bezier_tests.hpp"
 #include "gaudi/test/windychien_braid_tests.hpp"
+#include "gaudi/test/procrustes_pyramid_tests.hpp"
+#include "gaudi/test/residual_forest_tests.hpp"
+#include "gaudi/test/tp_line_search_tests.hpp"
+#include "gaudi/test/tp_sobolev_jacobi_tests.hpp"
+#include "gaudi/test/edge_cov_tree_tests.hpp"
 #include "liblombardi_tests.cpp"
 
 int main() {

@@ -18,9 +18,11 @@
 #include <vector>
 
 #include "gaudi/common.h"
+#include "gaudi/vec_addendum.h"
 
 #include "../projection_constraint.hpp"
 #include "gaudi/geometry_logger.hpp"
+#include "gaudi/hepworth/block/rod_constraints.hpp"
 
 namespace gaudi {
 namespace hepworth {
@@ -149,35 +151,29 @@ public:
   straight(const std::vector<index_t> &ids, const real &w)
       : projection_constraint(ids, w) {}
 
+  /// ids: {q0,q1,q2,q3,Nv}. Interiors q1,q2 pulled onto the short chord of the ends.
   virtual void project(const vecX &q, vecX &p) {
-    index_t ii = this->_ids[0];
-    index_t jj = this->_ids[1];
-    index_t Nv = this->_ids[2];
-    index_t i = 3 * Nv + 4 * ii;
-    index_t j = 3 * Nv + 4 * jj;
-    quat ui = quat(q.block(i, 0, 4, 1).data());
-    quat uj = quat(q.block(j, 0, 4, 1).data());
-
-    quat uij = ui.slerp(0.5, uj);
-
-    ui = uij;
-    uj = uij;
-
-    p.block(_id0 + 0, 0, 4, 1) = _w * vec4(ui.coeffs().data());
-    p.block(_id0 + 4, 0, 4, 1) = _w * vec4(uj.coeffs().data());
+    const index_t Nv = this->_ids[4];
+    quat Q[4];
+    for (int k = 0; k < 4; ++k) {
+      const index_t off = 3 * Nv + 4 * this->_ids[k];
+      Q[k] = quat(q.block(off, 0, 4, 1).data()).normalized();
+    }
+    quat t1, t2;
+    block::straight::target_interiors(Q, t1, t2);
+    p.block(_id0 + 0, 0, 4, 1) = _w * vec4(t1.coeffs().data());
+    p.block(_id0 + 4, 0, 4, 1) = _w * vec4(t2.coeffs().data());
   }
 
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
     _id0 = id0;
-    index_t ii = this->_ids[0];
-    index_t jj = this->_ids[1];
-    index_t Nv = this->_ids[2];
-    index_t i = 3 * Nv + 4 * ii;
-    index_t j = 3 * Nv + 4 * jj;
+    const index_t Nv = this->_ids[4];
+    const index_t i1 = 3 * Nv + 4 * this->_ids[1];
+    const index_t i2 = 3 * Nv + 4 * this->_ids[2];
     for (int ax = 0; ax < 4; ax++)
-      triplets.push_back(trip(_id0 + 0 + ax, i + ax, _w));
+      triplets.push_back(trip(_id0 + 0 + ax, i1 + ax, _w));
     for (int ax = 0; ax < 4; ax++)
-      triplets.push_back(trip(_id0 + 4 + ax, j + ax, _w));
+      triplets.push_back(trip(_id0 + 4 + ax, i2 + ax, _w));
     id0 += 8;
   }
 };

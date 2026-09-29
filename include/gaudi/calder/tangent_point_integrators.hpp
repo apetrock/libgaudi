@@ -38,19 +38,16 @@ namespace gaudi
       std::vector<real> weights = R.l0();
       std::vector<vec3> Tc = R.N2c();
 
-      std::vector<vec3> us = integrate_over_rod<vec3>(
-          R, p_pov,
-          [&weights, &Tc](const std::vector<index_t> &edge_ids, Rod_Sum_Type &sum)
-          {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-          },
-          [l0, &w_pov, &T_pov, p](const index_t i, const index_t j, //
-                                  const vec3 &pi, const vec3 &pj,
-                                  const std::vector<calder::datum::ptr> &data,
-                                  Rod_Sum_Type::Node_Type node_type, //
-                                  const Rod_Sum_Type::Tree &tree) -> vec3
-          {
+      auto bind = [&weights, &Tc](const std::vector<index_t> &edge_ids,
+                                  cov_rod_sum &sum) {
+        sum.bind(calder::scalar_datum::create(edge_ids, weights));
+        sum.bind(calder::vec3_datum::create(edge_ids, Tc));
+      };
+      auto kernel = [l0, &w_pov, &T_pov, p](
+                        const index_t i, const index_t j, const vec3 &pi,
+                        const vec3 &pj, const std::vector<calder::datum::ptr> &data,
+                        Node_Type node_type,
+                        const arp::edge_cov_tree<2> &) -> vec3 {
             real wi = w_pov[i];
             vec3 Ti = T_pov[i];
             real wj = get_data<real>(node_type, j, 0, data);
@@ -70,30 +67,29 @@ namespace gaudi
             //vec3 g = 0.5 * (wi * gi - wj * gj);
             //std::cout << "g: " << g.transpose() << std::endl;
             return 0.5 * (wi * gi - wj * gj);
-          });
-      return us;
+          };
+      return integrate_over_rod_cov<vec3>(R, p_pov, bind, kernel, kernel);
     }
 
     /// Cauchy leaf gradient: exact ∇ of K = |N·dp|^p / (|dp|²+ε²)^p, ε=l0.
     std::vector<vec3> tangent_point_gradient_cauchy(
         asawa::rod::rod &R, const std::vector<vec3> &p_pov,
         const std::vector<real> &w_pov, const std::vector<vec3> &T_pov,
-        real l0, real p = 3.0) {
+        real l0, real p = 3.0, real bh_eps = 0.25,
+        const arp::edge_cov_tree<2> *cov = nullptr, real cone_eps = -1) {
       std::vector<real> weights = R.l0();
       std::vector<vec3> Tc = R.N2c();
 
-      return integrate_over_rod<vec3>(
-          R, p_pov,
-          [&weights, &Tc](const std::vector<index_t> &edge_ids,
-                          Rod_Sum_Type &sum) {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-          },
-          [l0, &w_pov, &T_pov, p](
-              const index_t i, const index_t j, const vec3 &pi, const vec3 &pj,
-              const std::vector<calder::datum::ptr> &data,
-              Rod_Sum_Type::Node_Type node_type,
-              const Rod_Sum_Type::Tree & /*tree*/) -> vec3 {
+      auto bind = [&weights, &Tc](const std::vector<index_t> &edge_ids,
+                                  cov_rod_sum &sum) {
+        sum.bind(calder::scalar_datum::create(edge_ids, weights));
+        sum.bind(calder::vec3_datum::create(edge_ids, Tc));
+      };
+      auto kernel = [l0, &w_pov, &T_pov, p](
+                        const index_t i, const index_t j, const vec3 &pi,
+                        const vec3 &pj, const std::vector<calder::datum::ptr> &data,
+                        Node_Type node_type,
+                        const arp::edge_cov_tree<2> &) -> vec3 {
             real wi = w_pov[i];
             vec3 Ti = T_pov[i];
             real wj = get_data<real>(node_type, j, 0, data);
@@ -113,56 +109,13 @@ namespace gaudi
             const vec3 gi =
                 calc_tangent_point_radius_grad_cauchy(-dp, Ni, l0, p);
             return real(0.5) * (wi * gi - wj * gj);
-          });
-    }
-
-    /// Cauchy + λ circle-agree gradient. Pair force from EΔ uses ∇_dp EΔ with
-    /// the same ½(wi gΔ − wj gΔ) assembly as Cauchy (gΔ = ∇_dp EΔ).
-    std::vector<vec3> tangent_point_gradient_cauchy_agree(
-        asawa::rod::rod &R, const std::vector<vec3> &p_pov,
-        const std::vector<real> &w_pov, const std::vector<vec3> &T_pov,
-        real l0, real p = 3.0, real lam = 0.5) {
-      std::vector<real> weights = R.l0();
-      std::vector<vec3> Tc = R.N2c();
-
-      return integrate_over_rod<vec3>(
-          R, p_pov,
-          [&weights, &Tc](const std::vector<index_t> &edge_ids,
-                          Rod_Sum_Type &sum) {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-          },
-          [l0, &w_pov, &T_pov, p, lam](
-              const index_t i, const index_t j, const vec3 &pi, const vec3 &pj,
-              const std::vector<calder::datum::ptr> &data,
-              Rod_Sum_Type::Node_Type node_type,
-              const Rod_Sum_Type::Tree & /*tree*/) -> vec3 {
-            real wi = w_pov[i];
-            vec3 Ti = T_pov[i];
-            real wj = get_data<real>(node_type, j, 0, data);
-            vec3 Tj = get_data<vec3>(node_type, j, 1, data);
-            Ti.normalize();
-            Tj.normalize();
-            vec3 dp = pj - pi;
-            vec3 ci = Ti.cross(dp);
-            vec3 cj = Tj.cross(dp);
-            if (ci.squaredNorm() < real(1.0e-32) ||
-                cj.squaredNorm() < real(1.0e-32))
-              return vec3::Zero();
-            vec3 Ni = ci.normalized().cross(Ti).normalized();
-            vec3 Nj = cj.normalized().cross(Tj).normalized();
-            const vec3 gj =
-                calc_tangent_point_radius_grad_cauchy(dp, Nj, l0, p);
-            const vec3 gi =
-                calc_tangent_point_radius_grad_cauchy(-dp, Ni, l0, p);
-            vec3 out = real(0.5) * (wi * gi - wj * gj);
-            if (lam != real(0.0)) {
-              const vec3 gD = calc_circle_agree_grad(dp, Ni, Nj, l0);
-              // EΔ contrib weighted ½(wi+wj); ∇_{pi} via −∇_dp.
-              out += lam * real(0.5) * (wi + wj) * (-gD);
-            }
-            return out;
-          });
+          };
+      if (cov)
+        return integrate_over_cov_tree<vec3>(*cov, rod_cov_edge_ids(R), p_pov,
+                                             bind, kernel, kernel, bh_eps, 1,
+                                             cone_eps);
+      return integrate_over_rod_cov<vec3>(R, p_pov, bind, kernel, kernel,
+                                          bh_eps, 1, cone_eps);
     }
 
     /// Matrix-free Hess·v for Cauchy TP (exact leaf Hess, same pair assembly).
@@ -214,174 +167,6 @@ namespace gaudi
                 !std::isfinite(out[2]))
               return vec3::Zero();
             return out;
-          });
-    }
-
-    /// Matrix-free Hess·v for Cauchy + λ circle-agree.
-    std::vector<vec3> tangent_point_hessian_vec_cauchy_agree(
-        asawa::rod::rod &R, const std::vector<vec3> &p_pov,
-        const std::vector<real> &w_pov, const std::vector<vec3> &T_pov,
-        const std::vector<vec3> &v_pov, real l0, real p = 3.0,
-        real lam = 0.5) {
-      std::vector<real> weights = R.l0();
-      std::vector<vec3> Tc = R.N2c();
-
-      return integrate_over_rod<vec3>(
-          R, p_pov,
-          [&weights, &Tc, &v_pov](const std::vector<index_t> &edge_ids,
-                                  Rod_Sum_Type &sum) {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-            sum.bind(calder::vec3_datum::create(edge_ids, v_pov));
-          },
-          [l0, &w_pov, &T_pov, &v_pov, p, lam](
-              const index_t i, const index_t j, const vec3 &pi, const vec3 &pj,
-              const std::vector<calder::datum::ptr> &data,
-              Rod_Sum_Type::Node_Type node_type,
-              const Rod_Sum_Type::Tree & /*tree*/) -> vec3 {
-            real wi = w_pov[i];
-            vec3 Ti = T_pov[i];
-            vec3 vi = v_pov[i];
-            real wj = get_data<real>(node_type, j, 0, data);
-            vec3 Tj = get_data<vec3>(node_type, j, 1, data);
-            vec3 vj = get_data<vec3>(node_type, j, 2, data);
-            Ti.normalize();
-            Tj.normalize();
-            vec3 dp = pj - pi;
-            vec3 ci = Ti.cross(dp);
-            vec3 cj = Tj.cross(dp);
-            if (ci.squaredNorm() < real(1.0e-32) ||
-                cj.squaredNorm() < real(1.0e-32))
-              return vec3::Zero();
-            vec3 Ni = ci.normalized().cross(Ti).normalized();
-            vec3 Nj = cj.normalized().cross(Tj).normalized();
-            const vec3 dv = vj - vi;
-            const mat3 Hj =
-                calc_tangent_point_radius_hessian_cauchy(dp, Nj, l0, p);
-            const mat3 Hi =
-                calc_tangent_point_radius_hessian_cauchy(-dp, Ni, l0, p);
-            const vec3 gj = Hj * dv;
-            const vec3 gi = Hi * (-dv);
-            vec3 out = real(0.5) * (wi * gi - wj * gj);
-            if (lam != real(0.0)) {
-              const mat3 HD = calc_circle_agree_hessian(dp, Ni, Nj, l0);
-              // ∇_{pi} EΔ = -gD; Hess_{pi,pi} via ∂/∂pi (-gD) = H_dp · I
-              // (dp=pj-pi ⇒ ∂dp/∂pi = -I ⇒ d(-gD)= -H (-dv_from_i)...
-              // Hv for site i of ½(wi+wj) EΔ: ½(wi+wj) * H_dp * dv
-              // with same sign pattern as −∇_dp → contribution (−H dv) wait:
-              // g_i = −gD, Hg_i[vi] with vj free: ∂(−gD)/∂pi · (−vi) + ∂(−gD)/∂pj · vj
-              // = −H (−vi) − H? ∂gD/∂pj = H ∂dp/∂pj = H
-              // ∂(−gD)/∂pi = −H ∂dp/∂pi = −H(−I)=H; ∂(−gD)/∂pj=−H
-              // Hg·v at i = H (−vi)? No: (∂g_i/∂pi)vi + (∂g_i/∂pj)vj = H vi − H vj = −H dv
-              out += lam * real(0.5) * (wi + wj) * (-HD * dv);
-            }
-            if (!std::isfinite(out[0]) || !std::isfinite(out[1]) ||
-                !std::isfinite(out[2]))
-              return vec3::Zero();
-            return out;
-          });
-    }
-
-    /// Exact ∇E of regularized pair density k (commensurate with energy + Hess).
-    std::vector<vec3> tangent_point_gradient_exact(
-        asawa::rod::rod &R, const std::vector<vec3> &p_pov,
-        const std::vector<real> &w_pov, const std::vector<vec3> &T_pov,
-        real l0, real p = 3.0) {
-      std::vector<real> weights = R.l0();
-      std::vector<vec3> Tc = R.N2c();
-
-      return integrate_over_rod<vec3>(
-          R, p_pov,
-          [&weights, &Tc](const std::vector<index_t> &edge_ids,
-                          Rod_Sum_Type &sum) {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-          },
-          [l0, &w_pov, &T_pov, p](const index_t i, const index_t j,
-                                  const vec3 &pi, const vec3 &pj,
-                                  const std::vector<calder::datum::ptr> &data,
-                                  Rod_Sum_Type::Node_Type node_type,
-                                  const Rod_Sum_Type::Tree & /*tree*/) -> vec3 {
-            real wi = w_pov[i];
-            vec3 Ti = T_pov[i];
-            real wj = get_data<real>(node_type, j, 0, data);
-            vec3 Tj = get_data<vec3>(node_type, j, 1, data);
-            Ti.normalize();
-            Tj.normalize();
-            vec3 dp = pj - pi;
-            vec3 ci = Ti.cross(dp);
-            vec3 cj = Tj.cross(dp);
-            if (ci.squaredNorm() < real(1.0e-32) ||
-                cj.squaredNorm() < real(1.0e-32))
-              return vec3::Zero();
-            vec3 Ni = ci.normalized().cross(Ti).normalized();
-            vec3 Nj = cj.normalized().cross(Tj).normalized();
-            const vec3 gj =
-                calc_tangent_point_radius_grad_exact(dp, Nj, l0, p);
-            const vec3 gi =
-                calc_tangent_point_radius_grad_exact(-dp, Ni, l0, p);
-            return real(0.5) * (wi * gi - wj * gj);
-          });
-    }
-
-
-    /// Pair slide: project i's TP-center offset onto j's circle tangent at pi.
-    ///   Tji = Bj × (pi − cen_j),  cen_j = pj − rj Nj
-    ///   leaf = ½(wi+wj) proj_{Tji}(−ri Ni)   (−∇ convention; ci−pi = +ri Ni)
-    /// Compose upstream as w0·slide + w1·cauchy, then negate once for drive.
-    std::vector<vec3> tangent_point_surface_slide(
-        asawa::rod::rod &R, const std::vector<vec3> &p_pov,
-        const std::vector<real> &w_pov, const std::vector<vec3> &T_pov) {
-      std::vector<real> weights = R.l0();
-      std::vector<vec3> Tc = R.N2c();
-
-      return integrate_over_rod<vec3>(
-          R, p_pov,
-          [&weights, &Tc](const std::vector<index_t> &edge_ids,
-                          Rod_Sum_Type &sum) {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-          },
-          [&w_pov, &T_pov](
-              const index_t i, const index_t j, const vec3 &pi, const vec3 &pj,
-              const std::vector<calder::datum::ptr> &data,
-              Rod_Sum_Type::Node_Type node_type,
-              const Rod_Sum_Type::Tree & /*tree*/) -> vec3 {
-            real wi = w_pov[i];
-            vec3 Ti = T_pov[i];
-            real wj = get_data<real>(node_type, j, 0, data);
-            vec3 Tj = get_data<vec3>(node_type, j, 1, data);
-            Ti.normalize();
-            Tj.normalize();
-            vec3 dp = pj - pi;
-            vec3 Bi = Ti.cross(dp);
-            vec3 Bj = Tj.cross(dp);
-            if (Bi.squaredNorm() < real(1.0e-32) ||
-                Bj.squaredNorm() < real(1.0e-32))
-              return vec3::Zero();
-            Bj.normalize();
-            vec3 Ni = Bi.normalized().cross(Ti).normalized();
-            vec3 Nj = Bj.cross(Tj).normalized();
-
-            const real ri = va::tangent_point_radius(dp, Ni);
-            const real rj = va::tangent_point_radius(dp, Nj);
-            if (!(ri > real(0.0)) || !std::isfinite(ri) ||
-                !(rj > real(0.0)) || !std::isfinite(rj))
-              return vec3::Zero();
-
-            // Nj = (Tj×dp)×Tj ⇒ Nj·dp ≥ 0 ⇒ cen_j = pj − rj Nj.
-            const vec3 cen_j = pj - rj * Nj;
-            const vec3 radial = pi - cen_j;
-            if (radial.squaredNorm() < real(1.0e-32))
-              return vec3::Zero();
-            const vec3 Tji = Bj.cross(radial);
-            if (Tji.squaredNorm() < real(1.0e-32))
-              return vec3::Zero();
-
-            // project_vec(axis, v) = proj_axis(v). ci−pi = +ri Ni on this chart.
-            const vec3 cen_i_off = ri * Ni;
-            const vec3 proj_cen_i = va::project_vec(Tji, cen_i_off);
-            return real(0.5) * (wi + wj) * pow(ri, -0.0) * pow(rj, 0.0) * va::sgn(Ni, Tji) * Tji;
           });
     }
 
@@ -440,58 +225,6 @@ namespace gaudi
             return out;
           });
       return us;
-    }
-
-    /// Matrix-free Hess·v of exact-of-k energy (for harmonic leaf).
-    std::vector<vec3> tangent_point_hessian_vec_exact(
-        asawa::rod::rod &R, const std::vector<vec3> &p_pov,
-        const std::vector<real> &w_pov, const std::vector<vec3> &T_pov,
-        const std::vector<vec3> &v_pov, real l0, real p = 3.0) {
-      std::vector<real> weights = R.l0();
-      std::vector<vec3> Tc = R.N2c();
-
-      return integrate_over_rod<vec3>(
-          R, p_pov,
-          [&weights, &Tc, &v_pov](const std::vector<index_t> &edge_ids,
-                                  Rod_Sum_Type &sum) {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-            sum.bind(calder::vec3_datum::create(edge_ids, v_pov));
-          },
-          [l0, &w_pov, &T_pov, &v_pov, p](
-              const index_t i, const index_t j, const vec3 &pi, const vec3 &pj,
-              const std::vector<calder::datum::ptr> &data,
-              Rod_Sum_Type::Node_Type node_type,
-              const Rod_Sum_Type::Tree & /*tree*/) -> vec3 {
-            real wi = w_pov[i];
-            vec3 Ti = T_pov[i];
-            vec3 vi = v_pov[i];
-            real wj = get_data<real>(node_type, j, 0, data);
-            vec3 Tj = get_data<vec3>(node_type, j, 1, data);
-            vec3 vj = get_data<vec3>(node_type, j, 2, data);
-            Ti.normalize();
-            Tj.normalize();
-            vec3 dp = pj - pi;
-            vec3 ci = Ti.cross(dp);
-            vec3 cj = Tj.cross(dp);
-            if (ci.squaredNorm() < real(1.0e-32) ||
-                cj.squaredNorm() < real(1.0e-32))
-              return vec3::Zero();
-            vec3 Ni = ci.normalized().cross(Ti).normalized();
-            vec3 Nj = cj.normalized().cross(Tj).normalized();
-            const vec3 dv = vj - vi;
-            const mat3 Hj =
-                calc_tangent_point_radius_hessian(dp, Nj, l0, p);
-            const mat3 Hi =
-                calc_tangent_point_radius_hessian(-dp, Ni, l0, p);
-            const vec3 gj = Hj * dv;
-            const vec3 gi = Hi * (-dv);
-            vec3 out = real(0.5) * (wi * gi - wj * gj);
-            if (!std::isfinite(out[0]) || !std::isfinite(out[1]) ||
-                !std::isfinite(out[2]))
-              return vec3::Zero();
-            return out;
-          });
     }
 
     /// Matrix-free Hess·v for soft TP density (same pair assembly as gradient).
@@ -562,18 +295,16 @@ namespace gaudi
       std::vector<vec3> Tc = R.N2c();
       const bool use_hess = hess_alpha != real(0.0);
 
-      std::vector<vec3> us = integrate_over_rod<vec3>(
-          R, p_pov,
-          [&weights, &Tc](const std::vector<index_t> &edge_ids,
-                          Rod_Sum_Type &sum) {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-          },
-          [R_min, tau, &w_pov, &T_pov, p, hess_alpha, use_hess](
-              const index_t i, const index_t j, const vec3 &pi, const vec3 &pj,
-              const std::vector<calder::datum::ptr> &data,
-              Rod_Sum_Type::Node_Type node_type,
-              const Rod_Sum_Type::Tree & /*tree*/) -> vec3 {
+      auto bind = [&weights, &Tc](const std::vector<index_t> &edge_ids,
+                                  cov_rod_sum &sum) {
+        sum.bind(calder::scalar_datum::create(edge_ids, weights));
+        sum.bind(calder::vec3_datum::create(edge_ids, Tc));
+      };
+      auto kernel = [R_min, tau, &w_pov, &T_pov, p, hess_alpha, use_hess](
+                        const index_t i, const index_t j, const vec3 &pi,
+                        const vec3 &pj, const std::vector<calder::datum::ptr> &data,
+                        Node_Type node_type,
+                        const arp::edge_cov_tree<2> &) -> vec3 {
             real wi = w_pov[i];
             vec3 Ti = T_pov[i];
             real wj = get_data<real>(node_type, j, 0, data);
@@ -608,8 +339,8 @@ namespace gaudi
                 !std::isfinite(out[2]))
               return vec3::Zero();
             return out;
-          });
-      return us;
+          };
+      return integrate_over_rod_cov<vec3>(R, p_pov, bind, kernel, kernel);
     }
 
     /// Regularized TP energy matching regularized gradient:
@@ -623,19 +354,16 @@ namespace gaudi
       std::vector<real> weights = R.l0();
       std::vector<vec3> Tc = R.N2c();
 
-      return integrate_over_rod<real>(
-          R, p_pov,
-          [&weights, &Tc](const std::vector<index_t> &edge_ids, Rod_Sum_Type &sum)
-          {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-          },
-          [l0, &w_pov, &T_pov, p](const index_t i, const index_t j, //
-                                  const vec3 &pi, const vec3 &pj,
-                                  const std::vector<calder::datum::ptr> &data,
-                                  Rod_Sum_Type::Node_Type node_type, //
-                                  const Rod_Sum_Type::Tree & /*tree*/) -> real
-          {
+      auto bind = [&weights, &Tc](const std::vector<index_t> &edge_ids,
+                                  cov_rod_sum &sum) {
+        sum.bind(calder::scalar_datum::create(edge_ids, weights));
+        sum.bind(calder::vec3_datum::create(edge_ids, Tc));
+      };
+      auto kernel = [l0, &w_pov, &T_pov, p](
+                        const index_t i, const index_t j, const vec3 &pi,
+                        const vec3 &pj, const std::vector<calder::datum::ptr> &data,
+                        Node_Type node_type,
+                        const arp::edge_cov_tree<2> &) -> real {
             real wi = w_pov[i];
             vec3 Ti = T_pov[i];
             real wj = get_data<real>(node_type, j, 0, data);
@@ -657,7 +385,8 @@ namespace gaudi
             const real fj =
                 calc_tangent_point_inverse_radius(dp, Nj, l0, p);
             return real(0.5) * (wi * fi + wj * fj);
-          });
+          };
+      return integrate_over_rod_cov<real>(R, p_pov, bind, kernel, kernel);
     }
 
     /// Cauchy TP energy: K = |N·dp|^p / (|dp|²+ε²)^p, ε=l0.
@@ -665,22 +394,20 @@ namespace gaudi
     std::vector<real> tangent_point_energy_cauchy(
         asawa::rod::rod &R, const std::vector<vec3> &p_pov,
         const std::vector<real> &w_pov, const std::vector<vec3> &T_pov,
-        real l0, real p = 3.0) {
+        real l0, real p = 3.0, real bh_eps = 0.25, real cone_eps = -1) {
       std::vector<real> weights = R.l0();
       std::vector<vec3> Tc = R.N2c();
 
-      return integrate_over_rod<real>(
-          R, p_pov,
-          [&weights, &Tc](const std::vector<index_t> &edge_ids,
-                          Rod_Sum_Type &sum) {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-          },
-          [l0, &w_pov, &T_pov, p](
-              const index_t i, const index_t j, const vec3 &pi, const vec3 &pj,
-              const std::vector<calder::datum::ptr> &data,
-              Rod_Sum_Type::Node_Type node_type,
-              const Rod_Sum_Type::Tree & /*tree*/) -> real {
+      auto bind = [&weights, &Tc](const std::vector<index_t> &edge_ids,
+                                  cov_rod_sum &sum) {
+        sum.bind(calder::scalar_datum::create(edge_ids, weights));
+        sum.bind(calder::vec3_datum::create(edge_ids, Tc));
+      };
+      auto kernel = [l0, &w_pov, &T_pov, p](
+                        const index_t i, const index_t j, const vec3 &pi,
+                        const vec3 &pj, const std::vector<calder::datum::ptr> &data,
+                        Node_Type node_type,
+                        const arp::edge_cov_tree<2> &) -> real {
             real wi = w_pov[i];
             vec3 Ti = T_pov[i];
             real wj = get_data<real>(node_type, j, 0, data);
@@ -701,53 +428,9 @@ namespace gaudi
             const real fj =
                 calc_tangent_point_inverse_radius_cauchy(dp, Nj, l0, p);
             return real(0.5) * (wi * fi + wj * fj);
-          });
-    }
-
-    /// Cauchy TP + λ · circle-agreement: E = ½(Ki+Kj) + λ · ½(wi+wj) EΔ.
-    std::vector<real> tangent_point_energy_cauchy_agree(
-        asawa::rod::rod &R, const std::vector<vec3> &p_pov,
-        const std::vector<real> &w_pov, const std::vector<vec3> &T_pov,
-        real l0, real p = 3.0, real lam = 0.5) {
-      std::vector<real> weights = R.l0();
-      std::vector<vec3> Tc = R.N2c();
-
-      return integrate_over_rod<real>(
-          R, p_pov,
-          [&weights, &Tc](const std::vector<index_t> &edge_ids,
-                          Rod_Sum_Type &sum) {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-          },
-          [l0, &w_pov, &T_pov, p, lam](
-              const index_t i, const index_t j, const vec3 &pi, const vec3 &pj,
-              const std::vector<calder::datum::ptr> &data,
-              Rod_Sum_Type::Node_Type node_type,
-              const Rod_Sum_Type::Tree & /*tree*/) -> real {
-            real wi = w_pov[i];
-            vec3 Ti = T_pov[i];
-            real wj = get_data<real>(node_type, j, 0, data);
-            vec3 Tj = get_data<vec3>(node_type, j, 1, data);
-            wi = std::max(wi, real(1e-6));
-            wj = std::max(wj, real(1e-6));
-            Ti.normalize();
-            Tj.normalize();
-            vec3 dp = pj - pi;
-            vec3 ci = Ti.cross(dp);
-            vec3 cj = Tj.cross(dp);
-            if (ci.squaredNorm() < real(1e-30) || cj.squaredNorm() < real(1e-30))
-              return real(0.0);
-            vec3 Ni = ci.normalized().cross(Ti).normalized();
-            vec3 Nj = cj.normalized().cross(Tj).normalized();
-            const real fi =
-                calc_tangent_point_inverse_radius_cauchy(-dp, Ni, l0, p);
-            const real fj =
-                calc_tangent_point_inverse_radius_cauchy(dp, Nj, l0, p);
-            const real Ed =
-                calc_circle_agree_energy(dp, Ni, Nj, l0);
-            return real(0.5) * (wi * fi + wj * fj) +
-                   lam * real(0.5) * (wi + wj) * Ed;
-          });
+          };
+      return integrate_over_rod_cov<real>(R, p_pov, bind, kernel, kernel, bh_eps,
+                                          1, cone_eps);
     }
 
     /// Softmax-floor TP energy matching soft gradient:
@@ -759,18 +442,16 @@ namespace gaudi
       std::vector<real> weights = R.l0();
       std::vector<vec3> Tc = R.N2c();
 
-      return integrate_over_rod<real>(
-          R, p_pov,
-          [&weights, &Tc](const std::vector<index_t> &edge_ids,
-                          Rod_Sum_Type &sum) {
-            sum.bind(calder::scalar_datum::create(edge_ids, weights));
-            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
-          },
-          [R_min, tau, &w_pov, &T_pov, p](
-              const index_t i, const index_t j, const vec3 &pi, const vec3 &pj,
-              const std::vector<calder::datum::ptr> &data,
-              Rod_Sum_Type::Node_Type node_type,
-              const Rod_Sum_Type::Tree & /*tree*/) -> real {
+      auto bind = [&weights, &Tc](const std::vector<index_t> &edge_ids,
+                                  cov_rod_sum &sum) {
+        sum.bind(calder::scalar_datum::create(edge_ids, weights));
+        sum.bind(calder::vec3_datum::create(edge_ids, Tc));
+      };
+      auto kernel = [R_min, tau, &w_pov, &T_pov, p](
+                        const index_t i, const index_t j, const vec3 &pi,
+                        const vec3 &pj, const std::vector<calder::datum::ptr> &data,
+                        Node_Type node_type,
+                        const arp::edge_cov_tree<2> &) -> real {
             real wi = w_pov[i];
             vec3 Ti = T_pov[i];
             real wj = get_data<real>(node_type, j, 0, data);
@@ -791,7 +472,8 @@ namespace gaudi
             const real fj =
                 calc_tangent_point_radius_soft(dp, Nj, R_min, tau, p);
             return real(0.5) * (wi * fi + wj * fj);
-          });
+          };
+      return integrate_over_rod_cov<real>(R, p_pov, bind, kernel, kernel);
     }
 
     std::vector<real> tangent_point_energy(asawa::shell::shell &M,
@@ -1119,64 +801,6 @@ namespace gaudi
       for (size_t i = 0; i < G.size(); ++i)
         G[i] = Gs[i] + Ks[i];
       return G;
-    }
-
-    /// Rod convolution Φ = κ ∗ T with T = k (l0^p-floor density).
-    /// Exact leaf ∇T / HT (no post-diff Reg); then mollify:
-    ///   ∇E = κ∗∇T + (∇κ)∗T
-    inline std::vector<vec3>
-    tangent_point_harmonic_gradient(asawa::rod::rod &R,
-                                    const std::vector<vec3> &p_pov,
-                                    const std::vector<real> &w_pov,
-                                    const std::vector<vec3> &T_pov, real l0,
-                                    real p0, real smooth_l0, real p1 = 2.0) {
-      (void)p1;
-      std::vector<vec3> Gv =
-          tangent_point_gradient_exact(R, p_pov, w_pov, T_pov, l0, p0);
-      std::vector<real> Ev =
-          tangent_point_energy(R, p_pov, w_pov, T_pov, l0, p0);
-      std::vector<vec3> Gs = smoothed_gradient(R, p_pov, Gv, smooth_l0, p1);
-      std::vector<vec3> Ks = gradient_scalar(R, p_pov, Ev, smooth_l0, p1);
-      std::vector<vec3> G(Gs.size(), vec3::Zero());
-      for (size_t i = 0; i < G.size(); ++i)
-        G[i] = Gs[i] + Ks[i];
-      return G;
-    }
-
-    /// Convolution energy densities Φ = κ ∗ T with T = k.
-    inline std::vector<real>
-    tangent_point_energy_harmonic(asawa::rod::rod &R,
-                                  const std::vector<vec3> &p_pov,
-                                  const std::vector<real> &w_pov,
-                                  const std::vector<vec3> &T_pov, real l0,
-                                  real p0, real smooth_l0, real p1 = 2.0) {
-      (void)p1;
-      std::vector<real> Ev =
-          tangent_point_energy(R, p_pov, w_pov, T_pov, l0, p0);
-      return smoothed_scalar(R, p_pov, Ev, smooth_l0, p1);
-    }
-
-    /// Hess·v of Φ = κ ∗ T (exact leaf H(k) + mollifier terms).
-    inline std::vector<vec3> tangent_point_hessian_vec_harmonic(
-        asawa::rod::rod &R, const std::vector<vec3> &p_pov,
-        const std::vector<real> &w_pov, const std::vector<vec3> &T_pov,
-        const std::vector<vec3> &v_pov, real l0, real p0, real smooth_l0,
-        real p1 = 2.0) {
-      (void)p1;
-      std::vector<real> Ev =
-          tangent_point_energy(R, p_pov, w_pov, T_pov, l0, p0);
-      std::vector<vec3> Gv =
-          tangent_point_gradient_exact(R, p_pov, w_pov, T_pov, l0, p0);
-      std::vector<vec3> HvT = tangent_point_hessian_vec_exact(
-          R, p_pov, w_pov, T_pov, v_pov, l0, p0);
-      std::vector<vec3> kappa_Hv =
-          smoothed_gradient(R, p_pov, HvT, smooth_l0, p1);
-      std::vector<vec3> moll_Hv =
-          mollifier_hessian_vec(R, p_pov, Ev, Gv, v_pov, smooth_l0);
-      std::vector<vec3> out(kappa_Hv.size(), vec3::Zero());
-      for (size_t i = 0; i < out.size(); ++i)
-        out[i] = kappa_Hv[i] + moll_Hv[i];
-      return out;
     }
 
   } // namespace calder

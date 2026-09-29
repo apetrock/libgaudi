@@ -51,12 +51,16 @@ void init_stretch_shear(const asawa::rod::rod &rod,
 void init_straight(const asawa::rod::rod &rod,
                      std::vector<projection_constraint::ptr> &constraints,
                      const real &w) {
+  if (!(w > real(0)))
+    return;
   using asawa::rod::corner_id;
-  int Ni = rod.corner_count();
-  for (int i = 0; i < rod.corner_count(); i++) {
-    auto ci = corner_id(i);
-    auto j = rod.next(ci);
-    constraints.push_back(straight::create({ci, j, Ni}, w));
+  const int Ni = rod.corner_count();
+  for (int i = 0; i < Ni; i++) {
+    std::array<index_t, 4> ids;
+    if (!block::gather_four_corner_window(rod, corner_id(i), ids))
+      continue;
+    constraints.push_back(
+        straight::create({ids[0], ids[1], ids[2], ids[3], Ni}, w));
   }
 }
 

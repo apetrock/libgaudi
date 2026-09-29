@@ -59,6 +59,15 @@ inline braid load_braid(const std::string &name,
   return find_braid(load_braid_catalog(path_name), name);
 }
 
+/// Weave or catalog knot. `"plain_weave"` / `"plane_weave"` use strands and frames.
+inline braid make_knot(const knot_spec &spec,
+                       const std::string &path_name =
+                           "assets/knots/braids.json") {
+  if (knot_is_plain_weave(spec.name))
+    return make_plain_weave(spec.strands, spec.frames);
+  return load_braid(spec.name, path_name);
+}
+
 } // namespace windychien
 } // namespace gaudi
 

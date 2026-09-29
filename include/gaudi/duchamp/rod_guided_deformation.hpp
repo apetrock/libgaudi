@@ -55,9 +55,7 @@ enum class rod_guided_scene {
 struct rod_guided_config {
   rod_guided_scene scene = rod_guided_scene::braid_circle;
   braid_circle_config braid{
-    .use_plain_weave = true,
-    .weave_strands =25,
-    .weave_frames = 25
+      .knot = {.name = "plain_weave", .strands = 25, .frames = 25},
   };
   silly_walk_config walk{
       .i0 = 0,

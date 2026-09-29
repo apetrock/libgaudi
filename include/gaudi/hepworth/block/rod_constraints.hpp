@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "gaudi/asawa/rod/rod.hpp"
 #include "gaudi/common.h"
 #include "gaudi/vec_addendum.h"
 
@@ -348,9 +349,28 @@ public:
   real _w2;  // Weight for rotation component
 };
 
+/// Four successive corners {prev, c, next, next2}. Open ends return false.
+inline bool gather_four_corner_window(const asawa::rod::rod &rod,
+                                      asawa::rod::CornerId c,
+                                      std::array<index_t, 4> &ids) {
+  using asawa::rod::CornerId;
+  const CornerId im1 = rod.prev(c);
+  if (im1 < 0)
+    return false;
+  const CornerId ip1 = rod.next(c);
+  if (ip1 < 0)
+    return false;
+  const CornerId ip2 = rod.next(ip1);
+  if (ip2 < 0)
+    return false;
+  ids = {im1, c, ip1, ip2};
+  return true;
+}
+
 class straight : public block_constraint {
 public:
   typedef std::shared_ptr<straight> ptr;
+  static constexpr int kStencil = 4;
 
   static ptr create(const std::vector<index_t> &ids, const real &w,
                     std::vector<sim_block::ptr> blocks) {
@@ -359,36 +379,44 @@ public:
 
   straight(const std::vector<index_t> &ids, const real &w,
              std::vector<sim_block::ptr> blocks)
-      : block_constraint(ids, w, blocks) {}
+      : block_constraint(ids, w, blocks) {
+    assert(ids.size() >= kStencil);
+  }
   virtual std::string name() { return typeid(*this).name(); }
 
+  /// Sequential short-arc gauge, then interiors at 1/3 and 2/3 of slerp(a0,a3).
+  /// Targets are flipped back onto the stored sheet of each interior.
+  static void target_interiors(const quat Q[kStencil], quat &t1, quat &t2) {
+    const quat a0 = Q[0].normalized();
+    const quat a1 = squad_smooth::hemisphere_align(a0, Q[1]);
+    const quat a2 = squad_smooth::hemisphere_align(a1, Q[2]);
+    const quat a3 = squad_smooth::hemisphere_align(a2, Q[3]);
+    const float t_a = static_cast<float>(real(1.0) / real(3.0));
+    const float t_b = static_cast<float>(real(2.0) / real(3.0));
+    t1 = squad_smooth::hemisphere_align(Q[1], va::slerp(a0, a3, t_a)).normalized();
+    t2 = squad_smooth::hemisphere_align(Q[2], va::slerp(a0, a3, t_b)).normalized();
+  }
+
   virtual void project(const vecX &q, vecX &p) {
+    quat Q[kStencil];
+    for (int i = 0; i < kStencil; ++i)
+      Q[i] = _blocks[0]->get_quat(this->_ids[i], q).normalized();
 
-    index_t ii = this->_ids[0];
-    index_t jj = this->_ids[1];
-
-    quat ui = _blocks[0]->get_quat(ii, q);
-    quat uj = _blocks[0]->get_quat(jj, q);
-    quat uij = va::slerp(ui, uj, 0.5);
-
-    uij.normalize();
-
-    ui = uij;
-    uj = uij;
-
-    p.block(_id0 + 0, 0, 4, 1) = _w * vec4(ui.coeffs().data());
-    p.block(_id0 + 4, 0, 4, 1) = _w * vec4(uj.coeffs().data());
+    quat t1, t2;
+    target_interiors(Q, t1, t2);
+    p.block(_id0 + 0, 0, 4, 1) = _w * vec4(t1.coeffs().data());
+    p.block(_id0 + 4, 0, 4, 1) = _w * vec4(t2.coeffs().data());
   }
 
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
     _id0 = id0;
-    index_t i = _blocks[0]->get_offset_idx(this->_ids[0]);
-    index_t j = _blocks[0]->get_offset_idx(this->_ids[1]);
+    const index_t i1 = _blocks[0]->get_offset_idx(this->_ids[1]);
+    const index_t i2 = _blocks[0]->get_offset_idx(this->_ids[2]);
 
     for (int ax = 0; ax < 4; ax++)
-      triplets.push_back(trip(_id0 + 0 + ax, i + ax, _w));
+      triplets.push_back(trip(_id0 + 0 + ax, i1 + ax, _w));
     for (int ax = 0; ax < 4; ax++)
-      triplets.push_back(trip(_id0 + 4 + ax, j + ax, _w));
+      triplets.push_back(trip(_id0 + 4 + ax, i2 + ax, _w));
     id0 += 8;
   }
 };

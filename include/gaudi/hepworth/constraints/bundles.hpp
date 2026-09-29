@@ -236,6 +236,14 @@ inline constraint_recompute_fn make_rod_squad_smooth_recompute(
 }
 
 template <size_t... Is>
+inline constraint_recompute_fn make_rod_straight_recompute(asawa::rod::rod::ptr rod,
+                                                           real w) {
+  return [rod, w](solver_context &ctx) {
+    init_straight(*rod, ctx.constraints, w, select_blocks<Is...>(ctx));
+  };
+}
+
+template <size_t... Is>
 inline constraint_recompute_fn make_rod_bend_twist_recompute(
     asawa::rod::rod::ptr rod, real w_bend, real w_twist,
     index_t free_hinge_i = -1, real free_twist_w = 0.0) {

@@ -200,6 +200,24 @@ GAUDI_TEST(duchamp_braid_sphere_rod_3_1) {
   GAUDI_EXPECT(r_max < 1.1);
 }
 
+GAUDI_TEST(windychien_make_knot_weave_or_catalog) {
+  const windychien::braid weave =
+      windychien::make_knot({.name = "plain_weave", .strands = 4, .frames = 3});
+  const windychien::braid plain = windychien::make_plain_weave(4, 3);
+  GAUDI_EXPECT(weave.strands == plain.strands);
+  GAUDI_EXPECT(weave.word == plain.word);
+  GAUDI_EXPECT(weave.layer_counts == plain.layer_counts);
+
+  const windychien::braid alias =
+      windychien::make_knot({.name = "plane_weave", .strands = 4, .frames = 3});
+  GAUDI_EXPECT(alias.word == plain.word);
+
+  const windychien::braid cat = windychien::make_knot({.name = "3_1"});
+  const windychien::braid loaded = windychien::load_braid("3_1");
+  GAUDI_EXPECT(cat.strands == loaded.strands);
+  GAUDI_EXPECT(cat.word == loaded.word);
+}
+
 GAUDI_TEST(duchamp_braid_sphere_rod_T8_7) {
   const asawa::rod::rod::ptr R = duchamp::load_braid_sphere_rod("T8_7");
   GAUDI_EXPECT(R != nullptr);

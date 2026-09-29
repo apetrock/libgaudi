@@ -3,8 +3,10 @@
 
 #include "gaudi/common.h"
 #include "gaudi/arp/arp.h"
+#include "gaudi/arp/edge_cov_tree.hpp"
 #include "gaudi/arp/hash_tree.hpp"
 #include "integrators.hpp"
+#include <memory>
 #include "gaudi/geometry_logger.hpp"
 #include <algorithm>
 #include <cmath>
@@ -77,6 +79,110 @@ namespace gaudi
           },
           bh_eps, false);
       return us;
+    }
+
+    // Datum binder for the covariance walk. bind() matches fast_summation.
+    struct cov_rod_sum {
+      std::vector<datum::ptr> data;
+      void bind(const datum::ptr &x) { data.push_back(x); }
+    };
+
+    inline arp::edge_cov_tree<2>::ptr build_rod_cov_tree(asawa::rod::rod &R) {
+      const std::vector<vec3> &x = R.x();
+      const std::vector<index_t> edges = R.get_edge_vert_ids();
+      return arp::edge_cov_tree<2>::create(edges, x);
+    }
+
+    inline std::vector<index_t> rod_cov_edge_ids(const asawa::rod::rod &R) {
+      auto rverts = R.get_vert_range();
+      return std::vector<index_t>(rverts.begin(), rverts.end());
+    }
+
+    // One count per integrate_over_cov_tree call, not per query.
+    inline int &cov_walk_count_slot() {
+      static int n = 0;
+      return n;
+    }
+    inline int cov_walk_count() { return cov_walk_count_slot(); }
+
+    // cone_eps < 0 uses the box ratio for the tangent chord as well.
+    inline real cov_cone_eps(real box_eps, real cone_eps) {
+      return cone_eps < real(0) ? box_eps : cone_eps;
+    }
+
+    // Point queries against an existing rod edge_cov_tree. Near and far are
+    // the pair kernels. The helper fills the sample: a leaf is the query
+    // projected onto that edge; a far node is μ_c, with the tangent datum's
+    // node value set to μ_T so the kernel reads the axis. A non-positive box
+    // or cone threshold never opens. The tree is not rebuilt.
+    template <typename T, class Bind, class Near, class Far>
+    std::vector<T>
+    integrate_over_cov_tree(const arp::edge_cov_tree<2> &tree,
+                            const std::vector<index_t> &edge_ids,
+                            const std::vector<vec3> &p_pov, Bind &&bind_fcn,
+                            Near &&near, Far &&far, real bh_eps = 0.25,
+                            int tangent_slot = 1, real cone_eps = -1) {
+      std::vector<T> us(p_pov.size(), z::zero<T>());
+      if (tree.internal_nodes_.empty())
+        return us;
+
+      cov_rod_sum sum;
+      bind_fcn(edge_ids, sum);
+      for (datum::ptr &d : sum.data)
+        d->pyramid(tree);
+      if (tangent_slot >= 0 &&
+          tangent_slot < static_cast<int>(sum.data.size())) {
+        auto tangent = std::dynamic_pointer_cast<vec3_datum>(
+            sum.data[static_cast<size_t>(tangent_slot)]);
+        if (tangent && tangent->node_data().size() == tree.mu_T_.size())
+          tangent->node_data() = tree.mu_T_;
+      }
+
+      const std::vector<datum::ptr> &data = sum.data;
+      const real cone = cov_cone_eps(bh_eps, cone_eps);
+      ++cov_walk_count_slot();
+#pragma omp parallel for
+      for (int i = 0; i < static_cast<int>(p_pov.size()); ++i) {
+        T acc = z::zero<T>();
+        arp::traverse_cov_opening(
+            tree, static_cast<index_t>(i), p_pov[static_cast<size_t>(i)],
+            bh_eps, cone,
+            [&](index_t node_id, index_t qi, const vec3 &pi) {
+              acc += far(qi, node_id, pi, tree.mu_c(node_id), data, BRANCH,
+                         tree);
+            },
+            [&](index_t leaf_id, index_t, index_t qi, const vec3 &pi) {
+              const index_t prim = tree.get_index(static_cast<size_t>(leaf_id));
+              const index_t ia = tree.adjacency_[static_cast<size_t>(2 * prim)];
+              const index_t ib =
+                  tree.adjacency_[static_cast<size_t>(2 * prim + 1)];
+              const vec3 &x0 = tree.data_[static_cast<size_t>(ia)];
+              const vec3 &x1 = tree.data_[static_cast<size_t>(ib)];
+              if ((x0 - x1).norm() < real(1e-8))
+                return;
+              const vec3 pj = va::project_on_line(x0, x1, pi);
+              acc += near(qi, leaf_id, pi, pj, data, LEAF, tree);
+            });
+        us[static_cast<size_t>(i)] = acc;
+      }
+      return us;
+    }
+
+    template <typename T, class Bind, class Near, class Far>
+    std::vector<T> integrate_over_rod_cov(asawa::rod::rod &R,
+                                          const std::vector<vec3> &p_pov,
+                                          Bind &&bind_fcn, Near &&near,
+                                          Far &&far, real bh_eps = 0.25,
+                                          int tangent_slot = 1,
+                                          real cone_eps = -1) {
+      arp::edge_cov_tree<2>::ptr tree = build_rod_cov_tree(R);
+      if (!tree)
+        return std::vector<T>(p_pov.size(), z::zero<T>());
+      return integrate_over_cov_tree<T>(*tree, rod_cov_edge_ids(R), p_pov,
+                                        std::forward<Bind>(bind_fcn),
+                                        std::forward<Near>(near),
+                                        std::forward<Far>(far), bh_eps,
+                                        tangent_slot, cone_eps);
     }
 
     template <typename T>

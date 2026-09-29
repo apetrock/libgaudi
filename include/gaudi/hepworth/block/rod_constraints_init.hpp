@@ -185,14 +185,19 @@ void init_straight(const asawa::rod::rod &R,
                      std::vector<projection_constraint::ptr> &constraints,
                      const real &w, std::vector<sim_block::ptr> blocks,
                      bool skip = false) {
-  int Ni = R.corner_count();
+  if (!(w > real(0)))
+    return;
   auto verts = R.get_vert_range();
-  int N = skip ? verts.size() - 1 : verts.size();
+  const int N = skip ? static_cast<int>(verts.size()) - 1
+                     : static_cast<int>(verts.size());
   for (int i = 0; i < N; i++) {
     if (R.length(verts[i]) < 1e-6)
       continue;
-    asawa::rod::consec_t c = R.consec(verts[i]);
-    constraints.push_back(straight::create({c[1], c[2], Ni}, w, blocks));
+    std::array<index_t, 4> ids;
+    if (!gather_four_corner_window(R, verts[i], ids))
+      continue;
+    constraints.push_back(
+        straight::create({ids[0], ids[1], ids[2], ids[3]}, w, blocks));
   }
 }
 

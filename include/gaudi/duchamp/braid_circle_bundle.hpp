@@ -17,12 +17,8 @@ namespace duchamp {
 
 /// Braid knot + matching sphere shell, built in the same ambient circle.
 struct braid_circle_config {
-  /// If true: plain weave (even frames 0-1,2-3,…; odd 1-2,3-4,…).
-  /// If false: load `knot_name` from the catalog.
-  bool use_plain_weave = true;
-  int weave_strands = 50;
-  int weave_frames = 50;
-  std::string knot_name = "K11a359";
+  /// `"plain_weave"` uses strands/frames. Any other name is a catalog knot.
+  windychien::knot_spec knot{.name = "plain_weave", .strands = 50, .frames = 50};
   braid_planar_params planar{};
   // Keep dense circumferential subdiv even with fewer weave frames.
   braid_sphere_params sphere{.n_lat = 256};
@@ -53,10 +49,7 @@ make_braid_circle_bundle(const braid_circle_config &cfg = {}) {
     planar.dy = planar.dx;
   }
 
-  const windychien::braid b =
-      cfg.use_plain_weave
-          ? windychien::make_plain_weave(cfg.weave_strands, cfg.weave_frames)
-          : windychien::load_braid(cfg.knot_name);
+  const windychien::braid b = windychien::make_knot(cfg.knot);
 
   braid_circle_bundle out;
   out.config = cfg;

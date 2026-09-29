@@ -1,6 +1,8 @@
 #ifndef GAUDI_DUCHAMP_TP_CONFIG_HPP
 #define GAUDI_DUCHAMP_TP_CONFIG_HPP
 
+#include <vector>
+
 #include "gaudi/common.h"
 #include "gaudi/duchamp/modules/ccd_step.hpp"
 #include "gaudi/duchamp/modules/tp_line_search.hpp"
@@ -33,23 +35,6 @@ inline void resolve_soft_tangent_scales(soft_tangent_point_force_config &cfg,
     cfg.tau = std::max(cfg.tau_frac, real(1e-6)) * cfg.R_min;
 }
 
-struct harmonic_tangent_point_force_config {
-  real w = 1.0;
-  /// Leaf = regularized TP density k; l0 scaled by Cc unless absolute set later.
-  real l0 = 0.1;
-  real l1 = 4.0; ///< Gaussian mollifier length / Cc
-  real p0 = 6.0;
-  real p1 = 2.0; ///< unused (Gaussian)
-  real smooth_l0 = 0.0; ///< if >0, absolute mollifier length
-};
-
-inline void resolve_harmonic_tangent_scales(harmonic_tangent_point_force_config &cfg,
-                                            real /*rod_radius*/, real Cc) {
-  const real eps = std::max(Cc, real(1e-6));
-  if (!(cfg.smooth_l0 > 0.0))
-    cfg.smooth_l0 = std::max(cfg.l1, real(1e-6)) * eps;
-}
-
 /// Cauchy leaf: K = |N·dp|^p / (|dp|²+ε²)^p with ε = l0 · Cc (already regularized).
 struct cauchy_tangent_point_force_config {
   real w = 1.0;
@@ -57,20 +42,19 @@ struct cauchy_tangent_point_force_config {
   real p = 6.0;
 };
 
-/// Cauchy + λ circle-agreement: E = ½(Ki+Kj) + λ EΔ(|ci−cj|).
-struct cauchy_agree_tangent_point_force_config {
-  real w = 1.0;
-  real l0 = 1.0; ///< ε / Cc
-  real p = 6.0;
-  real lam = 0.5; ///< weight on scale-free circle center mismatch EΔ
-};
-
-/// Compose: drive = −(w0·slide + w1·cauchy) = w0·t − w1·∇K (positive w0,w1).
-struct surface_slide_tangent_point_force_config {
-  real w0 = 1.0; ///< circle-slide weight
-  real w1 = 1.0; ///< Cauchy core weight
-  real l0 = 1.0; ///< Cauchy ε / Cc
-  real p = 6.0;
+/// Sobolev: f = Cauchy ∇K, then MG/Jacobi Ag=f with A=M+α_B B+α_0 B_0.
+struct sobolev_tangent_point_force_config {
+  real w = 1.0;   ///< Cauchy leaf weight
+  real l0 = 0.01; ///< Cauchy ε / Cc (also metric length regularizer)
+  real p = 6.0;   ///< Cauchy / metric power
+  real alpha_B = 1.0;
+  real alpha_0 = 1.0;
+  real mass = 1.0; ///< diagonal M scale on sample masses
+  int jacobi_iters = 8; ///< pre/post smooth + coarsest Jacobi budget
+  int num_v_cycles = 2;
+  int max_levels = 4; ///< incl. L0; ≤0 ⇒ full forest depth
+  real bh_eps = 0.25;  ///< box ratio r_x < dist * bh_eps; ≤0 ⇒ leaves-only
+  real cone_eps = 1.0; ///< tangent chord r_T < cone_eps; ≤0 ⇒ leaves-only
 };
 
 enum class tangent_point_type {
@@ -78,24 +62,19 @@ enum class tangent_point_type {
   regularized,
   /// Softmin-floor composition; exact chain-rule ∇/H.
   soft,
-  /// E=M(T)=κ*T with T=k; exact leaf ∇T/HT then mollify.
-  harmonic,
   /// Cauchy K with ε in E; exact ∇K/HK.
   cauchy,
-  /// Cauchy + λ same-circle agreement (EΔ).
-  cauchy_agree,
-  /// w0·slide + w1·cauchy (composed from the two integrators).
-  surface_slide
+  /// Sobolev: f = Cauchy ∇K, then MG Ag=f (A=M+α_B B+α_0 B_0).
+  sobolev
 };
 
 struct tangent_point_solver_config {
-  tangent_point_type type = tangent_point_type::soft;
+  /// One or more kernels. The propose field is the sum of their gradients.
+  std::vector<tangent_point_type> type{tangent_point_type::soft};
   tangent_point_force_config regularized{};
   soft_tangent_point_force_config soft{};
-  harmonic_tangent_point_force_config harmonic{};
   cauchy_tangent_point_force_config cauchy{};
-  cauchy_agree_tangent_point_force_config cauchy_agree{};
-  surface_slide_tangent_point_force_config surface_slide{};
+  sobolev_tangent_point_force_config sobolev{};
   /// Shared alpha-window settings (all TP types).
   tp_line_search_config line_search{};
 
@@ -117,6 +96,13 @@ struct tangent_point_solver_config {
       .chain_skip_hops = 8,
   };
 };
+
+inline tangent_point_type
+tp_primary_type(const tangent_point_solver_config &cfg) {
+  if (cfg.type.empty())
+    return tangent_point_type::soft;
+  return cfg.type.front();
+}
 
 } // namespace duchamp
 } // namespace gaudi

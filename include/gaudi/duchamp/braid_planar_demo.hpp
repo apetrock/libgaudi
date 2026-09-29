@@ -19,6 +19,7 @@
 #include "gaudi/duchamp/modules/tp_energies.hpp"
 #include "gaudi/duchamp/modules/tp_line_search.hpp"
 #include "gaudi/hepworth/blocks/rod_position_block.hpp"
+#include "gaudi/hepworth/blocks/rod_quaternion_block.hpp"
 #include "gaudi/hepworth/blocks/rod_velocity_block.hpp"
 #include "gaudi/hepworth/constraints/bundles.hpp"
 #include "gaudi/hepworth/nodes/block_solver_node.hpp"
@@ -31,10 +32,9 @@ namespace gaudi {
 namespace duchamp {
 
 struct braid_planar_demo_config {
-  bool use_plain_weave = false;
-  int weave_strands = 50;
-  int weave_frames = 50;
-  std::string knot_name = "K11a359";
+  // windychien::knot_spec knot{.name = "K11a359"};
+  windychien::knot_spec knot{
+      .name = "plain_weave", .strands = 50, .frames = 50};
   braid_planar_params planar{};
   braid_sphere_params sphere{.n_lat = 256};
   vec3 rod_color = vec3(0.95, 0.55, 0.15);
@@ -43,37 +43,44 @@ struct braid_planar_demo_config {
   bool show_planar_graph = true;
 
   real edge_stretch_w = 1.0e-5;
+  /// >0: quaternion block + stretch_shear + four-frame straight. 0: edge_stretch only.
+  real straight_w = 1.0;
   real smooth_w = 1.0e-4;
-  real min_kink_w = 1.0e-4;
+  real min_kink_w = 1.0e-3;
   real collision_w = 1.0;
-  real dt = 0.05;
-  real damping = 0.5;
+  real dt = 0.2;
+  real damping = 0.05;
   int iterations = 20;
 
   tangent_point_solver_config tp{
-      //.type = tangent_point_type::cauchy,
-      //.type = tangent_point_type::regularized,
-      //.type = tangent_point_type::harmonic,
-      //.type = tangent_point_type::cauchy_agree,
-      .type = tangent_point_type::surface_slide,
+      .type = {tangent_point_type::cauchy, tangent_point_type::sobolev},
+      //.type = {tangent_point_type::sobolev},
 
       .regularized = {.w = 1.0, .l0 = 1.0, .p = 3.0},
       .soft = {.w = 1.0, .p = 6.0, .R_min_frac = 0.1, .tau_frac = 1.0},
-      .harmonic = {.w = 1.0, .l0 = 0.001, .l1 = 4.0, .p0 = 6.0, .p1 = 2.0},
-      .cauchy = {.w = 1.0, .l0 = 0.5, .p = 3.0},
-      .cauchy_agree = {.w = 1.0, .l0 = 0.00001, .p = 2.0, .lam = 0.1},
-      .surface_slide = {.w0 = 1.0, .w1 = 0.001, .l0 = 0.2, .p = 3.0},
-      .line_search = {.alpha_min = 1.0e-7,
+      .cauchy = {.w = 1e-6, .l0 = 0.1, .p = 6.0},
+      .sobolev = {.w = 1.0,
+                  .l0 = 0.001,
+                  .p = 2.0,
+                  .alpha_B = 1.0,
+                  .alpha_0 = 1.0,
+                  .mass = 0.0001,
+                  .jacobi_iters = 16,
+                  .num_v_cycles = 4,
+                  .max_levels = 12,
+                  .bh_eps = 0.25,
+                  .cone_eps = 1.0},
+      .line_search = {.alpha_min = 1.0e-6,
                       .alpha_max = 0.0,
                       .fallback_alpha = 0.0,
-                      .trust_frac_lavg = 1.0,
+                      .trust_frac_lavg = 128.0,
                       .shrink = 0.5,
                       .max_backtracks = 32,
-                      .verbose = false},
+                      .verbose = true},
       .peak_scale = 1.0,
       .ccd_dx_max_frac = 0.1,
-      .ccd = {.dx_max = 0.0, .dt_max = 0.05, .dt_min = 1.0e-8, .max_substeps = 16},
-      .neighborhood = {.cfl_frac = 0.4,
+      .ccd = {.dx_max = 0.0, .dt_max = 1.0, .dt_min = 1.0e-8, .max_substeps = 32},
+      .neighborhood = {.cfl_frac = 0.8,
                        .agg = cfl_agg_mode::hard_min,
                        .gate_frac = 0.1,
                        .use_envelope = true,
@@ -82,7 +89,7 @@ struct braid_planar_demo_config {
   bool use_velocity_block = true;
   bool ccd_enable = true;
   bool ccd_verbose = true;
-  bool show_tp_gradients = false;
+  bool show_tp_gradients = true;
 };
 
 inline const braid_planar_demo_config k_braid_planar_demo_default{};
@@ -100,11 +107,7 @@ public:
   explicit braid_planar_demo(
       const braid_planar_demo_config &cfg = k_braid_planar_demo_default)
       : _cfg(cfg) {
-    const windychien::braid b =
-        _cfg.use_plain_weave
-            ? windychien::make_plain_weave(_cfg.weave_strands,
-                                           _cfg.weave_frames)
-            : windychien::load_braid(_cfg.knot_name);
+    const windychien::braid b = windychien::make_knot(_cfg.knot);
 
     braid_planar_params planar = _cfg.planar;
     planar.close = true;
@@ -148,21 +151,54 @@ public:
 
     _rod_pos = std::make_shared<hepworth::block::rod_position_block>(__R, __Rd);
     _rod_vel = std::make_shared<hepworth::block::rod_velocity_block>(__R, __Rd);
+    const bool use_frames = _cfg.straight_w > real(0);
+    if (use_frames)
+      _rod_quat =
+          std::make_shared<hepworth::block::rod_quaternion_block>(__R, __Rd);
 
     _ccd_dx_max_explicit = (_cfg.tp.ccd.dx_max > 0.0);
     ccd_config ccd = _cfg.tp.ccd;
     if (ccd.dt_max <= 0.0)
       ccd.dt_max = _cfg.dt;
-    if (!_ccd_dx_max_explicit && _cfg.tp.ccd_dx_max_frac > 0.0)
+    if (!_cfg.use_velocity_block && !_ccd_dx_max_explicit &&
+        _cfg.tp.ccd_dx_max_frac > 0.0)
       ccd.dx_max = _cfg.tp.ccd_dx_max_frac * lavg;
     ccd.neighborhood = _cfg.tp.neighborhood;
     if (ccd.neighborhood.radius <= 0.0)
       ccd.neighborhood.radius = _cfg.rod_radius;
     if (ccd.neighborhood.dt_max <= 0.0)
-      ccd.neighborhood.dt_max = _cfg.dt;
+      ccd.neighborhood.dt_max = ccd.dt_max;
     _ccd = ccd;
 
-    if (_cfg.use_velocity_block) {
+    if (_cfg.use_velocity_block && use_frames) {
+      _solver_config_vel_frame =
+          hepworth::block::block_solver_builder<
+              hepworth::block::rod_velocity_block,
+              hepworth::block::rod_quaternion_block>::create()
+              .with_blocks(_rod_vel, _rod_quat)
+              .with_recompute(
+                  hepworth::block::make_rod_stretch_shear_recompute<0, 1>(
+                      __R, _cfg.edge_stretch_w))
+              .with_recompute(
+                  hepworth::block::make_rod_straight_recompute<1>(
+                      __R, _cfg.straight_w))
+              .with_recompute(hepworth::block::make_rod_smooth_recompute<0>(
+                  __R, _cfg.smooth_w))
+              .with_recompute(hepworth::block::make_rod_min_kink_recompute<0>(
+                  __R, _cfg.min_kink_w))
+              .with_recompute(
+                  hepworth::block::make_rod_collisions_recompute<0>(
+                      __R, __Rd, _cfg.collision_w))
+              .dt(_cfg.dt)
+              .damping(_cfg.damping)
+              .iterations(_cfg.iterations)
+              .build();
+
+      _solver_node_vel_frame =
+          _graph.create_node<hepworth::block::block_solver_node<
+              hepworth::block::rod_velocity_block,
+              hepworth::block::rod_quaternion_block>>(_solver_config_vel_frame);
+    } else if (_cfg.use_velocity_block) {
       _solver_config_vel =
           hepworth::block::block_solver_builder<
               hepworth::block::rod_velocity_block>::create()
@@ -185,6 +221,34 @@ public:
       _solver_node_vel =
           _graph.create_node<hepworth::block::block_solver_node<
               hepworth::block::rod_velocity_block>>(_solver_config_vel);
+    } else if (use_frames) {
+      _solver_config_pos_frame =
+          hepworth::block::block_solver_builder<
+              hepworth::block::rod_position_block,
+              hepworth::block::rod_quaternion_block>::create()
+              .with_blocks(_rod_pos, _rod_quat)
+              .with_recompute(
+                  hepworth::block::make_rod_stretch_shear_recompute<0, 1>(
+                      __R, _cfg.edge_stretch_w))
+              .with_recompute(
+                  hepworth::block::make_rod_straight_recompute<1>(
+                      __R, _cfg.straight_w))
+              .with_recompute(hepworth::block::make_rod_smooth_recompute<0>(
+                  __R, _cfg.smooth_w))
+              .with_recompute(hepworth::block::make_rod_min_kink_recompute<0>(
+                  __R, _cfg.min_kink_w))
+              .with_recompute(
+                  hepworth::block::make_rod_collisions_recompute<0>(
+                      __R, __Rd, _cfg.collision_w))
+              .dt(_cfg.dt)
+              .damping(_cfg.damping)
+              .iterations(_cfg.iterations)
+              .build();
+
+      _solver_node_pos_frame =
+          _graph.create_node<hepworth::block::block_solver_node<
+              hepworth::block::rod_position_block,
+              hepworth::block::rod_quaternion_block>>(_solver_config_pos_frame);
     } else {
       _solver_config_pos =
           hepworth::block::block_solver_builder<
@@ -213,8 +277,12 @@ public:
     _tp = tangent_point_drive::create(_graph, __R, __Rd, _cfg.tp,
                                       _cfg.rod_radius);
     _tp.set_velocity_output(_cfg.use_velocity_block);
-    if (_cfg.use_velocity_block)
+    if (_solver_node_vel_frame)
+      _tp.link_to(_graph, _solver_node_vel_frame->input_at<0>());
+    else if (_solver_node_vel)
       _tp.link_to(_graph, _solver_node_vel->input_at<0>());
+    else if (_solver_node_pos_frame)
+      _tp.link_to(_graph, _solver_node_pos_frame->input_at<0>());
     else
       _tp.link_to(_graph, _solver_node_pos->input_at<0>());
   }
@@ -230,7 +298,8 @@ public:
 
   void step(int frame) {
     auto sync_dx_max = [this]() {
-      if (_ccd_dx_max_explicit || !(_cfg.tp.ccd_dx_max_frac > 0.0))
+      if (_cfg.use_velocity_block || _ccd_dx_max_explicit ||
+          !(_cfg.tp.ccd_dx_max_frac > 0.0))
         return;
       const real lavg = std::max(__R->lavg(), real(1e-6));
       _ccd.dx_max = _cfg.tp.ccd_dx_max_frac * lavg;
@@ -272,9 +341,15 @@ public:
     };
 
     auto run_solver = [this](real dti) {
-      if (_cfg.use_velocity_block) {
+      if (_solver_node_vel_frame) {
+        _solver_node_vel_frame->set_dt(dti);
+        _solver_node_vel_frame->compute();
+      } else if (_solver_node_vel) {
         _solver_node_vel->set_dt(dti);
         _solver_node_vel->compute();
+      } else if (_solver_node_pos_frame) {
+        _solver_node_pos_frame->set_dt(dti);
+        _solver_node_pos_frame->compute();
       } else {
         _solver_node_pos->set_dt(dti);
         _solver_node_pos->compute();
@@ -361,25 +436,18 @@ public:
             std::vector<vec3> &drive = mutable_drive_field();
             drive = frozen_disp;
             if (_cfg.use_velocity_block) {
-              const real h_safe = std::max(h, real(1e-20));
-              for (auto &a : drive)
-                a /= h_safe;
+              // v = δ. ccd_velocity returns the safe fraction of δ.
+              _ccd_breakdown.drive_scale = 1.0;
             } else {
               const real h2 = std::max(h * h, real(1e-20));
               for (auto &a : drive)
                 a /= h2;
-            }
-            real bite_cap = _ccd.dx_max;
-            if (alpha_left > 0.0) {
-              if (!(bite_cap > 0.0) || alpha_left < bite_cap)
-                bite_cap = alpha_left;
-            }
-            if (bite_cap > 0.0) {
-              if (_cfg.use_velocity_block) {
-                const real h_safe = std::max(h, real(1e-20));
-                _ccd_breakdown.drive_scale = ccd_scale_field_to_dx_max(
-                    drive, bite_cap / h_safe, _ccd.eps);
-              } else {
+              real bite_cap = _ccd.dx_max;
+              if (alpha_left > 0.0) {
+                if (!(bite_cap > 0.0) || alpha_left < bite_cap)
+                  bite_cap = alpha_left;
+              }
+              if (bite_cap > 0.0) {
                 _ccd_breakdown.drive_scale = ccd_scale_force_to_dx_max(
                     drive, h, bite_cap, _ccd.eps);
               }
@@ -393,6 +461,9 @@ public:
           if (_cfg.use_velocity_block) {
             dti = ccd_velocity(*__R, drive, _ccd, &_ccd_stats.last,
                                &_ccd_breakdown);
+            // v is the remaining δ, so h > 1 would step past it.
+            if (have_frozen)
+              dti = std::min(dti, real(1.0));
           } else {
             _ccd_breakdown.drive = ccd_field_stats_vec(drive);
             ccd_diagnose_rod(*__R, &_ccd_breakdown.rod_x);
@@ -484,16 +555,29 @@ private:
 
   hepworth::block::rod_position_block::ptr _rod_pos;
   hepworth::block::rod_velocity_block::ptr _rod_vel;
+  hepworth::block::rod_quaternion_block::ptr _rod_quat;
   hepworth::block::block_solver_config<hepworth::block::rod_position_block>
       _solver_config_pos;
   hepworth::block::block_solver_config<hepworth::block::rod_velocity_block>
       _solver_config_vel;
+  hepworth::block::block_solver_config<hepworth::block::rod_position_block,
+                                       hepworth::block::rod_quaternion_block>
+      _solver_config_pos_frame;
+  hepworth::block::block_solver_config<hepworth::block::rod_velocity_block,
+                                       hepworth::block::rod_quaternion_block>
+      _solver_config_vel_frame;
   liblombardi::GraphContext _graph;
   tangent_point_drive _tp{};
   hepworth::block::block_solver_node<hepworth::block::rod_position_block>::ptr
       _solver_node_pos;
   hepworth::block::block_solver_node<hepworth::block::rod_velocity_block>::ptr
       _solver_node_vel;
+  hepworth::block::block_solver_node<hepworth::block::rod_position_block,
+                                     hepworth::block::rod_quaternion_block>::ptr
+      _solver_node_pos_frame;
+  hepworth::block::block_solver_node<hepworth::block::rod_velocity_block,
+                                     hepworth::block::rod_quaternion_block>::ptr
+      _solver_node_vel_frame;
   ccd_config _ccd{};
   ccd_step_stats _ccd_stats{};
   ccd_dt_breakdown _ccd_breakdown{};

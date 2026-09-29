@@ -150,6 +150,7 @@ inline real ccd_displacement(const asawa::rod::rod &rod,
   }
   cfl_neighborhood_config neigh = cfg.neighborhood;
   neigh.h_ref = 1.0;
+  neigh.linear_time = true;
   if (neigh.dt_max <= 0.0 && cfg.dt_max > 0.0)
     neigh.dt_max = cfg.dt_max;
   const cfl_neighborhood_result r = cfl_estimate_rod_from_u(rod, u, neigh);

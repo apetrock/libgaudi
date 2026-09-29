@@ -2,20 +2,26 @@
 
 ## Status
 
-Draft — design lock for a **pointerless residual forest** on rods, aimed at
-**geometric multigrid (V-cycle)** under **dynamic topology**.
+**Phase 1 (forest on fat rod, x-channel):** implemented —
+`include/gaudi/asawa/rod/residual_forest.hpp` and
+`include/gaudi/test/residual_forest_tests.hpp` (five tests green).
 
-**This doc only.** No `residual_forest` implementation or data-less rod migration
-until Phase A/B are scheduled separately.
+Preferred hierarchy for **uniform V-cycles** (same Calder TP + CFL/line search
+at every level via `pickle_rod` → relax → `set`). ARP BVH Procrustes pyramid MG
+remains experiments-only (no line connectivity).
+
+**Data-less rod** (old Phase A) deferred until pickle must project arbitrary
+datums beyond `x`.
 
 **Related code (today):**
 [`rod.hpp`](../include/gaudi/asawa/rod/rod.hpp) (fat attribute member arrays),
 [`dynamic.hpp`](../include/gaudi/asawa/rod/dynamic.hpp) (BVH / split-collapse adapter),
 [`shell.hpp`](../include/gaudi/asawa/shell/shell.hpp) (topology + datum pool — target parity),
 [`slab_prism_operators.hpp`](../include/gaudi/hepworth/constraints/slab/slab_prism_operators.hpp)
-(`fit_procrustes_rotation` — Kabsch SO(3) pattern to reuse or mirror).
+(`fit_procrustes_rotation` — Kabsch SO(3) pattern),
+[`procrustes_pyramid.hpp`](../include/gaudi/arp/procrustes_pyramid.hpp) (`procrustes_rotation`).
 
-**Target header (Phase B):**
+**Header:**
 `include/gaudi/asawa/rod/residual_forest.hpp`
 
 ---
@@ -66,33 +72,11 @@ alloc/free of hierarchy nodes — out of scope.
 
 ---
 
-## Prephase: data-less rod (Phase A)
+## Prephase: data-less rod (deferred)
 
-### Problem
-
-Shell is topology-only + `insert_datum` / `get_datum`. Rod today bakes
-`__x, __v, __u, __o, __M, __J, __l0, __t` into the object; `pack()` and
-`dynamic::interp` hardcode each field.
-
-Forest `pickle(level, datum_id)` must project **arbitrary** attribute channels.
-Building the forest on the fat rod forces a second migration.
-
-### Decision
-
-**Phase A before Phase B:** make `asawa::rod` data-less (shell parity).
-
-| Keep on `rod` | Move to datums |
-|---------------|----------------|
-| `__corners_prev` / `__corners_next` | positions `x`, velocity `v`, frames `u`/`o`, `l0`, masses, … |
-| `insert_datum` / `get_datum` / `get_data` | conventional slot ids (or first-insert convention) |
-
-Compatibility shims during migration: `rod::x()` → underlying x-datum data so
-braid / TP / knotted keep compiling.
-
-`dynamic` split/collapse/pack becomes **generic over all datums** (one interp path).
-
-Blast radius is still smallish (braid, knotted, vortex, rod tests/forces) — better
-now than after forest lands.
+Was required so `pickle(level, datum_id)` can project arbitrary channels.
+**Phase 1** ships x-only on the fat rod (`pickle` / `pickle_rod` / `set` on positions).
+Revisit data-less rod when non-x datums need residual transfer.
 
 ---
 

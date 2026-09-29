@@ -34,7 +34,9 @@ struct cfl_neighborhood_config {
   real u_abs_floor = 0.0;
   /// Enable swept-AABB displacement-envelope (broad-phase overlap).
   bool use_envelope = true;
-  real h_ref = 0.0; ///< predicted u = h_ref² f
+  real h_ref = 0.0; ///< predicted u = h_ref² f (quadratic) or h_ref · v (linear)
+  /// false: dt = h √s (force, Δx = h² f). true: dt = h · s (velocity, Δx = h v).
+  bool linear_time = false;
   real dt_max = 0.0;
   real dt_min = 1.0e-8;
   real eps = 1.0e-16;
@@ -156,11 +158,14 @@ inline real cfl_edge_scale(const vec3 &R, const vec3 &U, real cfl_frac,
                        nullptr);
 }
 
-inline real cfl_scale_to_dt(real s, real h_ref, real eps) {
+inline real cfl_scale_to_dt(real s, real h_ref, real eps,
+                            bool linear_time = false) {
   if (!(s > 0.0) || !(h_ref > 0.0))
     return 0.0;
   if (!std::isfinite(s))
     return std::numeric_limits<real>::infinity();
+  if (linear_time)
+    return h_ref * s;
   return h_ref * std::sqrt(std::max(s, eps));
 }
 
@@ -603,7 +608,8 @@ cfl_estimate_rod_from_u(const asawa::rod::rod &rod,
     if (!std::isfinite(s) || !(s > 0.0))
       continue;
 
-    const real dti = cfl_scale_to_dt(s, cfg.h_ref, cfg.eps);
+    const real dti =
+        cfl_scale_to_dt(s, cfg.h_ref, cfg.eps, cfg.linear_time);
     if (!std::isfinite(dti) || !(dti > 0.0))
       continue;
 

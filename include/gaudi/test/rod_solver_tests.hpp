@@ -8,9 +8,11 @@
 #include "gaudi/asawa/rod/rod.hpp"
 #include "gaudi/hepworth/blocks/rod_position_block.hpp"
 #include "gaudi/hepworth/blocks/rod_quaternion_block.hpp"
+#include "gaudi/hepworth/block/rod_constraints.hpp"
 #include "gaudi/hepworth/constraints/bundles.hpp"
 #include "gaudi/hepworth/nodes/solver_builder.hpp"
 #include "gaudi/test/test.hpp"
+#include "gaudi/vec_addendum.h"
 
 namespace gaudi {
 namespace test {
@@ -70,6 +72,31 @@ GAUDI_TEST(rod_solver_one_step) {
   hepworth::block::projection_solver solver;
   hepworth::block::run_solver_step(config, solver);
   GAUDI_ASSERT((R->x()[0] - x0).norm() > 1e-12 || (R->v()[0] - v0).norm() > 1e-12);
+}
+
+GAUDI_TEST(straight_four_frame_sign_flip) {
+  auto Rz = [](real a) {
+    return quat(Eigen::AngleAxis<real>(a, vec3::UnitZ()));
+  };
+  quat Q[4] = {Rz(0.0), Rz(0.2), Rz(0.4), Rz(0.6)};
+  Q[1].coeffs() *= real(-1);
+
+  quat t1, t2;
+  hepworth::block::straight::target_interiors(Q, t1, t2);
+
+  quat e1 = va::slerp(Rz(0.0), Rz(0.6), static_cast<float>(1.0 / 3.0));
+  quat e2 = va::slerp(Rz(0.0), Rz(0.6), static_cast<float>(2.0 / 3.0));
+  if (e1.coeffs().dot(Q[1].coeffs()) < 0.0)
+    e1.coeffs() *= real(-1);
+  if (e2.coeffs().dot(Q[2].coeffs()) < 0.0)
+    e2.coeffs() *= real(-1);
+
+  GAUDI_ASSERT(t1.normalized().coeffs().dot(e1.normalized().coeffs()) >
+               real(0.999));
+  GAUDI_ASSERT(t2.normalized().coeffs().dot(e2.normalized().coeffs()) >
+               real(0.999));
+  GAUDI_ASSERT(t1.coeffs().dot(Q[1].coeffs()) > real(0));
+  GAUDI_ASSERT(t2.coeffs().dot(Q[2].coeffs()) > real(0));
 }
 
 } // namespace test

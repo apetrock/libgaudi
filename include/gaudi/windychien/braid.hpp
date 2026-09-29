@@ -9,6 +9,20 @@
 namespace gaudi {
 namespace windychien {
 
+/// One knot source. `name` selects it.
+/// `"plain_weave"` or `"plane_weave"` builds a tabby cloth from `strands` and
+/// `frames`. Any other name is loaded from the braid catalog (`"K11a359"`,
+/// `"3_1"`, `"T8_7"`, …), and `strands` / `frames` are unused.
+struct knot_spec {
+  std::string name = "K11a359";
+  int strands = 50;
+  int frames = 50;
+};
+
+inline bool knot_is_plain_weave(const std::string &name) {
+  return name == "plain_weave" || name == "plane_weave";
+}
+
 /// KnotTheory-style braid representative BR[k, l]:
 ///   strands = k
 ///   word[j] = ±i  → crossing between strands i and i+1 (1-based);
