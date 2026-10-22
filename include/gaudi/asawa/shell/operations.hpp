@@ -61,6 +61,10 @@ int count_cycle(shell &M, CornerId corner) {
   return t;
 }
 
+/// Contract edge `c` to a point: `vert(c)` is removed and `vert(other(c))`
+/// survives, at its own position (datums move it). The faces on either side
+/// lose one corner each; the caller merges them first if they would become
+/// two-sided. Returns `next(other(c))` from before the call.
 CornerId merge_edge(shell &M, CornerId corner_index) {
   CornerId c0 = corner_index;
   CornerId c1 = M.other(c0);
@@ -91,6 +95,12 @@ CornerId merge_edge(shell &M, CornerId corner_index) {
   return c1n;
 }
 
+/// Add the diagonal from `vert(c0)` to `vert(c1)`, both in one face `f0`.
+/// The new face holds `c0 .. prev(c1)` and the new corner `other(c0i)`
+/// (`vert(c1) -> vert(c0)`); `f0` keeps `c1 .. prev(c0)` and `c0i`
+/// (`vert(c0) -> vert(c1)`). Returns `c0i`. Passing `new_corner` /
+/// `new_face` reuses dead slots; otherwise this appends a pair and a face
+/// without growing EDGE / FACE datums (only `op_edges` allocates those).
 CornerId split_face(shell &M, CornerId c0, CornerId c1,
                     CornerId new_corner = corner_id(-1),
                     FaceId new_face = face_id(-1)) {
@@ -145,21 +155,49 @@ FaceId remove_dangling(shell &M, CornerId c0, CornerId c1) {
   return f0;
 }
 
+// A digon corner is a 1-cycle (vnext(c) == c). Any other ring on this vertex
+// is already closed and is not linked to the digon. After the digon corners
+// are cleared, either vbegin still heads that ring, or it named the digon and
+// has to move onto a remaining corner. remove_vertex only when nothing remains.
+void reseat_vertex(shell &M, VertId v, CornerId gone0, CornerId gone1) {
+  const CornerId head = M.vbegin(v);
+  const int h = static_cast<int>(head);
+  const int n = static_cast<int>(M.corner_count());
+  if (h >= 0 && h < n && head != gone0 && head != gone1 && M.next(head) >= 0 &&
+      M.vert(head) == v)
+    return;
+
+  for (int i = 0; i < n; ++i) {
+    CornerId c = corner_id(i);
+    if (M.next(c) < 0 || M.vert(c) != v)
+      continue;
+    M.set_vbegin(v, c);
+    M.vupdate(v);
+    return;
+  }
+  M.remove_vertex(v);
+}
+
 FaceId remove_cruft(shell &M, CornerId c0, CornerId c1) {
   FaceId f0 = M.face(c0);
   FaceId f1 = M.face(c1);
   VertId v0 = M.vert(c0);
   VertId v1 = M.vert(c1);
 
-  M.remove_vertex(v0);
-  M.remove_vertex(v1);
   M.remove_face(f0);
-  M.remove_face(f1);
-
+  if (f1 != f0)
+    M.remove_face(f1);
   M.remove_edge_pair(c0);
+
+  reseat_vertex(M, v0, c0, c1);
+  if (v1 != v0)
+    reseat_vertex(M, v1, c0, c1);
   return face_id(-1);
 }
 
+/// Delete edge `c0` (`c1 == other(c0)`) and join its two faces into
+/// `face(c0)`. When both sides are one face, removes a dangling spoke and its
+/// end vertex, or a two-corner loop. Returns the surviving face, or -1.
 FaceId merge_face(shell &M, CornerId c0, CornerId c1) {
   assert(c1 == M.other(c0));
   CornerId c0p = M.prev(c0);
@@ -198,6 +236,47 @@ FaceId merge_face(shell &M, CornerId c0, CornerId c1) {
   return f0;
 }
 
+// Length of the face cycle through c, or -1 when next/prev are not inverses.
+// Vertex walks only follow prev, so a cycle can still close after next and
+// prev have drifted; the triangle split uses both and then the ring does not.
+inline int face_len(const shell &M, CornerId c) {
+  if (static_cast<int>(c) < 0 || M.next(c) < 0)
+    return -1;
+  const int n = static_cast<int>(M.corner_count());
+  CornerId c0 = c;
+  for (int k = 1; k <= n; ++k) {
+    CornerId nx = M.next(c0);
+    if (static_cast<int>(nx) < 0 || M.prev(nx) != c0)
+      return -1;
+    if (nx == c)
+      return k;
+    c0 = nx;
+  }
+  return -1;
+}
+
+// Turn every consistent n-gon into triangles by clipping a diagonal between
+// a corner and the corner two steps ahead. A quad becomes two triangles; a
+// longer face sheds one triangle per clip. Inconsistent cycles are left alone.
+inline void triangulate_ngons(shell &M) {
+  const int nf = static_cast<int>(M.face_count());
+  for (int i = 0; i < nf; ++i) {
+    FaceId f = face_id(i);
+    if (M.fbegin(f) < 0)
+      continue;
+    for (int guard = 0; guard < 64; ++guard) {
+      CornerId c0 = M.fbegin(f);
+      const int len = face_len(M, c0);
+      if (len <= 3)
+        break;
+      CornerId c1 = M.next(M.next(c0));
+      if (static_cast<int>(c1) < 0 || c1 == c0 || M.vert(c0) == M.vert(c1))
+        break;
+      split_face(M, c0, c1);
+    }
+  }
+}
+
 CornerId subdivide_edge(shell &M, CornerId corner_index,
                         VertId new_vert = vert_id(-1),
                         CornerId new_corner0 = corner_id(-1),
@@ -207,8 +286,13 @@ CornerId subdivide_edge(shell &M, CornerId corner_index,
                         FaceId new_face1 = face_id(-1)) {
 
   CornerId c0 = corner_index;
-  CornerId c1 = M.next(M.other(c0));
+  CornerId c1 = M.other(c0);
+  // next(next) is the opposite corner only on a triangle. On an n-gon it
+  // splices the wrong prev and the endpoint ring no longer returns to vbegin.
+  if (face_len(M, c0) != 3 || face_len(M, c1) != 3)
+    return c0;
 
+  c1 = M.next(c1);
   c0 = split_edge(M, c0, new_vert, new_corner0);
   c1 = M.next(M.other(c0));
 
@@ -218,6 +302,39 @@ CornerId subdivide_edge(shell &M, CornerId corner_index,
   return c0;
 }
 
+/// The link condition for collapsing edge `c` of two triangles: its ends
+/// share exactly the two opposite vertices as neighbors. A third common
+/// neighbor (or a second edge between the ends) would pinch the surface.
+inline bool collapse_link_ok(const shell &M, CornerId c) {
+  const VertId v0 = M.vert(c), v1 = M.vert(M.other(c));
+  const std::vector<VertId> r0 = M.get_one_ring(v0);
+  int common = 0, ends = 0;
+  M.const_for_each_vertex(v1, [&](CornerId ci, const shell &m) {
+    const VertId w = m.vert(m.other(ci));
+    if (w == v0)
+      ++ends;
+    else if (std::find(r0.begin(), r0.end(), w) != r0.end())
+      ++common;
+  });
+  return ends == 1 && common == 2;
+}
+
+/// The guards `collapse_edge` applies, without changing the shell: the
+/// valences (ends at least 3, opposite vertices at least 4 so they keep 3)
+/// and, unless `degenerate`, the link condition.
+inline bool can_collapse(const shell &M, CornerId c, bool degenerate = false) {
+  const CornerId c1 = M.other(c);
+  if (M.vsize(M.vert(c)) < 3 || M.vsize(M.vert(c1)) < 3)
+    return false;
+  if (M.vsize(M.vert(M.prev(c))) < 4 || M.vsize(M.vert(M.prev(c1))) < 4)
+    return false;
+  return degenerate || collapse_link_ok(M, c);
+}
+
+/// Collapse edge `c` of two triangles: merge each triangle into its wing,
+/// then contract the edge. `vert(other(c))` survives and `vert(c)` is
+/// removed. Refuses (returns `c` unchanged) when `can_collapse` fails.
+/// Returns -1 when the merges consumed the edge.
 CornerId collapse_edge(shell &M, CornerId corner_index,
                        bool degenerate = false) {
 
@@ -227,20 +344,15 @@ CornerId collapse_edge(shell &M, CornerId corner_index,
   CornerId c0p = M.prev(c0);
   CornerId c1p = M.prev(c1);
 
-  if (count_cycle(M, c0) > 1 && !degenerate)
-    return corner_index;
-
-  if (M.vsize(M.vert(c0)) < 3)
-    return c0;
-  if (M.vsize(M.vert(c1)) < 3)
-    return c0;
-  if (M.vsize(M.vert(c0p)) < 4)
-    return c0;
-  if (M.vsize(M.vert(c1p)) < 4)
+  if (!can_collapse(M, c0, degenerate))
     return c0;
 
   merge_face(M, c0p, M.other(c0p));
+  if (M.next(c0) < 0)
+    return corner_id(-1);
   merge_face(M, c1p, M.other(c1p));
+  if (M.next(c0) < 0)
+    return corner_id(-1);
 
   c0 = merge_edge(M, c0);
 
@@ -249,6 +361,10 @@ CornerId collapse_edge(shell &M, CornerId corner_index,
   return c0;
 }
 
+/// Rotate the diagonal of the quad formed by the two triangles on `c`: the
+/// edge then joins the two opposite vertices `vert(prev(c))` and
+/// `vert(prev(other(c)))`. Refuses unless both faces are triangles. Does not
+/// check that the new edge is absent elsewhere.
 CornerId flip_edge(shell &M, CornerId corner_index) {
   CornerId c0i = corner_index;
   CornerId c0p = M.prev(c0i);
@@ -267,6 +383,11 @@ CornerId flip_edge(shell &M, CornerId corner_index) {
   VertId v1 = M.vert(c0p);
   VertId v2 = M.vert(c1i);
   VertId v3 = M.vert(c1p);
+
+  // Release builds drop the post-flip assert. Rewriting an n-gon here orphans
+  // a corner and the next subdivision walks a ring that does not close.
+  if (face_len(M, c0i) != 3 || face_len(M, c1i) != 3)
+    return c0i;
 
   M.link(c0pp, c0i);
   M.link(c0i, c1p);
@@ -300,6 +421,8 @@ CornerId flip_edge(shell &M, CornerId corner_index) {
   return c0i;
 }
 
+/// Delete `v` and its spokes, joining its fan into one face (an n-gon for
+/// valence n). Returns that face.
 FaceId remove_vertex(shell &M, VertId v) {
 
   std::vector<CornerId> corners;

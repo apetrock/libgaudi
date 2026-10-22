@@ -152,6 +152,8 @@ private:
       if (_demo)
         _demo->step(frame);
 
+      // Lines logged during the step stay. The publish below steals them.
+      // debug_draw adds the overlay for the mesh after the step.
       if (_demo)
         _demo->debug_draw();
       _channel.publish(capture_frame(frame));

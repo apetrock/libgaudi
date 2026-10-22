@@ -24,4 +24,10 @@ python3 scripts/knots/fetch_katlas_rdf.py --tables Rolfsen Knots11 --index
 | `Knots15.rdf.gz` | ~29MB | 253k |
 | `ht_index.json` | regenerable | union of tables |
 
-**Note:** HT dumps generally do **not** include `BraidWord` (Rolfsen does). For `K11a359` etc., use wiki `BR[…]` / `KnotTheory\``. Knotilus renders Gauss codes; it is not this RDF set.
+**Note:** HT dumps do **not** include `BraidWord` (Rolfsen does). Braid words are built from the DT codes already in `ht_index.json`:
+
+```bash
+python3 scripts/knots/import_ht_braids.py
+```
+
+That uses `spherogram.Link.braid_word` (`pip install spherogram`) and regenerates `assets/knots/braids.json`. Knotilus renders Gauss codes; it is not this RDF set.

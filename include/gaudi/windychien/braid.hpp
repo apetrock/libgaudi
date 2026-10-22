@@ -1,7 +1,11 @@
 #ifndef GAUDI_WINDYCHIEN_BRAID_HPP
 #define GAUDI_WINDYCHIEN_BRAID_HPP
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <numeric>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -11,12 +15,15 @@ namespace windychien {
 
 /// One knot source. `name` selects it.
 /// `"plain_weave"` or `"plane_weave"` builds a tabby cloth from `strands` and
-/// `frames`. Any other name is loaded from the braid catalog (`"K11a359"`,
-/// `"3_1"`, `"T8_7"`, …), and `strands` / `frames` are unused.
+/// `frames`. `"random"` builds an irregular braid with `strands` strings and
+/// `frames` crossings, repeated from `seed`. Any other name is loaded from the
+/// braid catalog (`"K11a359"`, `"3_1"`, `"T8_7"`, …), and `strands` / `frames`
+/// are unused.
 struct knot_spec {
   std::string name = "K11a359";
   int strands = 50;
   int frames = 50;
+  std::uint32_t seed = 1;
 };
 
 inline bool knot_is_plain_weave(const std::string &name) {
@@ -131,6 +138,187 @@ inline std::vector<int> braid_end_rows(const braid &b) {
     }
   }
   return pos;
+}
+
+/// Link components of the closure. Signs do not matter: a generator only swaps
+/// the two strands in its rows.
+inline int braid_component_count(const braid &b) {
+  const std::vector<int> row = braid_end_rows(b);
+  std::vector<char> seen(static_cast<size_t>(b.strands), 0);
+  int cycles = 0;
+  for (int s = 0; s < b.strands; ++s) {
+    if (seen[static_cast<size_t>(s)]) {
+      continue;
+    }
+    ++cycles;
+    int j = s;
+    do {
+      seen[static_cast<size_t>(j)] = 1;
+      j = row[static_cast<size_t>(j)];
+    } while (j != s);
+  }
+  return cycles;
+}
+
+/// Irregular braid. `n_crossings` is the requested number of crossings.
+/// Each column is one slide: the number of rows it crosses is chosen
+/// uniformly from a single pair up to the whole stack, and the slide can
+/// sit anywhere in the stack. Up-and-over is never paired with down-and-over
+/// (same for under): one chirality ties direction to side, and a slide that
+/// crosses at least two rows weaves the other way at one or two crossings.
+/// Every adjacent pair is used, and the closure is a single component. A
+/// single n-cycle needs the same parity as `strands - 1`, so one crossing
+/// is added when the request has the other parity. Same `seed` repeats the
+/// word.
+inline braid make_random_braid(int strands, int n_crossings,
+                               std::uint32_t seed = 1) {
+  if (strands < 2) {
+    throw std::runtime_error("make_random_braid: strands >= 2");
+  }
+  if (n_crossings < strands - 1) {
+    throw std::runtime_error(
+        "make_random_braid: need at least strands-1 crossings so every pair "
+        "is used");
+  }
+  // Each generator is a transposition, so the closure permutation has sign
+  // (-1)^{n_crossings}. An n-cycle has sign (-1)^{strands-1}.
+  if ((n_crossings % 2) != ((strands - 1) % 2)) {
+    ++n_crossings;
+  }
+
+  std::mt19937 rng(seed);
+  std::uniform_int_distribution<int> coin(0, 1);
+
+  // lo, hi are inclusive 0-based rows. `up` sends the strand at lo to hi.
+  // `weave[i]` flips over/under at that crossing along the slide.
+  const auto push_slide = [](std::vector<int> &col, int lo, int hi, bool up,
+                             bool over, const std::vector<char> &weave) {
+    int which = 0;
+    const auto emit = [&](int g) {
+      const bool woven = weave[static_cast<size_t>(which)] != 0;
+      const bool side_over = woven ? !over : over;
+      const int sign = (up == side_over) ? 1 : -1;
+      col.push_back(sign * g);
+      ++which;
+    };
+    if (up) {
+      for (int g = lo + 1; g <= hi; ++g) {
+        emit(g);
+      }
+    } else {
+      for (int g = hi; g >= lo + 1; --g) {
+        emit(g);
+      }
+    }
+  };
+
+  constexpr int k_max_attempts = 4096;
+  for (int attempt = 0; attempt < k_max_attempts; ++attempt) {
+    std::vector<std::vector<int>> columns;
+    std::vector<std::vector<int>> built_cols;
+    bool undone = false;
+    int left = n_crossings;
+    // Up-over cancels down-over, and up-under cancels down-under.
+    // Tie the side to the direction so a return trip is not the inverse.
+    const bool up_is_over = coin(rng) != 0;
+
+    const auto column_is_inverse = [&](const std::vector<int> &col) {
+      for (const std::vector<int> &prev : built_cols) {
+        if (prev.size() != col.size()) {
+          continue;
+        }
+        bool inv = true;
+        for (size_t i = 0; i < col.size(); ++i) {
+          if (col[i] != -prev[prev.size() - 1 - i]) {
+            inv = false;
+            break;
+          }
+        }
+        if (inv) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const auto take_slide = [&](std::vector<int> &col, int lo, int hi) {
+      const int steps = hi - lo;
+      int n_weave = 0;
+      if (steps >= 2) {
+        n_weave = 1;
+        if (steps >= 3 && coin(rng) != 0) {
+          n_weave = 2;
+        }
+        if (n_weave > steps - 1) {
+          n_weave = steps - 1;
+        }
+      }
+      std::vector<int> slots(static_cast<size_t>(steps));
+      std::iota(slots.begin(), slots.end(), 0);
+      bool kept = false;
+      for (int try_i = 0; try_i < 8; ++try_i) {
+        const bool up = coin(rng) != 0;
+        const bool over = up ? up_is_over : !up_is_over;
+        std::shuffle(slots.begin(), slots.end(), rng);
+        std::vector<char> weave(static_cast<size_t>(steps), 0);
+        for (int w = 0; w < n_weave; ++w) {
+          weave[static_cast<size_t>(slots[static_cast<size_t>(w)])] = 1;
+        }
+        col.clear();
+        push_slide(col, lo, hi, up, over, weave);
+        if (!column_is_inverse(col)) {
+          kept = true;
+          break;
+        }
+      }
+      if (!kept) {
+        undone = true;
+      }
+      built_cols.push_back(col);
+      left -= steps;
+    };
+
+    while (left > 0) {
+      const int max_steps = std::min(strands - 1, left);
+      std::uniform_int_distribution<int> step_dist(1, max_steps);
+      const int steps = step_dist(rng);
+      const int slack = strands - (steps + 1);
+      std::uniform_int_distribution<int> off_dist(0, std::max(slack, 0));
+      const int lo = off_dist(rng);
+      std::vector<int> col;
+      take_slide(col, lo, lo + steps);
+      columns.push_back(std::move(col));
+    }
+
+    braid b;
+    b.name = "random_" + std::to_string(strands) + "x" +
+             std::to_string(n_crossings);
+    b.strands = strands;
+    b.layer_counts.reserve(columns.size());
+    for (const std::vector<int> &col : columns) {
+      b.word.insert(b.word.end(), col.begin(), col.end());
+      b.layer_counts.push_back(static_cast<int>(col.size()));
+    }
+    if (undone || static_cast<int>(b.word.size()) != n_crossings) {
+      continue;
+    }
+    std::vector<char> covered(static_cast<size_t>(strands - 1), 0);
+    for (int g : b.word) {
+      covered[static_cast<size_t>(std::abs(g) - 1)] = 1;
+    }
+    if (std::find(covered.begin(), covered.end(), 0) != covered.end()) {
+      continue;
+    }
+    validate_braid(b);
+    if (braid_component_count(b) == 1) {
+      return b;
+    }
+  }
+  throw std::runtime_error(
+      "make_random_braid: no single-component braid in " +
+      std::to_string(k_max_attempts) + " draws (strands " +
+      std::to_string(strands) + ", crossings " + std::to_string(n_crossings) +
+      ", seed " + std::to_string(seed) + ")");
 }
 
 } // namespace windychien

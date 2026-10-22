@@ -8,6 +8,7 @@
 
 #include "gaudi/asawa/shell/shell.hpp"
 #include "gaudi/common.h"
+#include "gaudi/hepworth/block/cache_compute.hpp"
 #include "gaudi/hepworth/block/sim_block.hpp"
 #include "gaudi/hepworth/block/solver.hpp"
 #include "gaudi/hepworth/blocks/block_wrapper.hpp"
@@ -20,10 +21,12 @@ namespace block {
 struct solver_context {
   std::vector<sim_block::ptr> blocks;
   std::vector<projection_constraint::ptr> constraints;
+  std::vector<cache_compute::ptr> computes;
 
   real dt = 0.01;
   real damping = 0.5;
   int iterations = 10;
+  vec3_block::ptr positions;
 
   asawa::shell::shell *shell_mesh = nullptr;
   const std::vector<vec3> *rod_normals = nullptr;
@@ -112,7 +115,19 @@ inline void solve_solver_step(block_solver_config<DofBlocks...> &config,
       },
       std::index_sequence_for<DofBlocks...>{});
 
+  ctx.positions.reset();
+  detail::for_each_dof_block(
+      config,
+      [&](auto &block, size_t) {
+        if (block) {
+          if (vec3_block::ptr positions = block->shell_positions())
+            ctx.positions = std::move(positions);
+        }
+      },
+      std::index_sequence_for<DofBlocks...>{});
+
   ctx.constraints.clear();
+  ctx.computes.clear();
   for (const auto &fn : config.recompute) {
     if (fn) {
       fn(ctx);
@@ -120,6 +135,7 @@ inline void solve_solver_step(block_solver_config<DofBlocks...> &config,
   }
 
   solver.set_constraints(ctx.constraints);
+  solver.set_computes(ctx.computes);
   solver.step(ctx.blocks, ctx.dt, ctx.damping, ctx.iterations, &ctx);
 }
 

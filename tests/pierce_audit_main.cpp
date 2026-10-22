@@ -4,8 +4,8 @@
 #include "gaudi/arp/ray_simplex.hpp"
 #include "gaudi/arp/ray_traversal.hpp"
 #include "gaudi/duchamp/pierce_cylinder_medial.hpp"
-#include "gaudi/hepworth/block/slab_pierce_stencil.hpp"
-#include "gaudi/hepworth/block/slab_prism_init.hpp"
+#include "gaudi/hepworth/constraints/slab/slab_pierce_stencil.hpp"
+#include "gaudi/hepworth/constraints/slab/slab_prism_init.hpp"
 
 #include <algorithm>
 #include <cstring>

@@ -2,6 +2,8 @@
 #define __GAUDI_TEST_HPP__
 
 #include "gaudi/console_logger.hpp"
+#include <algorithm>
+#include <cstdlib>
 #include <exception>
 #include <string>
 #include <vector>
@@ -60,9 +62,27 @@ public:
     cases().push_back({name, fn});
   }
 
+  /// `GAUDI_TEST_FILTER=a,b` runs only the tests whose name contains one of
+  /// the comma-separated substrings.
+  static bool selected(const std::string &name) {
+    const char *f = std::getenv("GAUDI_TEST_FILTER");
+    if (!f || !*f)
+      return true;
+    const std::string filter(f);
+    for (size_t b = 0; b <= filter.size();) {
+      const size_t e = std::min(filter.find(',', b), filter.size());
+      if (e > b && name.find(filter.substr(b, e - b)) != std::string::npos)
+        return true;
+      b = e + 1;
+    }
+    return false;
+  }
+
   static Result run_all(bool stop_on_fail = false) {
     Result result;
     for (const auto &test_case : cases()) {
+      if (!selected(test_case.name))
+        continue;
       result.total++;
       TestContext ctx;
       set_current_context(&ctx);

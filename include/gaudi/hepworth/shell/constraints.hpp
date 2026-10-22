@@ -148,11 +148,12 @@ public:
       vf += K * dqi;
     }
 
-    vec3 Rvg = vf * _vg.squaredNorm() / vf.squaredNorm();
-    if (vf.squaredNorm() > 1e-12)
-      p.block(_id0, 0, 3, 1) = _w * Rvg;
+    const real vf2 = vf.squaredNorm();
+    const real vg2 = _vg.squaredNorm();
+    if (vf2 > 1e-12 && vg2 > 1e-24)
+      p.block(_id0, 0, 3, 1) = _w * vf * std::sqrt(vg2 / vf2);
     else
-      p.block(_id0, 0, 3, 1) = qi0;
+      p.block(_id0, 0, 3, 1) = vec3::Zero();
   }
 
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {

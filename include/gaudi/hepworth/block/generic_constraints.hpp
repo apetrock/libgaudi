@@ -54,6 +54,56 @@ public:
   vec3 _p;
 };
 
+/// Holds the area-weighted centroid of `ids` at `c0`. One identity row per
+/// vertex, weight `w sqrt(a_i / A)`, goal `x_i - (c - c0)` with `c` the live
+/// centroid, so the energy is `w^2 |c - c0|^2`: only translation pays, and
+/// the rows are diagonal, so the system stays sparse. `areas` are the
+/// vertices' dual areas (any positive weights).
+class centroid_pin : public block_constraint {
+public:
+  DEFINE_CREATE_FUNC(centroid_pin)
+
+  centroid_pin(const std::vector<index_t> &ids, const std::vector<real> &areas, const vec3 &c0,
+               const real &w, std::vector<sim_block::ptr> blocks)
+      : block_constraint(ids, w, blocks), _c0(c0) {
+    real A = 0;
+    for (size_t k = 0; k < ids.size() && k < areas.size(); ++k)
+      A += std::max(areas[k], real(0));
+    _a.assign(ids.size(), ids.empty() ? real(0) : real(1) / real(ids.size()));
+    if (A > real(0))
+      for (size_t k = 0; k < ids.size(); ++k)
+        _a[k] = k < areas.size() ? std::max(areas[k], real(0)) / A : real(0);
+    _s.resize(_a.size());
+    for (size_t k = 0; k < _a.size(); ++k)
+      _s[k] = std::sqrt(_a[k]);
+  }
+
+  virtual std::string name() { return "centroid_pin"; }
+
+  virtual void project(const vecX &q, vecX &p) {
+    vec3 c = vec3::Zero();
+    for (size_t k = 0; k < _ids.size(); ++k)
+      c += _a[k] * _blocks[0]->get_vec3(_ids[k], q);
+    const vec3 d = c - _c0;
+    for (size_t k = 0; k < _ids.size(); ++k)
+      p.block(_id0 + static_cast<index_t>(3 * k), 0, 3, 1) =
+          _w * _s[k] * (_blocks[0]->get_vec3(_ids[k], q) - d);
+  }
+
+  virtual void fill_A(index_t &id0, std::vector<trip> &triplets) {
+    _id0 = id0;
+    for (size_t k = 0; k < _ids.size(); ++k) {
+      const index_t i = _blocks[0]->get_offset_idx(_ids[k]);
+      for (int ax = 0; ax < 3; ax++)
+        triplets.push_back(trip(id0 + ax, i + ax, _w * _s[k]));
+      id0 += 3;
+    }
+  }
+
+  vec3 _c0;
+  std::vector<real> _a, _s;
+};
+
 class pnt_pnt_weld : public block_constraint {
 public:
   DEFINE_CREATE_FUNC(pnt_pnt_weld)
@@ -165,12 +215,13 @@ public:
 #ifdef WELD_4
     p.block(_id0 + 0, 0, 3, 1) = _w0 * (xA0 + 0.0 * a0 * dX);
     p.block(_id0 + 3, 0, 3, 1) = _w0 * (xA1 + 0.0 * a1 * dX);
-    p.block(_id0 + 6, 0, 3, 1) = _w1 * (xB0 - 1.0 * b0 * dX);
-    p.block(_id0 + 9, 0, 3, 1) = _w1 * (xB1 - 1.0 * b1 * dX);
+    p.block(_id0 + 6, 0, 3, 1) = _w1 * (xB0 - dX);
+    p.block(_id0 + 9, 0, 3, 1) = _w1 * (xB1 - dX);
 #else
     p.block(_id0 + 0, 0, 3, 1) = _w0 * (xA1 - xA0);
-    p.block(_id0 + 3, 0, 3, 1) = _w1 * (xB0 - 1.0 * b0 * dX - xA0);
-    p.block(_id0 + 6, 0, 3, 1) = _w1 * (xB1 - 1.0 * b1 * dX - xA0);
+    // Same gap on both shell vertices, so the seam translates and does not shorten.
+    p.block(_id0 + 3, 0, 3, 1) = _w1 * (xB0 - dX - xA0);
+    p.block(_id0 + 6, 0, 3, 1) = _w1 * (xB1 - dX - xA0);
     //    p.block(3 * j, 0, 3, 1) = -_w * dq / l;
 #endif
   }

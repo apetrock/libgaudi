@@ -11,6 +11,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>
+#include <array>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -36,12 +37,59 @@ inline int build_compact_edge_dof_map(asawa::shell::shell &M,
 inline int edge_orientation_sign(const asawa::shell::shell &M,
                                  asawa::shell::CornerId c) {
   const int ia = static_cast<int>(M.vert(c));
-  const int ib = static_cast<int>(M.vert(M.next(c)));
-  return ia < ib ? 1 : -1;
+  const int ib = static_cast<int>(M.vert(M.other(c)));
+  return ia <= ib ? 1 : -1;
 }
 
 namespace laplace {
 namespace vector_dirichlet {
+
+/// One triangle's contribution (6 x 6), local index `comp * 3 + edge`
+/// (`comp` 0 parallel, 1 perpendicular; local edge `e = (X_e, X_{e+1})`).
+/// `sign[e]` is +1 when local edge `e` runs from the lower vertex id to the
+/// higher (the edge dof's canonical orientation), -1 otherwise. A degenerate
+/// triangle returns zero.
+inline Eigen::Matrix<real, 6, 6> face_element(const vec3 &X0, const vec3 &X1,
+                                              const vec3 &X2,
+                                              const std::array<int, 3> &sign) {
+  Eigen::Matrix<real, 6, 6> K = Eigen::Matrix<real, 6, 6>::Zero();
+  const vec3 X[3] = {X0, X1, X2};
+  double lsq[3];
+  for (int e = 0; e < 3; ++e)
+    lsq[e] = static_cast<double>((X[(e + 1) % 3] - X[e]).squaredNorm());
+  const double dA = (X1 - X0).cross(X2 - X0).norm();
+  if (dA < 1e-30)
+    return K;
+  for (int e = 0; e < 3; ++e) {
+    const double eij = lsq[e];
+    const double ejk = lsq[(e + 1) % 3];
+    const double eki = lsq[(e + 2) % 3];
+    if (!(eij > 1e-24) || !(eki > 1e-24))
+      continue;
+    const double lens = std::sqrt(eij * eki);
+    const int j = (e + 2) % 3;
+    const int o = sign[static_cast<size_t>(e)] * sign[static_cast<size_t>(j)];
+    const double diag = 2.0 / dA * eij;
+    const double num = eij - ejk + eki;
+    const double Dijki = static_cast<double>(o) * num * num / (2.0 * eij * eki * dA) * lens;
+    const double Dperp = -static_cast<double>(o) * num / (eij * eki) * lens;
+    // A sliver divides by a vanishing area and writes Inf. The normal
+    // equations then turn that into NaN.
+    if (!std::isfinite(diag) || !std::isfinite(Dijki) || !std::isfinite(Dperp))
+      continue;
+    K(e, e) += diag;
+    K(3 + e, 3 + e) += diag;
+    K(e, j) += Dijki;
+    K(j, e) += Dijki;
+    K(3 + e, 3 + j) += Dijki;
+    K(3 + j, 3 + e) += Dijki;
+    K(e, 3 + j) += Dperp;
+    K(3 + j, e) += Dperp;
+    K(3 + e, j) -= Dperp;
+    K(j, 3 + e) -= Dperp;
+  }
+  return K;
+}
 
 /// Sparse symmetric stiffness for \f$\tfrac12 u^\top L u\f$ (two scalar DOFs per edge).
 inline Eigen::SparseMatrix<real> energy(asawa::shell::shell &M,
@@ -71,58 +119,29 @@ inline Eigen::SparseMatrix<real> energy(asawa::shell::shell &M,
   for (asawa::shell::FaceId fi : frange) {
     if (M.fsize(fi) != 3)
       continue;
+    bool first = true; // a triangle's fan repeats once, degenerate
     M.const_for_each_face_tri(
         fi, [&](asawa::shell::CornerId c0, asawa::shell::CornerId c1,
                 asawa::shell::CornerId c2, const asawa::shell::shell &Ms) {
-          const asawa::shell::CornerId ce[3] = {c0, c1, c2};
-          double lsq[3];
-          for (int e = 0; e < 3; ++e) {
-            const real len =
-                asawa::shell::edge_length(Ms, ce[static_cast<size_t>(e)], x);
-            lsq[static_cast<size_t>(e)] = static_cast<double>(len * len);
-          }
-          const vec3 X0 = x[Ms.vert(c0)];
-          const vec3 X1 = x[Ms.vert(c1)];
-          const vec3 X2 = x[Ms.vert(c2)];
-          const double dA = (X1 - X0).cross(X2 - X0).norm();
-          if (dA < 1e-30)
+          if (!first)
             return;
-
+          first = false;
+          const asawa::shell::CornerId ce[3] = {c0, c1, c2};
+          std::array<int, 3> sign{};
+          int dof[3];
           for (int e = 0; e < 3; ++e) {
-            const double eij = lsq[static_cast<size_t>(e)];
-            const double ejk = lsq[static_cast<size_t>((e + 1) % 3)];
-            const double eki = lsq[static_cast<size_t>((e + 2) % 3)];
-            const double lens = std::sqrt(eij * eki);
-            const int o = edge_orientation_sign(Ms, ce[static_cast<size_t>(e)]) *
-                          edge_orientation_sign(
-                              Ms, ce[static_cast<size_t>((e + 2) % 3)]);
-            const int Ei =
-                slot_map[static_cast<size_t>(static_cast<int>(ce[static_cast<size_t>(e)]) /
-                                             2)];
-            const int Ej = slot_map[static_cast<size_t>(
-                static_cast<int>(ce[static_cast<size_t>((e + 2) % 3)]) / 2)];
-            if (Ei < 0 || Ej < 0)
+            sign[static_cast<size_t>(e)] = edge_orientation_sign(Ms, ce[e]);
+            dof[e] = slot_map[static_cast<size_t>(static_cast<int>(ce[e]) / 2)];
+            if (dof[e] < 0)
               return;
-
-            const double diag = 2.0 / dA * eij;
-            triplets.emplace_back(Ei, Ei, diag);
-            triplets.emplace_back(Ei + nE, Ei + nE, diag);
-
-            const double num = eij - ejk + eki;
-            const double Dijki =
-                static_cast<double>(o) * num * num / (2.0 * eij * eki * dA) * lens;
-            triplets.emplace_back(Ei, Ej, Dijki);
-            triplets.emplace_back(Ej, Ei, Dijki);
-            triplets.emplace_back(Ei + nE, Ej + nE, Dijki);
-            triplets.emplace_back(Ej + nE, Ei + nE, Dijki);
-
-            const double Dperp =
-                -static_cast<double>(o) * num / (eij * eki) * lens;
-            triplets.emplace_back(Ei, Ej + nE, Dperp);
-            triplets.emplace_back(Ej + nE, Ei, Dperp);
-            triplets.emplace_back(Ei + nE, Ej, -Dperp);
-            triplets.emplace_back(Ej, Ei + nE, -Dperp);
           }
+          const Eigen::Matrix<real, 6, 6> K = face_element(
+              x[Ms.vert(c0)], x[Ms.vert(c1)], x[Ms.vert(c2)], sign);
+          for (int a = 0; a < 6; ++a)
+            for (int b = 0; b < 6; ++b)
+              if (K(a, b) != real(0))
+                triplets.emplace_back(dof[a % 3] + (a / 3) * nE,
+                                      dof[b % 3] + (b / 3) * nE, K(a, b));
         });
   }
 

@@ -79,9 +79,10 @@ real cotan(const shell &M, CornerId ci, const std::vector<vec3> &x) {
   // return va::cotan(x0, xp, xn);
 }
 
-/// Signed half-angle cot weights for the **weak cotan Laplacian** (Pinkall–Polthier).
-/// Degenerate corners contribute **0**; |cot| is capped (see `va::cotan_robust`).
-/// `cotan()` above stays nonnegative for constraints / legacy weights.
+/// Signed cot(∠ at ci) for the weak cotan Laplacian (Pinkall–Polthier).
+/// An obtuse corner is negative. Absolute cot pulls that spoke the wrong way,
+/// so one-ring projectors use this. Degenerate corners contribute 0; |cot|
+/// is capped (see `va::cotan_robust`). `cotan()` above stays nonnegative.
 real weak_cotan(const shell &M, CornerId ci, const std::vector<vec3> &x) {
   vec3 xp = x[M.vert(M.prev(ci))];
   vec3 x0 = x[M.vert(ci)];
@@ -89,18 +90,27 @@ real weak_cotan(const shell &M, CornerId ci, const std::vector<vec3> &x) {
   return va::cotan_robust(x0, xp, xn);
 }
 
+/// Interior angle at `vert(ci)` in `face(ci)`, in [0, pi].
 real angle(const shell &M, CornerId ci, const std::vector<vec3> &x) {
 
   vec3 xp = x[M.vert(M.prev(ci))];
   vec3 x0 = x[M.vert(ci)];
   vec3 xn = x[M.vert(M.next(ci))];
-  vec3 e0 = (xp - x0).normalized();
-  vec3 e1 = (xn - x0).normalized();
+  vec3 e0 = xp - x0;
+  vec3 e1 = xn - x0;
+  const real n0 = e0.squaredNorm();
+  const real n1 = e1.squaredNorm();
+  // A collapsed edge has no angle. normalized() on it is 0/0.
+  if (!(n0 > real(1e-24)) || !(n1 > real(1e-24)) || !std::isfinite(n0) ||
+      !std::isfinite(n1))
+    return real(0);
+  e0 /= std::sqrt(n0);
+  e1 /= std::sqrt(n1);
   real ede = e0.dot(e1);
-  ede = va::clamp(ede, 0.0, 1.0 - 1e-8);
+  ede = va::clamp(ede, -1.0, 1.0 - 1e-8);
   ede = acos(ede);
 
-  return ede;
+  return std::isfinite(ede) ? ede : real(0);
 }
 
 vec3 face_cross(const shell &M, FaceId fi, const std::vector<vec3> &x) {
@@ -117,6 +127,8 @@ vec3 face_cross(const shell &M, FaceId fi, const std::vector<vec3> &x) {
 
 vec3 face_normal(const shell &M, FaceId fi, const std::vector<vec3> &x) {
   vec3 N = face_cross(M, fi, x);
+  if (!N.allFinite() || !(N.squaredNorm() > real(1e-24)))
+    return vec3::Zero();
   return N.normalized();
 }
 
@@ -162,6 +174,8 @@ vec3 vert_normal(const shell &M, VertId vi, const std::vector<vec3> &x) {
     real ede = angle(M, ci, x);
     N += ede * face_cross(M, M.face(ci), x);
   });
+  if (!N.allFinite() || !(N.squaredNorm() > real(1e-24)))
+    return vec3::Zero();
   return N.normalized();
 }
 
@@ -196,7 +210,8 @@ std::vector<real> vert_cotan_weights(const shell &M, VertId vi,
   M.const_for_each_vertex(vi, [&w, &x](CornerId ci, const shell &M) {
     CornerId c0p = M.prev(ci);
     CornerId c1p = M.prev(M.other(ci));
-    w.push_back(cotan(M, c0p, x) + cotan(M, c1p, x));
+    // Pinkall–Polthier: w_ij = cot α_ij + cot β_ij, signed.
+    w.push_back(weak_cotan(M, c0p, x) + weak_cotan(M, c1p, x));
   });
   return w;
 }
@@ -496,6 +511,82 @@ std::vector<TYPE> edge_to_face(const shell &M, const std::vector<vec3> &x,
   return vals;
 }
 
+/// Other endpoint is the twin corner. Positive when the tail id is the
+/// lesser one, so the sample runs from the lesser vertex id toward the greater.
+inline bool edge_canonical_parallel(const shell &M, CornerId c,
+                                   const std::vector<vec3> &x, vec3 &parallel) {
+  const int v0 = static_cast<int>(M.vert(c));
+  const int v1 = static_cast<int>(M.vert(M.other(c)));
+  if (v0 < 0 || v1 < 0 || v0 >= static_cast<int>(x.size()) ||
+      v1 >= static_cast<int>(x.size()))
+    return false;
+  vec3 t = x[static_cast<size_t>(v1)] - x[static_cast<size_t>(v0)];
+  const real len = t.norm();
+  if (!(len > real(1e-20)) || !t.allFinite())
+    return false;
+  const real sign = v0 <= v1 ? real(1) : real(-1);
+  parallel = sign * t / len;
+  return parallel.allFinite();
+}
+
+/// Principal axis of `Σ (w ‖t‖) û ûᵀ`. A short tangent pulls less than a
+/// long one. The sign follows that same weighted sum. `R.col(0)` is the axis.
+inline bool edge_to_vert(const std::vector<vec3> &tangents,
+                         const std::vector<real> &weights, mat3 &R) {
+  vec3 s = vec3::Zero();
+  mat3 M = mat3::Zero();
+  int used = 0;
+  for (size_t i = 0; i < tangents.size(); ++i) {
+    const vec3 &t = tangents[i];
+    if (!t.allFinite() || !(t.squaredNorm() > real(1e-16)))
+      continue;
+    real w = real(1);
+    if (i < weights.size() && std::isfinite(weights[i]))
+      w = weights[i];
+    const real mag = t.norm();
+    if (!(mag > real(1e-16)))
+      continue;
+    w *= mag;
+    const vec3 u = t / mag;
+    s += w * u;
+    M += w * u * u.transpose();
+    ++used;
+  }
+  if (used == 0 || !M.allFinite() || !(M.squaredNorm() > real(1e-16)))
+    return false;
+  Eigen::SelfAdjointEigenSolver<mat3> es(M);
+  if (es.info() != Eigen::Success)
+    return false;
+  vec3 T = es.eigenvectors().col(2);
+  if (!T.allFinite() || !(T.squaredNorm() > real(1e-16)))
+    return false;
+  T.normalize();
+  if (s.allFinite() && s.squaredNorm() > real(1e-16) && T.dot(s) < real(0))
+    T = -T;
+  const vec3 x = vec3::UnitX();
+  const real c = x.dot(T);
+  const vec3 axis = x.cross(T);
+  const real s2 = axis.squaredNorm();
+  if (!(s2 > real(1e-16))) {
+    if (c > real(0))
+      R = mat3::Identity();
+    else
+      R = mat3(Eigen::AngleAxis<real>(std::acos(real(-1)), vec3::UnitY()));
+  } else {
+    const real sa = std::sqrt(s2);
+    const vec3 k = axis / sa;
+    mat3 K = mat3::Zero();
+    K(0, 1) = -k.z();
+    K(0, 2) = k.y();
+    K(1, 0) = k.z();
+    K(1, 2) = -k.x();
+    K(2, 0) = -k.y();
+    K(2, 1) = k.x();
+    R = mat3::Identity() + sa * K + (real(1) - c) * (K * K);
+  }
+  return R.allFinite() && R.determinant() > real(0);
+}
+
 real surface_area(const shell &M, const std::vector<vec3> &x) {
   auto range = M.get_face_range();
   real A = 0.0;
@@ -681,6 +772,7 @@ struct face_curvature_frame {
   vec3 t_max = vec3::UnitY();
   real k_min = 0;
   real k_max = 0;
+  bool valid = false;
 };
 
 /// Monge / height jet in foot frame: z ≈ a x² + b x y + c y² over (u,v), axis n.
@@ -872,6 +964,7 @@ inline face_curvature_frame face_curvature_frame_fit(
   out.k_max = es.eigenvalues()[1];
   out.t_min = (ev0[0] * jet.u + ev0[1] * jet.v).normalized();
   out.t_max = (ev1[0] * jet.u + ev1[1] * jet.v).normalized();
+  out.valid = out.t_min.allFinite() && out.t_max.allFinite();
   return out;
 }
 

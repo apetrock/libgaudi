@@ -634,7 +634,9 @@ cfl_estimate_rod_from_u(const asawa::rod::rod &rod,
 
   real dt;
   if (dts.empty()) {
-    dt = cfg.dt_max > 0.0 ? cfg.dt_max : 0.0;
+    // dt_max ≤ 0 means uncapped. Nothing closing is the whole step, not 0.
+    dt = cfg.dt_max > 0.0 ? cfg.dt_max
+                          : std::numeric_limits<real>::infinity();
     out.softmin_tau = 0.0;
   } else if (cfg.agg == cfl_agg_mode::hard_min) {
     dt = cfl_hardmin(dts);
@@ -658,7 +660,9 @@ cfl_estimate_rod_from_u(const asawa::rod::rod &rod,
     dt = std::min(dt, cfg.dt_max);
   if (cfg.dt_min > 0.0 && std::isfinite(dt))
     dt = std::max(dt, cfg.dt_min);
-  if (!std::isfinite(dt) || !(dt > 0.0))
+  // +inf stays: it is the uncapped empty-contact result. NaN and
+  // non-positive times still fall back to the cap, then the floor.
+  if (std::isnan(dt) || !(dt > 0.0))
     dt = cfg.dt_max > 0.0 ? cfg.dt_max : cfg.dt_min;
 
   out.dt = dt;

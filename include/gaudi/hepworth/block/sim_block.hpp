@@ -42,16 +42,17 @@ public:
   // vecX x = to(x_);
   // vecX q = concat(x0, u0);
   // from(u_, u);
-  vec3 get_vec3(index_t ii, const vecX &q) {
+  vec3 get_vec3(index_t ii, const vecX &q) const {
     return get_elem<vec3>(ii, q, _offset);
   }
-  quat get_quat(index_t ii, const vecX &q) {
+  quat get_quat(index_t ii, const vecX &q) const {
     return get_elem<quat>(ii, q, _offset);
   }
 
   template <int N, typename T> void map_to_x(std::vector<T> &x_, vecX &q) {
     _offset = q.size();
     vecX x = to<N, T>(x_);
+    _span = x.size();
     q = concat(q, x);
     if (q.hasNaN()) {
       std::cout << "NAN:" << __PRETTY_FUNCTION__ << std::endl;
@@ -71,7 +72,8 @@ public:
 
   virtual void integrate_inertia(const real &h) {}
   virtual void update_inertia(const real &h) {}
-  index_t _offset;
+  index_t _offset = -1;
+  index_t _span = 0;
 };
 
 class vec3_block : public sim_block {

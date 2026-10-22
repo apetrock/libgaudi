@@ -65,6 +65,11 @@ public:
 
   virtual void flip(const shell::shell &M, const index_t &i){};
 
+  /// Called before `dissolve_vertex` removes vertex `v` and triangulates its
+  /// ring. The new diagonals reuse the freed spoke and fan slots, which keep
+  /// their old values (as `flip` does).
+  virtual void dissolve(const shell::shell &M, const index_t &v) {}
+
   /// Rod topology hooks (corner-indexed). Default: no-op on base.
   virtual void rod_split(rod::rod & /*R*/, index_t /*c_prev*/, index_t /*c0*/,
                          index_t /*c1*/, index_t /*c_next*/,
@@ -160,13 +165,15 @@ public:
     }
   };
 
+  /// Called before `collapse_edge(M, i)`. That keeps `vert(other(i))`, so
+  /// the edge midpoint goes there.
   virtual void collapse(const shell::shell &M, const index_t &i) {
     shell::CornerId c0 = shell::corner_id(i);
     shell::CornerId c1 = M.other(c0);
     if (__type == VERTEX) {
       index_t v0 = M.vert(c0);
       index_t v1 = M.vert(c1);
-      this->__data[v0] = va::mix(0.5, this->__data[v0], this->__data[v1]);
+      this->__data[v1] = va::mix(0.5, this->__data[v0], this->__data[v1]);
     } else if (__type == EDGE) {
       shell::FaceId f0 = M.face(c0);
       shell::FaceId f1 = M.face(c1);

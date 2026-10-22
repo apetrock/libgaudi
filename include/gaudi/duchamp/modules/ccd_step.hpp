@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include "gaudi/asawa/rod/rod.hpp"
@@ -123,6 +124,10 @@ inline real ccd_scale_force_to_dx_max(std::vector<vec3> &f, real h_ref,
 inline real ccd_sanitize_dt(real dt, const ccd_config &cfg) {
   if (std::isfinite(dt))
     return dt;
+  // +inf with no cap is "nothing is closing." Callers that own a
+  // displacement already inside τ_max take min(dt, 1).
+  if (dt > real(0) && !(cfg.dt_max > real(0)))
+    return std::numeric_limits<real>::infinity();
   if (cfg.dt_max > 0.0)
     return cfg.dt_max;
   if (cfg.dt_min > 0.0)

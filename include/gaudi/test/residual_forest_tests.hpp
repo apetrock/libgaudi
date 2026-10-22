@@ -197,10 +197,13 @@ GAUDI_TEST(rod_forest_restrict_prolong) {
     p += vec3(real(0.01), 0, 0);
   F->set(0, x0);
   F->restrict_up(0);
-  const auto &keep = F->keep(0);
-  for (size_t j = 0; j < keep.size(); ++j)
-    GAUDI_ASSERT((F->live(1)[j] - x0[static_cast<size_t>(keep[j])]).norm() <
-                 real(1e-12));
+  // Coarse positions solve Jᵀ J x_c = Jᵀ x_f (reference ApplyPinv).
+  const std::vector<vec3> Jxc = F->prolong_J(0, F->live(1));
+  const std::vector<vec3> JTJxc = F->restrict_JT(0, Jxc);
+  const std::vector<vec3> JTx = F->restrict_JT(0, x0);
+  GAUDI_ASSERT(JTJxc.size() == JTx.size());
+  for (size_t j = 0; j < JTJxc.size(); ++j)
+    GAUDI_ASSERT((JTJxc[j] - JTx[j]).norm() < real(1e-8));
 }
 
 GAUDI_TEST(rod_forest_restrict_after_split) {
@@ -233,9 +236,12 @@ GAUDI_TEST(rod_forest_restrict_after_split) {
   const auto &x0 = F->live(0);
   const auto &x1 = F->live(1);
   GAUDI_ASSERT(x1.size() == keep.size());
-  for (size_t j = 0; j < keep.size(); ++j)
-    GAUDI_ASSERT((x1[j] - x0[static_cast<size_t>(keep[j])]).norm() <
-                 real(1e-12));
+  const std::vector<vec3> Jxc = F->prolong_J(0, x1);
+  const std::vector<vec3> JTJxc = F->restrict_JT(0, Jxc);
+  const std::vector<vec3> JTx = F->restrict_JT(0, x0);
+  GAUDI_ASSERT(JTJxc.size() == JTx.size());
+  for (size_t j = 0; j < JTJxc.size(); ++j)
+    GAUDI_ASSERT((JTJxc[j] - JTx[j]).norm() < real(1e-8));
 
   // Coarse edges must be local (thinned knot), not chordal diameter.
   real mean_e = 0;

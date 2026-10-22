@@ -8,7 +8,7 @@
 #include "gaudi/asawa/shell/asset_loader.hpp"
 #include "gaudi/duchamp/fields.hpp"
 #include "gaudi/hepworth/block/block_geometry.hpp"
-#include "gaudi/hepworth/block/slab_prism_init.hpp"
+#include "gaudi/hepworth/constraints/slab/slab_prism_init.hpp"
 #include "gaudi/hepworth/block/projection_diagnostics.hpp"
 #include "gaudi/hepworth/block/slab_prism_log.hpp"
 #include "gaudi/hepworth/block/generic_constraints_init.hpp"

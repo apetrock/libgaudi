@@ -776,6 +776,101 @@ namespace gaudi
       return us;
     }
 
+    /// Unit-tangent dot. Zero when either tangent is degenerate.
+    inline real tp_tangent_align(const vec3 &Ti, const vec3 &Tj) {
+      const real ni = Ti.norm();
+      const real nj = Tj.norm();
+      if (!(ni > real(1e-12)) || !(nj > real(1e-12)))
+        return real(0);
+      return Ti.dot(Tj) / (ni * nj);
+    }
+
+    /// Sample of w Tp with w = κ ⟨T_i, T_j⟩.
+    /// κ is the Gaussian mollifier of length l1 and power p1.
+    /// ⟨T_i, T_j⟩ is the Repulsive Curves cross-term coefficient, held fixed
+    /// (Yu, Schumacher, Crane, reference/crane2021-repulsive-curves.pdf, §5.2.2).
+    inline real harmonic_tp_density(const vec3 &dp, const vec3 &Ti, const vec3 &Tj,
+                                    real Tp, real l1, real p1 = 2.0) {
+      if (!(l1 > real(1e-16)))
+        return real(0);
+      return calc_gaussian(dp, l1, p1) * tp_tangent_align(Ti, Tj) * Tp;
+    }
+
+    /// ∇(w Tp) = w′ Tp + w ∇Tp, w = κ ⟨T_i, T_j⟩.
+    /// κ(l1, p1) is differentiated; ⟨T_i, T_j⟩ is the same frozen coefficient.
+    /// ∇_i κ = −∂κ/∂dp. Matches the shell product rule
+    /// (scripts/sympy/tp_harmonic_compose.py) with the extra tangent weight.
+    inline vec3 harmonic_tp_pair(const vec3 &dp, const vec3 &Ti, const vec3 &Tj,
+                                 real Tp, const vec3 &grad_Tp, real l1,
+                                 real p1 = 2.0) {
+      if (!(l1 > real(1e-16)))
+        return vec3::Zero();
+      const real align = tp_tangent_align(Ti, Tj);
+      const real kappa = calc_gaussian(dp, l1, p1);
+      const vec3 dkappa = calc_d_gaussian(dp, l1, p1);
+      return (-dkappa) * (align * Tp) + (kappa * align) * grad_Tp;
+    }
+
+    /// Rod harmonic potential Φ = (κ ⟨T_i, T_j⟩) ∗ Tp.
+    /// Tp is the Cauchy density (l0, p0). κ is the Gaussian (l1, p1).
+    inline std::vector<real> tangent_point_harmonic_potential(
+        asawa::rod::rod &R, const std::vector<vec3> &p_pov,
+        const std::vector<real> &w_pov, const std::vector<vec3> &T_pov, real l0,
+        real p0, real l1, real p1) {
+      const std::vector<real> Ev =
+          tangent_point_energy_cauchy(R, p_pov, w_pov, T_pov, l0, p0);
+      std::vector<vec3> Tc = R.N2c();
+      return integrate_over_rod<real>(
+          R, p_pov,
+          [&Ev, &Tc](const std::vector<index_t> &edge_ids, Rod_Sum_Type &sum) {
+            sum.bind(calder::scalar_datum::create(edge_ids, Ev));
+            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
+          },
+          [&T_pov, l1, p1](const index_t i, const index_t j, const vec3 &pi,
+                           const vec3 &pj,
+                           const std::vector<calder::datum::ptr> &data,
+                           Rod_Sum_Type::Node_Type node_type,
+                           const Rod_Sum_Type::Tree &) -> real {
+            const real Tp = get_data<real>(node_type, j, 0, data);
+            vec3 Tj = get_data<vec3>(node_type, j, 1, data);
+            const vec3 Ti = T_pov[static_cast<size_t>(i)];
+            return harmonic_tp_density(pj - pi, Ti, Tj, Tp, l1, p1);
+          });
+    }
+
+    /// Rod harmonic gradient ∇(w Tp) = w′ Tp + w ∇Tp, w = κ ⟨T_i, T_j⟩.
+    /// Leaf Tp / ∇Tp are the Cauchy density and its gradient (l0, p0).
+    /// κ is the Gaussian mollifier (l1, p1).
+    inline std::vector<vec3> tangent_point_harmonic_gradient(
+        asawa::rod::rod &R, const std::vector<vec3> &p_pov,
+        const std::vector<real> &w_pov, const std::vector<vec3> &T_pov, real l0,
+        real p0, real l1, real p1) {
+      const std::vector<vec3> Gv =
+          tangent_point_gradient_cauchy(R, p_pov, w_pov, T_pov, l0, p0);
+      const std::vector<real> Ev =
+          tangent_point_energy_cauchy(R, p_pov, w_pov, T_pov, l0, p0);
+      std::vector<vec3> Tc = R.N2c();
+      return integrate_over_rod<vec3>(
+          R, p_pov,
+          [&Gv, &Ev, &Tc](const std::vector<index_t> &edge_ids,
+                          Rod_Sum_Type &sum) {
+            sum.bind(calder::vec3_datum::create(edge_ids, Gv));
+            sum.bind(calder::scalar_datum::create(edge_ids, Ev));
+            sum.bind(calder::vec3_datum::create(edge_ids, Tc));
+          },
+          [&T_pov, l1, p1](const index_t i, const index_t j, const vec3 &pi,
+                           const vec3 &pj,
+                           const std::vector<calder::datum::ptr> &data,
+                           Rod_Sum_Type::Node_Type node_type,
+                           const Rod_Sum_Type::Tree &) -> vec3 {
+            const vec3 grad_Tp = get_data<vec3>(node_type, j, 0, data);
+            const real Tp = get_data<real>(node_type, j, 1, data);
+            vec3 Tj = get_data<vec3>(node_type, j, 2, data);
+            const vec3 Ti = T_pov[static_cast<size_t>(i)];
+            return harmonic_tp_pair(pj - pi, Ti, Tj, Tp, grad_Tp, l1, p1);
+          });
+    }
+
     /// Mollified / harmonic TP gradient via convolution Φ = κ ∗ T.
     /// Leaf T uses regularized density energy; shell force path uses
     /// post-diff Reg leaf grad (same as tangent_point_gradient).

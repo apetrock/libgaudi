@@ -100,6 +100,29 @@ namespace gaudi
       return -2.0 * dx * C / l / lp * expx2;
     };
 
+    /// κ = (C/l) exp(−(|dp|/l)^p). p = 2 matches calc_gaussian(dx, l).
+    inline real calc_gaussian(const vec3 &dx, real l, real p) {
+      if (!(l > real(1e-16)) || !(p > real(0)))
+        return real(0);
+      const real dist = dx.norm();
+      const real u = std::pow(dist / l, p);
+      const real C = real(1.0) / std::sqrt(real(2.0) * real(M_PI));
+      return (C / l) * std::exp(-u);
+    }
+
+    /// ∂κ/∂dp for calc_gaussian(dx, l, p). At p = 2 this is calc_d_gaussian.
+    inline vec3 calc_d_gaussian(const vec3 &dx, real l, real p) {
+      if (!(l > real(1e-16)) || !(p > real(0)))
+        return vec3::Zero();
+      const real dist = dx.norm();
+      if (!(dist > real(1e-16)))
+        return vec3::Zero();
+      const real kappa = calc_gaussian(dx, l, p);
+      const real lp = std::pow(l, p);
+      const real sp = std::pow(dist, p - real(2));
+      return -kappa * (p / lp) * sp * dx;
+    }
+
     /// Hess_dp of κ = (C/l) exp(−|dp|²/l²). Verified:
     ///   python3 scripts/sympy/tp_harmonic_compose.py
     inline mat3 calc_d2_gaussian(const vec3 &dp, real l) {

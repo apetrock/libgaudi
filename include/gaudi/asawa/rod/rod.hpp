@@ -506,6 +506,7 @@ public:
   const std::vector<vec4> &J() const;
   const std::vector<real> &l0() const;
   const std::vector<real> &t() const;
+  const std::vector<real> &rest_l() const;
 
   std::vector<vec3> &x();
   std::vector<vec3> &v();
@@ -515,6 +516,7 @@ public:
   std::vector<vec4> &J();
   std::vector<real> &l0();
   std::vector<real> &t();
+  std::vector<real> &rest_l();
 
   std::vector<vec3> xc() {
     std::vector<vec3> xc(x());
@@ -798,6 +800,14 @@ inline std::vector<real> &rod::t() {
 inline const std::vector<real> &rod::t() const {
   const_cast<rod *>(this)->ensure_default_datums();
   return rod_real(*this, datum_id::t);
+}
+inline std::vector<real> &rod::rest_l() {
+  ensure_default_datums();
+  return rod_real(*this, datum_id::rest_l);
+}
+inline const std::vector<real> &rod::rest_l() const {
+  const_cast<rod *>(this)->ensure_default_datums();
+  return rod_real(*this, datum_id::rest_l);
 }
 
 /// Pack rod topology together with an explicit channel pool (usually R.channels()).

@@ -19,6 +19,8 @@ bool patch_hole(index_t i, std::vector<index_t> &face_start,
 
   auto other = [](int id) { return 2 * (id / 2) + (id + 1) % 2; };
   auto next = [&corners_next](int id) { return corners_next[id]; };
+  // shell::vprev on the raw arrays: needs no prev, so collecting next, then
+  // swing, around an open patch finds its boundary before faces exist.
   auto swing = [&corners_next, other, next](int id) { return next(other(id)); };
 
   index_t c0 = i;

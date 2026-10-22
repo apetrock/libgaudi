@@ -1,0 +1,1 @@
+add_gaudi_vermeer_project(vermeer_monge_fairing_demo SOURCES main.cpp)

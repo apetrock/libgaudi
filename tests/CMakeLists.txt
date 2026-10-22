@@ -29,6 +29,36 @@ add_executable(pierce_audit pierce_audit_main.cpp)
 target_link_libraries(pierce_audit PRIVATE gaudi::core gaudi::headless)
 gaudi_msvc_disable_parallel_cl_writers(pierce_audit)
 
+add_executable(monge_fairing_smoke monge_fairing_smoke.cpp)
+target_link_libraries(monge_fairing_smoke PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(monge_fairing_smoke)
+add_test(NAME monge_fairing_smoke COMMAND monge_fairing_smoke)
+
+add_executable(frame_spin_probe frame_spin_probe.cpp)
+target_include_directories(frame_spin_probe PRIVATE ${CMAKE_SOURCE_DIR}/ext/liblombardi/include)
+target_link_libraries(frame_spin_probe PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(frame_spin_probe)
+
+add_executable(principal_curvature_tests principal_curvature_tests.cpp)
+target_link_libraries(principal_curvature_tests PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(principal_curvature_tests)
+add_test(NAME principal_curvature_tests COMMAND principal_curvature_tests)
+
+add_executable(weingarten_tests weingarten_tests.cpp)
+target_link_libraries(weingarten_tests PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(weingarten_tests)
+add_test(NAME weingarten_tests COMMAND weingarten_tests)
+
+add_executable(shell_qc_tests shell_qc_tests.cpp)
+target_link_libraries(shell_qc_tests PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(shell_qc_tests)
+add_test(NAME shell_qc_tests COMMAND shell_qc_tests)
+
+add_executable(principal_curvature_probe principal_curvature_probe.cpp)
+target_include_directories(principal_curvature_probe PRIVATE ${CMAKE_SOURCE_DIR}/ext/liblombardi/include)
+target_link_libraries(principal_curvature_probe PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(principal_curvature_probe)
+
 add_executable(anisotropic_cotan_smoke anisotropic_cotan_smoke.cpp)
 target_link_libraries(anisotropic_cotan_smoke PRIVATE gaudi::core gaudi::headless)
 gaudi_msvc_disable_parallel_cl_writers(anisotropic_cotan_smoke)

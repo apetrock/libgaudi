@@ -20,6 +20,7 @@ constexpr index_t M = 4;
 constexpr index_t J = 5;
 constexpr index_t l0 = 6;
 constexpr index_t t = 7;
+constexpr index_t rest_l = 8;
 } // namespace datum_id
 
 /// Positions: Catmull–Rom on split when a 4-stencil exists.
@@ -114,6 +115,26 @@ struct real_interp_l_datum : public scalar_datum {
   }
 };
 
+/// Constraint rest length. Split shares the parent rest. Collapse adds the
+/// deleted edge's rest onto the surviving previous corner. update_lengths
+/// does not write this channel.
+struct real_rest_length_datum : public real_interp_l_datum {
+  using ptr = std::shared_ptr<real_rest_length_datum>;
+  static ptr create(prim_type type, const std::vector<real> &data) {
+    return std::make_shared<real_rest_length_datum>(type, data);
+  }
+  using real_interp_l_datum::real_interp_l_datum;
+
+  void rod_collapse(rod & /*R*/, index_t c_prev, index_t c0, index_t /*c1*/,
+                    index_t /*c_next*/) override {
+    if (c_prev < 0 || c0 < 0)
+      return;
+    ensure_index(c_prev);
+    ensure_index(c0);
+    __data[c_prev] += __data[c0];
+  }
+};
+
 inline void install_default_datums(rod &R) {
   if (!R.get_data().empty())
     return;
@@ -131,6 +152,8 @@ inline void install_default_datums(rod &R) {
   R.insert_datum(
       real_interp_l_datum::create(pt, std::vector<real>(n, real(0.0))));
   R.insert_datum(scalar_datum::create(pt, std::vector<real>(n, real(0.0))));
+  R.insert_datum(
+      real_rest_length_datum::create(pt, std::vector<real>(n, real(0.0))));
 
   auto &ch = R.channels();
   ch.bind_name("x", datum_id::x);
@@ -141,6 +164,7 @@ inline void install_default_datums(rod &R) {
   ch.bind_name("J", datum_id::J);
   ch.bind_name("l0", datum_id::l0);
   ch.bind_name("t", datum_id::t);
+  ch.bind_name("rest_l", datum_id::rest_l);
   ch.set_velocity_slot(datum_id::v);
 }
 

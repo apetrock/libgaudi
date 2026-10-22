@@ -12,6 +12,7 @@
 #include "gaudi/calder/tangent_point_integrators.hpp"
 #include "gaudi/common.h"
 #include "gaudi/duchamp/modules/tp_config.hpp"
+#include "gaudi/duchamp/modules/tp_constraint_solver.hpp"
 #include "gaudi/duchamp/modules/tp_line_search.hpp"
 #include "gaudi/duchamp/modules/tp_sobolev_jacobi.hpp"
 
@@ -78,7 +79,8 @@ inline std::vector<vec3> soft_tp_grad_energy(asawa::rod::rod &rod, real R_min,
 inline std::vector<vec3>
 tp_grad_energy_one(asawa::rod::rod &rod, const asawa::rod::dynamic &dynamic,
                    const tangent_point_solver_config &cfg,
-                   tangent_point_type type) {
+                   tangent_point_type type,
+                   sobolev_constraint_solver *constraints = nullptr) {
   const std::vector<vec3> &x = rod.x();
   const std::vector<real> l = rod.l0();
   const std::vector<vec3> T = rod.N2c();
@@ -99,8 +101,22 @@ tp_grad_energy_one(asawa::rod::rod &rod, const asawa::rod::dynamic &dynamic,
     }
     return g;
   }
-  case tangent_point_type::sobolev:
-    return sobolev_tp_gradient(rod, dynamic, cfg.sobolev);
+  case tangent_point_type::sobolev: {
+    sobolev_tp_rhs rhs = sobolev_tp_energy_grad(rod, dynamic, cfg.sobolev);
+    if (constraints && !constraints->empty())
+      return constraints->project_gradient(rod, rhs.f, cfg.sobolev, rhs.l0);
+    return sobolev_mg_solve(rod, rhs.f, cfg.sobolev, rhs.l0, std::move(rhs.cov));
+  }
+  case tangent_point_type::harmonic: {
+    auto g = calder::tangent_point_harmonic_gradient(
+        rod, x, l, T, cfg.harmonic.l0 * eps, cfg.harmonic.p0,
+        cfg.harmonic.l1 * eps, cfg.harmonic.p1);
+    if (cfg.harmonic.w != 1.0) {
+      for (auto &a : g)
+        a *= cfg.harmonic.w;
+    }
+    return g;
+  }
   case tangent_point_type::regularized:
   default: {
     auto g = calder::tangent_point_gradient(rod, x, l, T,
@@ -125,10 +141,18 @@ inline real tp_energy_one(asawa::rod::rod &rod,
   case tangent_point_type::cauchy:
     return tp_energy_cauchy(rod, dynamic, cfg.cauchy);
   case tangent_point_type::sobolev: {
-    const real l0 = cfg.sobolev.l0 * dynamic._Cc;
     const auto ev = sobolev_detail::eval_paper_tp(
-        rod, l0, cfg.sobolev.p, cfg.sobolev.bh_eps, cfg.sobolev.cone_eps);
+        rod, cfg.sobolev.tpe_alpha, cfg.sobolev.tpe_beta, cfg.sobolev.bh_eps);
     return cfg.sobolev.w * ev.energy;
+  }
+  case tangent_point_type::harmonic: {
+    const real eps = dynamic._Cc;
+    const std::vector<vec3> &x = rod.x();
+    const std::vector<real> l = rod.l0();
+    const std::vector<vec3> T = rod.N2c();
+    return cfg.harmonic.w * tp_sum_energy(calder::tangent_point_harmonic_potential(
+               rod, x, l, T, cfg.harmonic.l0 * eps, cfg.harmonic.p0,
+               cfg.harmonic.l1 * eps, cfg.harmonic.p1));
   }
   case tangent_point_type::regularized:
   default:
@@ -139,14 +163,16 @@ inline real tp_energy_one(asawa::rod::rod &rod,
 /// ∇E summed over cfg.type. A one-element list is that kernel alone.
 inline std::vector<vec3>
 tp_grad_energy(asawa::rod::rod &rod, const asawa::rod::dynamic &dynamic,
-               const tangent_point_solver_config &cfg) {
+               const tangent_point_solver_config &cfg,
+               sobolev_constraint_solver *constraints = nullptr) {
   if (cfg.type.empty())
-    return tp_grad_energy_one(rod, dynamic, cfg, tangent_point_type::soft);
-  std::vector<vec3> sum =
-      tp_grad_energy_one(rod, dynamic, cfg, cfg.type.front());
+    return tp_grad_energy_one(rod, dynamic, cfg, tangent_point_type::soft,
+                              constraints);
+  std::vector<vec3> sum = tp_grad_energy_one(rod, dynamic, cfg, cfg.type.front(),
+                                            constraints);
   for (size_t k = 1; k < cfg.type.size(); ++k) {
     const std::vector<vec3> g =
-        tp_grad_energy_one(rod, dynamic, cfg, cfg.type[k]);
+        tp_grad_energy_one(rod, dynamic, cfg, cfg.type[k], constraints);
     const size_t n = std::min(sum.size(), g.size());
     for (size_t i = 0; i < n; ++i)
       sum[i] += g[i];
@@ -169,21 +195,27 @@ struct tp_curvature_propose {
   tp_line_search_result ls{};
   std::vector<vec3> displacement; ///< α_accepted · d
   std::vector<vec3> direction;    ///< search direction d (peak-norm)
+  /// First collision time along direction. Line search starts at 2/3 of this.
+  real tau_max = 0.0;
   real propose_ms = 0.0;
 };
 
-/// Naive gradient descent: d = −g, peak-norm, alpha window on E_tp.
+/// Descent direction, then collision time, then energy search.
+/// Repulsive Curves §5.4: τ_max is the first collision along the step, and
+/// backtracking starts at (2/3) τ_max so the accepted step stays in the
+/// same isotopy class.
 inline tp_curvature_propose
 tp_propose_curvature_step(asawa::rod::rod &rod,
                           const asawa::rod::dynamic &dynamic,
-                          const tangent_point_solver_config &cfg) {
+                          const tangent_point_solver_config &cfg,
+                          sobolev_constraint_solver *constraints = nullptr) {
   using clock = std::chrono::steady_clock;
   const auto t0 = clock::now();
 
   tp_curvature_propose out;
   const tp_line_search_config &ls_cfg = cfg.line_search;
 
-  const std::vector<vec3> g = tp_grad_energy(rod, dynamic, cfg);
+  const std::vector<vec3> g = tp_grad_energy(rod, dynamic, cfg, constraints);
   const size_t n = g.size();
   out.direction.resize(n);
   for (size_t i = 0; i < n; ++i)
@@ -207,8 +239,32 @@ tp_propose_curvature_step(asawa::rod::rod &rod,
     return E;
   };
 
-  const real probe = tp_probe_length(rod.lavg(), ls_cfg);
-  out.ls = tp_best_energy_line_search(E0, probe, eval_E, ls_cfg);
+  // Geometric collision time along the unit-peak direction. The neighborhood
+  // (cfl_frac, envelope, gate, chain skip, tube radius) is the query.
+  // dt_max / dt_min / dx_max are apply-loop clamps, not a contact time:
+  // a ray that never hits falls through to the trust cap.
+  ccd_config ccd = cfg.ccd;
+  ccd.dt_min = 0.0;
+  ccd.dt_max = 0.0;
+  ccd.dx_max = 0.0;
+  ccd.neighborhood.dt_min = 0.0;
+  ccd.neighborhood.dt_max = 0.0;
+  cfl_neighborhood_result hit;
+  ccd_velocity(rod, out.direction, ccd, &hit);
+  const real trust = tp_probe_length(rod.lavg(), ls_cfg);
+  const real tau_hit = hit.dt_pre_clamp;
+  real alpha0 = trust;
+  if (tau_hit > real(0) && std::isfinite(tau_hit) &&
+      hit.limiting != cfl_limit_term::none) {
+    // Yu, Schumacher, Crane, Repulsive Curves, §5.4.
+    out.tau_max = tau_hit;
+    alpha0 = (real(2) / real(3)) * tau_hit;
+    if (trust > real(0) && alpha0 > trust)
+      alpha0 = trust;
+  } else {
+    out.tau_max = 0.0;
+  }
+  out.ls = tp_best_energy_line_search(E0, alpha0, eval_E, ls_cfg);
   out.ls.E_tp0 = E0;
   out.ls.g_d = tp_field_dot(g, out.direction);
   out.displacement = tp_scaled_direction(out.direction, out.ls.alpha);

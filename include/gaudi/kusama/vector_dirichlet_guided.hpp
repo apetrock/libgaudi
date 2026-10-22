@@ -30,7 +30,7 @@ struct edge_triangle_link {
 inline vec3 edge_cr_parallel_3d(const asawa::shell::shell &M,
                                 asawa::shell::CornerId c,
                                 const std::vector<vec3> &x) {
-  vec3 t = x[M.vert(M.next(c))] - x[M.vert(c)];
+  vec3 t = x[M.vert(M.other(c))] - x[M.vert(c)];
   real len = t.norm();
   if (len < 1e-20)
     return vec3::UnitX();
@@ -164,19 +164,31 @@ inline Eigen::VectorXd build_edge_curvature_guidance(
         edge_average_normal(M, x, edge_incident_faces[static_cast<size_t>(e)]);
     real wsum = 0;
     real acc_p = 0, acc_q = 0;
+    vec3 e_par = edge_cr_parallel_3d(M, c, x);
+    vec3 e_perp = edge_cr_perp_3d(M, c, x, n_avg);
+    vec3 anchor = vec3::Zero();
+    bool have_anchor = false;
     for (asawa::shell::FaceId f :
          edge_incident_faces[static_cast<size_t>(e)]) {
       if (static_cast<int>(f) < 0)
         continue;
       asawa::shell::face_curvature_frame fc =
           asawa::shell::face_curvature_frame_fit(M, x, f, stencil);
+      if (!fc.valid)
+        continue;
       vec3 d = project_to_tangent_plane(fc.t_min, n_avg);
       real dn = d.norm();
       if (dn < 1e-14)
         continue;
       d /= dn;
-      vec3 e_par = edge_cr_parallel_3d(M, c, x);
-      vec3 e_perp = edge_cr_perp_3d(M, c, x, n_avg);
+      // The eigenvector sign is arbitrary per face. Flip into the first
+      // face's direction before averaging, or the two wings cancel.
+      if (have_anchor && d.dot(anchor) < real(0))
+        d = -d;
+      if (!have_anchor) {
+        anchor = d;
+        have_anchor = true;
+      }
       real w = asawa::shell::face_area(M, f, x);
       wsum += w;
       acc_p += w * d.dot(e_par);
@@ -208,9 +220,9 @@ inline void orient_edge_guidance_sign_coherence(
     if (static_cast<int>(c) < 0)
       continue;
     int a = std::min(static_cast<int>(M.vert(c)),
-                     static_cast<int>(M.vert(M.next(c))));
+                     static_cast<int>(M.vert(M.other(c))));
     int b = std::max(static_cast<int>(M.vert(c)),
-                     static_cast<int>(M.vert(M.next(c))));
+                     static_cast<int>(M.vert(M.other(c))));
     std::pair<int, int> key = {a, b};
     if (key < best) {
       best = key;
@@ -455,7 +467,7 @@ inline void collect_edge_midpoints_normals(
     if (static_cast<int>(c) < 0)
       continue;
     const vec3 &xa = x[M.vert(c)];
-    const vec3 &xb = x[M.vert(M.next(c))];
+    const vec3 &xb = x[M.vert(M.other(c))];
     p_edge[static_cast<size_t>(e)] = 0.5 * (xa + xb);
     n_edge[static_cast<size_t>(e)] =
         edge_average_normal(M, x, edge_incident_faces[static_cast<size_t>(e)]);

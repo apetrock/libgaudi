@@ -29,7 +29,13 @@
 # Crane et al. — Repulsive Curves / Repulsive Surfaces
 # https://www.cs.cmu.edu/~kmcrane/Projects/RepulsiveCurves/RepulsiveCurves.pdf
 # https://www.cs.cmu.edu/~kmcrane/Projects/RepulsiveSurfaces/RepulsiveSurfaces.pdf
+# DOI (TOG 40(2) Article 10): https://doi.org/10.1145/3439429
 # Local: crane2021-repulsive-curves.pdf, crane2021-repulsive-surfaces.pdf
+
+# Yu, Schumacher, Crane 2021 — Repulsive Curves supplemental (evaluation)
+# https://www.cs.cmu.edu/~kmcrane/Projects/RepulsiveCurves/RepulsiveCurves_Supplemental.pdf
+# Same TOG article: https://doi.org/10.1145/3439429
+# Local: crane2021-repulsive-curves-supplemental.pdf (fetched 2026-10-01)
 
 # Gillespie — Harnack Tracing / Integer Coordinates
 # https://markjgillespie.com/Research/harnack-tracing/HarnackTracing.pdf
@@ -78,3 +84,110 @@
 # arXiv: https://arxiv.org/pdf/math-ph/0503012
 # DOI: https://doi.org/10.1098/rspa.2005.1527
 # Local: dennis2005-geometry-calugareanu.pdf (from Downloads / arXiv, 2026-09-12)
+
+# Crane, Pinkall, Schröder 2013 — Robust Fairing via Conformal Curvature Flow
+# Project: https://www.cs.cmu.edu/~kmcrane/Projects/ConformalWillmoreFlow/
+# PDF: https://www.cs.cmu.edu/~kmcrane/Projects/ConformalWillmoreFlow/paper.pdf
+# DOI: https://doi.org/10.1145/2461912.2461986
+# Local: crane2013-conformal-willmore-flow.pdf (fetched 2026-10-05)
+
+# Soliman, Chern, Diamanti, Knöppel, Pinkall, Schröder 2021 — Constrained Willmore Surfaces
+# PDF: https://www.yousufsoliman.com/projects/download/ConstrainedWillmoreSurfaces.pdf
+# DOI: https://doi.org/10.1145/3450626.3459759
+# Local: soliman2021-constrained-willmore-surfaces.pdf (fetched 2026-10-06)
+
+# Pinkall 1985 — Hopf tori in S^3
+# DOI: https://doi.org/10.1007/BF01389060
+# Course PDF: https://www3.math.tu-berlin.de/geometrie/Lehre/SS12/MathVisII/Pinkall%20-%201985%20-%20Hopf%20tori%20in%20S3.pdf
+# Local: pinkall1985-hopf-tori.pdf (fetched 2026-10-07)
+
+# Knöppel, Crane, Pinkall, Schröder 2015 — Stripe Patterns on Surfaces
+# ACM Trans. Graph. 34, 4 (2015), 1–11
+# DOI: https://doi.org/10.1145/2767000
+# Project: https://www.cs.cmu.edu/~kmcrane/Projects/StripePatterns/
+# PDF: https://www.cs.cmu.edu/~kmcrane/Projects/StripePatterns/paper.pdf
+# Local: knoeppel2015-stripe-patterns.pdf (fetched 2026-10-08)
+
+# Eigensatz 2010 — Constraint-Based Surface Processing for Geometric Modeling and Architecture
+# Diss. ETH No. 19140
+# DOI: https://doi.org/10.2312/diss.20108240
+# PDF: https://diglib.eg.org/bitstream/handle/10.2312/8240/eigensatz.pdf?sequence=1
+# Local: eigensatz2010-constraint-based-surface-processing.pdf (from Downloads, 2026-10-13)
+# Section chunks: reference/.cache/eigensatz2010-constraint-based-surface-processing/INDEX.md
+
+
+# Langer & Singer 1984 — The total squared curvature of closed curves
+# J. Differential Geom. 20 (1984), 1–22
+# DOI: https://doi.org/10.4310/jdg/1214438990
+# Not fetched 2026-10-07: Unpaywall and Semantic Scholar list it closed; Project Euclid blocks the PDF.
+
+# Ferus & Pedit 1990 — S^1-equivariant minimal tori in S^4 and S^1-equivariant Willmore tori in S^3
+# Math. Z. 204 (1990), 269–282
+# DOI: https://doi.org/10.1007/BF02570873
+# Not fetched 2026-10-07: closed. Do not substitute arXiv dg-ga/9507001 (Curved flats in symmetric spaces, 1995).
+
+# Bouaziz, Martin, Liu, Kavan, Pauly 2014 — Projective Dynamics: Fusing Constraint Projections for Fast Simulation
+# ACM Trans. Graph. 33(4) (SIGGRAPH 2014)
+# DOI: https://doi.org/10.1145/2601097.2601116
+# Not fetched 2026-10-17.
+
+# Müller, Heidelberger, Teschner, Gross 2005 — Meshless Deformations Based on Shape Matching
+# ACM Trans. Graph. 24(3) (SIGGRAPH 2005), 471–478
+# DOI: https://doi.org/10.1145/1073204.1073216
+# Not fetched 2026-10-17.
+
+# Overby, Brown, Li, Narain 2017 — ADMM ⊇ Projective Dynamics: Fast Simulation of Hyperelastic Models with Dynamic Constraints
+# IEEE TVCG 23(10)
+# DOI: https://doi.org/10.1109/TVCG.2017.2730875
+# Not fetched 2026-10-17.
+
+# Wang, Liu, Tong 2012 — Linear Surface Reconstruction from Discrete Fundamental Forms on Triangle Meshes
+# Computer Graphics Forum 31(8):2277-2287
+# DOI: https://doi.org/10.1111/j.1467-8659.2012.03153.x
+# https://www.cse.msu.edu/~ytong/DiscreteFundamentalForms.pdf
+
+# Dynamic mesh correctness and quality (TODO item 9, not fetched)
+# Lawson 1977; Rosenberg & Stenger 1975 (Math. Comp.); Rivara 1984, 1997 (IJNME); Dey, Edelsbrunner, Guha, Nekhayev 1999;
+# Bobenko & Springborn 2007 (DCG); Fisher, Springborn, Schroeder, Bobenko 2007 (Computing); Sharp, Soliman, Crane 2019 (ACM TOG);
+# Botsch & Kobbelt 2004 (SGP); Gonthier 2008 (Notices AMS)
+
+# Peng, Deng, Zhang, Geng, Qin, Liu 2018 — Anderson Acceleration for Geometry Optimization and Physics Simulation
+# ACM Trans. Graph. 37(4) (SIGGRAPH 2018), 42:1–42:14
+# DOI: https://doi.org/10.1145/3197517.3201290
+# https://arxiv.org/pdf/1805.05715
+
+# Angelidis, Cani, Wyvill, King 2006 — Swirling-Sweepers: Constant-Volume Modeling
+# Graphical Models 68(4), 324–332 (Pacific Graphics 2004)
+# DOI: https://doi.org/10.1016/j.gmod.2005.11.001
+# https://dgp.toronto.edu/~silex/Publications/ACWK04/ACWK04b.pdf
+
+# von Funck, Theisel, Seidel 2006 — Vector Field Based Shape Deformations
+# ACM Trans. Graph. 25(3) (SIGGRAPH 2006)
+# DOI: https://doi.org/10.1145/1141911.1142002
+# https://graphics.stanford.edu/courses/cs468-07-winter/Papers/fts-vfbsd-06.pdf
+
+# Combaz, Neyret 2002 — Painting Folds using Expansion Textures
+# Pacific Graphics 2002
+# DOI: https://doi.org/10.1109/pccga.2002.1167853
+# http://evasion.imag.fr/Publications/2002/CN02/pg.pdf
+
+# Rodriguez, Hoger, McCulloch 1994 — Stress-dependent finite growth in soft elastic tissues
+# J. Biomechanics 27(4), 455–467
+# DOI: https://doi.org/10.1016/0021-9290(94)90021-3
+# https://biomechanics.stanford.edu/me338/me338_project04.pdf
+
+# Merks 2003 — Branching Growth in Stony Corals: a Modelling Approach (PhD thesis, University of Amsterdam)
+# https://pure.uva.nl/ws/files/3391622/26478_Merks.pdf
+# Related: Merks, Hoekstra, Kaandorp, Sloot 2003, J. Theor. Biol. 224(2), 153–166, https://doi.org/10.1016/S0022-5193(03)00140-1
+
+# Sharp, Soliman, Crane 2019 — The Vector Heat Method (ACM TOG 38(3))
+# https://www.cs.cmu.edu/~kmcrane/Projects/VectorHeatMethod/paper.pdf
+# https://doi.org/10.1145/3243651
+
+# Crane, Desbrun, Schröder 2010 — Trivial Connections on Discrete Surfaces (SGP, CGF 29(5))
+# https://www.cs.cmu.edu/~kmcrane/Projects/TrivialConnections/paper.pdf
+# https://doi.org/10.1111/j.1467-8659.2010.01761.x
+
+# Knöppel, Crane, Pinkall, Schröder 2013 — Globally Optimal Direction Fields (ACM TOG 32(4))
+# https://www.cs.cmu.edu/~kmcrane/Projects/GloballyOptimalDirectionFields/paper.pdf
+# https://doi.org/10.1145/2461912.2462005

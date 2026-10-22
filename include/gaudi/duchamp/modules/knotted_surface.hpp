@@ -26,6 +26,7 @@
 #include "gaudi/hepworth/block/solver_composition.hpp"
 #include "gaudi/hepworth/blocks/rod_position_block.hpp"
 #include "gaudi/hepworth/blocks/rod_quaternion_block.hpp"
+#include "gaudi/hepworth/blocks/shell_frame_block.hpp"
 #include "gaudi/hepworth/blocks/shell_position_block.hpp"
 #include "gaudi/hepworth/constraints/bundles.hpp"
 #include "gaudi/hepworth/nodes/solver_builder.hpp"
@@ -36,6 +37,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <vector>
 #include "gaudi/geometry_logger.hpp"
@@ -45,6 +47,59 @@ namespace gaudi
 
   namespace duchamp
   {
+
+    struct knotted_surface_config
+    {
+      /// One-ring Willmore: spokes project onto the two-ring Weingarten quadric.
+      /// 0 leaves it off.
+      real w_willmore = 1e-0;
+      /// Dihedral hinge (`edge_willmore`). 0 leaves it off.
+      real w_edge_willmore = 0;
+      /// Cotangent Laplacian, target Δx = 0. 0 leaves it off.
+      real w_smooth = 0;
+      real w_area = 5e-2;
+      real w_shell_strain = 1.0e-1;
+      real w_shell_bending = 5.0e-2;
+      real w_rod_min_kink = 1.0e-2; // 3rd-diff / min-jerk fairing on positions
+      real w_rod_strain = 1.0e-1;
+      real w_rod_bend = 4.0e-1;
+      real w_rod_twist = 4.0e-1;
+      real w_rod_weld = 1.0;
+      real w_shell_weld = 1.0;
+      real w_tunnel_orientation = 0.01; // triangle_dipole_tunneling (face N)
+      real w_dipole_weld = 0.1;         // dipole_weld shell side
+      real w_dipole_weld_rod = 0.01;    // dipole_weld rod side
+      real w_tunnel_force = 0.1;        // v += (w/h)*dx; mesh-N ray → dipole cyl
+      real w_darboux_force = 0.0;       // f = (w/h²)*(d0-d); rod LS-Darboux zero set
+      real darboux_fit_scale = 0.1;     // fit length = scale * _eps
+      real darboux_fit_p0 = 3.0;        // κ_inv_dist power
+      real darboux_fit_p1 = 8.0;        // sin(φ) radial-gate power
+      // Soft tip-in of mesh N at query: w_foot = foot_normal_w * Σ w_MLS.
+      // 1.0 ≈ match neighborhood mass (not an absolute weight).
+      real darboux_foot_normal_w = 1.0;
+      // Off while investigating divergent sites (was kusama one-ring jet-smooth).
+      bool darboux_smooth = false; // kusama jet-smooth Q on mesh (as medial)
+      kusama::cyclide_jet_smooth_params darboux_smooth_params{
+          .wi = 0.5,      // weaker anchor → more neighbor agreement
+          .alpha_G = 2.0, // gradient (C1) match across edges
+          .alpha_H = 0.1, // Hessian match
+          .use_cotan_weights = true,
+          .sweeps = 2, // Jacobi iterations
+      };
+      real w_rod_pin = 1.0e-2;
+      /// Floor on the rod–rod centerline gap, in units of `__R->_r`.
+      real rod_offset_min = 1.0;
+      /// Rod–rod edge–edge constraints. Off lets welded strands leave the surface.
+      bool repel_rods = true;
+      real rod_offset = 1.0; // enforced gap this frame, >= rod_offset_min
+      // Absolute dipole cylinder radius for weld/tunnel. <=0 → legacy
+      // rod_offset * __R->_r.
+      real dipole_radius = 0.0;
+      /// 0 keeps the pose at the start of the step. 1 keeps the solved pose.
+      real position_mix = 0.5;
+      real damping = 0.5;
+      int iterations = 10;
+    };
 
     class knotted_surface_module : public module_base
     {
@@ -73,16 +128,20 @@ namespace gaudi
         _rod = std::make_shared<hepworth::block::rod_position_block>(__R, __Rd);
         _rod_quat =
             std::make_shared<hepworth::block::rod_quaternion_block>(__R, __Rd);
+        _shell_frame =
+            std::make_shared<hepworth::block::shell_frame_block>(__M);
 
         _shell->with_force([this]() { return _fs; });
         _rod->with_force([this]() { return _fr; });
+        _rod->with_velocity([this]() { return _vr; });
 
         _config_solver =
             hepworth::block::block_solver_builder<
                 hepworth::block::shell_position_block,
                 hepworth::block::rod_position_block,
-                hepworth::block::rod_quaternion_block>::create()
-                .with_blocks(_shell, _rod, _rod_quat)
+                hepworth::block::rod_quaternion_block,
+                hepworth::block::shell_frame_block>::create()
+                .with_blocks(_shell, _rod, _rod_quat, _shell_frame)
                 .with_presolve([this](hepworth::block::solver_context &) {
                   __R->update_lengths();
                   // Stash once per step for dipole constraints / forces.
@@ -156,7 +215,7 @@ namespace gaudi
                   }
                 })
                 .with_recompute([this](hepworth::block::solver_context &ctx) {
-                  if (!_repel_rods)
+                  if (!_config.repel_rods)
                     return;
                   auto blocks = hepworth::block::select_blocks<1>(ctx);
                   // chain_sep=3: skip AB↔BC and AB↔CD (short segs + growing
@@ -185,13 +244,37 @@ namespace gaudi
                       hepworth::block::select_blocks<0>(ctx));
                 })
                 .with_recompute([this](hepworth::block::solver_context &ctx) {
+                  if (_config.w_smooth <= 0.0)
+                    return;
+                  ctx.shell_mesh = __M.get();
+                  hepworth::block::init_laplacian(
+                      *__M, ctx.constraints, _shell_xs->get(),
+                      hepworth::block::laplacian_mode::null,
+                      hepworth::block::laplacian_stencil::cotan,
+                      _config.w_smooth,
+                      hepworth::block::select_blocks<0>(ctx));
+                })
+                .with_recompute([this](hepworth::block::solver_context &ctx) {
                   if (_config.w_willmore <= 0.0)
                     return;
                   ctx.shell_mesh = __M.get();
                   const auto atten = force_attenuation_verts();
-                  const auto we =
-                      edge_weights_from_vert_attenuation(*__M, atten,
-                                                         _config.w_willmore);
+                  const auto &x = _shell_xs->get();
+                  std::vector<real> wv(x.size(), _config.w_willmore);
+                  const size_t n = std::min(wv.size(), atten.size());
+                  for (size_t i = 0; i < n; ++i)
+                    wv[i] *= atten[i];
+                  hepworth::block::init_willmore(
+                      *__M, ctx.constraints, x, wv,
+                      hepworth::block::select_blocks<0>(ctx));
+                })
+                .with_recompute([this](hepworth::block::solver_context &ctx) {
+                  if (_config.w_edge_willmore <= 0.0)
+                    return;
+                  ctx.shell_mesh = __M.get();
+                  const auto atten = force_attenuation_verts();
+                  const auto we = edge_weights_from_vert_attenuation(
+                      *__M, atten, _config.w_edge_willmore);
                   hepworth::block::init_edge_willmore(
                       *__M, ctx.constraints, we,
                       hepworth::block::select_blocks<0>(ctx));
@@ -214,8 +297,8 @@ namespace gaudi
                       0.5 * eps, 0.5 * eps, 1.0, {blocks[0], blocks[0]});
                 })
                 .dt(0.05)
-                .damping(0.5)
-                .iterations(10)
+                .damping(_config.damping)
+                .iterations(_config.iterations)
                 .build();
       };
 
@@ -792,19 +875,19 @@ namespace gaudi
     hepworth::block::init_edge_willmore(M, constraints, df, blocks);
   }
 #endif
-      // Attenuate smoothing where tunnel force is strong:
-      // a[v] = 1 - ||f[v]|| / f_max  (1 away from force, 0 at peak).
+      // Attenuate smoothing where the tunnel displacement is large:
+      // a[v] = 1 - ||dx[v]|| / dx_max  (1 away from the kick, 0 at peak).
       std::vector<real> force_attenuation_verts() const {
-        std::vector<real> a(_fs.size(), 1.0);
-        if (_fs.empty())
+        std::vector<real> a(_tunnel_kick.size(), 1.0);
+        if (_tunnel_kick.empty())
           return a;
         real f_max = 0.0;
-        for (const vec3 &f : _fs)
-          f_max = std::max(f_max, f.norm());
+        for (const vec3 &d : _tunnel_kick)
+          f_max = std::max(f_max, d.norm());
         if (!(f_max > 1e-18))
           return a;
-        for (size_t i = 0; i < _fs.size(); ++i)
-          a[i] = 1.0 - std::min(1.0, _fs[i].norm() / f_max);
+        for (size_t i = 0; i < _tunnel_kick.size(); ++i)
+          a[i] = 1.0 - std::min(1.0, _tunnel_kick[i].norm() / f_max);
         return a;
       }
 
@@ -909,7 +992,10 @@ namespace gaudi
         std::vector<vec3> &xr = __R->x();
         _pr = std::vector<vec3>(0, vec3::Zero());
         _fs = std::vector<vec3>(xs.size(), vec3::Zero());
+        _tunnel_kick = std::vector<vec3>(xs.size(), vec3::Zero());
         _fr = std::vector<vec3>(xr.size(), vec3::Zero());
+        _vr = std::vector<vec3>(xr.size(), vec3::Zero());
+        _rod->set_integrate_velocity(false);
       }
 
       void set_rod_pin(const std::vector<vec3> &x, const real &w = 1e-1)
@@ -919,12 +1005,37 @@ namespace gaudi
         _config.w_rod_pin = w;
       }
 
+      /// Pin the rod to `x + dx` for this frame. Call after `init_step`.
+      /// Keeps `w_rod_pin`. Does not integrate a rod velocity.
+      void pin_rod_to_delta(const std::vector<vec3> &dx) {
+        const std::vector<vec3> &x = __R->x();
+        std::vector<vec3> target(x.size(), vec3::Zero());
+        const size_t n = std::min(x.size(), dx.size());
+        for (size_t i = 0; i < x.size(); ++i)
+          target[i] = x[i];
+        for (size_t i = 0; i < n; ++i)
+          target[i] += dx[i];
+        _pin_rod = true;
+        _pr = std::move(target);
+      }
+
       void add_rod_force(const std::vector<vec3> &fr, const real &h = 1.0)
       {
         for (int i = 0; i < fr.size(); i++)
         {
           _fr[i] += h * fr[i];
         }
+      }
+
+      /// Rod target velocity for this step (`x += h v`). Call after `init_step`.
+      void add_rod_velocity(const std::vector<vec3> &vr)
+      {
+        if (_vr.size() != __R->x().size())
+          _vr.assign(__R->x().size(), vec3::Zero());
+        const size_t n = std::min(_vr.size(), vr.size());
+        for (size_t i = 0; i < n; ++i)
+          _vr[i] += vr[i];
+        _rod->set_integrate_velocity(true);
       }
 
       void add_shell_force(const std::vector<vec3> &fs, const real &h = 1.0)
@@ -938,8 +1049,8 @@ namespace gaudi
       void step(real h)
       {
         _config_solver.dt = h;
-        _config_solver.damping = 0.5;
-        _config_solver.iterations = 10;
+        _config_solver.damping = _config.damping;
+        _config_solver.iterations = _config.iterations;
 
         std::vector<vec3> &xs = asawa::get_vec_data(*__M, 0);
         std::vector<vec3> &xr = __R->x();
@@ -950,16 +1061,22 @@ namespace gaudi
         if (_config.w_tunnel_force > 0.0 || _config.w_darboux_force > 0.0) {
           refresh_dipole_cache();
 
-          // Tunnel: f = (w/h²)*dx along mesh N onto dipole cylinder.
-          if (_config.w_tunnel_force > 0.0 && _dipole_Nr.size() == xr.size()) {
+          // Tunnel: dx is the displacement onto the dipole cylinder along mesh N.
+          // v += (w/h)*dx so the inertial step adds w*dx via x += h v.
+          if (_config.w_tunnel_force > 0.0 && _dipole_Nr.size() == xr.size() &&
+              h > 1e-12) {
             std::vector<vec3> tunnel;
             dipole_tunneling::accumulate_dipole_tunnel_forces(
                 *__M, xs, xr, _dipole_Nr, __R->get_edge_vert_ids(), _tunnel_r,
                 _tunnel_r, /*force_w unused=*/1.0, tunnel);
-            if (tunnel.size() == _fs.size()) {
-              const real inv_h2 = _config.w_tunnel_force / (h * h);
-              for (size_t i = 0; i < _fs.size(); ++i)
-                _fs[i] += inv_h2 * tunnel[i];
+            std::vector<vec3> &vs = _shell_vs->get();
+            const size_t n = std::min(tunnel.size(), vs.size());
+            const real inv_h = _config.w_tunnel_force / h;
+            if (_tunnel_kick.size() < xs.size())
+              _tunnel_kick.assign(xs.size(), vec3::Zero());
+            for (size_t i = 0; i < n; ++i) {
+              vs[i] += inv_h * tunnel[i];
+              _tunnel_kick[i] = _config.w_tunnel_force * tunnel[i];
             }
           }
 
@@ -1004,13 +1121,15 @@ namespace gaudi
                 geometry_logger::line(xs[i], xs[i] + dx,
                                       vec4(0.2, 0.9, 0.4, 1.0));
               _fs[i] = inv_h2 * dx;
+              if (i < _tunnel_kick.size())
+                _tunnel_kick[i] = _config.w_darboux_force * dx;
             }
           }
         }
 
         hepworth::block::run_solver_step(_config_solver, _solver);
 
-        const real t = 0.5;
+        const real t = _config.position_mix;
         for (size_t i = 0; i < xr.size(); i++)
           xr[i] = va::mix(t, xr0[i], xr[i]);
         for (size_t i = 0; i < xs.size(); i++)
@@ -1018,7 +1137,45 @@ namespace gaudi
         _frame++;
       }
 
+      void set_config(const knotted_surface_config &cfg) { _config = cfg; }
+      const knotted_surface_config &config() const { return _config; }
+
+      /// Red tangent, green bitangent, blue normal. `stride` keeps every Nth
+      /// live vertex. A missing quat is drawn as the world axes.
+      void draw_shell_frames(int stride) {
+        if (stride < 1)
+          return;
+        const std::vector<vec3> &x = asawa::const_get_vec_data(*__M, 0);
+        const std::vector<quat> *u = nullptr;
+        if (_shell_frame) {
+          const std::vector<quat> &frames = _shell_frame->frames();
+          if (!frames.empty())
+            u = &frames;
+        }
+        const int n = static_cast<int>(x.size());
+        const real scale = std::max(_eps, real(1e-4));
+        int seen = 0;
+        for (int i = 0; i < n; ++i) {
+          if (static_cast<int>(__M->vbegin(asawa::shell::vert_id(i))) < 0)
+            continue;
+          if (seen++ % stride != 0)
+            continue;
+          mat3 R = mat3::Identity();
+          if (u && i < static_cast<int>(u->size())) {
+            quat q = (*u)[static_cast<size_t>(i)];
+            const real n2 = q.squaredNorm();
+            if (n2 > 1e-8 && std::isfinite(n2)) {
+              q.normalize();
+              R = q.toRotationMatrix();
+            }
+          }
+          geometry_logger::frame(R, x[static_cast<size_t>(i)], scale);
+        }
+      }
+
       void set_willmore_weight(real w) { _config.w_willmore = w; }
+      void set_edge_willmore_weight(real w) { _config.w_edge_willmore = w; }
+      void set_smooth_weight(real w) { _config.w_smooth = w; }
       void set_area_weight(real w) { _config.w_area = w; }
       void set_shell_strain_weight(real w) { _config.w_shell_strain = w; }
       void set_shell_bending_weight(real w) { _config.w_shell_bending = w; }
@@ -1050,8 +1207,64 @@ namespace gaudi
         _angle_constraints.push_back(angle_constraint{axis, theta, w});
       }
 
-      void set_repel_rods(bool b) { _repel_rods = b; }
+      void set_repel_rods(bool b) {
+        _repel_rods = b;
+        _config.repel_rods = b;
+      }
       void set_rod_offset(real o) { _config.rod_offset = o; }
+
+      /// Min non-adjacent rod–rod gap at `x + dx`, in units of `__R->_r`.
+      /// Enforced gap is `max(rod_offset_min, measured)`. Same chain skip as
+      /// the edge–edge constraint (`chain_sep` 3).
+      void adopt_rod_offset_from_delta(const std::vector<vec3> &dx) {
+        const real floor = _config.rod_offset_min;
+        if (!(__R->_r > 1e-12) || dx.empty()) {
+          _config.rod_offset = std::max(_config.rod_offset, floor);
+          return;
+        }
+        std::vector<vec3> &x = __R->x();
+        if (x.empty()) {
+          _config.rod_offset = std::max(_config.rod_offset, floor);
+          return;
+        }
+        const std::vector<vec3> x0 = x;
+        const size_t n = std::min(x.size(), dx.size());
+        for (size_t i = 0; i < n; ++i)
+          x[i] = x0[i] + dx[i];
+        __Rd->update_tree();
+
+        const real scale =
+            std::max(_config.rod_offset, floor);
+        const real tol =
+            std::max(real(4) * __R->_r,
+                     (real(1) + real(0.1)) * scale * __R->_r);
+        const std::vector<index_t> edge_verts = __R->get_edge_vert_ids();
+        asawa::rod::dynamic::edge_view_type edges(x, edge_verts);
+        const auto raw = __Rd->get_collisions(edges, tol);
+        const real tol2 = tol * tol;
+        real min_d2 = std::numeric_limits<real>::infinity();
+        for (const auto &c : raw) {
+          if (c[0] < 0 || c[1] < 0 || c[0] == c[1] || c[0] > c[1])
+            continue;
+          const std::array<index_t, 4> c4 = __Rd->get_collision_ids(c);
+          if (c4[0] < 0 || c4[1] < 0 || c4[2] < 0 || c4[3] < 0)
+            continue;
+          if (hepworth::block::rod_edges_chain_neighbors(
+                  *__R, c4[0], c4[1], c4[2], c4[3], /*min_sep=*/3))
+            continue;
+          const std::array<real, 3> d = va::distance_Segment_Segment(
+              x[c4[0]], x[c4[1]], x[c4[2]], x[c4[3]]);
+          if (d[0] < tol2 && d[0] < min_d2)
+            min_d2 = d[0];
+        }
+
+        x = x0;
+        __Rd->update_tree();
+        _config.rod_offset = floor;
+        if (std::isfinite(min_d2))
+          _config.rod_offset =
+              std::max(floor, std::sqrt(min_d2) / __R->_r);
+      }
       void set_dipole_radius(real r) { _config.dipole_radius = r; }
       void set_shell_collisions(bool b) { _shell_collisions = b; }
       void set_pin_rod(bool b) { _pin_rod = b; }
@@ -1078,7 +1291,9 @@ namespace gaudi
 
       // std::map<index_t, index_t> _rod_adjacent_edges;
       std::vector<vec3> _fr;
+      std::vector<vec3> _vr;
       std::vector<vec3> _fs;
+      std::vector<vec3> _tunnel_kick;
       std::vector<vec3> _dipole_Nr;
       real _tunnel_r = 0.0;
 
@@ -1100,9 +1315,11 @@ namespace gaudi
       hepworth::block::shell_position_block::ptr _shell;
       hepworth::block::rod_position_block::ptr _rod;
       hepworth::block::rod_quaternion_block::ptr _rod_quat;
+      hepworth::block::shell_frame_block::ptr _shell_frame;
       hepworth::block::block_solver_config<hepworth::block::shell_position_block,
                                            hepworth::block::rod_position_block,
-                                           hepworth::block::rod_quaternion_block>
+                                           hepworth::block::rod_quaternion_block,
+                                           hepworth::block::shell_frame_block>
           _config_solver;
       hepworth::block::projection_solver _solver;
 
@@ -1118,44 +1335,7 @@ namespace gaudi
       bool _repel_rods = true;
       bool _shell_collisions = true;
       bool _pin_rod = true;
-      struct
-      {
-        real w_willmore = 1e-0;
-        real w_area = 5e-2;
-        real w_shell_strain = 1.0e-1;
-        real w_shell_bending = 5.0e-2;
-        real w_rod_min_kink = 1.0e-2; // 3rd-diff / min-jerk fairing on positions
-        real w_rod_strain = 1.0e-1;
-        real w_rod_bend = 4.0e-1;
-        real w_rod_twist = 4.0e-1;
-        real w_rod_weld = 1.0;
-        real w_shell_weld = 1.0;
-        real w_tunnel_orientation = 0.01; // triangle_dipole_tunneling (face N)
-        real w_dipole_weld = 0.1;       // dipole_weld shell side
-        real w_dipole_weld_rod = 0.01;  // dipole_weld rod side
-        real w_tunnel_force = 0.1;       // f = (w/h²)*dx; mesh-N ray → dipole cyl
-        real w_darboux_force = 0.0;      // f = (w/h²)*(d0-d); rod LS-Darboux zero set
-        real darboux_fit_scale = 0.1;    // fit length = scale * _eps
-        real darboux_fit_p0 = 3.0;       // κ_inv_dist power
-        real darboux_fit_p1 = 8.0;       // sin(φ) radial-gate power
-        // Soft tip-in of mesh N at query: w_foot = foot_normal_w * Σ w_MLS.
-        // 1.0 ≈ match neighborhood mass (not an absolute weight).
-        real darboux_foot_normal_w = 1.0;
-        // Off while investigating divergent sites (was kusama one-ring jet-smooth).
-        bool darboux_smooth = false;      // kusama jet-smooth Q on mesh (as medial)
-        kusama::cyclide_jet_smooth_params darboux_smooth_params{
-            .wi = 0.5,               // weaker anchor → more neighbor agreement
-            .alpha_G = 2.0,          // gradient (C1) match across edges
-            .alpha_H = 0.1,          // Hessian match
-            .use_cotan_weights = true,
-            .sweeps = 2,             // Jacobi iterations
-        };
-        real w_rod_pin = 1.0e-2;
-        real rod_offset = 1.0;           // rod–rod collision scale on __R->_r
-        // Absolute dipole cylinder radius for weld/tunnel. <=0 → legacy
-        // rod_offset * __R->_r.
-        real dipole_radius = 0.0;
-      } _config;
+      knotted_surface_config _config;
     };
 
   } // namespace duchamp

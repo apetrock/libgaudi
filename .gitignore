@@ -124,6 +124,12 @@ public
 tmp/
 temp/
 
+# Braid demo log and Sobolev blowup dumps
+/dump/
+
+# Extracted paper text (reference/pdf_text.py)
+reference/.cache/
+
 # Knot Atlas RDF dumps (fetch via scripts/knots/fetch_katlas_rdf.py; ~45MB gz)
 assets/knots/katlas/*.rdf.gz
 assets/knots/katlas/*.rdf

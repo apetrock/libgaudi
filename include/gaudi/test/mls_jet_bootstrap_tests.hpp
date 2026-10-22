@@ -62,8 +62,8 @@ GAUDI_TEST(albers_osculating_torus_from_sphere_like_W) {
   // still produces a finite tube prior.
   GAUDI_EXPECT(std::isfinite(T.R));
   GAUDI_EXPECT(std::abs(albers::torus_sdf(foot, T)) < 1e-6);
-  // Sphere limit: geometric center opposite outward n → foot - r*n.
-  GAUDI_EXPECT((T.center + T.r * n).norm() < 1e-5);
+  // Sphere limit: center is the cylinder_minor center, foot + n/κ.
+  GAUDI_EXPECT((T.center - T.r * n).norm() < 1e-5);
   GAUDI_EXPECT(T.sign == 1);
 }
 

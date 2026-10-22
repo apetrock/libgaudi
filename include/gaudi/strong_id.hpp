@@ -2,6 +2,7 @@
 #define GAUDI_STRONG_ID_HPP
 
 #include <compare>
+#include <cstddef>
 #include <functional>
 #include <ostream>
 
@@ -29,6 +30,13 @@ public:
     return os << static_cast<T>(id);
   }
 };
+
+/// Subscript for a live id. The value stays signed so `-1` still means absent.
+/// `idx` is for an id already known to be `>= 0`.
+template <auto K, typename T>
+constexpr std::size_t idx(Id<K, T> id) noexcept {
+  return static_cast<std::size_t>(static_cast<T>(id));
+}
 
 } // namespace gaudi
 

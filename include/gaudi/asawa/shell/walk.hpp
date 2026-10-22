@@ -243,11 +243,8 @@ bool walk(const shell &M, const std::vector<vec3> &x, const CornerId &start,
   };
 
   auto get_one_ring = [&](CornerId c) {
-    std::vector<index_t> range;
-    M.const_for_each_vertex(M.vert(c), [&range](CornerId ci, const shell &M) {
-      range.push_back(M.next(ci));
-    });
-    return range;
+    const std::vector<CornerId> link = M.link_corners(M.vert(c));
+    return std::vector<index_t>(link.begin(), link.end());
   };
 
   CornerId corner = start;

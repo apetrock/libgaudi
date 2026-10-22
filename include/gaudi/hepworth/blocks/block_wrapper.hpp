@@ -17,6 +17,8 @@ struct dof_block_wrapper {
   virtual ~dof_block_wrapper() = default;
   virtual void prepare(solver_context &ctx) = 0;
   virtual void emit_dof_blocks(std::vector<sim_block::ptr> &out) = 0;
+  /// Position block emitted by `emit_dof_blocks`, when this wrapper owns a shell.
+  virtual vec3_block::ptr shell_positions() const { return nullptr; }
   virtual void apply_external_input(const std::vector<vec3> &input, real scale = 1.0) = 0;
   virtual void flush_external_inputs() = 0;
 };

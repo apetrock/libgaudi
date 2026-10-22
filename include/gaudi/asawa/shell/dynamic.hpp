@@ -11,6 +11,7 @@
 #include "../datums.hpp"
 
 #include "datum_x.hpp"
+#include "element_qc.hpp"
 #include "operations.hpp"
 #include "shell.hpp"
 // #include "subdivide.hpp"
@@ -499,15 +500,27 @@ struct one_ring_dedup {
   }
 
 private:
+  void flag_face(shell &M, CornerId c) {
+    const int n = static_cast<int>(M.corner_count());
+    const CornerId start = c;
+    for (int k = 0; k < n; ++k) {
+      if (static_cast<int>(c) < 0 || M.next(c) < 0)
+        return;
+      const size_t e = static_cast<size_t>(c) / 2;
+      if (e < edge_flags.size())
+        edge_flags[e] = true;
+      c = M.next(c);
+      if (c == start)
+        return;
+    }
+  }
+
   void flag_one_ring(shell &M, VertId v) {
-    M.for_each_vertex(v, [this](CornerId ci, shell &m) {
-      CornerId ca = ci;
-      CornerId cb = m.next(ci);
-      CornerId cc = m.next(cb);
-      edge_flags[static_cast<size_t>(ca) / 2] = true;
-      edge_flags[static_cast<size_t>(cb) / 2] = true;
-      edge_flags[static_cast<size_t>(cc) / 2] = true;
-    });
+    // Every edge of each incident face, not only the first three. The
+    // opposite edge of an n-gon does not touch this vertex; flagging three
+    // corners left it free to be split in the same batch.
+    M.for_each_vertex(
+        v, [this](CornerId ci, shell &m) { this->flag_face(m, ci); });
   }
 };
 
@@ -646,11 +659,10 @@ public:
 
       if (M.fsize(fi) > 2)
         continue;
+      // Merging a two-sided face deletes an edge but joins no vertices, so
+      // no datum collapse hook runs here.
       CornerId c0 = M.fbegin(fi);
       CornerId c1 = M.other(c0);
-      for (auto d : M.get_data()) {
-        d->collapse(M, c0);
-      }
       merge_face(M, c0, c1);
     }
 
@@ -1019,23 +1031,25 @@ public:
              });
   }
 
+  /// True when flipping `corner` would break the mesh: an end would drop
+  /// below valence 3 (it loses a spoke), the two opposite vertices are the
+  /// same, or they are already joined, so the flip would duplicate an edge.
   bool skip_flip(shell &M, CornerId corner) {
     CornerId c0 = corner;
     CornerId c1 = M.other(c0);
     VertId v0 = M.vert(c0);
     VertId v1 = M.vert(c1);
 
-    if (M.vsize(v0) < 3)
+    if (M.vsize(v0) < 4)
       return true;
-    if (M.vsize(v1) < 3)
-      return true;
-
-    if (M.vert(M.prev(c0)) == M.prev(c1))
+    if (M.vsize(v1) < 4)
       return true;
 
-    if (M.vert(M.prev(c0)) == M.vert(M.prev(c1)))
+    const VertId a = M.vert(M.prev(c0));
+    const VertId b = M.vert(M.prev(c1));
+    if (a == b)
       return true;
-    return false;
+    return M.find_edge_from_verts(a, b) >= 0;
   }
 
   void flip_edges() {
@@ -1054,7 +1068,7 @@ public:
       CornerId c0 = corner_id(edges[static_cast<size_t>(i)]);
       CornerId c1 = __M->prev(c0);
 
-      if (skip_flip(*__M, c0))
+      if (skip_flip(*__M, c0) || !flip_quality_ok(c0))
         continue;
 
       CornerId c2 = __M->other(c0);
@@ -1131,25 +1145,73 @@ public:
 
       // std::cout << eFlip << " " << eSame << std::endl;
       //  if (false) {
-      if (eFlip < 1.0 * eSame) {
-        for (auto d : __M->get_data()) {
-          if (d->type() == EDGE) {
-            d->flip(*__M, c0);
-          }
-        }
-
-        flip_edge(*__M, c0);
-      }
+      if (eFlip < 1.0 * eSame)
+        apply_flip(c0);
     }
+  }
+
+  /// Flip `c` with the EDGE datum hooks, as every flip pass does.
+  void apply_flip(CornerId c) {
+    for (auto d : __M->get_data())
+      if (d->type() == EDGE)
+        d->flip(*__M, c);
+    flip_edge(*__M, c);
+  }
+
+  /// Collapse `c` with every datum hook (the vertex datum moves the survivor
+  /// to the midpoint), only after the caller's guards passed.
+  void apply_collapse(CornerId c) {
+    for (auto d : __M->get_data())
+      d->collapse(*__M, c);
+    collapse_edge(*__M, c);
+  }
+
+  /// The flip's two new faces are no worse than `min(q_warn, old minimum)`
+  /// and neither turns over. Always true when QC is off.
+  bool flip_quality_ok(CornerId c) {
+    if (!_qc.enabled)
+      return true;
+    const flip_prediction p = predict_flip(*__M, c, qc_x(), _metric);
+    return !p.inverts && p.q_after >= std::min(_qc.q_warn, p.q_before);
+  }
+
+  /// `can_collapse` plus, with QC on, the quality guard: the merged one-ring
+  /// keeps `min(q_warn, its old minimum)`, no face turns over, and the merged
+  /// valence stays at most `max_valence`.
+  bool collapse_quality_ok(CornerId c, int max_valence) {
+    if (!can_collapse(*__M, c))
+      return false;
+    if (!_qc.enabled)
+      return true;
+    const collapse_prediction p = predict_collapse(*__M, c, qc_x(), _metric);
+    return !p.inverts && p.valence <= max_valence &&
+           p.q_after >= std::min(_qc.q_warn, p.q_before);
+  }
+
+  /// Triangulate every n-gon, by the best triangulation where one exists and
+  /// by `triangulate_ngons`' corner clipping otherwise.
+  void triangulate_ngons_best() {
+    for (int i = 0; i < static_cast<int>(__M->face_count()); ++i) {
+      const FaceId f = face_id(i);
+      if (__M->fbegin(f) >= 0 && face_len(*__M, __M->fbegin(f)) > 3)
+        retriangulate_face(*__M, f, qc_x(), _metric);
+    }
+    triangulate_ngons(*__M);
   }
 
   void subdivide_edges() {
     using comp_great = shell_data_comp<vec3, std::greater<real>>;
+    triangulate_ngons_best();
     const std::vector<vec3> &x = get_vec_data(*__M, 0);
     auto cmp = comp_great(x, _Cs, *__M);
 
     auto edges_typed = gather_edges<comp_great>(*__M, cmp);
-    std::vector<index_t> edges_to_divide(edges_typed.begin(), edges_typed.end());
+    std::vector<index_t> edges_to_divide;
+    edges_to_divide.reserve(edges_typed.size());
+    for (CornerId c : edges_typed) {
+      if (face_len(*__M, c) == 3 && face_len(*__M, __M->other(c)) == 3)
+        edges_to_divide.push_back(static_cast<index_t>(c));
+    }
 
     std::vector<real> S(edges_to_divide.size(), 0.5);
     subdivide_op(*__M, edges_to_divide, S, x,
@@ -1175,24 +1237,18 @@ public:
     const std::vector<vec3> &x = get_vec_data(*__M, 0);
     auto cmp = comp(x, _Cc, *__M);
 
-    auto edges_typed = gather_edges<comp>(*__M, cmp);
-    std::vector<index_t> edges_to_divide(edges_typed.begin(), edges_typed.end());
-
-    if (_collapse_pred)
-      edges_to_divide.erase(std::remove_if(edges_to_divide.begin(), edges_to_divide.end(),
-                     [this](index_t c) { return _collapse_pred(*__M, corner_id(c)); }), edges_to_divide.end());
-
-    std::vector<real> S(edges_to_divide.size(), 0.5);
-    collapse_op(*__M, edges_to_divide, S, x,
-                [this](index_t i,  //
-                       index_t cs, //
-                       index_t vs, //
-                       index_t fs, //
-                       const std::vector<index_t> &edges, shell &m) -> corner1 {
-                  if (_collapse_pred && _collapse_pred(m, corner_id(edges[i])))
-                    return {-1};
-                  return {collapse_edge(m, corner_id(edges[i]))};
-                });
+    // Shortest first, one-ring disjoint. Each edge is checked against the
+    // shell as earlier collapses left it, and the datum hooks run only for
+    // the collapses that happen.
+    for (CornerId c : gather_edges<comp>(*__M, cmp)) {
+      if (__M->next(c) < 0 || face_len(*__M, c) != 3 ||
+          face_len(*__M, __M->other(c)) != 3)
+        continue;
+      if (_collapse_pred && _collapse_pred(*__M, c))
+        continue;
+      if (collapse_quality_ok(c, _qc.val_hi + 2))
+        apply_collapse(c);
+    }
   }
 
   void test_nan() {
@@ -1218,7 +1274,189 @@ public:
     }
   }
 
+  // ------------------------------------------------------------ element QC
+
+  void set_qc(const qc_config &cfg) { _qc = cfg; }
+  const qc_config &qc() const { return _qc; }
+  void set_tri_metric(tri_metric q) { _metric = std::move(q); }
+  /// Called at the end of every remesh step with QC on, before `pack` (the
+  /// report's ids are pre-pack).
+  void set_qc_handler(std::function<void(shell &, const qc_report &)> h) {
+    _qc_handler = std::move(h);
+  }
+  const qc_report &last_qc() const { return _last_qc; }
+
+  const std::vector<vec3> &qc_x() const { return const_get_vec_data(*__M, _qc.datum); }
+  qc_census qc_census_now() const { return census(*__M, qc_x(), _qc, _metric); }
+
+  /// Minimum metric over the faces around `v`.
+  real ring_quality(VertId v) const {
+    const std::vector<vec3> &x = qc_x();
+    real lo = 1;
+    __M->const_for_each_vertex(v, [&](CornerId s, const shell &m) {
+      lo = std::min(lo, _metric(x[m.vert(s)], x[m.vert(m.next(s))], x[m.vert(m.prev(s))]));
+    });
+    return lo;
+  }
+
+  /// Dissolve `v` only into faces no worse than `min(q_warn, its ring now)`.
+  bool dissolve_guarded(VertId v) {
+    return dissolve_vertex(*__M, v, qc_x(), _metric, std::min(_qc.q_warn, ring_quality(v)));
+  }
+
+  /// Flip spokes of `v` while it is above `val_hi`, taking only flips that
+  /// lower the valence deviation `sum |val - 6|` of the four vertices
+  /// involved and pass the flip guards (Botsch and Kobbelt's valence flip).
+  int flip_valence_down(VertId v) {
+    std::vector<CornerId> spokes;
+    __M->const_for_each_vertex(v, [&](CornerId s, const shell &) { spokes.push_back(s); });
+    auto dev = [this](VertId u, int d) {
+      return std::abs(static_cast<int>(__M->vsize(u)) + d - 6);
+    };
+    int n = 0;
+    for (CornerId s : spokes) {
+      if (static_cast<int>(__M->vsize(v)) <= _qc.val_hi)
+        break;
+      if (__M->next(s) < 0 || __M->vert(s) != v || skip_flip(*__M, s) || !flip_quality_ok(s))
+        continue;
+      const VertId w = __M->vert(__M->other(s));
+      const VertId a = __M->vert(__M->prev(s)), b = __M->vert(__M->prev(__M->other(s)));
+      if (dev(v, -1) + dev(w, -1) + dev(a, 1) + dev(b, 1) >= dev(v, 0) + dev(w, 0) + dev(a, 0) + dev(b, 0))
+        continue;
+      apply_flip(s);
+      ++n;
+    }
+    return n;
+  }
+
+  /// One triangle below `q_warn`. A cap (an angle above 120 degrees) flips
+  /// the edge opposite that angle when the flip improves it, else dissolves
+  /// the apex. A needle collapses its shortest edge, else dissolves an end.
+  bool repair_face(FaceId f, qc_report &rep) {
+    const std::vector<vec3> &x = qc_x();
+    const CornerId c0 = __M->fbegin(f);
+    const std::array<CornerId, 3> c{c0, __M->next(c0), __M->prev(c0)};
+    int obtuse = 0, shortest = 0;
+    for (int k = 1; k < 3; ++k) {
+      if (angle(*__M, c[k], x) > angle(*__M, c[obtuse], x))
+        obtuse = k;
+      if (edge_length(*__M, c[k], x) < edge_length(*__M, c[shortest], x))
+        shortest = k;
+    }
+    if (angle(*__M, c[obtuse], x) > real(2.0 * M_PI / 3.0)) {
+      const CornerId apex = c[obtuse], e = __M->next(apex);
+      if (!skip_flip(*__M, e)) {
+        const flip_prediction p = predict_flip(*__M, e, x, _metric);
+        if (!p.inverts && p.q_after > p.q_before) {
+          apply_flip(e);
+          ++rep.flipped;
+          return true;
+        }
+      }
+      if (dissolve_guarded(__M->vert(apex))) {
+        ++rep.dissolved;
+        return true;
+      }
+      return false;
+    }
+    const CornerId e = c[shortest];
+    if (collapse_quality_ok(e, _qc.val_hi + 4)) {
+      apply_collapse(e);
+      ++rep.collapsed;
+      return true;
+    }
+    const VertId v0 = __M->vert(e), v1 = __M->vert(__M->other(e));
+    if (dissolve_guarded(v0) || dissolve_guarded(v1)) {
+      ++rep.dissolved;
+      return true;
+    }
+    return false;
+  }
+
+  /// Repair n-gons, valences outside `[val_lo, val_hi]` and triangles below
+  /// `q_warn`, for up to `rounds` rounds or until a round fixes nothing.
+  void qc_pass(qc_report &rep) {
+    const std::vector<vec3> &x = qc_x();
+    for (int round = 0; round < _qc.rounds; ++round) {
+      int fixed = 0;
+      const int nf0 = static_cast<int>(__M->face_count());
+      for (int i = 0; i < nf0; ++i) {
+        const CornerId b = __M->fbegin(face_id(i));
+        if (b >= 0 && face_len(*__M, b) > 3 && retriangulate_face(*__M, face_id(i), x, _metric)) {
+          ++rep.retriangulated;
+          ++fixed;
+        }
+      }
+      for (int i = 0; i < static_cast<int>(__M->vert_count()); ++i) {
+        const VertId v = vert_id(i);
+        if (__M->vbegin(v) < 0)
+          continue;
+        const int n = static_cast<int>(__M->vsize(v));
+        if (n < _qc.val_lo) {
+          if (dissolve_guarded(v)) {
+            ++rep.dissolved;
+            ++fixed;
+          }
+        } else if (n > _qc.val_hi) {
+          const int flipped = flip_valence_down(v);
+          rep.flipped += flipped;
+          fixed += flipped;
+          if (static_cast<int>(__M->vsize(v)) > _qc.val_hi && dissolve_guarded(v)) {
+            ++rep.dissolved;
+            ++fixed;
+          }
+        }
+      }
+      const int nf = static_cast<int>(__M->face_count());
+      for (int i = 0; i < nf; ++i) {
+        const FaceId f = face_id(i);
+        const CornerId b = __M->fbegin(f);
+        if (b < 0 || face_len(*__M, b) != 3)
+          continue;
+        if (_metric(x[__M->vert(b)], x[__M->vert(__M->next(b))], x[__M->vert(__M->prev(b))]) >= _qc.q_warn)
+          continue;
+        if (repair_face(f, rep))
+          ++fixed;
+      }
+      delete_degenerates(*__M);
+      if (fixed == 0)
+        break;
+    }
+    rep.final = qc_census_now();
+    rep.bad_faces.clear();
+    rep.bad_verts.clear();
+    for (FaceId f : __M->get_face_range(false)) {
+      const CornerId b = __M->fbegin(f);
+      if (face_len(*__M, b) != 3 ||
+          _metric(x[__M->vert(b)], x[__M->vert(__M->next(b))], x[__M->vert(__M->prev(b))]) < _qc.q_warn)
+        rep.bad_faces.push_back(f);
+    }
+    for (VertId v : __M->get_vert_range()) {
+      const int n = static_cast<int>(__M->vsize(v));
+      if (n < _qc.val_lo || n > _qc.val_hi)
+        rep.bad_verts.push_back(v);
+    }
+    rep.refused = static_cast<int>(rep.bad_faces.size() + rep.bad_verts.size());
+  }
+
+  static void log_qc(const qc_report &r) {
+    auto c = [](const char *name, const qc_census &s) {
+      std::cout << " | " << name << " f=" << s.faces << " hard=" << s.hard
+                << " ngon=" << s.ngons << " v=" << s.val_lo << "/" << s.val_hi;
+    };
+    std::cout << "[dynamic] qc";
+    c("subd", r.subdivide);
+    c("collapse", r.collapse);
+    c("merge", r.merge);
+    c("flip", r.flip);
+    std::cout << " | fixed c/f/d/t=" << r.collapsed << "/" << r.flipped << "/"
+              << r.dissolved << "/" << r.retriangulated;
+    c("left", r.final);
+    std::cout << " worst=" << r.final.worst_q << std::endl;
+  }
+
   void step(bool merge_edges_ = true, bool break_cycles_ = true) {
+    qc_report rep;
     for (int k = 0; k < 1; k++) {
       if (!has_active_edges()) {
         std::cout << "dynamic::step: mesh has no active edges, skipping"
@@ -1227,8 +1465,12 @@ public:
       }
 
       std::cout << "subd" << std::endl;
+      __M->audit_links("before subd");
       subdivide_edges();
       delete_degenerates(*__M);
+      __M->audit_links("after subd");
+      if (_qc.enabled)
+        rep.subdivide = qc_census_now();
 
       if (!has_active_edges()) {
         std::cout << "dynamic::step: collapsed to nothing after subd"
@@ -1241,6 +1483,7 @@ public:
         break_cycles();
         std::cout << "degenerates ";
         delete_degenerates(*__M);
+        __M->audit_links("after break");
       }
       std::cout << std::endl;
 
@@ -1253,6 +1496,9 @@ public:
       std::cout << "collapse" << std::endl;
       collapse_edges();
       delete_degenerates(*__M);
+      __M->audit_links("after collapse");
+      if (_qc.enabled)
+        rep.collapse = rep.merge = qc_census_now();
 
       if (!has_active_edges()) {
         std::cout << "dynamic::step: collapsed to nothing after collapse"
@@ -1262,8 +1508,12 @@ public:
 
       if (merge_edges_) {
         std::cout << "merge" << std::endl;
+        __M->audit_links("before merge");
         merge_edges();
         delete_degenerates(*__M);
+        __M->audit_links("after merge");
+        if (_qc.enabled)
+          rep.merge = qc_census_now();
       }
 
       if (!has_active_edges()) {
@@ -1275,10 +1525,22 @@ public:
       std::cout << "flip" << std::endl;
       flip_edges();
       delete_degenerates(*__M);
+      __M->audit_links("after flip");
+      if (_qc.enabled) {
+        rep.flip = qc_census_now();
+        qc_pass(rep);
+        __M->audit_links("after qc");
+        log_qc(rep);
+        if (_qc_handler)
+          _qc_handler(*__M, rep);
+      }
     }
+    _last_qc = rep;
 
-    if (has_active_edges())
+    if (has_active_edges()) {
       pack(*__M);
+      __M->audit_links("after pack");
+    }
   }
 
   void step(real dt, const std::vector<vec3> &dx) {
@@ -1300,6 +1562,11 @@ public:
   OpPredicateFcn _flip_pred;
   MergePredicateFcn _merge_pred;
   OpPredicateFcn _collapse_pred;
+
+  qc_config _qc;
+  tri_metric _metric = face_quality;
+  std::function<void(shell &, const qc_report &)> _qc_handler;
+  qc_report _last_qc;
 
   arp::bvh_tree<2>::ptr edge_tree_;
   arp::bvh_tree<3>::ptr face_tree_;

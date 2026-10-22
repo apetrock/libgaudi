@@ -294,8 +294,10 @@ public:
     std::vector<vec3> &x = R.x();
     const std::vector<index_t> &edge_verts = R.get_edge_vert_ids();
     edge_view_type edges(x, edge_verts);
+    // Search out to the rest gap `offset * R._r`. Half of that misses pairs
+    // that are already inside the separation the constraint is supposed to hold.
     std::vector<std::array<index_t, 2>> raw =
-        get_collisions(edges, 0.5 * offset * R._r);
+        get_collisions(edges, offset * R._r);
 
     std::vector<std::array<index_t, 2>> collisions;
     collisions.reserve(raw.size());
@@ -334,9 +336,16 @@ public:
     __R->pack();
     __R->update_mass();
     __R->update_lengths();
+    update_tree();
+  }
+
+  void update_tree() {
     edge_verts_ = __R->get_edge_vert_ids();
     edge_set_.emplace(__R->x(), edge_verts_);
-    bvh_tree->update(*edge_set_);
+    if (!bvh_tree)
+      bvh_tree = arp::bvh_tree<2>::create(*edge_set_);
+    else
+      bvh_tree->update(*edge_set_);
   }
 
   rod::ptr __R;

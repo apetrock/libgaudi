@@ -5,8 +5,11 @@
 #if defined(__GNUC__) || defined(__clang__)
 #include <cxxabi.h>
 #endif
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory.h>
+#include <string>
 #include <numeric>
 #include <ostream>
 #include <set>
@@ -16,6 +19,7 @@
 
 #include "gaudi/asawa/geometry_channels.hpp"
 #include "gaudi/asawa/shell/shell_id.hpp"
+#include "gaudi/exception_diagnostics.hpp"
 
 #ifndef __ASAWA_SHELL__
 #define __ASAWA_SHELL__
@@ -26,6 +30,17 @@
 
 namespace gaudi {
 namespace asawa {
+
+inline std::ofstream &shell_link_log() {
+  static std::ofstream out;
+  if (!out.is_open()) {
+    std::error_code ec;
+    std::filesystem::create_directories("dump", ec);
+    out.open("dump/shell_link.log", std::ios::out | std::ios::trunc);
+    out << std::unitbuf;
+  }
+  return out;
+}
 
 class datum;
 
@@ -86,6 +101,7 @@ public:
       bool it = true;
       while (it) {
         it = j0 != j_end;
+        require_corner_ref("update_prev", __corners_next[j0], j0);
         __corners_prev[__corners_next[j0]] = j0;
         j0 = __corners_next[j0];
       }
@@ -122,21 +138,26 @@ public:
   size_t edge_count() const { return __corners_next.size() / 2; }
   size_t corner_count() const { return __corners_next.size(); }
 
+  /// A corner `c` is the half-edge from `vert(c)` to `vert(next(c))` in
+  /// `face(c)`. `other(c)` is its twin in the same slot pair `{2k, 2k + 1}`,
+  /// running the other way, so `vert(other(c)) == vert(next(c))`.
   CornerId other(CornerId id) const {
     return corner_id(2 * (id / 2) + (id + 1) % 2);
   }
   bool edge_equal(CornerId c0, CornerId c1) {
     return c0 / 2 == c1 / 2;
   }
-  CornerId vprev(CornerId id) const { return next(other(id)); }
+  /// The outgoing corners at `vert(c)` in `for_each_vertex` order:
+  /// `vnext(c) = other(prev(c))`. `face(c)` lies between spoke `c` and spoke
+  /// `vnext(c)`. Needs `prev`.
   CornerId vnext(CornerId id) const { return other(prev(id)); }
+  /// Inverse of `vnext`: `vprev(c) = next(other(c))`. Needs only `next` and
+  /// `other`, so it still walks a ring while `prev` links are stale.
+  CornerId vprev(CornerId id) const { return next(other(id)); }
 
+  /// The corner after / before `c` in `face(c)`.
   CornerId next(CornerId id) const { return corner_id(__corners_next[id]); }
   CornerId prev(CornerId id) const { return corner_id(__corners_prev[id]); }
-
-  /// Half-edge swing: rotate around the tail vertex to the next outgoing half-edge
-  /// (\c next(other(id))); matches \c patch_hole in \c asawa/faceloader.hpp.
-  CornerId swing(CornerId id) const { return next(other(id)); }
 
   VertId vert(CornerId id) const { return vert_id(__corners_vert[id]); }
   FaceId face(CornerId id) const { return face_id(__corners_face[id]); }
@@ -236,29 +257,161 @@ public:
     return out;
   }
 
+  /// First / last corner `for_each_face` visits; -1 marks a dead face.
   CornerId fbegin(FaceId id) const { return corner_id(__face_begin[id]); }
   CornerId fend(FaceId id) const { return prev(corner_id(__face_begin[id])); }
 
+  /// First / last corner `for_each_vertex` visits (`vnext(vend) == vbegin`);
+  /// -1 marks a dead vertex.
   CornerId vbegin(VertId id) const { return corner_id(__vert_begin[id]); }
-
   CornerId vend(VertId id) const { return vprev(vbegin(id)); }
 
   void set_vbegin(VertId id, CornerId c) { __vert_begin[id] = c; }
   void set_fbegin(FaceId id, CornerId c) { __face_begin[id] = c; }
 
   void set_next(CornerId id, CornerId c) { __corners_next[id] = c; }
-  void set_prev(CornerId id, CornerId c) { __corners_prev[id] = c; }
 
+  void report_link_failure(const char *where, const std::string &msg) const {
+    std::ofstream &out = shell_link_log();
+    out << "shell link [" << where << "] " << msg << "\n";
+    gaudi::print_native_backtrace(out);
+    out.flush();
+    std::cerr << "shell link [" << where << "] " << msg
+              << "\n  wrote dump/shell_link.log\n"
+              << std::flush;
+    std::abort();
+  }
+
+  void require_corner_ref(const char *what, index_t slot, index_t value) const {
+    const index_t n = static_cast<index_t>(corner_count());
+    const bool slot_ok = slot >= 0 && slot < n;
+    const bool value_ok = value == -1 || (value >= 0 && value < n);
+    if (slot_ok && value_ok)
+      return;
+    report_link_failure(
+        what, "store slot=" + std::to_string(slot) +
+                  " value=" + std::to_string(value) + " n=" + std::to_string(n));
+  }
+
+  void set_prev(CornerId id, CornerId c) {
+    require_corner_ref("set_prev", static_cast<index_t>(id),
+                       static_cast<index_t>(c));
+    __corners_prev[id] = c;
+  }
+
+  // Between topology phases. A live corner's prev must name another live
+  // corner. A prev of -1, past the array, or aimed at a deleted corner is the
+  // sew that later walks blow up on. The phase name is the operation.
+  void audit_links(const char *where) const {
+    const int n = static_cast<int>(corner_count());
+    auto live = [&](int c) {
+      return c >= 0 && c < n && __corners_next[static_cast<size_t>(c)] >= 0;
+    };
+    for (int i = 0; i < n; ++i) {
+      const int nx = __corners_next[static_cast<size_t>(i)];
+      if (nx < 0)
+        continue;
+      const int pv = __corners_prev[static_cast<size_t>(i)];
+      const int v = __corners_vert[static_cast<size_t>(i)];
+      std::string why;
+      if (nx >= n)
+        why = "next out of range";
+      else if (pv < 0 || pv >= n)
+        why = "prev out of range";
+      else if (__corners_next[static_cast<size_t>(pv)] < 0)
+        why = "prev names a deleted corner";
+      if (why.empty())
+        continue;
+      report_link_failure(
+          where, why + " corner=" + std::to_string(i) + " next=" +
+                     std::to_string(nx) + " prev=" + std::to_string(pv) +
+                     " vert=" + std::to_string(v) + " n=" + std::to_string(n));
+    }
+    audit_vbegins(where);
+    std::ofstream &out = shell_link_log();
+    out << "shell link [" << where << "] ok corners=" << n
+        << " verts=" << vert_count() << "\n";
+  }
+
+  // vbegin of a live vertex must head a live corner. Cheap enough to call
+  // after each topology primitive.
+  void audit_vbegins(const char *where) const {
+    const int n = static_cast<int>(corner_count());
+    auto live = [&](int c) {
+      return c >= 0 && c < n && __corners_next[static_cast<size_t>(c)] >= 0;
+    };
+    for (int i = 0; i < n; ++i) {
+      if (!live(i))
+        continue;
+      const int o = static_cast<int>(other(corner_id(i)));
+      const int nx = __corners_next[static_cast<size_t>(i)];
+      if (!live(o) || !live(nx))
+        continue;
+      const int nv = __corners_vert[static_cast<size_t>(nx)];
+      const int ov = __corners_vert[static_cast<size_t>(o)];
+      if (nv == ov)
+        continue;
+      report_link_failure(
+          where, "next vert != twin vert c=" + std::to_string(i) +
+                     " next=" + std::to_string(nx) + " next_vert=" +
+                     std::to_string(nv) + " twin=" + std::to_string(o) +
+                     " twin_vert=" + std::to_string(ov) + " n=" +
+                     std::to_string(n));
+    }
+    for (int vi = 0; vi < static_cast<int>(vert_count()); ++vi) {
+      const int vb = __vert_begin[static_cast<size_t>(vi)];
+      if (vb < 0)
+        continue;
+      if (live(vb) && __corners_vert[static_cast<size_t>(vb)] != vi) {
+        report_link_failure(
+            where, "vbegin vert mismatch v=" + std::to_string(vi) +
+                       " vbegin=" + std::to_string(vb) + " vert=" +
+                       std::to_string(__corners_vert[static_cast<size_t>(vb)]) +
+                       " n=" + std::to_string(n));
+      }
+      if (!live(vb)) {
+        const int nx = (vb >= 0 && vb < n)
+                           ? __corners_next[static_cast<size_t>(vb)]
+                           : -2;
+        const int pv = (vb >= 0 && vb < n)
+                           ? __corners_prev[static_cast<size_t>(vb)]
+                           : -2;
+        const int cv = (vb >= 0 && vb < n)
+                           ? __corners_vert[static_cast<size_t>(vb)]
+                           : -2;
+        int still = 0;
+        int sample = -1;
+        for (int c = 0; c < n; ++c) {
+          if (!live(c) || __corners_vert[static_cast<size_t>(c)] != vi)
+            continue;
+          if (sample < 0)
+            sample = c;
+          ++still;
+        }
+        report_link_failure(
+            where, "vbegin not a live corner v=" + std::to_string(vi) +
+                       " vbegin=" + std::to_string(vb) + " next=" +
+                       std::to_string(nx) + " prev=" + std::to_string(pv) +
+                       " vert=" + std::to_string(cv) + " live_corners=" +
+                       std::to_string(still) + " sample=" +
+                       std::to_string(sample) + " n=" + std::to_string(n));
+      }
+    }
+  }
+
+  /// Label `cid` and make it the head: also sets `vbegin(v) = cid`.
   void set_vert(CornerId cid, VertId v) {
     __corners_vert[cid] = v;
     set_vbegin(v, cid);
   }
 
+  /// Label `cid` and make it the head: also sets `fbegin(f) = cid`.
   void set_face(CornerId cid, FaceId f) {
     __corners_face[cid] = f;
     set_fbegin(f, cid);
   }
 
+  /// A corner from `v0` to `v1`, or -1 when no edge joins them. O(valence).
   CornerId find_edge_from_verts(VertId v0, VertId v1) const {
     CornerId c = corner_id(-1);
     const_for_each_vertex(v0, [&](CornerId ci, const shell &M) {
@@ -405,11 +558,13 @@ public:
     set_fbegin(face_id(fB), cA);
 
     __corners_next[cA] = cBn;
+    require_corner_ref("swap_rows", static_cast<index_t>(cA), cBp);
     __corners_prev[cA] = cBp;
     __corners_vert[cA] = vB;
     __corners_face[cA] = fB;
 
     __corners_next[cB] = cAn;
+    require_corner_ref("swap_rows", static_cast<index_t>(cB), cAp);
     __corners_prev[cB] = cAp;
     __corners_vert[cB] = vA;
     __corners_face[cB] = fA;
@@ -439,6 +594,9 @@ public:
     __corners_face[i1] = -1;
   }
 
+  /// The corners of face `i` in `next` order from `fbegin(i)` to `fend(i)`.
+  /// Stops after 100 corners; `face_len` / `walk_face_ring` walk long or
+  /// broken cycles without that cap.
   void for_each_face(FaceId i,
                      std::function<void(CornerId cid, shell &m)> func) {
     int j0 = this->fbegin(i);
@@ -501,32 +659,41 @@ public:
     }
   }
 
+  /// The outgoing corners of vertex `i` in `vnext` order from `vbegin(i)` to
+  /// `vend(i)`. On corner `c` the ring neighbor is `vert(other(c))` and the
+  /// edge opposite `i` is `next(c)`. Aborts when the ring does not close.
   void for_each_vertex(VertId i,
                        std::function<void(CornerId cid, shell &m)> func) {
-
-    int j0 = this->vbegin(i);
-    int j_end = this->vend(i);
-    bool it = true;
-    int k = 0;
-    while (it && k++ < 100) {
-      it = j0 != j_end;
+    // Walk the whole ring. The old bound of 100 left corners of a merged
+    // vertex labeled with the vertex merge_edge had already removed.
+    const int j_start = this->vbegin(i);
+    int j0 = j_start;
+    const int n = static_cast<int>(corner_count());
+    for (int k = 0; k < n; ++k) {
       func(corner_id(j0), *this);
       j0 = this->vnext(corner_id(j0));
+      if (j0 == j_start)
+        return;
     }
+    report_link_failure("for_each_vertex",
+                        "ring did not close v=" + std::to_string(static_cast<int>(i)) +
+                            " vbegin=" + std::to_string(j_start));
   }
 
   void const_for_each_vertex(
       VertId i, std::function<void(CornerId cid, const shell &m)> func) const {
-
-    int j0 = this->vbegin(i);
-    int j_end = this->vend(i);
-    bool it = true;
-    int k = 0;
-    while (it && k++ < 100) {
-      it = j0 != j_end;
+    const int j_start = this->vbegin(i);
+    int j0 = j_start;
+    const int n = static_cast<int>(corner_count());
+    for (int k = 0; k < n; ++k) {
       func(corner_id(j0), *this);
       j0 = this->vnext(corner_id(j0));
+      if (j0 == j_start)
+        return;
     }
+    report_link_failure("for_each_vertex",
+                        "ring did not close v=" + std::to_string(static_cast<int>(i)) +
+                            " vbegin=" + std::to_string(j_start));
   }
 
   std::vector<CornerId> get_edge_range() const {
@@ -607,10 +774,22 @@ public:
     return faces;
   }
 
+  /// Ring neighbors of `iv` in `for_each_vertex` order.
   std::vector<VertId> get_one_ring(VertId iv) const {
     std::vector<VertId> range;
     this->const_for_each_vertex(iv, [&range](CornerId ci, const shell &M) {
       range.push_back(M.vert(M.next(ci)));
+    });
+    return range;
+  }
+
+  /// The link of `iv`: corner `next(c)` for each spoke `c`, in the same
+  /// order. On a triangle fan these are the ring edges `w_k -> w_{k+1}`
+  /// opposite `iv`, and they chain head to tail.
+  std::vector<CornerId> link_corners(VertId iv) const {
+    std::vector<CornerId> range;
+    this->const_for_each_vertex(iv, [&range](CornerId ci, const shell &M) {
+      range.push_back(M.next(ci));
     });
     return range;
   }

@@ -13,14 +13,6 @@ public:
     return std::make_shared<rod_guided_demo_adapter>(cfg);
   }
 
-  // Convenience overloads.
-  static ptr create(const braid_circle_config &braid_cfg) {
-    rod_guided_config cfg;
-    cfg.scene = rod_guided_scene::braid_circle;
-    cfg.braid = braid_cfg;
-    return create(cfg);
-  }
-
   static ptr create_bunny_walk() {
     rod_guided_config cfg;
     cfg.scene = rod_guided_scene::bunny_walk;

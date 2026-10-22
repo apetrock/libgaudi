@@ -488,6 +488,11 @@ namespace gaudi
     inline double one<double>() { return 1.0; }
 
     template <>
+    inline Eigen::Matrix<double, 2, 1> zero<Eigen::Matrix<double, 2, 1>>()
+    {
+      return Eigen::Matrix<double, 2, 1>::Zero();
+    }
+    template <>
     inline Eigen::Matrix<double, 3, 1> zero<Eigen::Matrix<double, 3, 1>>()
     {
       return Eigen::Matrix<double, 3, 1>::Zero();

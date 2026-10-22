@@ -3,13 +3,15 @@
 
 /// Residual forest as a rod chain:
 ///   rod0 → rod1+(adjacent_tuples,R) → rod2+(adjacent_tuples,R) → …
-/// Restrict = half-rate vertex collapse along the strand (not pool-index subsample).
+/// Restrict = half-rate vertex collapse along next/prev (not a loop flag).
 
 #include "gaudi/arp/procrustes_pyramid.hpp"
 #include "gaudi/asawa/datums.hpp"
 #include "gaudi/asawa/rod/rod.hpp"
 #include "gaudi/common.h"
 
+#include <Eigen/Sparse>
+#include <Eigen/SparseLU>
 #include <Eigen/SVD>
 #include <algorithm>
 #include <array>
@@ -296,6 +298,52 @@ public:
   }
 
   /// Half-rate collapse restrict: seed rod[fine+1].x from fine survivors.
+  /// Coarse positions from the prolongation normal equations, per coordinate.
+  static bool pinv_restrict_positions(const std::vector<j_idx_pair> &pairs,
+                                      const std::vector<vec3> &fine_x,
+                                      std::vector<vec3> &coarse_x) {
+    const int nf = static_cast<int>(pairs.size());
+    const int nc = static_cast<int>(coarse_x.size());
+    if (nf <= 0 || nc <= 0)
+      return false;
+    std::vector<Eigen::Triplet<double>> trips;
+    trips.reserve(static_cast<size_t>(nf) * 2);
+    for (int i = 0; i < nf; ++i) {
+      const index_t i0 = pairs[static_cast<size_t>(i)][0];
+      const index_t i1 = pairs[static_cast<size_t>(i)][1];
+      if (i0 < 0 || i0 >= nc)
+        continue;
+      if (i1 < 0) {
+        trips.emplace_back(i, static_cast<int>(i0), 1.0);
+      } else if (i1 < nc) {
+        trips.emplace_back(i, static_cast<int>(i0), 0.5);
+        trips.emplace_back(i, static_cast<int>(i1), 0.5);
+      }
+    }
+    if (trips.empty())
+      return false;
+    Eigen::SparseMatrix<double> J(nf, nc);
+    J.setFromTriplets(trips.begin(), trips.end());
+    const Eigen::SparseMatrix<double> JTJ = J.transpose() * J;
+    Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> lu;
+    lu.compute(JTJ);
+    if (lu.info() != Eigen::Success)
+      return false;
+    for (int c = 0; c < 3; ++c) {
+      Eigen::VectorXd xf(nf);
+      for (int i = 0; i < nf; ++i)
+        xf(i) = (static_cast<size_t>(i) < fine_x.size())
+                    ? fine_x[static_cast<size_t>(i)][c]
+                    : 0.0;
+      const Eigen::VectorXd xc = lu.solve(J.transpose() * xf);
+      if (lu.info() != Eigen::Success)
+        return false;
+      for (int j = 0; j < nc; ++j)
+        coarse_x[static_cast<size_t>(j)][c] = xc(j);
+    }
+    return true;
+  }
+
   void restrict_up(int fine_level) {
     assert_valid();
     assert_level(fine_level);
@@ -305,12 +353,15 @@ public:
     const size_t C = F + 1;
     const auto &fine_x = _rods[F]->x();
     auto &coarse_x = _rods[C]->x();
-    const auto &adj = _adjacent[C];
-    for (size_t j = 0; j < adj.size(); ++j) {
-      const index_t cen = adj[j][1];
-      if (cen < 0 || static_cast<size_t>(cen) >= fine_x.size())
-        continue;
-      coarse_x[j] = fine_x[static_cast<size_t>(cen)];
+    // Reference Coarsen places the coarse curve at (JᵀJ)⁻¹ Jᵀ x.
+    if (!pinv_restrict_positions(j_pairs(fine_level), fine_x, coarse_x)) {
+      const auto &adj = _adjacent[C];
+      for (size_t j = 0; j < adj.size(); ++j) {
+        const index_t cen = adj[j][1];
+        if (cen < 0 || static_cast<size_t>(cen) >= fine_x.size())
+          continue;
+        coarse_x[j] = fine_x[static_cast<size_t>(cen)];
+      }
     }
     _rods[C]->_update_frames();
   }
@@ -429,12 +480,58 @@ private:
     return const_cast<rod &>(R).get_ordered_verts();
   }
 
-  static bool strand_is_loop(const rod &R, const std::vector<CornerId> &ord) {
-    if (ord.size() < 2)
-      return false;
-    const CornerId last = ord.back();
-    const CornerId first = ord.front();
-    return R.next(last) == first && R.prev(first) == last;
+  struct strand_walk {
+    std::vector<index_t> corner;
+    bool returned = false;
+  };
+
+  /// One walk per component. `returned` is next() coming back to the seed.
+  std::vector<strand_walk> collect_strands(const rod &R) const {
+    const int n = static_cast<int>(R.corner_count());
+    std::vector<char> seen(static_cast<size_t>(std::max(n, 0)), 0);
+    std::vector<strand_walk> walks;
+    for (int i = 0; i < n; ++i) {
+      if (seen[static_cast<size_t>(i)])
+        continue;
+      CornerId s = corner_id(i);
+      if (R.next(s) < corner_id(0) && R.prev(s) < corner_id(0))
+        continue;
+      {
+        CornerId p = s;
+        int guard = n + 1;
+        while (guard-- > 0) {
+          const CornerId q = R.prev(p);
+          if (q < corner_id(0) || q == s)
+            break;
+          p = q;
+        }
+        s = p;
+      }
+      const int si = static_cast<int>(s);
+      if (si < 0 || si >= n || seen[static_cast<size_t>(si)])
+        continue;
+
+      strand_walk w;
+      const CornerId seed = s;
+      CornerId j = s;
+      int guard = n + 1;
+      while (!(j < corner_id(0)) && guard-- > 0) {
+        const int ji = static_cast<int>(j);
+        if (ji < 0 || ji >= n || seen[static_cast<size_t>(ji)])
+          break;
+        seen[static_cast<size_t>(ji)] = 1;
+        w.corner.push_back(static_cast<index_t>(ji));
+        const CornerId nxt = R.next(j);
+        if (nxt == seed) {
+          w.returned = true;
+          break;
+        }
+        j = nxt;
+      }
+      if (w.corner.size() >= 2)
+        walks.push_back(std::move(w));
+    }
+    return walks;
   }
 
   int k_use_at(int level, index_t center) const {
@@ -484,112 +581,203 @@ private:
     }
   }
 
-  /// Collapse-restrict: build next coarser rod from fine by every-other along
-  /// the strand; record adjacent_tuples and parent/keep maps.
+  /// Collapse-restrict: every other corner along next/prev. A white corner
+  /// averages the previous and next black corners on that same walk.
   void append_collapsed_level(rod::ptr fine) {
-    const std::vector<CornerId> ord = ordered_live_corners(*fine);
-    const int n = static_cast<int>(ord.size());
-    if (n / 2 <= _min_coarse)
+    const std::vector<strand_walk> walks = collect_strands(*fine);
+    int n_live = 0;
+    for (const strand_walk &w : walks)
+      n_live += static_cast<int>(w.corner.size());
+    if (n_live / 2 <= _min_coarse)
       return;
 
-    std::vector<int> keep_ord;
-    keep_ord.reserve(static_cast<size_t>(n / 2 + 1));
-    for (int i = 0; i < n; i += 2)
-      keep_ord.push_back(i);
-    if (!_loop && (n % 2 == 1) && keep_ord.back() != n - 1)
-      keep_ord.push_back(n - 1);
-    const int nc = static_cast<int>(keep_ord.size());
+    const int ncorn = static_cast<int>(fine->corner_count());
+    std::vector<char> is_black(static_cast<size_t>(std::max(ncorn, 0)), 0);
+    for (const strand_walk &w : walks) {
+      const int m = static_cast<int>(w.corner.size());
+      if (m < 2)
+        continue;
+      if (w.returned) {
+        for (int t = 0; t < m; t += 2)
+          is_black[static_cast<size_t>(w.corner[static_cast<size_t>(t)])] = 1;
+      } else {
+        is_black[static_cast<size_t>(w.corner.front())] = 1;
+        is_black[static_cast<size_t>(w.corner.back())] = 1;
+        for (int t = 2; t + 1 < m; t += 2)
+          is_black[static_cast<size_t>(w.corner[static_cast<size_t>(t)])] = 1;
+      }
+    }
+
+    int nc = 0;
+    for (char b : is_black)
+      if (b)
+        ++nc;
     if (nc < 2 || nc <= _min_coarse)
       return;
 
-    auto wrap_ord = [n, this](int i) -> int {
-      if (_loop) {
-        i %= n;
-        if (i < 0)
-          i += n;
-        return i;
-      }
-      return std::max(0, std::min(n - 1, i));
-    };
-
-    std::vector<index_t> keep(static_cast<size_t>(nc));
-    std::vector<vec3> coarse_x(static_cast<size_t>(nc));
-    std::vector<adjacent_tuple> adj(static_cast<size_t>(nc));
     const auto &fx = fine->x();
-    for (int j = 0; j < nc; ++j) {
-      const int oi = keep_ord[static_cast<size_t>(j)];
-      const int ip = wrap_ord(oi - 1);
-      const int in = wrap_ord(oi + 1);
-      const index_t c_prev = static_cast<index_t>(ord[static_cast<size_t>(ip)]);
-      const index_t c_cen = static_cast<index_t>(ord[static_cast<size_t>(oi)]);
-      const index_t c_next = static_cast<index_t>(ord[static_cast<size_t>(in)]);
-      keep[static_cast<size_t>(j)] = c_cen;
-      adj[static_cast<size_t>(j)] = {c_prev, c_cen, c_next};
-      coarse_x[static_cast<size_t>(j)] = fx[static_cast<size_t>(c_cen)];
+    std::vector<index_t> keep;
+    std::vector<vec3> coarse_x;
+    std::vector<adjacent_tuple> adj;
+    std::vector<index_t> coarse_of(static_cast<size_t>(ncorn), index_t(-1));
+    keep.reserve(static_cast<size_t>(nc));
+    coarse_x.reserve(static_cast<size_t>(nc));
+    adj.reserve(static_cast<size_t>(nc));
+    for (const strand_walk &w : walks) {
+      for (index_t c : w.corner) {
+        if (c < 0 || static_cast<size_t>(c) >= is_black.size() ||
+            !is_black[static_cast<size_t>(c)])
+          continue;
+        coarse_of[static_cast<size_t>(c)] = static_cast<index_t>(keep.size());
+        keep.push_back(c);
+        coarse_x.push_back(fx[static_cast<size_t>(c)]);
+        const CornerId cen = corner_id(static_cast<int>(c));
+        const CornerId cp = fine->prev(cen);
+        const CornerId cn = fine->next(cen);
+        const index_t ip = cp < corner_id(0) ? index_t(-1) : static_cast<index_t>(cp);
+        const index_t in = cn < corner_id(0) ? index_t(-1) : static_cast<index_t>(cn);
+        adj.push_back({ip, c, in});
+      }
     }
+    nc = static_cast<int>(keep.size());
+
+    auto walk_black = [&](index_t start, bool forward) -> index_t {
+      if (start < 0 || start >= ncorn)
+        return index_t(-1);
+      if (is_black[static_cast<size_t>(start)])
+        return start;
+      CornerId a = forward ? fine->next(corner_id(static_cast<int>(start)))
+                           : fine->prev(corner_id(static_cast<int>(start)));
+      int guard = ncorn;
+      while (!(a < corner_id(0)) && guard-- > 0) {
+        const int ai = static_cast<int>(a);
+        if (ai == static_cast<int>(start))
+          return index_t(-1);
+        if (ai >= 0 && ai < ncorn && is_black[static_cast<size_t>(ai)])
+          return static_cast<index_t>(ai);
+        a = forward ? fine->next(a) : fine->prev(a);
+      }
+      return index_t(-1);
+    };
 
     std::vector<index_t> parent(fine->corner_count(), index_t(-1));
     std::vector<vec3> delta(fine->corner_count(), vec3::Zero());
     std::vector<j_idx_pair> pairs(fine->corner_count(),
                                   j_idx_pair{index_t(-1), index_t(-1)});
 
-    // Map ordered index → coarse index for kept verts.
-    std::vector<int> ord_to_coarse(static_cast<size_t>(n), -1);
-    for (int j = 0; j < nc; ++j)
-      ord_to_coarse[static_cast<size_t>(keep_ord[static_cast<size_t>(j)])] = j;
-
-    for (int i = 0; i < n; ++i) {
-      int best = 0;
-      int best_d = n + 1;
-      for (int j = 0; j < nc; ++j) {
-        const int oi_keep = keep_ord[static_cast<size_t>(j)];
-        int d = std::abs(i - oi_keep);
-        if (_loop)
-          d = std::min(d, n - d);
-        if (d < best_d) {
-          best_d = d;
-          best = j;
-        }
-      }
-      const size_t ci = static_cast<size_t>(ord[static_cast<size_t>(i)]);
-      parent[ci] = static_cast<index_t>(best);
-      delta[ci] = fx[ci] - coarse_x[static_cast<size_t>(best)];
-
-      if (ord_to_coarse[static_cast<size_t>(i)] >= 0) {
-        // Black: copy coarse DOF.
-        pairs[ci] = {static_cast<index_t>(ord_to_coarse[static_cast<size_t>(i)]),
-                     index_t(-1)};
-      } else {
-        // White: average of bracketing blacks along the strand.
-        int jL = -1, jR = -1;
-        for (int k = static_cast<int>(keep_ord.size()) - 1; k >= 0; --k) {
-          if (keep_ord[static_cast<size_t>(k)] < i) {
-            jL = k;
-            break;
-          }
-        }
-        for (int k = 0; k < nc; ++k) {
-          if (keep_ord[static_cast<size_t>(k)] > i) {
-            jR = k;
-            break;
-          }
-        }
-        if (_loop) {
-          if (jL < 0)
-            jL = nc - 1;
-          if (jR < 0)
-            jR = 0;
+    for (const strand_walk &w : walks) {
+      for (index_t c : w.corner) {
+        if (c < 0 || c >= ncorn)
+          continue;
+        const size_t ci = static_cast<size_t>(c);
+        const bool black = is_black[ci] != 0;
+        index_t b_prev = index_t(-1);
+        index_t b_next = index_t(-1);
+        int hops_prev = ncorn + 1;
+        int hops_next = ncorn + 1;
+        if (black) {
+          b_prev = c;
+          hops_prev = 0;
         } else {
-          if (jL < 0)
-            jL = 0;
-          if (jR < 0)
-            jR = nc - 1;
+          CornerId a = fine->prev(corner_id(static_cast<int>(c)));
+          int guard = ncorn;
+          int hops = 0;
+          while (!(a < corner_id(0)) && guard-- > 0) {
+            const int ai = static_cast<int>(a);
+            if (ai == static_cast<int>(c))
+              break;
+            ++hops;
+            if (ai >= 0 && ai < ncorn && is_black[static_cast<size_t>(ai)]) {
+              b_prev = static_cast<index_t>(ai);
+              hops_prev = hops;
+              break;
+            }
+            a = fine->prev(a);
+          }
+          a = fine->next(corner_id(static_cast<int>(c)));
+          guard = ncorn;
+          hops = 0;
+          while (!(a < corner_id(0)) && guard-- > 0) {
+            const int ai = static_cast<int>(a);
+            if (ai == static_cast<int>(c))
+              break;
+            ++hops;
+            if (ai >= 0 && ai < ncorn && is_black[static_cast<size_t>(ai)]) {
+              b_next = static_cast<index_t>(ai);
+              hops_next = hops;
+              break;
+            }
+            a = fine->next(a);
+          }
         }
-        pairs[ci] = {static_cast<index_t>(jL), static_cast<index_t>(jR)};
+
+        const index_t nearest =
+            (hops_prev <= hops_next) ? (b_prev >= 0 ? b_prev : b_next)
+                                     : (b_next >= 0 ? b_next : b_prev);
+        if (nearest >= 0 &&
+            static_cast<size_t>(nearest) < coarse_of.size()) {
+          const index_t pc = coarse_of[static_cast<size_t>(nearest)];
+          parent[ci] = pc;
+          if (pc >= 0 && static_cast<size_t>(pc) < coarse_x.size())
+            delta[ci] = fx[ci] - coarse_x[static_cast<size_t>(pc)];
+        }
+
+        if (black) {
+          pairs[ci] = {coarse_of[ci], index_t(-1)};
+        } else {
+          if (b_prev < 0)
+            b_prev = walk_black(c, false);
+          if (b_next < 0)
+            b_next = walk_black(c, true);
+          const index_t cL =
+              (b_prev >= 0 && static_cast<size_t>(b_prev) < coarse_of.size())
+                  ? coarse_of[static_cast<size_t>(b_prev)]
+                  : index_t(-1);
+          const index_t cR =
+              (b_next >= 0 && static_cast<size_t>(b_next) < coarse_of.size())
+                  ? coarse_of[static_cast<size_t>(b_next)]
+                  : index_t(-1);
+          if (cL < 0)
+            pairs[ci] = {cR, index_t(-1)};
+          else if (cR < 0)
+            pairs[ci] = {cL, index_t(-1)};
+          else
+            pairs[ci] = {cL, cR};
+        }
       }
     }
 
-    rod::ptr coarse = rod::create(coarse_x, _loop);
+    // Reference PolyCurveNetwork::Coarsen: X_c = (JᵀJ)⁻¹ Jᵀ X_f.
+    pinv_restrict_positions(pairs, fx, coarse_x);
+    for (size_t i = 0; i < parent.size(); ++i) {
+      const index_t p = parent[i];
+      if (p < 0 || static_cast<size_t>(p) >= coarse_x.size())
+        continue;
+      if (i < fx.size())
+        delta[i] = fx[i] - coarse_x[static_cast<size_t>(p)];
+    }
+
+    rod::ptr coarse;
+    for (const strand_walk &w : walks) {
+      std::vector<vec3> xs;
+      for (index_t c : w.corner) {
+        if (c >= 0 && static_cast<size_t>(c) < is_black.size() &&
+            is_black[static_cast<size_t>(c)]) {
+          const index_t cj = coarse_of[static_cast<size_t>(c)];
+          xs.push_back(cj >= 0 && static_cast<size_t>(cj) < coarse_x.size()
+                           ? coarse_x[static_cast<size_t>(cj)]
+                           : fx[static_cast<size_t>(c)]);
+        }
+      }
+      if (xs.size() < 2)
+        continue;
+      if (!coarse)
+        coarse = rod::create(xs, w.returned);
+      else
+        coarse->insert_strand(xs, w.returned);
+    }
+    if (!coarse)
+      return;
     const size_t fine_level = _rods.size() - 1;
     _keep[fine_level] = std::move(keep);
     _parent[fine_level] = std::move(parent);
@@ -636,8 +824,8 @@ private:
       return;
     }
 
-    const auto ord = ordered_live_corners(*R);
-    _loop = strand_is_loop(*R, ord);
+    const auto strands = collect_strands(*R);
+    _loop = strands.size() == 1 && strands[0].returned;
     _rods.push_back(R);
     _rest.push_back(R->x());
     _delta.emplace_back();

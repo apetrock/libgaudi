@@ -23,7 +23,6 @@
 #include "gaudi/asawa/primitive_objects.hpp"
 #include "gaudi/common.h"
 
-#include "braid_circle_bundle.hpp"
 #include "modules/knotted_surface.hpp"
 #include "modules/rod_forces.hpp"
 #include "utils/point_things.hpp"
@@ -47,16 +46,12 @@ namespace duchamp {
 using namespace asawa;
 
 enum class rod_guided_scene {
-  braid_circle, // closed braid on matching sphere shell
-  bunny_walk,   // bunny + silly_walk rod (legacy)
-  sphere_walk,  // sphere + silly_walk rod
+  bunny_walk,  // bunny + silly_walk rod (legacy)
+  sphere_walk, // sphere + silly_walk rod
 };
 
 struct rod_guided_config {
-  rod_guided_scene scene = rod_guided_scene::braid_circle;
-  braid_circle_config braid{
-      .knot = {.name = "plain_weave", .strands = 25, .frames = 25},
-  };
+  rod_guided_scene scene = rod_guided_scene::bunny_walk;
   silly_walk_config walk{
       .i0 = 0,
       .N_steps = 10000,
@@ -85,21 +80,9 @@ public:
     return std::make_shared<rod_guided_deformation>(cfg);
   }
 
-  // Convenience: braid+circle bundle only.
-  static ptr create(const braid_circle_config &bundle_cfg) {
-    rod_guided_config cfg;
-    cfg.scene = rod_guided_scene::braid_circle;
-    cfg.braid = bundle_cfg;
-    return create(cfg);
-  }
-
   explicit rod_guided_deformation(const rod_guided_config &cfg = {})
       : _tangent(cfg.tangent), _dipole_radius_scale(cfg.dipole_radius_scale) {
-    if (cfg.scene == rod_guided_scene::braid_circle) {
-      const braid_circle_bundle bundle = make_braid_circle_bundle(cfg.braid);
-      __M = bundle.shell;
-      __R = bundle.rod;
-    } else if (cfg.scene == rod_guided_scene::bunny_walk) {
+    if (cfg.scene == rod_guided_scene::bunny_walk) {
       __M = shell::load_bunny();
     } else {
       __M = shell::load_sphere(1.0, cfg.sphere_n, cfg.sphere_n / 2);
@@ -113,14 +96,10 @@ public:
     }
 
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
-    if (cfg.scene != rod_guided_scene::braid_circle) {
-      // Walk scenes: normalize bounds, then walk on the normalized mesh.
-      asawa::center(x, 2.0);
-      const std::vector<vec3> x_w = cfg.walk.run(*__M);
-      __R = rod::rod::create(x_w, false);
-      __R->_r = cfg.rod_radius;
-    }
-    // Braid+circle: keep matched sphere radius (no recenter/rescale).
+    asawa::center(x, 2.0);
+    const std::vector<vec3> x_w = cfg.walk.run(*__M);
+    __R = rod::rod::create(x_w, false);
+    __R->_r = cfg.rod_radius;
 
     const real l0 = asawa::shell::avg_length(*__M, x);
     const real C = 3.0;

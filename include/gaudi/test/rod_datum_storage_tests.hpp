@@ -20,7 +20,7 @@ GAUDI_TEST(rod_datum_pool_install_and_sizes) {
       vec3(3, 0, 0),
   };
   auto R = asawa::rod::rod::create(verts, false);
-  GAUDI_EXPECT(R->get_data().size() == 8);
+  GAUDI_EXPECT(R->get_data().size() == 9);
   GAUDI_EXPECT(R->x().size() == R->corner_count());
   GAUDI_EXPECT(R->v().size() == R->corner_count());
   GAUDI_EXPECT(R->u().size() == R->corner_count());
@@ -29,6 +29,7 @@ GAUDI_TEST(rod_datum_pool_install_and_sizes) {
   GAUDI_EXPECT(R->J().size() == R->corner_count());
   GAUDI_EXPECT(R->l0().size() == R->corner_count());
   GAUDI_EXPECT(R->t().size() == R->corner_count());
+  GAUDI_EXPECT(R->rest_l().size() == R->corner_count());
   GAUDI_EXPECT((R->x()[1] - vec3(1, 0, 0)).norm() < 1e-12);
   GAUDI_EXPECT(R->get_datum(0)->slot_id == 0);
   GAUDI_EXPECT(R->channels().get("x") != nullptr);
@@ -100,6 +101,7 @@ GAUDI_TEST(rod_datum_collapse_and_pack) {
   GAUDI_EXPECT(R->corner_count() == n0 - 1);
   GAUDI_EXPECT(R->x().size() == R->corner_count());
   GAUDI_EXPECT(R->l0().size() == R->corner_count());
+  GAUDI_EXPECT(R->rest_l().size() == R->corner_count());
   GAUDI_EXPECT(R->u().size() == R->corner_count());
   for (size_t i = 0; i < R->corner_count(); ++i) {
     if (R->next(asawa::rod::corner_id(static_cast<int>(i))) < 0 &&

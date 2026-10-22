@@ -43,6 +43,16 @@ public:
   virtual void project(const vecX &q, vecX &p){};
   virtual void fill_A(index_t &id0, std::vector<trip> &triplets){};
 
+  /// Gauss–Newton row block: a residual `r(q)` with Jacobian `J(q)`, solved
+  /// in the same global system as the projection rows. `fill_J` writes the
+  /// Jacobian rows at the live `q` and must emit the same row count every
+  /// call. `add_gradient` adds `J(q)^T r(q)`; `residual_sq` is `|r(q)|^2`.
+  virtual bool gauss_newton() const { return false; }
+  virtual void fill_J(const vecX &q, index_t &id0,
+                      std::vector<trip> &triplets) {}
+  virtual void add_gradient(const vecX &q, vecX &g) {}
+  virtual real residual_sq(const vecX &q) { return 0; }
+
   std::vector<index_t> _ids;
   index_t _id0;
   real _w;

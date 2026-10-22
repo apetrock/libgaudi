@@ -857,6 +857,52 @@ private:
   bool _velocity_output = false;
 };
 
+class harmonic_tangent_point_gradient_node : public liblombardi::Node {
+public:
+  using ptr = std::shared_ptr<harmonic_tangent_point_gradient_node>;
+
+  enum class PortId { Output = 0 };
+  using OutputPortDef = liblombardi::PortDef<field_datum<vec3>, PortId::Output>;
+
+  harmonic_tangent_point_gradient_node(
+      asawa::rod::rod::ptr rod, asawa::rod::dynamic::ptr dynamic,
+      const harmonic_tangent_point_force_config &cfg = {})
+      : _rod(std::move(rod)), _dynamic(std::move(dynamic)), _cfg(cfg) {}
+
+  void set_step_h(real h) { _step_h = h; }
+  void set_velocity_output(bool velocity) { _velocity_output = velocity; }
+
+  void compute() override {
+    auto out = get_datum<OutputPortDef>();
+    tangent_point_solver_config cfg;
+    cfg.type = {tangent_point_type::harmonic};
+    cfg.harmonic = _cfg;
+    out->data() = tp_grad_energy_one(*_rod, *_dynamic, cfg,
+                                     tangent_point_type::harmonic);
+    for (auto &f : out->data())
+      f *= real(-1);
+    if (!_velocity_output && _step_h > 0.0) {
+      const real h2 = _step_h * _step_h;
+      for (auto &f : out->data())
+        f *= h2;
+    }
+  }
+
+  unsigned int port_count() const override { return 1; }
+
+  liblombardi::PortRef<harmonic_tangent_point_gradient_node, OutputPortDef>
+  output() {
+    return {*this};
+  }
+
+private:
+  asawa::rod::rod::ptr _rod;
+  asawa::rod::dynamic::ptr _dynamic;
+  harmonic_tangent_point_force_config _cfg;
+  real _step_h = 0.0;
+  bool _velocity_output = false;
+};
+
 /// Active TP gradient node + unified drive API.
 struct tangent_point_drive {
   std::vector<tangent_point_type> type{tangent_point_type::soft};
@@ -870,6 +916,7 @@ struct tangent_point_drive {
   soft_tangent_point_gradient_node::ptr soft;
   cauchy_tangent_point_gradient_node::ptr cauchy;
   sobolev_tangent_point_gradient_node::ptr sobolev;
+  harmonic_tangent_point_gradient_node::ptr harmonic;
 
   tangent_point_type primary() const {
     if (type.empty())
@@ -908,6 +955,10 @@ struct tangent_point_drive {
       out.sobolev = graph.create_node<sobolev_tangent_point_gradient_node>(
           rod, dynamic, cfg.sobolev);
       break;
+    case tangent_point_type::harmonic:
+      out.harmonic = graph.create_node<harmonic_tangent_point_gradient_node>(
+          rod, dynamic, cfg.harmonic);
+      break;
     }
     return out;
   }
@@ -927,6 +978,9 @@ struct tangent_point_drive {
     case tangent_point_type::sobolev:
       graph.link(sobolev->output(), solver_in);
       break;
+    case tangent_point_type::harmonic:
+      graph.link(harmonic->output(), solver_in);
+      break;
     }
   }
 
@@ -945,6 +999,9 @@ struct tangent_point_drive {
     case tangent_point_type::sobolev:
       sobolev->set_step_h(h);
       break;
+    case tangent_point_type::harmonic:
+      harmonic->set_step_h(h);
+      break;
     }
   }
 
@@ -962,6 +1019,9 @@ struct tangent_point_drive {
       break;
     case tangent_point_type::sobolev:
       sobolev->set_velocity_output(velocity);
+      break;
+    case tangent_point_type::harmonic:
+      harmonic->set_velocity_output(velocity);
       break;
     }
   }
@@ -992,6 +1052,9 @@ struct tangent_point_drive {
     case tangent_point_type::sobolev:
       sobolev->compute();
       break;
+    case tangent_point_type::harmonic:
+      harmonic->compute();
+      break;
     }
   }
 
@@ -1012,6 +1075,10 @@ struct tangent_point_drive {
     case tangent_point_type::sobolev:
       return sobolev
           ->get_datum<sobolev_tangent_point_gradient_node::OutputPortDef>()
+          ->data();
+    case tangent_point_type::harmonic:
+      return harmonic
+          ->get_datum<harmonic_tangent_point_gradient_node::OutputPortDef>()
           ->data();
     default:
       return regularized

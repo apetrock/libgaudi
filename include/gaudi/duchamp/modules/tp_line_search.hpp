@@ -8,21 +8,21 @@
 #include <vector>
 
 #include "gaudi/common.h"
+#include "gaudi/duchamp/demo_log.hpp"
 
 namespace gaudi {
 namespace duchamp {
 
 struct tp_line_search_config {
-  /// After normalizing d so peak|d|=1, α has length units.
-  real alpha_min = 1.0e-8;
-  real alpha_max = 0.0; ///< if > trust probe, used as larger window probe
-  real fallback_alpha = 0.0; ///< unused by window search (kept for compat)
-
-  /// Probe / trust: |δ|_∞ ≤ trust_frac_lavg · lavg (big step for window).
+  /// Cap on the search start: |δ|_∞ ≤ trust_frac_lavg · lavg.
+  /// Collision time can only make the start shorter.
   real trust_frac_lavg = 0.25;
-
+  /// Geometric shrink of Boyd & Vandenberghe Algorithm 9.2 (β in (0, 1)).
   real shrink = 0.5;
+  /// How many times to multiply the step by shrink, starting at α0.
   int max_backtracks = 32;
+  /// Bisections of the bracket around the best shrink sample.
+  int max_refine = 4;
 
   bool verbose = false;
 };
@@ -82,80 +82,141 @@ inline real tp_peak_normalize(std::vector<vec3> &d, real eps = 1.0e-16) {
 
 inline real tp_probe_length(real lavg, const tp_line_search_config &cfg) {
   const real L = std::max(lavg, real(1e-6));
-  real probe = cfg.trust_frac_lavg * L;
-  if (cfg.alpha_max > probe)
-    probe = cfg.alpha_max;
-  return std::max(probe, cfg.alpha_min);
+  return std::max(cfg.trust_frac_lavg * L, real(0));
 }
 
-/// Large α₀, sample α,ρ α,ρ²α,… and pick lowest finite E.
+/// Shrink from α0, then bisect the bracket around the best sample.
+/// Accept only when that energy is below E0 + tol. A step that never
+/// beats E0 is held (α = 0).
+/// Repulsive Curves §5.4 cites Boyd & Vandenberghe Algorithm 9.2 for the
+/// shrink. max_refine fills the gap between those geometric samples.
 inline tp_line_search_result tp_best_energy_line_search(
     real E0, real alpha0, const std::function<real(real)> &eval_E,
     const tp_line_search_config &cfg = {}, real E_tol = 0.0) {
   tp_line_search_result out;
   out.E0 = E0;
   out.alpha_quad = alpha0;
-  const real amax = std::max(alpha0, cfg.alpha_min);
-  out.alpha = std::clamp(alpha0, cfg.alpha_min, amax);
-
-  real best_alpha = cfg.alpha_min;
-  real best_E = E0;
-  bool found = false;
-  int n_eval = 0;
-  int best_k = -1;
+  const real amax = std::max(alpha0, real(0));
   const real E_accept = E0 + std::max(E_tol, real(0.0));
+  const real beta = (cfg.shrink > real(0) && cfg.shrink < real(1))
+                        ? cfg.shrink
+                        : real(0.5);
+  const int n_shrink = std::max(0, cfg.max_backtracks);
+  const int n_refine = std::max(0, cfg.max_refine);
 
   if (cfg.verbose) {
-    std::cout << "[tp best-E] begin E0=" << E0 << " α0=" << amax
-              << " E_tol=" << E_tol << " shrink=" << cfg.shrink << std::endl;
+    demo_log() << "[tp best-E] begin E0=" << E0 << " α0=" << amax
+              << " shrink=" << beta << " backtracks=" << n_shrink
+              << " refine=" << n_refine << std::endl;
   }
 
-  real alpha = out.alpha;
-  for (int k = 0; k <= cfg.max_backtracks; ++k) {
+  int n_eval = 0;
+  auto probe = [&](real alpha) -> real {
     const real E1 = eval_E(alpha);
     ++n_eval;
-    out.n_backtracks = k;
-    const real dE = E1 - E0;
-    bool is_best = false;
-    if (std::isfinite(E1) && (!found || E1 < best_E)) {
-      best_E = E1;
-      best_alpha = alpha;
-      found = true;
-      best_k = k;
-      is_best = true;
-    }
     if (cfg.verbose) {
-      std::cout << "[tp best-E] k=" << k << " alpha=" << alpha << " E=" << E1
-                << " dE=" << dE << " best=" << (is_best ? 1 : 0) << std::endl;
+      demo_log() << "[tp best-E] k=" << (n_eval - 1) << " alpha=" << alpha
+                << " E=" << E1 << " dE=" << (E1 - E0) << std::endl;
     }
-    if (k == cfg.max_backtracks)
+    return E1;
+  };
+
+  real a = amax;
+  real best_a = real(0);
+  real best_E = E0;
+  bool have_best = false;
+  real lo = real(0);
+  real hi = amax;
+  bool have_lo = false;
+  bool have_hi = false;
+  int geom_evals = 0;
+
+  for (int k = 0; k <= n_shrink; ++k) {
+    if (!(a > real(0)) || !std::isfinite(a))
       break;
-    alpha *= cfg.shrink;
-    if (!(alpha > cfg.alpha_min))
+    const real E = probe(a);
+    ++geom_evals;
+    const bool better =
+        std::isfinite(E) && (!have_best || E < best_E);
+    if (better) {
+      if (have_best && best_a > a) {
+        hi = best_a;
+        have_hi = true;
+      }
+      best_a = a;
+      best_E = E;
+      have_best = true;
+      have_lo = false;
+    } else if (have_best && best_E < E_accept && a < best_a) {
+      lo = a;
+      have_lo = true;
       break;
-    alpha = std::max(alpha, cfg.alpha_min);
+    }
+    const real next = a * beta;
+    if (!(next < a))
+      break;
+    a = next;
   }
 
-  if (!found || !(best_E < E_accept)) {
+  out.n_backtracks = std::max(0, geom_evals - 1);
+  if (!have_best || !(best_E < E_accept)) {
     out.used_fallback = true;
     out.alpha = 0.0;
     out.E_accepted = E0;
     out.peak_delta = 0.0;
     if (cfg.verbose) {
-      std::cout << "[tp best-E] hold α=0 α0=" << amax << " E0=" << E0
+      demo_log() << "[tp best-E] hold α=0 α0=" << amax << " E0=" << E0
                 << " samples=" << n_eval << " (no sample beat E0+tol)"
                 << std::endl;
     }
     return out;
   }
 
-  out.alpha = best_alpha;
-  out.E_accepted = best_E;
+  if (!have_hi)
+    hi = std::max(best_a, amax);
+  if (!have_lo)
+    lo = best_a * beta;
+  if (!(lo < best_a))
+    lo = real(0);
+  if (!(hi > best_a))
+    hi = best_a;
+
+  real aL = lo;
+  real aR = hi;
+  real aM = best_a;
+  real EM = best_E;
+  for (int r = 0; r < n_refine && aR > aL; ++r) {
+    const real gapL = aM - aL;
+    const real gapR = aR - aM;
+    if (!(gapL > real(0)) && !(gapR > real(0)))
+      break;
+    const real aC = (gapL >= gapR) ? real(0.5) * (aL + aM)
+                                   : real(0.5) * (aM + aR);
+    if (!(aC > aL) || !(aC < aR))
+      break;
+    const real EC = probe(aC);
+    const bool c_left = aC < aM;
+    if (std::isfinite(EC) && EC < EM) {
+      if (c_left)
+        aR = aM;
+      else
+        aL = aM;
+      aM = aC;
+      EM = EC;
+    } else if (c_left) {
+      aL = aC;
+    } else {
+      aR = aC;
+    }
+  }
+
+  out.alpha = aM;
+  out.E_accepted = EM;
   out.peak_delta = out.alpha;
   if (cfg.verbose) {
-    std::cout << "[tp best-E] α*=" << out.alpha << " α0=" << amax
-              << " E0=" << E0 << " E*=" << best_E << " dE*=" << (best_E - E0)
-              << " samples=" << n_eval << " best_k=" << best_k << std::endl;
+    demo_log() << "[tp best-E] α*=" << out.alpha << " α0=" << amax
+              << " E0=" << E0 << " E*=" << EM << " dE*=" << (EM - E0)
+              << " samples=" << n_eval << std::endl;
   }
   return out;
 }

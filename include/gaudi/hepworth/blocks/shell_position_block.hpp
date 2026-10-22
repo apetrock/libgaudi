@@ -42,7 +42,7 @@ public:
   }
 
   void prepare(solver_context &ctx) override {
-    (void)ctx;
+    ctx.shell_mesh = mesh ? mesh.get() : nullptr;
     mass = asawa::shell::vertex_areas_3(*mesh, xs->get());
     forces.assign(xs->size(), vec3::Zero());
     // Same scale as graph connectors (apply_external_input default = 1).
@@ -70,6 +70,8 @@ public:
   }
 
   vec3_block::ptr dof_vec3() const { return _vec3; }
+
+  vec3_block::ptr shell_positions() const override { return _vec3; }
 
 private:
   vec3_block::ptr _vec3;

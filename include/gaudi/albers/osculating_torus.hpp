@@ -84,11 +84,24 @@ struct osculating_torus {
   real r = 0.1; // minor
   int sign = 1; // side of surface (+1 or -1)
   bool valid = false;
+  // Tube frame at the foot. `spine` is the tube center nearest the foot, a
+  // distance `r` along the normal. `radial` points from the circle's center
+  // toward that spine point. `ruling` is the circle tangent there, along the
+  // smaller principal direction. `tube` stays set when the circle is refused.
+  vec3 spine = vec3::Zero();
+  vec3 radial = vec3::UnitZ();
+  vec3 ruling = vec3::UnitX();
+  bool tube = false;
 };
 
-/// PAT algebra (Feng–Gkioulekas–Crane): \(r=1/|\kappa|_{\mathrm{hi}}\),
-/// \(R=1/|\kappa|_{\mathrm{lo}}-\mathrm{sign}(\kappa_+\kappa_-)r\),
-/// \(\mathrm{sign}(\mathbb{T})\) from Eq. 22 (~ follow \(\kappa_{\max}<0\)).
+/// Tube radius \(r=1/|\kappa|_{\mathrm{hi}}\), the same center as
+/// `cylinder_minor`: the minor spine is `foot + n/κ_hi` on both sheets.
+/// `κ_lo` does not move that spine. Same-sign curvature puts the major center
+/// further along that normal, at distance \(1/|\kappa|_{\mathrm{lo}}\).
+/// Opposite signs put the major center on the other side of the foot.
+/// Vanishing \(\kappa_{\mathrm{lo}}\) keeps a large-\(R\) torus (Feng, Gkioulekas
+/// & Crane, *Points as Tori*, `feng-points-as-tori.pdf`): cylinder / plane are
+/// limits of that torus, not a refused circle.
 inline osculating_torus
 osculating_torus_from_shape_operator(const vec3 &foot, const vec3 &n_hint,
                                      const mat3 &W,
@@ -109,43 +122,111 @@ osculating_torus_from_shape_operator(const vec3 &foot, const vec3 &n_hint,
   const real k_lo = max_is_kmax ? pc.k_min : pc.k_max;
   const vec3 e_lo = max_is_kmax ? pc.e_min : pc.e_max;
 
-  const real eps = 1e-12;
-  T.r = 1.0 / std::max(std::abs(k_hi), eps);
-  if (!std::isfinite(T.r) || T.r < 1e-12) {
+  // Both principal curvatures vanishing is a plane. No tube.
+  if (!(std::abs(k_hi) > real(1e-8)) || !pc.n.allFinite() || !e_lo.allFinite())
+    return T;
+
+  T.r = 1.0 / std::abs(k_hi);
+  if (!std::isfinite(T.r) || T.r < 1e-12)
     T.r = fallback_r;
-  }
+  if (!(T.r > real(1e-12)))
+    return T;
+
+  // sign stays +1 when κ_hi>0 so the Monge height graph does not flip.
+  // The spine itself follows 1/κ_hi, which is the other direction.
+  int side = 1;
+  if (mode == torus_sign_mode::pat_eq22)
+    side = (k_hi < 0.0) ? -1 : 1;
   const real s_prod =
       (pc.k_min * pc.k_max >= 0.0) ? real(1.0) : real(-1.0);
-  const real inv_lo = 1.0 / std::max(std::abs(k_lo), eps);
-  T.R = inv_lo - s_prod * T.r;
-  if (!std::isfinite(T.R)) {
-    T.R = std::max(T.r, fallback_r);
-  } else {
-    // Umbilic / sphere limit is R→0 (valid degenerate torus). Do not inflate.
-    T.R = std::max(T.R, real(0.0));
-  }
-
-  // Offset of geometric center is foot - side*(R+r)*n.
-  // With outward normals and κ>0 (convex), side=+1 puts the torus on the
-  // interior / medial side (-n). Concave κ_hi<0 → side=-1 → exterior of the
-  // local bowl (still the center of curvature).
-  int side = 1;
-  if (mode == torus_sign_mode::pat_eq22) {
-    side = (k_hi < 0.0) ? -1 : 1;
-  } else if (mode == torus_sign_mode::interior_biased) {
-    side = 1; // always toward -n
-  } else {
-    side = 1;
-  }
+  const real sgn = (k_hi >= 0.0) ? real(1.0) : real(-1.0);
+  const vec3 n = pc.n.normalized();
+  vec3 ruling = e_lo - n * e_lo.dot(n);
+  if (!(ruling.squaredNorm() > real(1e-16)))
+    return T;
+  ruling.normalize();
   T.sign = side;
-  T.axis = e_lo.normalized();
-  // Geometric center of revolution (outer contact): foot is at distance R+r
-  // from C along ±n. Tube/major-circle point would be foot - side*r*n.
-  T.center =
-      foot - static_cast<real>(side) * (T.R + T.r) * pc.n;
+  T.ruling = ruling;
+  // cylinder_minor center. κ_lo does not enter.
+  T.spine = foot + sgn * T.r * n;
+  // From the spine toward the foot, so spine + r * radial recovers the foot.
+  T.radial = -sgn * n;
+  T.tube = T.spine.allFinite() && T.radial.allFinite() && T.ruling.allFinite();
+  if (!T.tube)
+    return T;
+
+  // Floor a vanishing major κ so R is huge but finite (Points as Tori).
+  constexpr real k_lo_floor = real(1e-8);
+  const real abs_lo = std::max(std::abs(k_lo), k_lo_floor);
+  const real inv_lo = 1.0 / abs_lo;
+  T.R = inv_lo - s_prod * T.r;
+  if (!std::isfinite(T.R))
+    return T;
+  // Umbilic / sphere limit is R→0 (valid degenerate torus). Do not inflate.
+  T.R = std::max(T.R, real(0.0));
+
+  const vec3 revolution = n.cross(e_lo);
+  if (!(revolution.squaredNorm() > real(1e-16)))
+    return T;
+  T.axis = revolution.normalized();
+  // Same sign: further along n/κ_hi. Opposite signs: the other side of the foot.
+  T.center = foot + sgn * s_prod * inv_lo * n;
+  vec3 radial = T.spine - T.center;
+  if (radial.squaredNorm() > real(1e-16))
+    T.radial = radial.normalized();
   T.valid = T.center.allFinite() && T.axis.allFinite() && std::isfinite(T.R) &&
-            std::isfinite(T.r);
+            std::isfinite(T.r) && std::isfinite(inv_lo);
   return T;
+}
+
+/// Nearest point on the spine circle. Measured from `spine`, so a large R
+/// does not subtract two far radii. R→∞ is the line through `spine` along
+/// `ruling`.
+inline bool nearest_circle_spine(const osculating_torus &T, const vec3 &p,
+                                 vec3 &ps) {
+  if (!T.valid || !T.tube || !p.allFinite())
+    return false;
+  const vec3 v = p - T.spine;
+  const real tang = v.dot(T.ruling);
+  const real radial_off = v.dot(T.radial);
+  const real along = T.R + radial_off;
+  const real rho = std::hypot(along, tang);
+  if (!std::isfinite(rho))
+    return false;
+  if (!(rho > real(1e-18))) {
+    ps = T.spine;
+    return ps.allFinite();
+  }
+  const real scale = T.R / rho;
+  const real denom = along + rho;
+  const real sag =
+      (std::abs(denom) > real(1e-18)) ? (scale * tang * tang) / denom : real(0);
+  ps = T.spine - sag * T.radial + (scale * tang) * T.ruling;
+  return ps.allFinite();
+}
+
+/// Nearest point on the minor-radius cylinder's spine: the line through
+/// `spine` along `ruling`.
+inline bool nearest_line_spine(const osculating_torus &T, const vec3 &p,
+                               vec3 &ps) {
+  if (!T.tube || !p.allFinite() || !(T.ruling.squaredNorm() > real(1e-16)))
+    return false;
+  const vec3 v = p - T.spine;
+  ps = T.spine + v.dot(T.ruling) * T.ruling;
+  return ps.allFinite();
+}
+
+/// \(p_s + r\,\mathrm{normalize}(p - p_s)\). Same ray on either side of the tube.
+inline bool land_from_spine(const vec3 &ps, real radius, const vec3 &p,
+                            vec3 &out) {
+  if (!ps.allFinite() || !p.allFinite() || !(radius > real(1e-12)))
+    return false;
+  const vec3 ray = p - ps;
+  const real q = ray.norm();
+  if (!(q > real(1e-12)) || !std::isfinite(q))
+    return false;
+  out = ps + radius * (ray / q);
+  return out.allFinite();
 }
 
 /// Approximate SDF of an infinite torus of revolution (positive outside).
