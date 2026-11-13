@@ -423,12 +423,39 @@ inline Eigen::Matrix<real, 3, 3> cr_face_stiffness(const vec3 &X0, const vec3 &X
   return K;
 }
 
+/// The traceless part of `tensor_inner`, `q_z(h, h') = z . z'`:
+/// `tensor_inner() = tensor_inner_traceless() + 1/2 t t^T`, `t = (1, 0, 1)`.
+inline Eigen::Matrix<real, 3, 3> tensor_inner_traceless() {
+  Eigen::Matrix<real, 3, 3> Q;
+  Q << real(0.25), 0, real(-0.25), 0, 1, 0, real(-0.25), 0, real(0.25);
+  return Q;
+}
+
+/// `K_ab M_a^T Q M_b` over a triangle's three edge tensors for the inner
+/// product `Q` (`spin2_face_element`, `spin2_traceless_face_element`).
+inline Eigen::Matrix<real, 9, 9> spin2_face_element_q(const vec3 &X0, const vec3 &X1, const vec3 &X2,
+                                                      const Eigen::Matrix<real, 3, 3> &Q);
+
 /// CR spin-2 element of one triangle (9 x 9 over its three edge tensors,
 /// `3 edge + comp`): `K_ab M_a^T Q M_b`, `M_a` the map of edge `a`'s frame
 /// into the face frame. Energy `h^T E h` approximates
 /// `int |grad z|^2 + 1/2 |grad tau|^2` (second order; MATH.md section 14).
 inline Eigen::Matrix<real, 9, 9> spin2_face_element(const vec3 &X0, const vec3 &X1,
                                                     const vec3 &X2) {
+  return spin2_face_element_q(X0, X1, X2, tensor_inner());
+}
+
+/// The traceless part of `spin2_face_element`, `int |grad z|^2`. Exact: every
+/// frame map keeps the trace (`t^T M = t^T`), so `M_a^T (1/2 t t^T) M_b =
+/// 1/2 t t^T` and the full element is this one plus `1/2 K` on the traces
+/// (`edge_fair_rows::dirichlet_trace`).
+inline Eigen::Matrix<real, 9, 9> spin2_traceless_face_element(const vec3 &X0, const vec3 &X1,
+                                                              const vec3 &X2) {
+  return spin2_face_element_q(X0, X1, X2, tensor_inner_traceless());
+}
+
+inline Eigen::Matrix<real, 9, 9> spin2_face_element_q(const vec3 &X0, const vec3 &X1, const vec3 &X2,
+                                                      const Eigen::Matrix<real, 3, 3> &Q) {
   const vec3 X[3] = {X0, X1, X2};
   const Eigen::Matrix<real, 3, 3> K = cr_face_stiffness(X0, X1, X2);
   const vec3 N = (X1 - X0).cross(X2 - X0).normalized();
@@ -439,7 +466,6 @@ inline Eigen::Matrix<real, 9, 9> spin2_face_element(const vec3 &X0, const vec3 &
     const vec3 v = (X[(a + 1) % 3] - X[a]).normalized();
     M[static_cast<size_t>(a)] = tensor_map(v.dot(T), v.dot(B));
   }
-  const Eigen::Matrix<real, 3, 3> Q = tensor_inner();
   Eigen::Matrix<real, 9, 9> E;
   for (int a = 0; a < 3; ++a)
     for (int b = 0; b < 3; ++b)

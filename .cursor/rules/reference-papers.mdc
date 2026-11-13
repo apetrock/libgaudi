@@ -1,0 +1,27 @@
+---
+description: Search reference/MANIFEST.md for geometry papers before inventing methods
+alwaysApply: true
+---
+
+# Reference papers
+
+Before proposing or re-deriving a geometry / simulation method, skim
+[`reference/MANIFEST.md`](reference/MANIFEST.md) by **tags** and keywords.
+
+## Workflow
+
+1. Match the topic to manifest tags (e.g. `hepworth`, `ARAP`, `winding`, `TP`, `fluids`).
+2. Read the entry **summary** and **maps_to** first.
+3. Open the local PDF under [`reference/`](reference/) only when implementing details
+   (energies, local/global steps, discretizations).
+4. Cite the paper by title + local filename when discussing design choices.
+
+## Adding papers
+
+1. Place PDF in `reference/` (prefer `authorYEAR-short-slug.pdf`).
+2. Append a MANIFEST entry: title, file, url, tags, summary, maps_to.
+3. Record URL/DOI in `reference/SOURCES.txt`.
+4. Optional: add a fetch line to `scripts/fetch_reference_papers.sh`.
+
+PDFs may later move to external storage; keep **MANIFEST.md** (and SOURCES) in-repo
+as the searchable index.

@@ -165,7 +165,7 @@ GAUDI_TEST(shell_flip_and_collapse_refuse_duplicates_and_pinches) {
   GAUDI_ASSERT(!dyn->skip_flip(*small, corner_id(8)));
   flip_edge(*small, corner_id(8));
   GAUDI_ASSERT(expect_valid(*small, "3x3 torus after one flip"));
-  int dup = 0, pinch = 0;
+  int dup = 0, pinch = 0, pinch_dynamic = 0;
   for (CornerId c : small->get_edge_range()) {
     const VertId a = small->vert(small->prev(c));
     const VertId b = small->vert(small->prev(small->other(c)));
@@ -175,11 +175,15 @@ GAUDI_TEST(shell_flip_and_collapse_refuse_duplicates_and_pinches) {
     }
     if (!collapse_link_ok(*small, c)) {
       ++pinch;
-      GAUDI_EXPECT(collapse_edge(*small, c) == c);
+      GAUDI_EXPECT(!can_collapse(*small, c, false, collapse_topology::fixed));
+      GAUDI_EXPECT(collapse_edge(*small, c, false, collapse_topology::fixed) == c);
+      pinch_dynamic += count_cycle(*small, c) <= 1 && can_collapse(*small, c);
     }
   }
   GAUDI_EXPECT(dup > 0);
   GAUDI_EXPECT(pinch > 0);
+  // Dynamic topology lets a pinch through (the prune finishes it).
+  GAUDI_EXPECT(pinch_dynamic > 0);
   GAUDI_EXPECT(expect_valid(*small, "3x3 torus after refusals"));
   GAUDI_EXPECT(euler(*small) == 0);
 
@@ -421,6 +425,80 @@ GAUDI_TEST(shell_qc_brings_high_valence_into_band) {
   GAUDI_EXPECT(euler(*M) == 0);
   GAUDI_EXPECT(rep.final.val_hi == 0);
   GAUDI_EXPECT(rep.final.hard == 0);
+}
+
+/// A chain of needles all the way around the ring (one tube row squeezed to
+/// its neighbour, the band between them `squeeze` of its width): remesh
+/// steps with QC clear it, as they would one needle.
+GAUDI_TEST(shell_qc_clears_needle_chain) {
+  using namespace shell_qc_detail;
+  for (const real squeeze : {real(0.05), real(0.1), real(0.2)}) {
+    const int maj = 24, mn = 12;
+    auto M = load_torus(1.0, 0.33, maj, mn);
+    std::vector<vec3> &x = asawa::get_vec_data(*M, 0);
+    for (int i = 0; i < maj; ++i) {
+      const int a = i * mn + 3, b = i * mn + 4;
+      x[static_cast<size_t>(a)] = x[static_cast<size_t>(b)] + squeeze * (x[static_cast<size_t>(a)] - x[static_cast<size_t>(b)]);
+    }
+    auto below = [&](real q) {
+      int n = 0;
+      const std::vector<vec3> &y = asawa::const_get_vec_data(*M, 0);
+      for (FaceId f : M->get_face_range()) {
+        const auto t = M->get_tri(f);
+        n += face_quality(y[t[0]], y[t[1]], y[t[2]]) < q;
+      }
+      return n;
+    };
+    const int b1 = below(0.1), b2 = below(0.2);
+    const real l0 = avg_length(*M, asawa::const_get_vec_data(*M, 0));
+    auto dyn = dynamic::create(M, 0.5 * l0, 1.25 * l0, 0.25 * l0);
+    for (int k = 0; k < 3; ++k) {
+      dyn->update_trees();
+      dyn->step(true);
+    }
+    const int a1 = below(0.1), a2 = below(0.2);
+    std::cout << "[shell_qc] needle chain squeeze " << squeeze << ": faces below 0.1 " << b1 << " -> " << a1
+              << ", below 0.2 " << b2 << " -> " << a2 << ", min q " << min_face_quality(*M, asawa::const_get_vec_data(*M, 0))
+              << std::endl;
+    GAUDI_EXPECT(expect_valid(*M, "after needle chain"));
+    GAUDI_EXPECT(a1 == 0);
+    GAUDI_EXPECT(a2 <= b2 / 10);
+  }
+}
+
+/// A thin neck: a torus with a triangular cross-section (3 around the tube)
+/// and a tube far thinner than the collapse length, so every cross edge is
+/// short and fails the link condition (its ends share the third vertex of
+/// the cross-section). Remesh steps pinch it off instead of leaving the
+/// long thin chain of triangles.
+GAUDI_TEST(shell_thin_neck_pinches_off) {
+  using namespace shell_qc_detail;
+  for (const collapse_topology mode : {collapse_topology::dynamic, collapse_topology::fixed}) {
+    auto M = load_torus(1.0, 0.004, 24, 3);
+    const vef before = counts(*M);
+    const real l0 = avg_length(*M, asawa::const_get_vec_data(*M, 0));
+    auto dyn = dynamic::create(M, 0.5 * l0, 1.25 * l0, 0.25 * l0);
+    dyn->set_topology(mode);
+    int steps = 0;
+    bool valid = true;
+    for (; steps < 6 && dyn->has_active_edges(); ++steps) {
+      dyn->update_trees();
+      dyn->step(true);
+      if (dyn->has_active_edges())
+        valid = valid && expect_valid(*M, "thin neck after step");
+    }
+    const vef after = counts(*M);
+    const bool dynamic = mode == collapse_topology::dynamic;
+    std::cout << "[shell_qc] thin neck (" << (dynamic ? "dynamic" : "fixed") << "): faces " << before.F
+              << " -> " << after.F << " after " << steps << " steps" << std::endl;
+    GAUDI_EXPECT(valid);
+    // Dynamic: the neck pinches and dissipates. Fixed collapses keep the
+    // genus, so the neck stays as the long thin chain (bridges still weld).
+    if (dynamic)
+      GAUDI_EXPECT(after.F < before.F / 4);
+    else
+      GAUDI_EXPECT(after.F > before.F / 2);
+  }
 }
 
 /// Full remesh steps with QC on: valid, triangular, no hard faces, and the

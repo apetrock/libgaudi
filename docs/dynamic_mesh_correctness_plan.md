@@ -48,7 +48,7 @@ invariant and the offending ids.
 | `merge_face` -> `remove_cruft` | same face, digon | derive | -1 | -1 or -2 | derive |
 | `merge_edge(c)` (contraction step) | none | -1 | -1 | 0 | 0 |
 | `subdivide_edge` | both faces triangles | +1 | +3 | +2 | 0 |
-| `collapse_edge` | `count_cycle <= 1`, `vsize >= 3` at ends, `>= 4` at opposite vertices | -1 | -3 | -2 | 0 iff the link condition holds |
+| `collapse_edge` | `vsize >= 3` at ends, `>= 4` at opposite vertices; `collapse_topology::dynamic` (default) `count_cycle <= 1`, `fixed` the link condition | -1 | -3 | -2 | 0 iff the link condition holds |
 | `flip_edge` | both faces triangles | 0 | 0 | 0 | 0 |
 | `merge_edge(cA0, cB0)` (bridge) | valences `>= 4`, `adjacent` -> weld | derive per branch | | | handle or component join |
 | `dissolve_vertex(v)` (`element_qc.hpp`) | fan of triangles, ring vertices distinct with valence `>= 4`, no diagonal already an edge, best triangulation above a quality floor | -1 | -3 | -2 | 0 (reuses the freed pairs and faces) |
@@ -84,10 +84,17 @@ tetrahedron.
 1. `check_invariants` after every operation on every edge (or edge pair for
    the bridge) of every mesh, in a new `include/gaudi/test/shell_topology_tests.hpp`.
 2. For `collapse_edge`, classify every edge: guard accepts / rejects versus
-   link condition true / false. Report counts per family. Any
-   "accepted, link condition false" case is a bug: save the mesh (OBJ) as a
-   regression fixture. "Rejected, link condition true" is the conservatism
-   that leaves short edges and slivers behind.
+   link condition true / false. Report counts per family. In `fixed` mode
+   any "accepted, link condition false" case is a bug: save the mesh (OBJ)
+   as a regression fixture. In `dynamic` mode (the remesher's default) it is
+   the design: the collapse pinches, leaving a valid but degenerate shell
+   (two-edge rings, two-sided faces, doubled edges) that `delete_degenerates`
+   and `break_cycles` prune, which is how thin sheets and necks dissipate;
+   there the check is that the shell is valid after each prune. Requiring
+   the link condition everywhere (as tried 2026-10) leaves thin necks as
+   long chains of skinny triangles (`shell_thin_neck_pinches_off`).
+   "Rejected, link condition true" is the conservatism that leaves short
+   edges and slivers behind.
 3. Euler bookkeeping per operation against the table.
 
 **Exit.** A table of guard outcomes per family; zero invariant violations

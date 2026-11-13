@@ -191,3 +191,20 @@
 # Knöppel, Crane, Pinkall, Schröder 2013 — Globally Optimal Direction Fields (ACM TOG 32(4))
 # https://www.cs.cmu.edu/~kmcrane/Projects/GloballyOptimalDirectionFields/paper.pdf
 # https://doi.org/10.1145/2461912.2462005
+
+# Bobenko, Huhnen-Venedey 2012 — Curvature line parametrized surfaces and orthogonal coordinate systems: discretization with Dupin cyclides (Geom. Dedicata 159, 207–237)
+# https://arxiv.org/abs/1101.5955  (local: 1101.5955v2.pdf)
+# Bobenko, Suris 2008 — Discrete Differential Geometry: Integrable Structure (AMS GSM 98) — book, not archived
+# Related, local: 1511.01777v2.pdf (Bobenko, Schief, Suris, Techter — discretization of confocal quadrics), 2312.04341v1.pdf (Bobenko, Fairley — circular nets with spherical parameter lines)
+
+# Vaxman, Müller, Weber 2015 — Conformal Mesh Deformations with Möbius Transformations (ACM TOG 34(4), Article 55)
+# https://doi.org/10.1145/2766915
+# https://www.geometrie.tuwien.ac.at/geom/ig/publications/2015/conformal2015/conformal2015.pdf  (local: vaxman2015-conformal-mobius-deformations.pdf)
+
+# Kim, Liu, Llamas, Rossignac 2005 — FlowFixer: Using BFECC for Fluid Simulation (Eurographics Workshop on Natural Phenomena)
+# https://faculty.cc.gatech.edu/~jarek/papers/FlowFixer.pdf  (local: kim2005-flowfixer-bfecc.pdf)
+# Selle, Fedkiw, Kim, Liu, Rossignac 2008 — An Unconditionally Stable MacCormack Method (J. Sci. Comput. 35, 350–371)
+# https://www.andyselle.com/papers/7/maccormack.pdf  (local: selle2008-unconditionally-stable-maccormack.pdf)
+# Nabizadeh, Wang, Ramamoorthi, Chern 2022 — Covector Fluids (ACM TOG 41(4), Article 113)
+# https://doi.org/10.1145/3528223.3530120
+# https://cseweb.ucsd.edu/~viscomp/projects/SIG22CovectorFluids/paper/CovectorFluids.pdf  (local: nabizadeh2022-covector-fluids.pdf)

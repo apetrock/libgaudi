@@ -17,7 +17,7 @@
 //   principal_curvature_probe [frames] [target: delta|scale|torus] [w] [pd iterations]
 //                   [remesh] [nodrive] [refresh=K]
 //                   [backtracks=K] [ratio=R | logr=L] [rel] [shear=S] [wsshear=W] [skew=W] [skewscale=S] [areafree] [areaband=lo:hi] [warea=W] [fshear=W] [fsamt=S]
-//                   [dump=K] [res=ring:tube] [wstretch=W] [wgrad=W] [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W] [wgauss=W] [grelax=A]
+//                   [solver=weingarten|exponent|eigensatz|contact_net|off] [cnmode=native|inner] [cntan=vertex|edge] [cnrot] [nmass=C] [wdcircle=W] [dcmode=closest|slide|even|graded|hyperbolic|parabolic|loxodromic] [dcfam=0|1|2] [dcamt=A] [dcangle=DEG] [dcref=x,y,z] [wamap=W] [amapinv=A] [wconf=W] [wtension=W] [dupinreach=R] [dupindeg=D] [wgradtl=W] [wcmean=W] [wcratio=W] [wotorus=W] [wodupin=W] [wodupinshape=W] [wframefair=W] [walbers=W] [wkite=W] [kalpha=A] [kangle=DEG] [kmaxu=U] [ksrc=tangent|mean|aniso] [klevel=L] [kbalanced] [wcmc=W] [cmch0=H] [cnsolver=gn|pd] [cnsolves=K] [cnits=K] [cnmem=W] [cnaccel=anderson|chebyshev|anderson_chebyshev|none] [accel=anderson|chebyshev|anderson_chebyshev|none] [xkm=K] [xkb=K] [xmass=M] [xrefresh=K] [xrest=initial] [xconf=W] [xarea=W] [wmin=W] [freshstop=0|1] [maxascent=K] [dump=K] [res=ring:tube] [wstretch=W] [wgrad=W] [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W] [wgauss=W] [grelax=A]
 //                   [mean=M]
 //                   [tilt=G] [wtilt=W]
 //                   [tiltaxis=k0|k1] [tiltmode=rigid|spin|twist|bend]
@@ -265,6 +265,26 @@ int principal_curvature_probe_main(int argc, char **argv) {
       cfg.position.w_stretch = std::atof(flag.c_str() + 9);
     } else if (flag.rfind("wgrad=", 0) == 0) {
       cfg.shape.w_grad = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("dupinreach=", 0) == 0) {
+      cfg.shape.dupin_reach = std::atof(flag.c_str() + 11);
+    } else if (flag.rfind("dupindeg=", 0) == 0) {
+      cfg.shape.dupin_degree = std::atoi(flag.c_str() + 9);
+    } else if (flag.rfind("wgradtl=", 0) == 0) {
+      cfg.shape.w_grad_traceless = std::atof(flag.c_str() + 8);
+    } else if (flag.rfind("wcmean=", 0) == 0) {
+      cfg.shape.w_curvature_mean = std::atof(flag.c_str() + 7);
+    } else if (flag.rfind("wcratio=", 0) == 0) {
+      cfg.shape.w_curvature_ratio = std::atof(flag.c_str() + 8);
+    } else if (flag.rfind("wotorus=", 0) == 0) {
+      cfg.project.w_osculating_torus = std::atof(flag.c_str() + 8);
+    } else if (flag.rfind("wodupin=", 0) == 0) {
+      cfg.project.w_osculating_dupin = std::atof(flag.c_str() + 8);
+    } else if (flag.rfind("wodupinshape=", 0) == 0) {
+      cfg.project.w_osculating_dupin_shape = std::atof(flag.c_str() + 13);
+    } else if (flag.rfind("wframefair=", 0) == 0) {
+      cfg.project.w_frame_fair = std::atof(flag.c_str() + 11);
+    } else if (flag.rfind("walbers=", 0) == 0) {
+      cfg.project.w_fair_albers = std::atof(flag.c_str() + 8);
     } else if (flag.rfind("swind=", 0) == 0) {
       // ring:tube[:handedness] on the first shear entry.
       auto &w = cfg.position.shear.at(0).winding;
@@ -279,6 +299,143 @@ int principal_curvature_probe_main(int argc, char **argv) {
       cfg.position.recenter = true;
     } else if (flag.rfind("sdamp=", 0) == 0) {
       eig.w_store_damping = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("solver=", 0) == 0) {
+      const std::string v = flag.substr(7);
+      using cs = gaudi::duchamp::curvature_solver;
+      eig.kind = v == "exponent"      ? cs::exponent
+                 : v == "eigensatz"   ? cs::eigensatz
+                 : v == "contact_net" ? cs::contact_net
+                 : v == "off"         ? cs::off
+                                      : cs::weingarten;
+    } else if (flag.rfind("accel=", 0) == 0) {
+      const std::string a = flag.substr(6);
+      using sa = gaudi::hepworth::block::step_accel;
+      cfg.step.accel = a == "none"                 ? sa::none
+                       : a == "chebyshev"          ? sa::chebyshev
+                       : a == "anderson_chebyshev" ? sa::anderson_chebyshev
+                                                   : sa::anderson;
+    } else if (flag.rfind("cnsolver=", 0) == 0) {
+      eig.contact.solver = flag.substr(9) == "pd" ? gaudi::kusama::contact_net::kind::pd
+                                                  : gaudi::kusama::contact_net::kind::gn;
+    } else if (flag.rfind("cnmode=", 0) == 0) {
+      eig.contact_mode = flag.substr(7) == "inner" ? gaudi::duchamp::contact_net_mode::inner
+                                                   : gaudi::duchamp::contact_net_mode::native;
+    } else if (flag.rfind("cntan=", 0) == 0) {
+      eig.contact_tangency = flag.substr(6) == "edge" ? gaudi::hepworth::block::contact_net_gn::tangency::edge
+                                                      : gaudi::hepworth::block::contact_net_gn::tangency::vertex;
+    } else if (flag == "cnrot") {
+      eig.contact_rotations = true;
+    } else if (flag.rfind("nmass=", 0) == 0) {
+      eig.contact_normal_mass = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("wdcircle=", 0) == 0) {
+      cfg.position.w_dupin_circle = std::atof(flag.c_str() + 9);
+    } else if (flag.rfind("dcmode=", 0) == 0) {
+      using dm = hepworth::block::dupin_circle_spec::mode;
+      const std::string s = flag.substr(7);
+      dm m = dm::closest;
+      if (s == "slide")
+        m = dm::slide;
+      else if (s == "even")
+        m = dm::even;
+      else if (s == "graded")
+        m = dm::graded;
+      else if (s == "hyperbolic")
+        m = dm::hyperbolic;
+      else if (s == "parabolic")
+        m = dm::parabolic;
+      else if (s == "loxodromic")
+        m = dm::loxodromic;
+      for (auto &d : cfg.position.dupin_circle)
+        d.kind = m;
+    } else if (flag.rfind("dcfam=", 0) == 0) {
+      for (auto &d : cfg.position.dupin_circle)
+        d.family = std::atoi(flag.c_str() + 6);
+    } else if (flag.rfind("dcamt=", 0) == 0) {
+      // The active mode's amount: delta, g, lambda, beta or psi.
+      const real a = std::atof(flag.c_str() + 6);
+      using dm = hepworth::block::dupin_circle_spec::mode;
+      for (auto &d : cfg.position.dupin_circle) {
+        if (d.kind == dm::slide)
+          d.delta = a;
+        else if (d.kind == dm::graded)
+          d.g = a;
+        else if (d.kind == dm::hyperbolic)
+          d.lambda = a;
+        else if (d.kind == dm::parabolic)
+          d.beta = a;
+        else if (d.kind == dm::loxodromic)
+          d.psi = a;
+      }
+    } else if (flag.rfind("dcangle=", 0) == 0) {
+      for (auto &d : cfg.position.dupin_circle)
+        d.max_angle = std::atof(flag.c_str() + 8) * real(M_PI / 180.0);
+    } else if (flag.rfind("dcref=", 0) == 0) {
+      real a = 0, b = 0, c = 0;
+      std::sscanf(flag.c_str() + 6, "%lf,%lf,%lf", &a, &b, &c);
+      cfg.position.dupin_circle_ref = vec3(a, b, c);
+    } else if (flag.rfind("wamap=", 0) == 0) {
+      cfg.position.w_amap = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("amapinv=", 0) == 0) {
+      cfg.position.amap_inversion = std::atof(flag.c_str() + 8);
+    } else if (flag.rfind("wconf=", 0) == 0) {
+      cfg.position.w_conformal = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("wtension=", 0) == 0) {
+      cfg.position.w_tension = std::atof(flag.c_str() + 9);
+    } else if (flag.rfind("wkite=", 0) == 0) {
+      cfg.position.w_kite = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("kalpha=", 0) == 0) {
+      cfg.position.kite.alpha = std::atof(flag.c_str() + 7);
+    } else if (flag.rfind("kangle=", 0) == 0) {
+      cfg.position.kite.angle = std::atof(flag.c_str() + 7) * real(M_PI) / real(180);
+    } else if (flag.rfind("kmaxu=", 0) == 0) {
+      cfg.position.kite.max_u = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("ksrc=", 0) == 0) {
+      const std::string v = flag.substr(5);
+      cfg.position.kite.source = v == "mean"    ? hepworth::block::kite_source::mean_curvature
+                                 : v == "aniso" ? hepworth::block::kite_source::anisotropy
+                                                : hepworth::block::kite_source::tangent;
+    } else if (flag.rfind("klevel=", 0) == 0) {
+      cfg.position.kite.level = std::atof(flag.c_str() + 7);
+    } else if (flag == "kbalanced") {
+      cfg.position.kite.balanced = true;
+    } else if (flag.rfind("wcmc=", 0) == 0) {
+      cfg.shape.w_tension = std::atof(flag.c_str() + 5);
+    } else if (flag.rfind("cmch0=", 0) == 0) {
+      cfg.shape.tension.kind = hepworth::block::tension_target::mode::constant;
+      cfg.shape.tension.h0 = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("cnsolves=", 0) == 0) {
+      eig.contact.solves_per_frame = std::atoi(flag.c_str() + 9);
+    } else if (flag.rfind("cnits=", 0) == 0) {
+      eig.contact.iterations = std::atoi(flag.c_str() + 6);
+    } else if (flag.rfind("cnmem=", 0) == 0) {
+      eig.contact.w_memory = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("cnaccel=", 0) == 0) {
+      const std::string a = flag.substr(8);
+      using ca = gaudi::kusama::contact_net::accel;
+      eig.contact.acceleration = a == "none"                 ? ca::none
+                                 : a == "chebyshev"          ? ca::chebyshev
+                                 : a == "anderson_chebyshev" ? ca::anderson_chebyshev
+                                                             : ca::anderson;
+    } else if (flag.rfind("xkm=", 0) == 0) {
+      eig.exponent.km = std::atof(flag.c_str() + 4);
+    } else if (flag.rfind("xkb=", 0) == 0) {
+      eig.exponent.kb = std::atof(flag.c_str() + 4);
+    } else if (flag.rfind("freshstop=", 0) == 0) {
+      cfg.step.gn_stop_on_fresh_ascent = std::atoi(flag.c_str() + 10) != 0;
+    } else if (flag.rfind("maxascent=", 0) == 0) {
+      cfg.step.gn_max_ascent_refreshes = std::atoi(flag.c_str() + 10);
+    } else if (flag.rfind("wmin=", 0) == 0) {
+      cfg.shape.w_minimizer = std::atof(flag.c_str() + 5);
+    } else if (flag.rfind("xconf=", 0) == 0) {
+      eig.eigensatz.w_conformal = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("xarea=", 0) == 0) {
+      eig.eigensatz.w_area = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("xmass=", 0) == 0) {
+      eig.exponent.mass = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("xrefresh=", 0) == 0) {
+      eig.exponent.refresh_every = std::atoi(flag.c_str() + 9);
+    } else if (flag == "xrest=initial") {
+      eig.exponent.rest = gaudi::duchamp::exponent_rest::initial;
     } else if (flag.rfind("dump=", 0) == 0) {
       dump_every = std::atoi(flag.c_str() + 5);
     } else if (flag.rfind("res=", 0) == 0) {
@@ -664,7 +821,9 @@ int principal_curvature_probe_main(int argc, char **argv) {
               << std::sqrt(std::max(turn2 / std::max(nt, 1) -
                                         std::pow(turn / std::max(nt, 1), 2),
                                     real(0)))
-              << "  asym " << asym << "  defl " << demo->material_deflection()
+              << "  asym " << asym << "  dcres " << demo->dupin_circle_residual()
+              << "  kiteu " << demo->kite_u_range()
+              << "  defl " << demo->material_deflection()
               << "  stripes " << demo->last_stripes().lambda << " skip "
               << demo->last_stripes().skipped
               << "  |L| " << Lmom.norm() << "  verts " << x.size()
@@ -673,7 +832,9 @@ int principal_curvature_probe_main(int argc, char **argv) {
               << " -> " << demo->last_solve().E_last << " |dq| " << demo->last_solve().dq_last
               << "  lambda_min " << demo->last_solve().lambda_min << " neg "
               << demo->last_solve().modal_negative << " accepted "
-              << demo->last_solve().modal_accepted << "/" << demo->last_solve().modal_tried << "\n";
+              << demo->last_solve().modal_accepted << "/" << demo->last_solve().modal_tried
+              << "  refactors " << demo->last_solve().refreshes << "  accel " << demo->last_solve().accel_taken
+              << "/" << demo->last_solve().accel_tried << "\n";
     std::cout << "  modes: non-axisymmetric rms " << na_rms << "  top";
     for (const mode_amp &md : modes)
       std::cout << " (" << md.m << "," << md.n << ") " << md.a;

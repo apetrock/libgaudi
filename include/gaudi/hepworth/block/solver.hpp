@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cxxabi.h>
+#include <deque>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -165,6 +166,9 @@ inline void log_stiffness_by_name(const std::vector<trip> &triplets,
 }
 
 } // namespace detail
+
+/// The iterate corrector of `projection_solver` (`accel`).
+enum class step_accel { none, anderson, chebyshev, anderson_chebyshev };
 
 class projection_solver {
 public:
@@ -320,8 +324,24 @@ public:
       return;
     }
 
+    // Iterate corrector state (`accel`): Anderson's residual / iterate
+    // history, Chebyshev's previous start, step lengths and weight.
+    std::deque<vecX> aa_f, aa_g;
+    vecX cheb_prev;
+    std::vector<real> step_len;
+    real cheb_rho = 0, cheb_omega = 1;
+    bool cheb_on = false;
+    last_accel_taken = 0;
+    last_accel_tried = 0;
+    auto accel_reset = [&]() {
+      aa_f.clear();
+      aa_g.clear();
+      cheb_omega = 1;
+    };
+
     // Refill the Gauss–Newton rows at `qk` and refactor Mh + A^T A.
     auto refresh_gn = [&](const vecX &qk) {
+      accel_reset(); // the map changed
       gn_triplets.clear();
       for (const int i : gn_index) {
         index_t r0 = spans[static_cast<size_t>(i)].begin;
@@ -348,6 +368,13 @@ public:
     real E_prev = std::numeric_limits<real>::infinity();
     bool last_step_fresh = !cache_hit;
     bool refreshed_by_backtrack = false;
+    int ascent_refreshes = 0;
+    // An ascent that may not refactor: from a fresh factor (the model is
+    // wrong there) or past the per-step cap.
+    auto ascent_stops = [&](bool fresh_step) {
+      return (fresh_step && gn_stop_on_fresh_ascent) ||
+             (gn_max_ascent_refreshes >= 0 && ascent_refreshes >= gn_max_ascent_refreshes);
+    };
     auto project_all = [&](const vecX &qk) {
       p.setZero();
       for (int i = 0; i < _constraints.size(); i++) {
@@ -492,7 +519,7 @@ public:
         const bool ascent = k > 0 && E > E_prev * (real(1) + gn_ascent_tol);
         if (ascent)
           log_ascent(k, q_prev, q);
-        if (gn_on_ascent == ascent_policy::stop && ascent) {
+        if (ascent && (gn_on_ascent == ascent_policy::stop || ascent_stops(last_step_fresh))) {
           q = q_prev;
           stopped_on_ascent = true;
           break;
@@ -501,6 +528,7 @@ public:
           // The step on a stale factor went uphill: take it back and
           // retake it from the previous iterate with a fresh J.
           q = q_prev;
+          ++ascent_refreshes;
           refresh_gn(q);
           project_all(q);
           E = gn_energy(q);
@@ -577,6 +605,65 @@ public:
         q = _modes.correct(q, r_prev, energy_at, energy_at(q), scale, modal);
       }
 
+      if (accel != step_accel::none) {
+        // `q_start -> q` is one application of the map; correct it.
+        const vecX g = q;
+        step_len.push_back((g - q_start).norm());
+        vecX cand;
+        const bool use_aa = accel == step_accel::anderson || accel == step_accel::anderson_chebyshev;
+        if (use_aa) {
+          aa_f.push_back(g - q_start);
+          aa_g.push_back(g);
+          while (static_cast<int>(aa_f.size()) > anderson_m + 1) {
+            aa_f.pop_front();
+            aa_g.pop_front();
+          }
+          if (aa_f.size() > 1) {
+            const int m = static_cast<int>(aa_f.size()) - 1;
+            Eigen::MatrixXd dF(Nm, m), dG(Nm, m);
+            for (int i = 0; i < m; ++i) {
+              dF.col(i) = aa_f[static_cast<size_t>(i + 1)] - aa_f[static_cast<size_t>(i)];
+              dG.col(i) = aa_g[static_cast<size_t>(i + 1)] - aa_g[static_cast<size_t>(i)];
+            }
+            const Eigen::VectorXd gam = dF.colPivHouseholderQr().solve(aa_f.back());
+            cand = g - dG * gam;
+          }
+        }
+        const bool use_cheb = accel == step_accel::chebyshev ||
+                              (accel == step_accel::anderson_chebyshev && aa_f.size() < 2);
+        if (use_cheb) {
+          if (!cheb_on && static_cast<int>(step_len.size()) > std::max(cheb_delay, cheb_window)) {
+            const real s1 = step_len.back();
+            const real s0 = step_len[step_len.size() - 1 - static_cast<size_t>(cheb_window)];
+            cheb_rho = std::clamp(std::pow(s1 / std::max(s0, real(1e-300)), real(1) / real(cheb_window)), real(0),
+                                  real(0.9999));
+            cheb_on = true;
+            cheb_omega = 1;
+          }
+          if (cheb_on && cheb_prev.size() == Nm && cand.size() == 0) {
+            cheb_omega = cheb_omega == real(1) ? real(2) / (real(2) - cheb_rho * cheb_rho)
+                                               : real(4) / (real(4) - cheb_rho * cheb_rho * cheb_omega);
+            cand = cheb_omega * (g - cheb_prev) + cheb_prev;
+          }
+          cheb_prev = q_start;
+        }
+        if (cand.size() == Nm && cand.allFinite()) {
+          ++last_accel_tried;
+          const real E_start = has_gn ? E_prev : energy_at(q_start);
+          if (energy_at(cand) <= E_start) {
+            q = cand;
+            ++last_accel_taken;
+          } else {
+            q = g;
+            if (use_aa && aa_f.size() > 1) {
+              aa_f.erase(aa_f.begin(), aa_f.end() - 1);
+              aa_g.erase(aa_g.begin(), aa_g.end() - 1);
+            }
+            cheb_omega = 1;
+          }
+        }
+      }
+
       if (has_gn && gn_backtracks > 0) {
         // Halve the step toward the iterate it started from until the
         // energy does not rise. With no descent on a stale factor, refactor
@@ -593,10 +680,11 @@ public:
         if (!(E1 <= E_ok)) {
           log_ascent(k, q_prev, q);
           q = q_prev;
-          if (last_step_fresh || gn_on_ascent == ascent_policy::stop) {
+          if (last_step_fresh || gn_on_ascent == ascent_policy::stop || ascent_stops(false)) {
             stopped_on_ascent = true;
             break;
           }
+          ++ascent_refreshes;
           refresh_gn(q);
           refreshed_by_backtrack = true;
           continue;
@@ -623,6 +711,8 @@ public:
     }
     last_step = step_report{its_used, E_first, E_last, dq_last, q.norm(),
                             last_gn_refreshes, stopped_on_ascent, kept_best};
+    last_step.accel_taken = last_accel_taken;
+    last_step.accel_tried = last_accel_tried;
     if (modal_on) {
       const auto &mr = _modes.last();
       last_step.lambda_min = mr.lambda_min;
@@ -664,6 +754,9 @@ public:
     int modal_negative = 0;
     int modal_tried = 0;
     int modal_accepted = 0;
+    /// The iterate corrector (`accel`): corrected iterates taken of tried.
+    int accel_taken = 0;
+    int accel_tried = 0;
   };
   step_report last_step;
 
@@ -685,6 +778,13 @@ public:
   /// step there (no refactor; the step keeps an imperfect solve).
   enum class ascent_policy { refresh, stop };
   ascent_policy gn_on_ascent = ascent_policy::refresh;
+  /// With `refresh`: a step from a fresh factor that still raises the energy
+  /// means the Gauss-Newton model is wrong there; end the step (it returns
+  /// its best iterate) instead of going on from the uphill iterate.
+  bool gn_stop_on_fresh_ascent = false;
+  /// With `refresh`: refactors on ascent allowed per step; past it an ascent
+  /// ends the step. Negative: no cap.
+  int gn_max_ascent_refreshes = -1;
   /// Relative rise tolerated before an iterate counts as an ascent: a stale
   /// factor's model minimum sits a few percent off the true one, so small
   /// rises are wobble, not divergence. The step still returns its best
@@ -701,6 +801,28 @@ public:
   /// steps, the projective-dynamics default).
   int gn_backtracks = 0;
   int last_gn_refreshes = 0;
+  /// Iterate corrector after the global step, on the map `z -> G(z)` from an
+  /// iterate's start to its plain solve (TODO item 12; MATH.md 19.11):
+  /// `anderson` (Peng et al. 2018, window `anderson_m`), `chebyshev` (Wang
+  /// 2015, `rho` from the step lengths after `cheb_delay` iterates over
+  /// `cheb_window`), `anderson_chebyshev` (Chebyshev only while Anderson's
+  /// history is too short). Safeguard: a corrected iterate is taken only if
+  /// its energy is not above the step start's, else the plain iterate. The
+  /// history is kept while the map stays the same and cleared on every
+  /// Gauss-Newton refactor (the map changed); a backtracked or
+  /// best-iterate fall back does not clear it. Off by default: in the monge
+  /// demo (6 frames, torus target) it left energies and shapes unchanged to
+  /// 3-4 digits and doubled the frame time of `eigensatz` / `exponent`
+  /// (the safeguard's extra projection runs their stateful inner steps, and
+  /// the map is not a pure function of the iterate there). It pays on
+  /// constant-factor solves whose map is fixed (the contact net's `pd`).
+  step_accel accel = step_accel::none;
+  int anderson_m = 5;
+  int cheb_delay = 10;
+  int cheb_window = 5;
+  /// Corrected iterates taken / tried in the last step.
+  int last_accel_taken = 0;
+  int last_accel_tried = 0;
 
   matS __M;
   std::vector<projection_constraint::ptr> _constraints;

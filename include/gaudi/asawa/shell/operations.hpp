@@ -48,13 +48,13 @@ CornerId split_edge(shell &M, CornerId corner_index,
   return c0i;
 }
 
-int count_cycle(shell &M, CornerId corner) {
+int count_cycle(const shell &M, CornerId corner) {
   CornerId c0 = corner;
   CornerId c1 = M.other(c0);
   VertId v0 = M.vert(c0);
   VertId v1 = M.vert(c1);
   int t = 0;
-  M.for_each_vertex(v0, [&t, v1](CornerId ci, shell &M) {
+  M.const_for_each_vertex(v0, [&t, v1](CornerId ci, const shell &M) {
     VertId vi = M.vert(M.next(ci));
     t += int(vi == v1);
   });
@@ -319,16 +319,31 @@ inline bool collapse_link_ok(const shell &M, CornerId c) {
   return ends == 1 && common == 2;
 }
 
+/// What a collapse may do to the topology.
+///  dynamic - a collapse may pinch (a thin neck, a sheet meeting itself): it
+///            leaves a valid but degenerate shell (two-edge rings, two-sided
+///            faces, doubled edges) that `delete_degenerates` and
+///            `break_cycles` prune, so the topology changes and thin sheets
+///            dissipate. Refused only when the ends are already joined by a
+///            second edge.
+///  fixed   - the link condition (`collapse_link_ok`): every collapse keeps
+///            the genus, for meshes that must (fixed-topology analysis,
+///            parametrizations, rest data that cannot survive a cut).
+enum class collapse_topology { dynamic, fixed };
+
 /// The guards `collapse_edge` applies, without changing the shell: the
 /// valences (ends at least 3, opposite vertices at least 4 so they keep 3)
-/// and, unless `degenerate`, the link condition.
-inline bool can_collapse(const shell &M, CornerId c, bool degenerate = false) {
+/// and, unless `degenerate`, the topology guard of `mode`.
+inline bool can_collapse(const shell &M, CornerId c, bool degenerate = false,
+                         collapse_topology mode = collapse_topology::dynamic) {
   const CornerId c1 = M.other(c);
   if (M.vsize(M.vert(c)) < 3 || M.vsize(M.vert(c1)) < 3)
     return false;
   if (M.vsize(M.vert(M.prev(c))) < 4 || M.vsize(M.vert(M.prev(c1))) < 4)
     return false;
-  return degenerate || collapse_link_ok(M, c);
+  if (degenerate)
+    return true;
+  return mode == collapse_topology::fixed ? collapse_link_ok(M, c) : count_cycle(M, c) <= 1;
 }
 
 /// Collapse edge `c` of two triangles: merge each triangle into its wing,
@@ -336,7 +351,8 @@ inline bool can_collapse(const shell &M, CornerId c, bool degenerate = false) {
 /// removed. Refuses (returns `c` unchanged) when `can_collapse` fails.
 /// Returns -1 when the merges consumed the edge.
 CornerId collapse_edge(shell &M, CornerId corner_index,
-                       bool degenerate = false) {
+                       bool degenerate = false,
+                       collapse_topology mode = collapse_topology::dynamic) {
 
   CornerId c0 = corner_index;
   CornerId c1 = M.other(c0);
@@ -344,7 +360,7 @@ CornerId collapse_edge(shell &M, CornerId corner_index,
   CornerId c0p = M.prev(c0);
   CornerId c1p = M.prev(c1);
 
-  if (!can_collapse(M, c0, degenerate))
+  if (!can_collapse(M, c0, degenerate, mode))
     return c0;
 
   merge_face(M, c0p, M.other(c0p));

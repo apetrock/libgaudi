@@ -144,7 +144,7 @@ Provenance URLs/DOIs: [SOURCES.txt](SOURCES.txt). PDFs may move to external stor
 - **doi:** https://doi.org/10.1111/cgf.14070
 - **tags:** `[vector-dirichlet, covariant-derivative, Crouzeix-Raviart, direction-fields, asawa, geometry-processing]`
 - **summary:** Concise triangle-mesh discretization of the covariant vector Dirichlet energy using Crouzeix–Raviart elements (SGP 2020 / CGF).
-- **maps_to:** Direction / vector-field smoothness energies on shells.
+- **maps_to:** Direction / vector-field smoothness energies on shells. The CR derivative, mass, Dirichlet operator and App. A.2 face read-out are the operators of the curvature solvers: `kusama/weingarten.hpp` (Gauss-Newton coupling) and the exponent solver (`scripts/sympy/cr_poisson/exponent_solver.py`, `cr_ff_jacobian.py`, MATH.md section 16).
 
 ## Turk & O'Brien 1999 — Variational Implicit Surfaces
 - **file:** `turk1999-variational-implicit-surfaces.pdf`
@@ -180,7 +180,7 @@ Provenance URLs/DOIs: [SOURCES.txt](SOURCES.txt). PDFs may move to external stor
 - **doi:** https://doi.org/10.1145/2461912.2461986
 - **tags:** `[willmore, conformal, fairing, curvature-flow, CMC, shell, hepworth]`
 - **summary:** Willmore flow on a triangle mesh, integrated in curvature space so a single explicit step can be huge and triangle aspect ratios stay put. Mean curvature is \(H = \tfrac12\langle N, \Delta f\rangle\). The flow direction is the \(L^2\) gradient of Willmore energy on a curvature variable \(\rho\), then projected orthogonal to the linear constraints that keep the result integrable: constant total curvature, exactness against a harmonic-vector-field basis (non-simply-connected surfaces), and a Möbius/inversion constraint that limits area distortion. Positions are recovered by a Dirac eigenvalue problem for new tangents, then a Poisson solve \(\Delta\tilde f = \nabla\cdot\tilde T\). Same loop as their length-preserving curve flow (curvature → tangents → positions). Also builds CMC surfaces.
-- **maps_to:** Shell fairing beside `edge_willmore` / cotangent Laplacian in `shell_constraints.hpp`. The dihedral projection zeros hinge angle; this flow changes \(H\) and rebuilds the immersion conformally. Heller & Pedit (arXiv:1705.03217) use this flow for their constrained-Willmore experiments.
+- **maps_to:** Shell fairing beside `edge_willmore` / cotangent Laplacian in `shell_constraints.hpp`. The dihedral projection zeros hinge angle; this flow changes \(H\) and rebuilds the immersion conformally. Heller & Pedit (arXiv:1705.03217) use this flow for their constrained-Willmore experiments. Its loop (curvature -> per-element similarities advecting the tangents -> one Poisson solve) is the shape of the exponent solver (`scripts/sympy/cr_poisson/exponent_solver.py`, MATH.md section 16): per-face exponents (rotation + stretch) from a constant linear system, exponentiated, gathered by the CR Dirichlet operator.
 - **cites / related:** Bobenko & Schröder 2005 and Wardetzky et al. 2007 (discrete Willmore); Desbrun et al. 1999 implicit fairing; mean-curvature flow as the membrane analogue. Soliman et al. 2021 replace the Möbius penalty with an exact length-cross-ratio constraint.
 
 ## Soliman, Chern, Diamanti, Knöppel, Pinkall, Schröder 2021 — Constrained Willmore Surfaces
@@ -191,6 +191,48 @@ Provenance URLs/DOIs: [SOURCES.txt](SOURCES.txt). PDFs may move to external stor
 - **summary:** Minimizes discrete Willmore \(W(f)=\tfrac14\langle Lf,\star Lf\rangle\) on a triangle mesh subject to an exact conformal-class constraint. Two metrics are discretely conformally equivalent iff their length cross ratios agree (Springborn, Pinkall, Schröder 2008): \(\log c = C\log\ell\), and conformal classes are \(\log\ell\) modulo vertex scale factors. The Lagrange multipliers are discrete quadratic differentials, read as edge tension that balances \(\operatorname{grad} W\). The saddle point is integrated by competitive gradient descent in a Sobolev metric, not by projecting an \(L^2\) step back onto the constraint. Positions may be vertex coordinates or differential coordinates, so an abstract metric can be realized with no initial immersion. Point, area, and volume constraints sit in the same Lagrangian. Without the conformal constraint every torus collapses to the Clifford torus and four point constraints on a sphere yield the round sphere.
 - **maps_to:** Shell fairing beside Crane, Pinkall, Schröder 2013 and `edge_willmore` in `shell_constraints.hpp`. Crane’s Möbius penalty limits area distortion and can drift in conformal class; this paper holds the class exactly via length cross ratios.
 - **cites / related:** Crane et al. 2013 (conformal Willmore flow; they note its conformal-class drift); Springborn, Pinkall, Schröder 2008 (CETM); Canham 1970 / Helfrich 1973 (area–volume vesicles).
+
+## Vaxman, Müller, Weber 2015 — Conformal Mesh Deformations with Möbius Transformations
+- **file:** `vaxman2015-conformal-mobius-deformations.pdf`
+- **url:** https://www.geometrie.tuwien.ac.at/geom/ig/publications/2015/conformal2015/conformal2015.pdf
+- **doi:** https://doi.org/10.1145/2766915 (ACM TOG 34(4), SIGGRAPH 2015)
+- **tags:** `[conformal, mobius, quaternion, cross-ratio, circle-pattern, deformation, hepworth]`
+- **summary:** Meshes deformed by piecewise compatible Möbius (PCM) transformations: each face (or vertex) carries a Möbius map, written with complex numbers in 2D and quaternions in 3D (`x -> (a x + b)(c x + d)^-1`), and neighbouring maps must agree on shared edges. Discrete conformality is read from the cross ratio of the four vertices around an edge: its modulus is the length cross ratio (MC, metric conformal; Springborn, Pinkall, Schröder 2008), its phase the intersection angle of the two circumcircles (IAP; Bobenko and Springborn 2004). MC + IAP together means one Möbius map on the whole ring. As-Möbius-as-possible (AMAP) editing in 3D uses vertex quaternions `Y_i` (not unit: modulus is local scale) and, per edge, `E_AMAP = sum |w_ik - conj(Y_i) q_ik Y_k|^2` (`w_ik` the deformed edge, `q_ik` the rest edge, both pure quaternions; the "edge deviation" system, 2|V| quaternion unknowns), plus `E_INV = alpha_INV sum |Y_i - Y_k|^2` to damp inversions (scale variation); handles as linear constraints. IAP is too strong in 3D (at most one scalar per edge weaker than a single Möbius map) and is not used there. Solved by Gauss-Newton with line search after Tang et al. 2014.
+- **maps_to:** `hepworth/block/amap_gn.hpp` (the AMAP rows, vertex quaternion site on `shell_cr_block`; demo `position_distortion::w_amap`, `amap_inversion`). Contrast: `triangle_conformal` (`shell_constraints.hpp`, Eigensatz `E_conf`) projects each face's deformation gradient onto its closest similarity: first-order, per face, Euclidean; AMAP is vertex-based, couples neighbours through shared `Y`, and allows Möbius maps exactly.
+- **cites / related:** Springborn, Pinkall, Schröder 2008 (length cross ratios, CETM); Bobenko and Springborn 2004 (circle patterns); Liu et al. 2008 (ASAP local-global); Crane, Pinkall, Schröder 2011 (spin transformations); Tang et al. 2014 (guided projection); Soliman et al. 2021 (exact conformal class).
+
+## Kim, Liu, Llamas, Rossignac 2005 — FlowFixer: Using BFECC for Fluid Simulation
+- **file:** `kim2005-flowfixer-bfecc.pdf`
+- **url:** https://faculty.cc.gatech.edu/~jarek/papers/FlowFixer.pdf (Eurographics Workshop on Natural Phenomena 2005)
+- **tags:** `[advection, semi-lagrangian, BFECC, second-order, fluids, curvature-transport]`
+- **summary:** Back and forth error compensation and correction on top of first-order semi-Lagrangian (Stam) advection: advect forward, advect the result backward, take half the difference from the original as the error estimate, correct the data and advect forward again. Three first-order advections give second order in space and time with Stam's unconditional stability; much less dissipation and volume loss.
+- **maps_to:** curvature advection on the edge store (planned `goal_advect`): the transport step of the store's tensors (or the complex `(H, z)` form) along an oriented field.
+- **cites / related:** Stam 1999 (stable fluids, semi-Lagrangian); Dupont and Liu 2003 (BFECC for level sets); Selle et al. 2008 (MacCormack form).
+
+## Selle, Fedkiw, Kim, Liu, Rossignac 2008 — An Unconditionally Stable MacCormack Method
+- **file:** `selle2008-unconditionally-stable-maccormack.pdf`
+- **url:** https://www.andyselle.com/papers/7/maccormack.pdf (J. Sci. Comput. 35, 350–371)
+- **tags:** `[advection, semi-lagrangian, MacCormack, BFECC, second-order, limiter, fluids, curvature-transport]`
+- **summary:** Rewrites MacCormack as BFECC's error estimate applied to the already advected data: two first-order semi-Lagrangian steps (forward, then backward to estimate the error) give second order, unconditionally stable. Not monotone, so a limiter clamps the result to the range of the values the forward ray sampled; revert to first order where rays mix disparate regions.
+- **maps_to:** the cheaper second-order transport for the planned curvature advection; the limiter bounds the curvature so the coupling never sees overshoot.
+- **cites / related:** Kim et al. 2005 (BFECC); Stam 1999.
+
+## Nabizadeh, Wang, Ramamoorthi, Chern 2022 — Covector Fluids
+- **file:** `nabizadeh2022-covector-fluids.pdf`
+- **url:** https://cseweb.ucsd.edu/~viscomp/projects/SIG22CovectorFluids/paper/CovectorFluids.pdf
+- **doi:** https://doi.org/10.1145/3528223.3530120 (ACM TOG 41(4), Article 113)
+- **tags:** `[advection, lie-derivative, pullback, covector, differential-forms, BFECC, fluids, curvature-transport]`
+- **summary:** Advects velocity as a covector by pullback rather than componentwise: the value fetched at the back-traced point is multiplied by the transposed Jacobian of the inverse flow map, `u <- (nabla Psi)^T u(Psi(x))`, which solves the Lie advection `(L_v u)^# = v . grad u + (grad v) . u` and preserves circulation (Kelvin), so vortices are not damped. A small local change to advection-projection solvers; BFECC applied to the Lie advection keeps it non-dissipative.
+- **maps_to:** the transport rule for curvature: the second fundamental form is a symmetric 2-form, so its pullback is `II <- J^T II(Psi(x)) J` (`J` the inverse flow map's Jacobian in the tangent plane): it rotates and stretches with the flow, which plain parallel transport does not. Planned `goal_advect`.
+- **cites / related:** Stam 1999; Kim et al. 2005 and Selle et al. 2008 (BFECC / MacCormack); Mullen et al. 2011 (WENO for forms).
+
+## Bobenko, Fairley 2023 — Circular Nets with Spherical Parameter Lines and Terminating Laplace Sequences
+- **file:** `2312.04341v1.pdf`
+- **url:** https://arxiv.org/abs/2312.04341
+- **tags:** `[circular-net, dupin, cyclide, lie-sphere, mobius, curvature-lines, DDG]`
+- **summary:** Circular nets (quad nets with concyclic faces, the Möbius discretization of curvature-line parametrizations) with one or two families of spherical, planar, circular or straight parameter lines; Q-nets inscribed in quadrics with terminating Laplace sequences (Theorem 1.1). Circular nets with two families of circular parameter lines lie in Darboux cyclides; Dupin cyclides are the surfaces whose curvature lines in both families are circles. Section 5 gives the Lie-geometric version with principal contact element nets: neighbouring contact elements share an oriented sphere, and the next tangent plane is the previous one reflected in the edge's perpendicular bisector plane; a discrete Joachimsthal theorem (tangent planes along a spherical line meet its sphere at a constant angle).
+- **maps_to:** `hepworth/block/dupin_circle.hpp` (position-space Dupin rows: four consecutive points along a curvature line held to a planar circle, with modes that move the points on or with the circle; demo `position_distortion::dupin_circle`, `w_dupin_circle`). The principal contact element net condition is the zero-twist Rodrigues relation of `contact_net_gn.hpp`.
+- **cites / related:** Bobenko and Suris 2008 (principal contact element nets); Bobenko and Huhnen-Venedey 2012 (cyclidic nets, `1101.5955v2.pdf`); Vaxman et al. 2015 (cross ratios, concyclicity as a real cross ratio).
 
 ## Knöppel, Crane, Pinkall, Schröder 2015 — Stripe Patterns on Surfaces
 - **file:** `knoeppel2015-stripe-patterns.pdf`
@@ -285,7 +327,7 @@ Provenance URLs/DOIs: [SOURCES.txt](SOURCES.txt). PDFs may move to external stor
 - **doi:** https://doi.org/10.1111/j.1467-8659.2012.03153.x
 - **tags:** `[fairing, conformal, ARAP, curvature, hepworth]`
 - **summary:** Edge lengths as the discrete first fundamental form and dihedral angles as the second; reconstructs vertex positions (unique up to rigid motion) by one sparse linear solve, from a convex quadratic energy on per-face frames lifted to the 6D rigid-motion space. Gives a local integrability condition (discrete Gauss / Mainardi–Codazzi). Demonstrates rotation-invariant deformation through point and orientation constraints.
-- **maps_to:** `scripts/sympy/cr_poisson/face_loops.py` (`run_rotations`: CR shape-operator targets to dihedrals, rotation sync, Poisson); a route to curvature-domain (conformal) processing in hepworth.
+- **maps_to:** `scripts/sympy/cr_poisson/face_loops.py` (`run_rotations`: CR shape-operator targets to dihedrals, rotation sync, Poisson); a route to curvature-domain (conformal) processing in hepworth. The read-out in fundamental forms (`cr_ff_jacobian.py`) and the integrability condition (vertex closure; edge-gradient compatibility in the exponent solver, MATH.md section 16).
 
 ## Dynamic mesh: correctness and quality (not fetched)
 
@@ -345,6 +387,14 @@ Background for `docs/dynamic_mesh_correctness_plan.md` (TODO item 9). Titles and
 - **maps_to:** TODO 13(a): the curvature rule is the direct recipe (normal growth or rest growth scaled by curvature); the Laplacian-growth chapters explain when tips split rather than smooth out.
 - **cites / related:** Kaandorp and Kubler 2001; Witten and Sander 1981 (DLA); Mullins and Sekerka 1964.
 
+## Bobenko, Huhnen-Venedey 2012 — Curvature line parametrized surfaces and orthogonal coordinate systems: discretization with Dupin cyclides
+- **file:** `1101.5955v2.pdf`
+- **url:** https://arxiv.org/abs/1101.5955 (Geometriae Dedicata 159 (2012), 207–237)
+- **tags:** `[cyclide, lie-sphere, DDG, cyclidic-net, curvature-lines, albers]`
+- **summary:** Cyclidic nets: a curvature-line parametrized surface discretized as circular quads, each carrying a Dupin cyclide patch, adjacent patches meeting C^1. A circular quad plus a curvature-line frame at one vertex fixes the patch; the frame at the next vertex is the reflection of the current one in the edge's perpendicular bisector plane (discrete parallel transport of the shape frame). Neighbouring vertex contact elements share a sphere (principal contact element nets); circularity is a discrete Codazzi condition. Formulated in Lie sphere geometry.
+- **maps_to:** `scripts/sympy/cr_poisson/MATH.md` 18.6 and 19.7: the finite-element version (vertex cyclides as shape functions, edge spheres as interface DOFs, the common sphere of endpoint contact elements as the `contact` edge read-out, its residual a twist measure); `albers/lie_dupin.hpp`, `lie_ops.py`.
+- **cites / related:** Bobenko and Suris, *Discrete Differential Geometry: Integrable Structure* (AMS GSM 98, 2008; principal contact element nets, Lie sphere formulation; book, not archived); Cecil, *Lie Sphere Geometry*. Same group, in this folder: `1511.01777v2.pdf` (Bobenko, Schief, Suris, Techter, *On a discretization of confocal quadrics*), `2312.04341v1.pdf` (Bobenko, Fairley, *Circular nets with spherical parameter lines and terminating Laplace sequences*, own entry above).
+
 ---
 
 ## Tag cheat sheet
@@ -355,6 +405,7 @@ Background for `docs/dynamic_mesh_correctness_plan.md` (TODO item 9). Titles and
 | `asawa` | Mesh topology, winding, surface ops |
 | `calder` | Integrators / MLS / field fits |
 | `albers` | Normal-constrained LS shape fits (quadric, cyclide) |
+| `cyclide` / `lie-sphere` / `DDG` / `cyclidic-net` | Dupin cyclides, Lie sphere coordinates, cyclidic and principal contact element nets |
 | `duchamp` | Demos / fluid / experiment hosts |
 | `ARAP` / `ADMM` / `L1-normals` / `spokes-and-rims` | Cubic stylization & Chao ARAP |
 | `repulsive` / `TP` | Tangent-point / self-avoiding curves & surfaces |
@@ -362,6 +413,8 @@ Background for `docs/dynamic_mesh_correctness_plan.md` (TODO item 9). Titles and
 | `untangle` | Self-intersection / fold repair |
 | `developable` / `paper-folding` | Flattenable / ruled shells, nets, seams |
 | `willmore` / `conformal` / `fairing` | Conformal curvature flow, Willmore fairing |
+| `mobius` / `cross-ratio` / `circle-pattern` | Möbius-invariant deformation (AMAP), discrete conformality by cross ratios |
+| `advection` / `curvature-transport` / `lie-derivative` | Semi-Lagrangian transport (BFECC, MacCormack), pullback of tensors along a flow |
 | `anderson` / `acceleration` / `fixed-point` | Accelerating local-global / projective-dynamics solvers |
 | `growth` / `branching` / `morphogenesis` / `rest-state` | Growth by changing the rest metric, curvature-driven branching |
 | `volume-preserving` / `divergence-free` / `swirl` / `conservative-distortion` | Area- or volume-preserving maps, stream functions, swirling-sweepers |

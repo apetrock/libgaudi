@@ -17,7 +17,9 @@
 /// - `goal_ratio_smooth`: each edge's anisotropy to the mean over its face
 ///   neighbors (the old `curvature_ratio`);
 /// - `goal_principal_mean`: each principal curvature to the neighbors'
-///   normal curvature along its own direction (the old frame minimizer).
+///   normal curvature along its own direction (the old frame minimizer);
+/// - `goal_mean_tension`: surface tension in curvature space, the mean
+///   curvature to a constant or to the store's mean (`tension_target`).
 
 #include "gaudi/hepworth/block/edge_shape_fair.hpp"
 #include "gaudi/hepworth/block/shape_objectives.hpp"
@@ -710,6 +712,49 @@ inline edge_goal_fn goal_principal_mean(sim_block::ptr store,
       const shape_w out = shape_from_principals(s1 / n, s2 / n, W.e1x, W.e1y, W.e2x, W.e2y);
       if (out.ok)
         g[e] = coeffs_of_shape(out);
+    }
+  };
+}
+
+/// Surface tension in curvature space. Area is not a curvature quantity, but
+/// its first variation is the mean curvature; balanced against pressure it is
+/// Young-Laplace, `H = dp / (2 gamma)`.
+///   `constant`: every edge's mean curvature to `h0` (constant mean curvature,
+///               bubbles; the store's sign: `k > 0` bends toward the normal,
+///               so an outward-normal sphere of radius `r` has `H = -1 / r`).
+///   `mean`:     to the store's mean over the edges (constant-mean-curvature
+///               fairing: the curvature-space analogue of volume-preserving
+///               mean-curvature flow).
+struct tension_target {
+  enum class mode { constant, mean };
+  mode kind = mode::mean;
+  real h0 = 0;
+};
+
+/// Each edge tensor keeps its trace-free part and moves its mean curvature
+/// `(k11 + k22) / 2` to the target: `g = h + (H* - H_e)(1, 0, 1)`. Linear in
+/// the store.
+inline edge_goal_fn goal_mean_tension(sim_block::ptr store, tension_target spec) {
+  return [store, spec](const vecX &q, std::vector<vec3> &g) {
+    const size_t nE = g.size();
+    std::vector<vec3> h(nE);
+    real sum = 0;
+    size_t n = 0;
+    for (size_t e = 0; e < nE; ++e) {
+      h[e] = store->get_vec3(static_cast<index_t>(e), q);
+      if (h[e].allFinite()) {
+        sum += real(0.5) * (h[e][0] + h[e][2]);
+        ++n;
+      }
+    }
+    const real target = spec.kind == tension_target::mode::constant ? spec.h0 : (n ? sum / real(n) : real(0));
+    for (size_t e = 0; e < nE; ++e) {
+      g[e] = h[e];
+      if (!h[e].allFinite())
+        continue;
+      const real d = target - real(0.5) * (h[e][0] + h[e][2]);
+      g[e][0] += d;
+      g[e][2] += d;
     }
   };
 }

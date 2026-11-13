@@ -1,0 +1,20 @@
+# libgaudi C++ style: LLVM base, matching the existing headers (2-space
+# indent, attached braces, `int *p`). The column limit follows the newer
+# solver code (engman, kusama); older hepworth files wrap near 80 and are
+# left as they are unless touched.
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++20
+IndentWidth: 2
+ColumnLimit: 110
+PointerAlignment: Right
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeBraces: Attach
+IncludeBlocks: Preserve
+SortIncludes: true
+FixNamespaceComments: true
+NamespaceIndentation: None
+ReflowComments: false

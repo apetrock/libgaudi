@@ -39,6 +39,11 @@ target_include_directories(frame_spin_probe PRIVATE ${CMAKE_SOURCE_DIR}/ext/libl
 target_link_libraries(frame_spin_probe PRIVATE gaudi::core gaudi::headless)
 gaudi_msvc_disable_parallel_cl_writers(frame_spin_probe)
 
+add_executable(osculating_torus_probe osculating_torus_probe.cpp)
+target_include_directories(osculating_torus_probe PRIVATE ${CMAKE_SOURCE_DIR}/ext/liblombardi/include)
+target_link_libraries(osculating_torus_probe PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(osculating_torus_probe)
+
 add_executable(principal_curvature_tests principal_curvature_tests.cpp)
 target_link_libraries(principal_curvature_tests PRIVATE gaudi::core gaudi::headless)
 gaudi_msvc_disable_parallel_cl_writers(principal_curvature_tests)
@@ -63,6 +68,21 @@ add_executable(anisotropic_cotan_smoke anisotropic_cotan_smoke.cpp)
 target_link_libraries(anisotropic_cotan_smoke PRIVATE gaudi::core gaudi::headless)
 gaudi_msvc_disable_parallel_cl_writers(anisotropic_cotan_smoke)
 add_test(NAME anisotropic_cotan_smoke COMMAND anisotropic_cotan_smoke)
+
+add_executable(lie_sphere_tests lie_sphere_tests.cpp)
+target_link_libraries(lie_sphere_tests PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(lie_sphere_tests)
+add_test(NAME lie_sphere_tests COMMAND lie_sphere_tests)
+
+add_executable(contact_net_tests contact_net_tests.cpp)
+target_link_libraries(contact_net_tests PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(contact_net_tests)
+add_test(NAME contact_net_tests COMMAND contact_net_tests)
+
+add_executable(amap_tests amap_tests.cpp)
+target_link_libraries(amap_tests PRIVATE gaudi::core gaudi::headless)
+gaudi_msvc_disable_parallel_cl_writers(amap_tests)
+add_test(NAME amap_tests COMMAND amap_tests)
 
 # liblombardi tests need access to ext/liblombardi/include
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../ext/liblombardi/include)

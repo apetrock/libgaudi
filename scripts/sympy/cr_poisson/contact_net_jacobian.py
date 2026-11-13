@@ -1,0 +1,159 @@
+"""Residuals and Jacobians of the contact element net's Gauss-Newton rows
+(MATH.md 19.10, 19.11; prototype `contact_net.py`), emitted for C++.
+
+- `rodrigues` (per edge, 3 rows): `k (dx - (dx . nbar) nbar) + dn + tau (nbar x dx)`,
+  `dx = x_j - x_i`, `dn = n_j - n_i`, `nbar = (n_i + n_j) / |n_i + n_j|`;
+  inputs `(x_i, x_j, n_i, n_j)`, constants `(k, tau)`.
+- `tangency` (per directed spoke, 1 row): `(n_i / |n_i|) . d / |d| - c`,
+  `d = x_j - x_i`; inputs `(x_i, x_j, n_i)`, constant `c`.
+
+Unit length and length memory are written by hand in C++.
+
+    python3 contact_net_jacobian.py          # verify against contact_net.py and FD
+    python3 contact_net_jacobian.py --emit   # also write the C++ header
+"""
+
+import argparse
+import sys
+import time
+from pathlib import Path
+
+import numpy as np
+import sympy as sp
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from osculating_dupin_jacobian import FastPowPrinter  # noqa: E402
+
+import contact_net as cn  # noqa: E402
+
+HEADER = Path(__file__).resolve().parents[1] / "generated" / "contact_net_generated.hpp"
+PRINTER = FastPowPrinter()
+
+
+def vec(name, n=3):
+    return sp.Matrix(sp.symbols(f"{name}0:{n}", real=True))
+
+
+def blocks():
+    xi, xj, ni, nj = vec("xi"), vec("xj"), vec("ni"), vec("nj")
+    k, tau, c = sp.symbols("k tau c", real=True)
+    dx, dn = xj - xi, nj - ni
+    s = ni + nj
+    nb = s / sp.sqrt(s.dot(s))
+    rod = k * (dx - dx.dot(nb) * nb) + dn + tau * nb.cross(dx)
+    d = xj - xi
+    nh = ni / sp.sqrt(ni.dot(ni))
+    tan = sp.Matrix([nh.dot(d) / sp.sqrt(d.dot(d)) - c])
+    return {
+        "rodrigues": {"inputs": list(xi) + list(xj) + list(ni) + list(nj), "consts": [k, tau], "outputs": rod},
+        "tangency": {"inputs": list(xi) + list(xj) + list(ni), "consts": [c], "outputs": tan},
+        # The native rows in `projection_solver`: k and tau are the edge store's
+        # variables, so they are inputs (14), with a dummy constant.
+        "rodrigues_kt": {"inputs": list(xi) + list(xj) + list(ni) + list(nj) + [k, tau],
+                         "consts": [sp.Symbol("unused")], "outputs": rod},
+    }
+
+
+def with_jacobians(bl):
+    for b in bl.values():
+        b["jac"] = b["outputs"].jacobian(sp.Matrix(b["inputs"]))
+    return bl
+
+
+def verify(bl):
+    rng = np.random.default_rng(0)
+    worst = 0.0
+    for name, b in bl.items():
+        if name == "rodrigues_kt":
+            continue  # the same expression as `rodrigues`; checked through it
+        f = sp.lambdify([b["consts"], b["inputs"]], b["outputs"], "numpy")
+        J = sp.lambdify([b["consts"], b["inputs"]], b["jac"], "numpy")
+        for _ in range(20):
+            x = rng.standard_normal(len(b["inputs"]))
+            x[6:9] = x[6:9] / np.linalg.norm(x[6:9])
+            if name == "rodrigues":
+                x[9:12] = x[6:9] + 0.2 * rng.standard_normal(3)
+            cst = rng.standard_normal(len(b["consts"]))
+            y = np.array(f(cst, x), float).ravel()
+            V = x[None, :]
+            if name == "rodrigues":
+                ref = cn._rodrigues(V, np.array([cst[0]]), np.array([cst[1]]), True).ravel()
+            else:
+                ref = cn._tangency(V, np.array([cst[0]])).ravel()
+            worst = max(worst, np.abs(y - ref).max())
+            Ja = np.array(J(cst, x), float)
+            h = 1e-6
+            Jn = np.stack([(np.array(f(cst, x + h * e), float).ravel() - np.array(f(cst, x - h * e), float).ravel())
+                           / (2 * h) for e in np.eye(len(x))], 1)
+            worst = max(worst, np.abs(Ja - Jn).max() / max(1.0, np.abs(Jn).max()) * 1e-3)
+    print(f"verify: residuals against contact_net.py and Jacobians against FD, worst {worst:.1e}")
+    assert worst < 1e-8
+
+
+def emit_block(name, b):
+    exprs = list(b["outputs"]) + [e for row in b["jac"].tolist() for e in row]
+    repl, red = sp.cse(exprs, symbols=sp.numbered_symbols("t"), optimizations="basic")
+    n_in, n_out, consts = len(b["inputs"]), len(b["outputs"]), b["consts"]
+    sub = {cst: sp.Symbol(f"c[{i}]") for i, cst in enumerate(consts)}
+    sub.update({x: sp.Symbol(f"x[{i}]") for i, x in enumerate(b["inputs"])})
+
+    def cxx(e):
+        return PRINTER.doprint(e.xreplace(sub))
+
+    lines = [f"  const real {sym} = {cxx(e)};" for sym, e in repl]
+    for o in range(n_out):
+        lines.append(f"  y[{o}] = {cxx(red[o])};")
+    for o in range(n_out):
+        for i in range(n_in):
+            lines.append(f"  J({o}, {i}) = {cxx(red[n_out + o * n_in + i])};")
+    print(f"  {name}: {len(repl)} temporaries")
+    body = "\n".join(lines)
+    return f"""inline void contact_{name}(const Eigen::Matrix<real, {len(consts)}, 1> &c, const Eigen::Matrix<real, {n_in}, 1> &x,
+                             Eigen::Matrix<real, {n_out}, 1> &y, Eigen::Matrix<real, {n_out}, {n_in}> &J) {{
+{body}
+}}
+"""
+
+
+def emit(bl):
+    funcs = "\n".join(emit_block(n, b) for n, b in bl.items())
+    text = f"""// AUTO-GENERATED by scripts/sympy/cr_poisson/contact_net_jacobian.py --emit — do not edit
+#pragma once
+
+#include <cmath>
+#include <Eigen/Dense>
+
+#include "gaudi/common.h"
+
+namespace gaudi {{
+namespace kusama {{
+namespace contact_generated {{
+
+// The contact element net's Gauss-Newton rows (scripts/sympy/cr_poisson/MATH.md
+// 19.10): `contact_rodrigues` per edge, inputs (x_i, x_j, n_i, n_j), constants
+// (k, tau); `contact_tangency` per directed spoke, inputs (x_i, x_j, n_i),
+// constant c.
+
+{funcs}
+}} // namespace contact_generated
+}} // namespace kusama
+}} // namespace gaudi
+"""
+    HEADER.write_text(text)
+    print(f"wrote {HEADER} ({len(text.splitlines())} lines)")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--emit", action="store_true")
+    args = ap.parse_args()
+    t0 = time.time()
+    bl = with_jacobians(blocks())
+    print(f"Jacobians in {time.time() - t0:.1f}s")
+    verify(bl)
+    if args.emit:
+        emit(bl)
+
+
+if __name__ == "__main__":
+    main()

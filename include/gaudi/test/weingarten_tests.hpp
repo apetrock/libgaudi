@@ -2000,6 +2000,53 @@ inline real run_hepworth_frames(const std::vector<vec3> &x0, const std::vector<v
   return rigid_error(x, xt);
 }
 
+/// One frame of a coupling stiff enough that full Gauss-Newton steps go
+/// uphill (no backtracks): the ascent refactors stay under
+/// `gn_max_ascent_refreshes`, `gn_stop_on_fresh_ascent` ends the step on an
+/// uphill fresh step, and either way the step ends no higher than it began.
+GAUDI_TEST(projection_solver_ascent_limits) {
+  std::vector<vec3> x0, xt;
+  std::vector<std::array<int, 3>> tris;
+  torus_tris(2.0, 0.7, 24, 12, x0, tris);
+  torus_tris(2.0, 0.9, 24, 12, xt, tris);
+  const kusama::stencil_table t =
+      kusama::build_stencil_table(asawa::shell::triangle_walker(static_cast<int>(x0.size()), tris));
+  const std::vector<vec3> target = wg::edge_readings(t, xt);
+  auto run = [&](bool fresh_stop, int cap) {
+    const int n = static_cast<int>(x0.size());
+    std::vector<vec3> x = x0, v(n, vec3::Zero()), f = v, m(n, vec3::Ones());
+    auto pos = hepworth::vec3_block::create(m, x, v, f);
+    std::vector<vec3> hs = wg::edge_readings(t, x), hv(hs.size(), vec3::Zero()), hf = hv,
+                      hm(hs.size(), vec3::Constant(real(1e-8)));
+    auto store = hepworth::vec3_block::create(hm, hs, hv, hf);
+    std::vector<hepworth::sim_block::ptr> blocks{pos, store};
+    hb::projection_solver solver;
+    solver.gn_refresh_every = 0;
+    solver.gn_backtracks = 0;
+    solver.gn_stop_on_fresh_ascent = fresh_stop;
+    solver.gn_max_ascent_refreshes = cap;
+    std::vector<hepworth::projection_constraint::ptr> cs{
+        hb::weingarten_gn::create(&t, x, real(1e5), blocks),
+        hb::dirichlet_memory_gn::create(&t, x, real(1), std::vector<hepworth::sim_block::ptr>{pos}),
+        hb::edge_shape_fair::create(&t, x, hb::edge_fair_rows::pin, real(1e6),
+                                    std::vector<hepworth::sim_block::ptr>{store}, hb::goal_fixed(target))};
+    solver.set_constraints(cs);
+    solver.step(blocks, real(0.1), real(1), 30);
+    return solver.last_step;
+  };
+  const auto free = run(false, -1), capped = run(false, 1), stopped = run(true, -1);
+  console_logger::info << "ascent limits: free refreshes " << free.refreshes << " E " << free.E_first << " -> "
+                       << free.E_last << "; cap 1 refreshes " << capped.refreshes << " stopped "
+                       << capped.stopped_on_ascent << "; fresh stop refreshes " << stopped.refreshes << " its "
+                       << stopped.its << " stopped " << stopped.stopped_on_ascent << " E " << stopped.E_last
+                       << std::endl;
+  GAUDI_EXPECT(free.refreshes > 1);  // the case does go uphill
+  GAUDI_EXPECT(capped.refreshes <= 1 && capped.stopped_on_ascent);
+  GAUDI_EXPECT(stopped.stopped_on_ascent);
+  for (const auto *r : {&free, &capped, &stopped})
+    GAUDI_EXPECT(r->E_last <= r->E_first);
+}
+
 GAUDI_TEST(weingarten_gn_torus_tube_over_frames) {
   std::vector<vec3> x0, xt;
   std::vector<std::array<int, 3>> tris;

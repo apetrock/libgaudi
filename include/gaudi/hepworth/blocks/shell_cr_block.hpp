@@ -139,6 +139,18 @@ public:
   std::vector<vec3> face_velocity;
   std::vector<vec3> face_force;
   std::vector<vec3> face_mass;
+  /// Per-vertex unit normals for the contact net (`normal_site`), reseeded
+  /// each frame from the live mesh. A solver unknown when emitted.
+  std::vector<vec3> normal;
+  std::vector<vec3> normal_velocity;
+  std::vector<vec3> normal_force;
+  std::vector<vec3> normal_mass;
+  /// Normal mass per unit vertex dual area (0: the floor only).
+  real normal_mass_scale = 0;
+  /// Per-vertex AMAP quaternions (`amap_site`, `amap_gn.hpp`): reseeded to the
+  /// identity each frame; floor mass only (the rows determine them).
+  std::vector<vec4> amap_y;
+  std::vector<vec4> amap_mass;
   /// Applied once, when a Dirichlet solution fills an edge.
   real frame_angle = 0;
   /// `prepare` loaded every edge from raw guidance. The next Dirichlet
@@ -195,6 +207,38 @@ public:
         T.resize(static_cast<size_t>(slot) + 1, vec3::Zero());
       T[static_cast<size_t>(slot)] = dir;
     }
+  }
+
+  /// Per edge dof, the solved tangent `u` as a 3D direction in the live
+  /// frame (as `commit_edge_tangents` writes it); zero where unavailable.
+  std::vector<vec3> edge_tangent_dirs(const std::vector<vec3> &x) const {
+    std::vector<vec3> out(static_cast<size_t>(std::max(topology.nE, 0)), vec3::Zero());
+    if (!mesh || static_cast<int>(u.size()) < 2 * topology.nE)
+      return out;
+    for (int e = 0; e < topology.nE; ++e) {
+      vec3 e_par, e_perp;
+      if (!cr_edge_frame(*mesh, x, topology.dof_to_corner[static_cast<size_t>(e)],
+                         topology.edge_incident[static_cast<size_t>(e)], e_par, e_perp))
+        continue;
+      out[static_cast<size_t>(e)] =
+          u[static_cast<size_t>(e)] * e_par + u[static_cast<size_t>(e + topology.nE)] * e_perp;
+    }
+    return out;
+  }
+
+  /// Per edge dof, the tangent carried from the previous frame (the edge
+  /// datum, rewritten only by `commit_edge_tangents`); zero where empty.
+  std::vector<vec3> carried_edge_tangents() const {
+    std::vector<vec3> out(static_cast<size_t>(std::max(topology.nE, 0)), vec3::Zero());
+    if (!tangents)
+      return out;
+    const auto &T = tangents->data();
+    for (int e = 0; e < topology.nE; ++e) {
+      const int slot = static_cast<int>(topology.dof_to_corner[static_cast<size_t>(e)]) / 2;
+      if (slot >= 0 && static_cast<size_t>(slot) < T.size())
+        out[static_cast<size_t>(e)] = T[static_cast<size_t>(slot)];
+    }
+    return out;
   }
 
   int count() const { return topology.nE; }
@@ -292,6 +336,37 @@ public:
     face_velocity.assign(face_shape.size(), vec3::Zero());
     face_force.assign(face_shape.size(), vec3::Zero());
     face_mass.assign(face_shape.size(), vec3(real(1e-8), real(1e-8), real(1e-8)));
+    // The contact net's normals: reseeded every frame from the live mesh's
+    // area-weighted vertex normals, so remeshing needs no datum. Mass
+    // `normal_mass_scale` times the vertex's dual area (velocities zeroed, so
+    // a pull toward the frame-start normals); the floor keeps the diagonal
+    // positive.
+    normal.assign(x.size(), vec3::Zero());
+    std::vector<real> area(x.size(), real(0));
+    if (live)
+      for (int f = 0; f < table.n_faces; ++f) {
+        const auto &id = table.ids[static_cast<size_t>(f)];
+        const vec3 c = (x[static_cast<size_t>(id[1])] - x[static_cast<size_t>(id[0])])
+                           .cross(x[static_cast<size_t>(id[2])] - x[static_cast<size_t>(id[0])]);
+        for (int k = 0; k < 3; ++k) {
+          normal[static_cast<size_t>(id[static_cast<size_t>(k)])] += c;
+          area[static_cast<size_t>(id[static_cast<size_t>(k)])] += c.norm() / real(6);
+        }
+      }
+    for (vec3 &n : normal)
+      if (n.norm() > real(0))
+        n.normalize();
+    normal_velocity.assign(normal.size(), vec3::Zero());
+    normal_force.assign(normal.size(), vec3::Zero());
+    normal_mass.resize(normal.size());
+    for (size_t i = 0; i < normal.size(); ++i)
+      normal_mass[i] = vec3::Constant(std::max(normal_mass_scale * area[i], real(1e-8)));
+    amap_y.assign(x.size(), vec4(1, 0, 0, 0));
+    amap_mass.assign(x.size(), vec4::Constant(real(1e-8)));
+    // Per-edge rotations (`edge_quat_site`): identity until the contact net
+    // seeds them from the frame-start frames; floor mass only.
+    edge_quat.assign(static_cast<size_t>(std::max(nE, 0)), vec4(1, 0, 0, 0));
+    edge_quat_mass.assign(edge_quat.size(), vec4::Constant(real(1e-8)));
   }
 
   void apply_external_input(const std::vector<vec3> &input, real scale = 1.0) override {
@@ -311,7 +386,39 @@ public:
           vec3_block::create(face_mass, face_shape, face_velocity, face_force);
       out.push_back(_face_dof);
     }
+    _normal_dof = nullptr;
+    if (normal_site) {
+      _normal_dof = vec3_block::create(normal_mass, normal, normal_velocity, normal_force);
+      out.push_back(_normal_dof);
+    }
+    _amap_dof = nullptr;
+    if (amap_site) {
+      _amap_dof = vec4_block::create(amap_mass, amap_y);
+      out.push_back(_amap_dof);
+    }
+    _edge_quat_dof = nullptr;
+    if (edge_quat_site) {
+      _edge_quat_dof = vec4_block::create(edge_quat_mass, edge_quat);
+      out.push_back(_edge_quat_dof);
+    }
   }
+
+  /// Per-edge rotations for the contact net's rotation store
+  /// (`contact_net_gn` with a fourth block; `curvature_config::contact_rotations`).
+  std::vector<vec4> edge_quat;
+  std::vector<vec4> edge_quat_mass;
+  bool edge_quat_site = false;
+  vec4_block::ptr edge_quat_dof() const { return _edge_quat_dof; }
+
+  /// Emit the per-vertex AMAP quaternions (`amap_y`) for `amap_gn`; off unless
+  /// `position_distortion::w_amap` is on.
+  bool amap_site = false;
+  vec4_block::ptr amap_dof() const { return _amap_dof; }
+
+  /// Emit the per-vertex normals (`normal`) for the contact net's native rows
+  /// (`contact_net_gn.hpp`); off unless the net is the curvature solver.
+  bool normal_site = false;
+  vec3_block::ptr normal_dof() const { return _normal_dof; }
 
   /// Emit the per-face store (`face_shape`) for the face-site rows
   /// (`face_stretch`, `face_fair`, the Dirichlet `w_pin`). Off drops a third
@@ -326,6 +433,9 @@ private:
   cr_coeff_block::ptr _dof;
   vec3_block::ptr _shape_dof;
   vec3_block::ptr _face_dof;
+  vec3_block::ptr _normal_dof;
+  vec4_block::ptr _amap_dof;
+  vec4_block::ptr _edge_quat_dof;
 };
 
 } // namespace block

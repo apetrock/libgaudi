@@ -1,0 +1,10 @@
+---
+description: Read the project todo list before choosing work
+alwaysApply: true
+---
+
+# Todo list
+
+The living list is [`docs/TODO.md`](docs/TODO.md).
+
+Before choosing work, read that file. When the user adds, finishes, or reorders an item, update the file in the same turn. Do not drop an item because it was not part of the current task. When they ask what to work on, answer from that list.

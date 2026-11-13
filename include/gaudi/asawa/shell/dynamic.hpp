@@ -1163,7 +1163,7 @@ public:
   void apply_collapse(CornerId c) {
     for (auto d : __M->get_data())
       d->collapse(*__M, c);
-    collapse_edge(*__M, c);
+    collapse_edge(*__M, c, false, _topology);
   }
 
   /// The flip's two new faces are no worse than `min(q_warn, old minimum)`
@@ -1177,11 +1177,13 @@ public:
 
   /// `can_collapse` plus, with QC on, the quality guard: the merged one-ring
   /// keeps `min(q_warn, its old minimum)`, no face turns over, and the merged
-  /// valence stays at most `max_valence`.
+  /// valence stays at most `max_valence`. A pinching collapse (dynamic
+  /// topology) skips it: the prune finishes it, and its one-ring is not a
+  /// disk to predict.
   bool collapse_quality_ok(CornerId c, int max_valence) {
-    if (!can_collapse(*__M, c))
+    if (!can_collapse(*__M, c, false, _topology))
       return false;
-    if (!_qc.enabled)
+    if (!_qc.enabled || !collapse_link_ok(*__M, c))
       return true;
     const collapse_prediction p = predict_collapse(*__M, c, qc_x(), _metric);
     return !p.inverts && p.valence <= max_valence &&
@@ -1275,6 +1277,11 @@ public:
   }
 
   // ------------------------------------------------------------ element QC
+
+  /// `collapse_topology::dynamic` (default) lets collapses pinch and prunes
+  /// them; `fixed` keeps the genus (the link condition).
+  void set_topology(collapse_topology mode) { _topology = mode; }
+  collapse_topology topology() const { return _topology; }
 
   void set_qc(const qc_config &cfg) { _qc = cfg; }
   const qc_config &qc() const { return _qc; }
@@ -1564,6 +1571,7 @@ public:
   OpPredicateFcn _collapse_pred;
 
   qc_config _qc;
+  collapse_topology _topology = collapse_topology::dynamic;
   tri_metric _metric = face_quality;
   std::function<void(shell &, const qc_report &)> _qc_handler;
   qc_report _last_qc;

@@ -31,6 +31,10 @@ template <> quat get_elem<quat>(index_t ii, const vecX &q, index_t offset) {
   return quat(q.block(offset + 4 * ii, 0, 4, 1).data());
 }
 
+template <> vec4 get_elem<vec4>(index_t ii, const vecX &q, index_t offset) {
+  return q.block(offset + 4 * ii, 0, 4, 1);
+}
+
 class sim_block {
 public:
   typedef std::shared_ptr<sim_block> ptr;
@@ -119,6 +123,33 @@ public:
   std::vector<vec3> &_f;
   std::vector<vec3> &_M;
   std::vector<vec3> _x_prev;
+};
+
+/// Plain 4-vectors with no dynamics (no velocity, no inertia prediction):
+/// the solver's iterate is copied back each step, `M` only keeps the
+/// diagonal positive. For per-vertex unknowns that rows determine, such as
+/// the AMAP quaternions (`amap_gn.hpp`; `quat_block` carries rod angular
+/// dynamics and unit quaternions).
+class vec4_block : public sim_block {
+public:
+  typedef std::shared_ptr<vec4_block> ptr;
+  static ptr create(std::vector<vec4> &M, std::vector<vec4> &x) {
+    return std::make_shared<vec4_block>(M, x);
+  }
+  vec4_block(std::vector<vec4> &M, std::vector<vec4> &x) : _M(M), _x(x) {}
+
+  void map_to_x(vecX &q) override { sim_block::map_to_x<4, vec4>(_x, q); }
+  void map_mass(vecX &q) override { sim_block::map_to_x<4, vec4>(_M, q); }
+  void map_from_x(const vecX &q, const real &h, const real &damp) override {
+    (void)h;
+    (void)damp;
+    sim_block::map_from_x(q, _x);
+  }
+  index_t get_offset_idx(index_t ii) const override { return _offset + 4 * ii; }
+  vec4 get_vec4(index_t ii, const vecX &q) const { return get_elem<vec4>(ii, q, _offset); }
+
+  std::vector<vec4> &_M;
+  std::vector<vec4> &_x;
 };
 
 /// Ephemeral target velocity: x += h·v_ext (no h²·f, no v_state carryover).
