@@ -2599,7 +2599,57 @@ frustration.
 **Decision:** E2 for the C++ contact net store: better noisy accuracy, the
 only form robust under frustration, holonomy as a native frustration
 measure, and an intrinsic `kappa_g` channel tied to the tangent field; at
-the cost of 1.5 to 2 times the factor time.
+the cost of 1.5 to 2 times the factor time. **Revised 2026-11-12:** E2 was
+slower than hoped and its twist stayed latent in the store; the C++ E2 mode
+is removed and the contact net moves to E3 with native rows (below).
+
+**E3 with native rows** (`e3_native.py`, 2026-11-12). Unknowns `x` and `Y`
+per vertex, no edge store. Coupling: per directed spoke the frames'
+Rodrigues normal curvature `k_vj` and the tangency
+`n_v . d / |d| = k_vj |d| / 2 + c0` (`c0` the frame start's offset), so the
+positions' curvature follows the frames'; a unit row on `|Y|` (or the kite
+rows), a weak gauge row on the turn of `T` about `N`. The vertex tensor
+`S_v` in `v`'s own frame is the least-squares fit of `k = t^T S t` and
+`tau = t^T S (N x t)` over the spokes (within 3% of the analytic torus on
+24 x 12). Rows that compare vertices read `S` along frozen world directions
+projected into each tangent plane, or carry `z` by the frames' relative
+turn (`T_j` carried onto `i`'s plane by the shortest arc, `z_j e^{2 i phi}`),
+so the gauge drops out. Jacobians by colored central differences (the row
+pattern probed once per mesh). Native rows: shape memory (AMAP-style:
+`z_v` held at its frame-start value turned by the ring's best common turn,
+`H_v` held), tension (constant, frame_mean, volume controller), minimizer
+(across-line Dirichlet of `k1`, `k2` on frozen principal frames), Dupin
+(along-line), growth (normal curvature along / across a direction), `det`
+(ring sum of face solid angles of the normals), `gradtl` (Dirichlet on `z`
+with the frames' turn), twist (geodesic torsion along a winding direction,
+frame start plus `tau0` per frame), kite (`|Y_v|^2 = e^{u_v}` and spin-scale
+edges `|d| = l0 |Y_i| |Y_j|`), position growth (edge lengths
+`l0 (1 + g (d0 . a)^2)`).
+
+Torus `R = 1, r = 0.35`, 24 x 12, 3 frames, coupling 10, length memory
+0.05 (tube 0.350, volume 2.28, roughness 0.114 at the start):
+
+| rows | tube | volume | roughness | note |
+|---|---|---|---|---|
+| none | 0.350 | 2.28 | 0.114 | exact fixed point (no iterate taken) |
+| growth (x 0.3 at 0.6 rad) | 0.250 | 1.07 | 0.178 | more curvature along the axis: the tube tightens |
+| growth + memory 1 | 0.281 | 1.37 | 0.156 | memory resists |
+| growth + det 100 | 0.227 | 0.94 | 0.127 | `det` cannot resist a uniform tube shrink: the normals, so the Gauss image, do not change |
+| tension constant `H = -1.5` | 0.297 | 1.66 | 0.004 | lands on the target, very smooth |
+| tension frame_mean | 0.318 | 1.91 | 0.006 | CMC fairing: smooth, loses 17% volume |
+| tension volume | 0.340 | 2.18 | 0.010 | the controller recovers the volume |
+| minimizer 1 | 0.309 | 1.91 | 0.093 | smooths; the torus's hoop curvature varies across its lines, so not a fixed point |
+| dupin 1 | 0.394 | 2.79 | 0.120 | drifts 4% a frame from the vertex fit's discretization (0.4% at weight 0.1) |
+| gradtl 1 / 0.05 | 0.462 / 0.369 | 4.03 / 2.53 | 0.352 / 0.123 | `z` varies around the tube; strong weights roughen |
+| kite (alpha 0.1, cap 0.1) | 0.437 | 4.28 | 0.081 | inflates smoothly; `|Y|` 1.10 to 1.12 |
+| twist `tau0 = 0.1` (absolute) | 0.493 | 4.28 | 1.58 | the start's torsion is about -1: a large frustrated jump, crumples |
+| twist `tau0 = 0.1` (increment), 4 frames | 0.294 | 1.64 | 0.102 | smooth |
+| twist + position growth 0.1, 4 frames | 0.398 | 3.18 | 0.102 | smooth, grows |
+| twist + kite, 4 frames | 0.434 | 4.41 | 0.135 | lines start to turn at frame 3 (turn 0.18, anisotropy 0.53 -> 0.61) |
+
+Frames take 1 to 9 s in Python (finite-difference Jacobians, 8 LM
+iterates). Next: the C++ frames mode in `contact_net_gn` (analytic
+`dn/dY`), then these rows on `(x, Y)`, then the edge store dropped.
 
 **Advection.** Semi-Lagrangian on the vertex `(H, z)` field: RK2 back trace
 walking across faces (straightest path), barycentric sampling of the
