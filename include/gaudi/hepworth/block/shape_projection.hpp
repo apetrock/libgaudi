@@ -5,6 +5,7 @@
 
 #include "gaudi/hepworth/block/cr_dirichlet.hpp"
 #include "gaudi/hepworth/block/edge_shape_fair.hpp"
+#include "gaudi/hepworth/block/flat_growth.hpp"
 #include "gaudi/hepworth/block/shape_objectives.hpp"
 #include "gaudi/hepworth/block/shape_operator_datum.hpp"
 #include "gaudi/hepworth/block/shell_constraints.hpp"
@@ -230,47 +231,36 @@ inline void init_shear(const asawa::shell::shell &shell,
       !blocks[0])
     return;
   const std::vector<sim_block::ptr> held{blocks[0]};
-  // Per vertex: mean curvature and anisotropy q of its chart; mean |H|.
-  auto mean_q = [](const vec3 &h, real &H, real &q) {
-    H = real(0.5) * (h[0] + h[2]);
-    const real z = std::hypot(real(0.5) * (h[0] - h[2]), h[1]);
-    const real d = std::abs(H) + z;
-    q = d > real(0) ? z / d : real(0);
-  };
-  real Hbar = 0;
-  int nH = 0;
-  for (const vertex_chart &c : *charts)
-    if (c.ok && c.h.allFinite()) {
-      real H, q;
-      mean_q(c.h, H, q);
-      Hbar += std::abs(H);
-      ++nH;
-    }
-  Hbar = nH > 0 ? Hbar / nH : real(0);
+  // Per target the ring weights; per vertex the chart's anisotropy q.
+  std::vector<std::vector<real>> wt(targets.size());
+  for (size_t t = 0; t < targets.size(); ++t)
+    measure_weight(*charts, targets[t].measure, targets[t].power, wt[t]);
   for_each_spoke_ring(shell, x, valid, [&](const std::vector<index_t> &ids,
                                            const std::vector<real> &weights, int) {
     const size_t vi = static_cast<size_t>(ids[0]);
     const bool have = vi < charts->size() && (*charts)[vi].ok && (*charts)[vi].h.allFinite();
-    real H = 0, q = 1;
-    if (have)
-      mean_q((*charts)[vi].h, H, q);
-    for (const shear_target &spec : targets) {
+    real q = 1;
+    if (have) {
+      const vec3 &h = (*charts)[vi].h;
+      const real z = std::hypot(real(0.5) * (h[0] - h[2]), h[1]);
+      const real d = std::abs(real(0.5) * (h[0] + h[2])) + z;
+      q = d > real(0) ? z / d : real(0);
+    }
+    for (size_t t = 0; t < targets.size(); ++t) {
+      const shear_target &spec = targets[t];
       if (!std::isfinite(spec.shear) || spec.shear == real(0))
         continue;
       const real g = std::clamp(spec.shear, real(-0.99), real(0.99));
       const real angle = std::isfinite(spec.angle) ? spec.angle : real(0.25) * real(M_PI);
-      // Log-space amount: r^f, f from the curvature policy.
-      real f = 1;
-      if (spec.policy_power != real(0) && have) {
-        const real cusp = (real(1) - q) * (Hbar > real(0) ? std::min(real(1), std::abs(H) / Hbar) : real(0));
-        f = std::pow(std::clamp(real(1) - cusp, real(0), real(1)), spec.policy_power);
-      }
+      // Log-space amount: r^w.
+      const real f = have ? wt[t][vi] : real(1);
       if (!(f > real(1e-6)))
         continue;
       const real ratio = std::pow((real(1) + g) / (real(1) - g), f);
       auto row = axis_ratio::create(ids, weights, x, ratio, false, angle, w, held, charts, "shear", spec.area);
-      // Unreliable principal direction: the carried frame tangent instead.
-      if (have && q < spec.axis_q) {
+      const bool frame_axis = spec.axis == shear_axis::frame ||
+                              (spec.axis == shear_axis::automatic && q < spec.axis_q);
+      if (have && frame_axis) {
         const vertex_chart &c = (*charts)[vi];
         row->set_axis(std::cos(angle) * c.T + std::sin(angle) * c.B);
       }

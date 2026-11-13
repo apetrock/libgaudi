@@ -2747,6 +2747,15 @@ principal direction. Probe, shear alone, three frames: uniform 0.125 tube
 deformation) tube 0.303, roughness 0.181; at 0.125 the roughness stays
 flat (0.163). The torus has no round points (its `q` never falls below 0.2,
 so the axis fallback is idle there).
+Config (same day): the policy is now `shear_target::measure` and
+`::power` like flat growth (`measure_weight`, shared; the cusp form is the
+measure `off_umbilic`, also open to flat growth), and the axis an explicit
+`shear_axis` (`principal`, `frame`, `automatic` = principal above `axis_q`).
+Probe, shear alone, three frames at the current defaults: uniform 0.125
+tube 0.274, roughness 0.169; `off_umbilic` power 2 at 0.25 tube 0.331,
+roughness 0.185; `flatness` power 2 tube 0.282, roughness 0.200; the
+`frame` axis everywhere roughens the torus (0.86): the carried tangent is
+not tied to the curvature lines, so it belongs below `axis_q` only.
 
 **CR field out of the demo (2026-11-13).** The demo now runs on
 `shell_e3_block`: frames reseeded each frame from the area normals with the

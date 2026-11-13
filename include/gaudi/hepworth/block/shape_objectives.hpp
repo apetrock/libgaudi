@@ -130,6 +130,25 @@ struct axis_ratio_target {
   area_band area{};
 };
 
+/// A per-vertex curvature measure `m` of the chart tensor, for weights
+/// `m^power` (`flatness`, `off_umbilic`: already in [0, 1]) or
+/// `(m / mean m)^power` (the dimensional ones):
+/// - `flatness`: `1 - |k_lo| / |k_hi|` (1 where one curvature vanishes, 0 at
+///   round points);
+/// - `mean_curvature`: `|H|` (negative power favours flatter regions);
+/// - `anisotropy`: `|z| = |k_hi - k_lo| / 2`;
+/// - `k_lo`: `|k_lo|` (negative power favours a flat loose direction);
+/// - `off_umbilic`: `1 - (1 - q) min(1, |H| / mean |H|)`,
+///   `q = |z| / (|H| + |z|)`: 0 at curved round points (umbilic cusps), 1 on
+///   flats and anisotropic regions.
+enum class growth_measure { flatness, mean_curvature, anisotropy, k_lo, off_umbilic };
+
+/// Where a ring's axis comes from: `principal` the chart's tight principal
+/// direction, `frame` the chart's tangent `T` (the carried frame gauge,
+/// coherent across flats and round points), `automatic` the principal
+/// direction where `q >= axis_q` and the frame tangent below it.
+enum class shear_axis { principal, frame, automatic };
+
 /// Area-preserving shear of the one ring each frame: stretch by
 /// `1 + shear` along the direction at `angle` and `1 - shear` across it,
 /// against the frame-start ring. That ratio is held and the ring's area kept
@@ -138,20 +157,19 @@ struct axis_ratio_target {
 /// principal tangents it is independent of `axis_ratio_target`.
 struct shear_target {
   real shear = 0;
-  /// Radians from the tight principal tangent (k_hi) toward the other, as
-  /// `stretch_target::angle`. NaN is the 45-degree bisector.
+  /// Radians from the axis (`axis`: the tight principal tangent, k_hi, or the
+  /// frame tangent) toward the other, as `stretch_target::angle`. NaN is the
+  /// 45-degree bisector.
   real angle = std::numeric_limits<real>::quiet_NaN();
   /// Sets `angle` from winding numbers at startup (`stretch_winding`).
   stretch_winding winding{};
   area_band area{};
-  /// Curvature policy, in log space: each ring's ratio is `r^f`,
-  /// `f = (1 - cusp)^policy_power`, `cusp = (1 - q) min(1, |H| / mean |H|)`,
-  /// `q = |z| / (|H| + |z|)`. Curved round points (umbilic cusps) get none,
-  /// flat and anisotropic regions the full shear; 0 is uniform.
-  real policy_power = 0;
-  /// Below this `q` the principal direction is unreliable and the axis comes
-  /// from the chart's tangent `T` (the carried frame gauge) turned by `angle`
-  /// instead; 0 always uses the principal direction.
+  /// Where the shear acts, in log space: each ring's ratio is `r^w`,
+  /// `w = m^power` from `measure` (`growth_measure`); `power` 0 is uniform.
+  growth_measure measure = growth_measure::off_umbilic;
+  real power = 0;
+  shear_axis axis = shear_axis::automatic;
+  /// `automatic` only: below this `q` the axis is the frame tangent.
   real axis_q = 0;
 };
 

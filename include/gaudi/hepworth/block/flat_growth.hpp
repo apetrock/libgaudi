@@ -28,16 +28,8 @@ namespace gaudi {
 namespace hepworth {
 namespace block {
 
-/// What sets where the growth is:
-/// - `flatness`: `1 - |k_lo| / |k_hi|` (1 where one curvature vanishes, 0 at
-///   round points);
-/// - `mean_curvature`: `|H|` (negative power favours flatter regions);
-/// - `anisotropy`: `|z| = |k_hi - k_lo| / 2`;
-/// - `k_lo`: `|k_lo|` (negative power favours a flat loose direction).
-enum class growth_measure { flatness, mean_curvature, anisotropy, k_lo };
-
 /// `g`: fractional length added per frame at full weight; `measure` and
-/// `power`: the weight (`flatness^power`, or `(m / mean m)^power`); `angle`: the axis, radians from
+/// `power`: the weight (`growth_measure`, `measure_weight`); `angle`: the axis, radians from
 /// the loose principal direction toward the tight one; `winding`: sets
 /// `angle` at startup from a closed line on the fitted torus (resolved by the
 /// caller, as the shear's); `iso`: the share of direction-free growth.
@@ -50,10 +42,12 @@ struct flat_growth_target {
   real iso = 0;
 };
 
-/// The measure of one chart tensor.
+/// The raw measure of one chart tensor (`off_umbilic` reads `|H|` here; its
+/// normalization needs the mean, `measure_weight`).
 inline real growth_measure_of(const growth_detail::principals &p, growth_measure m) {
   switch (m) {
   case growth_measure::mean_curvature:
+  case growth_measure::off_umbilic:
     return std::abs(p.H);
   case growth_measure::anisotropy:
     return p.z;
@@ -65,38 +59,60 @@ inline real growth_measure_of(const growth_detail::principals &p, growth_measure
   }
 }
 
+/// Per vertex the weight `m^power` (`flatness`, `off_umbilic`) or
+/// `(m / mean m)^power` of `measure` (`growth_measure`); 1 at `power` 0, 0
+/// where the chart is missing.
+inline void measure_weight(const std::vector<vertex_chart> &charts, growth_measure measure, real power,
+                           std::vector<real> &weight) {
+  const size_t n = charts.size();
+  weight.assign(n, real(0));
+  std::vector<real> m(n, real(0)), q(n, real(0));
+  std::vector<char> ok(n, 0);
+  real mbar = 0;
+  int nm = 0;
+  for (size_t i = 0; i < n; ++i) {
+    if (!charts[i].ok || !charts[i].h.allFinite())
+      continue;
+    const growth_detail::principals p = growth_detail::principals_of(charts[i].h);
+    m[i] = growth_measure_of(p, measure);
+    const real d = std::abs(p.H) + p.z;
+    q[i] = d > real(0) ? p.z / d : real(0);
+    ok[i] = 1;
+    mbar += m[i];
+    ++nm;
+  }
+  mbar = nm > 0 ? mbar / nm : real(0);
+  for (size_t i = 0; i < n; ++i) {
+    if (!ok[i])
+      continue;
+    real w = 1;
+    if (power != real(0)) {
+      if (measure == growth_measure::off_umbilic) {
+        const real cusp = (real(1) - q[i]) * (mbar > real(0) ? std::min(real(1), m[i] / mbar) : real(0));
+        w = std::pow(std::clamp(real(1) - cusp, real(0), real(1)), power);
+      } else {
+        const real scale = measure == growth_measure::flatness ? real(1) : mbar;
+        if (!(scale > real(0)))
+          continue;
+        w = std::pow(std::max(m[i] / scale, real(1e-3)), power);
+      }
+    }
+    weight[i] = std::isfinite(w) ? w : real(0);
+  }
+}
+
 /// Per vertex: the weight and the growth axis in world (zero where the chart
 /// is missing).
 inline void flat_growth_field(const std::vector<vertex_chart> &charts, const flat_growth_target &spec,
                               std::vector<real> &weight, std::vector<vec3> &dir) {
-  const size_t n = charts.size();
-  weight.assign(n, real(0));
-  dir.assign(n, vec3::Zero());
-  std::vector<real> m(n, real(0));
-  real mbar = 0;
-  int nm = 0;
-  for (size_t i = 0; i < n; ++i) {
+  measure_weight(charts, spec.measure, spec.power, weight);
+  dir.assign(charts.size(), vec3::Zero());
+  for (size_t i = 0; i < charts.size(); ++i) {
     if (!charts[i].ok)
       continue;
     const growth_detail::principals p = growth_detail::principals_of(charts[i].h);
-    m[i] = growth_measure_of(p, spec.measure);
-    mbar += m[i];
-    ++nm;
     const vec2 e = std::cos(spec.angle) * p.e_lo + std::sin(spec.angle) * p.e_hi;
     dir[i] = (e[0] * charts[i].T + e[1] * charts[i].B).normalized();
-  }
-  mbar = nm > 0 ? mbar / nm : real(0);
-  for (size_t i = 0; i < n; ++i) {
-    if (!charts[i].ok)
-      continue;
-    real w = 1;
-    if (spec.power != real(0)) {
-      const real scale = spec.measure == growth_measure::flatness ? real(1) : mbar;
-      if (!(scale > real(0)))
-        continue;
-      w = std::pow(std::max(m[i] / scale, real(1e-3)), spec.power);
-    }
-    weight[i] = std::isfinite(w) ? w : real(0);
   }
 }
 

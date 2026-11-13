@@ -22,9 +22,10 @@
 //                   [dupin=W] [dupinreach=R] [dupindeg=D] [wgradtl=W] [wotorus=W] [sarap=W] [sarapfree]
 //                   [wcmc=W] [cmch0=H] [cmcvol] [wtwist=W] [tau0=T] [twangle=A] [wmin=W]
 //                   [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W]
-//                   [aratio=W] [wshear=W] [samt=S] [swind=ring:tube[:hand]] [spow=P] [saxisq=Q]
+//                   [aratio=W] [wshear=W] [samt=S] [swind=ring:tube[:hand]] [spow=P]
+//                   [smeasure=offumb|flat|mean|aniso|klo] [saxis=principal|frame|automatic] [saxisq=Q]
 //                   [wmobius=W] [malpha=A] [mmaxu=U] [msrc=mean|aniso|flat] [mlevel=L] [mbalanced]
-//                   [wflat=W] [fg=G] [fmeasure=flat|mean|aniso|klo] [fpow=P] [fiso=I] [fangle=DEG] [fwind=ring:tube[:hand]]
+//                   [wflat=W] [fg=G] [fmeasure=flat|mean|aniso|klo|offumb] [fpow=P] [fiso=I] [fangle=DEG] [fwind=ring:tube[:hand]]
 //                   [accel=anderson|chebyshev|anderson_chebyshev|none] [freshstop=0|1] [maxascent=K]
 //                   [dump=K] [res=ring:tube] [perturb=P] [wcenter=W] [recenter] [bend=W] [damp=D] [memory=W]
 //                   [qcwarn=Q] [noqc] [ascentrefresh] [ascenttol=T] [audit] [modes=K] [tau=T] [lmax=L]
@@ -179,7 +180,21 @@ int principal_curvature_probe_main(int argc, char **argv) {
       cfg.position.w_shear = std::atof(flag.c_str() + 7);
     } else if (flag.rfind("spow=", 0) == 0) {
       for (auto &e : cfg.position.shear)
-        e.policy_power = std::atof(flag.c_str() + 5);
+        e.power = std::atof(flag.c_str() + 5);
+    } else if (flag.rfind("smeasure=", 0) == 0) {
+      const std::string v = flag.substr(9);
+      using gm = hepworth::block::growth_measure;
+      for (auto &e : cfg.position.shear)
+        e.measure = v == "flat"    ? gm::flatness
+                    : v == "mean"  ? gm::mean_curvature
+                    : v == "aniso" ? gm::anisotropy
+                    : v == "klo"   ? gm::k_lo
+                                   : gm::off_umbilic;
+    } else if (flag.rfind("saxis=", 0) == 0) {
+      const std::string v = flag.substr(6);
+      using ax = hepworth::block::shear_axis;
+      for (auto &e : cfg.position.shear)
+        e.axis = v == "principal" ? ax::principal : v == "frame" ? ax::frame : ax::automatic;
     } else if (flag.rfind("saxisq=", 0) == 0) {
       for (auto &e : cfg.position.shear)
         e.axis_q = std::atof(flag.c_str() + 7);
@@ -219,6 +234,7 @@ int principal_curvature_probe_main(int argc, char **argv) {
       cfg.position.flat_growth.measure = v == "mean"    ? gm::mean_curvature
                                          : v == "aniso" ? gm::anisotropy
                                          : v == "klo"   ? gm::k_lo
+                                         : v == "offumb" ? gm::off_umbilic
                                                         : gm::flatness;
     } else if (flag.rfind("fiso=", 0) == 0) {
       cfg.position.flat_growth.iso = std::atof(flag.c_str() + 5);
