@@ -2736,6 +2736,18 @@ cube -> ellipsoid 1.5e-2 / 3.0e-2, closed band 2.2e-2 / 1.1e-1, saddle
 shape the 3-number fit loses. Decision: targets on spoke readings
 (edge-native); smoothing rows chained through the fit; no tensor block.
 
+**Shear policy (2026-11-13).** The one-ring shear (`axis_ratio` drive)
+now scales its ratio in log space, `r^f` with
+`f = (1 - cusp)^power`, `cusp = (1 - q) min(1, |H| / mean |H|)`,
+`q = |z| / (|H| + |z|)`, so curved round points get no shear (left to
+tension) while flat and anisotropic regions keep it; below `axis_q` the
+axis comes from the chart's carried frame tangent instead of the noisy
+principal direction. Probe, shear alone, three frames: uniform 0.125 tube
+0.248 -> 0.321, roughness 0.163 -> 0.198; policy power 2 at 0.25 (similar
+deformation) tube 0.303, roughness 0.181; at 0.125 the roughness stays
+flat (0.163). The torus has no round points (its `q` never falls below 0.2,
+so the axis fallback is idle there).
+
 **CR field out of the demo (2026-11-13).** The demo now runs on
 `shell_e3_block`: frames reseeded each frame from the area normals with the
 tangent from a carried gauge datum (the solved frames' `T`, kept through

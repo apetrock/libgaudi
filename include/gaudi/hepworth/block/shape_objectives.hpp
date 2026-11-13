@@ -144,6 +144,15 @@ struct shear_target {
   /// Sets `angle` from winding numbers at startup (`stretch_winding`).
   stretch_winding winding{};
   area_band area{};
+  /// Curvature policy, in log space: each ring's ratio is `r^f`,
+  /// `f = (1 - cusp)^policy_power`, `cusp = (1 - q) min(1, |H| / mean |H|)`,
+  /// `q = |z| / (|H| + |z|)`. Curved round points (umbilic cusps) get none,
+  /// flat and anisotropic regions the full shear; 0 is uniform.
+  real policy_power = 0;
+  /// Below this `q` the principal direction is unreliable and the axis comes
+  /// from the chart's tangent `T` (the carried frame gauge) turned by `angle`
+  /// instead; 0 always uses the principal direction.
+  real axis_q = 0;
 };
 
 /// The anisotropy of one point, from its two principal curvatures `k0`, `k1`

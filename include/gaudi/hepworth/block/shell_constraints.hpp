@@ -1043,6 +1043,10 @@ public:
 
   const std::vector<vec3> &rest() const { return _d_rest; }
 
+  /// A world axis that replaces the chart's principal one (projected into the
+  /// chart's tangent plane); zero keeps the chart's.
+  void set_axis(const vec3 &a) { _axis = a; }
+
   void project(const vecX &q, vecX &p) override;
 
   void fill_A(index_t &id0, std::vector<trip> &triplets) override {
@@ -1070,6 +1074,7 @@ public:
   real _angle = 0;
   area_band _area{};
   std::string _label;
+  vec3 _axis = vec3::Zero();
 };
 
 /// One triangle held at its frame-start shape mapped by a fixed in-plane
@@ -3795,6 +3800,8 @@ inline void axis_ratio::project(const vecX &q, vecX &p) {
       const monge_axes ax = monge_axes_of(axes);
       u = std::cos(_angle) * (ax.hx * T + ax.hy * B) + std::sin(_angle) * (ax.lx * T + ax.ly * B);
     }
+    if (_axis.squaredNorm() > real(0))
+      u = _axis;
     u -= N * u.dot(N);
   }
   if (u.squaredNorm() > real(1e-16) && u.allFinite() && _ratio > real(0) && std::isfinite(_ratio)) {

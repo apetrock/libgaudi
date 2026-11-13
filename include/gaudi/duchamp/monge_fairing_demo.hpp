@@ -172,7 +172,7 @@ struct shape_distortion {
   /// The frame minimizer: each principal curvature differenced across its
   /// own lines between neighbours (across-line Dirichlet, frame-start
   /// principal frames). 0 leaves it off.
-  real w_minimizer = 0.02;
+  real w_minimizer = 0.0;
   /// Surface tension in curvature space: each vertex's mean curvature pulled
   /// to `tension.h0` (`constant`, Young-Laplace: pressure over twice the
   /// tension; outward normals make a sphere's `H` negative), to the
@@ -243,12 +243,21 @@ struct position_distortion {
   /// ring. Only that ratio is held; area, skew and rotation are free.
   /// `.winding = {.ring, .tube, .handedness}` sets the angle at startup from
   /// the fitted torus (on the demo torus the bisector is about {1, 3}).
-  /// Comment a line to drop it. `w_shear` scales every entry; 0 leaves the
-  /// row off.
+  /// `.policy_power` scales each ring's shear in log space by
+  /// `(1 - cusp)^power`, `cusp = (1 - q) min(1, |H| / mean |H|)`
+  /// (`q = |z| / (|H| + |z|)`): curved round points get none (left to
+  /// tension), flat and anisotropic regions the full shear; 0 is uniform.
+  /// Below `.axis_q` the principal direction is noise and the axis comes from
+  /// the carried frame tangent instead (coherent across flats and round
+  /// points). Comment a line to drop it. `w_shear` scales every entry; 0
+  /// leaves the row off. Fields in order: `.shear`, `.angle`, `.winding`,
+  /// `.area`, `.policy_power`, `.axis_q`.
   std::vector<hepworth::block::shear_target> shear{
       hepworth::block::shear_target{
-          .shear = 0.125,
-          .winding = {.ring = 1, .tube = 10, .handedness = 1},
+          .shear = 0.125,                                        // (1 + s) / (1 - s) per frame along the axis
+          .winding = {.ring = 1, .tube = 10, .handedness = 1},   // sets the angle at startup on the torus
+          .policy_power = 2.0,                                   // 0: uniform; higher: umbilic cusps keep out
+          .axis_q = 0.2,                                         // below: axis from the carried frame tangent
       },
   };
   real w_shear = 0.0;

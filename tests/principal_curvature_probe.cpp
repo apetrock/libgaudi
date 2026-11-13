@@ -22,7 +22,7 @@
 //                   [dupin=W] [dupinreach=R] [dupindeg=D] [wgradtl=W] [wotorus=W] [sarap=W] [sarapfree]
 //                   [wcmc=W] [cmch0=H] [cmcvol] [wtwist=W] [tau0=T] [twangle=A] [wmin=W]
 //                   [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W]
-//                   [aratio=W] [wshear=W] [samt=S] [swind=ring:tube[:hand]]
+//                   [aratio=W] [wshear=W] [samt=S] [swind=ring:tube[:hand]] [spow=P] [saxisq=Q]
 //                   [wmobius=W] [malpha=A] [mmaxu=U] [msrc=mean|aniso|flat] [mlevel=L] [mbalanced]
 //                   [wflat=W] [fg=G] [fmeasure=flat|mean|aniso|klo] [fpow=P] [fiso=I] [fangle=DEG] [fwind=ring:tube[:hand]]
 //                   [accel=anderson|chebyshev|anderson_chebyshev|none] [freshstop=0|1] [maxascent=K]
@@ -177,6 +177,12 @@ int principal_curvature_probe_main(int argc, char **argv) {
       eig.contact_normal_mass = std::atof(flag.c_str() + 6);
     } else if (flag.rfind("wshear=", 0) == 0) {
       cfg.position.w_shear = std::atof(flag.c_str() + 7);
+    } else if (flag.rfind("spow=", 0) == 0) {
+      for (auto &e : cfg.position.shear)
+        e.policy_power = std::atof(flag.c_str() + 5);
+    } else if (flag.rfind("saxisq=", 0) == 0) {
+      for (auto &e : cfg.position.shear)
+        e.axis_q = std::atof(flag.c_str() + 7);
     } else if (flag.rfind("samt=", 0) == 0) {
       for (auto &e : cfg.position.shear)
         e.shear = std::atof(flag.c_str() + 5);
