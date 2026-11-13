@@ -24,7 +24,7 @@
 //                   [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W]
 //                   [aratio=W] [wshear=W] [samt=S] [swind=ring:tube[:hand]]
 //                   [wmobius=W] [malpha=A] [mmaxu=U] [msrc=mean|aniso|flat] [mlevel=L] [mbalanced]
-//                   [wflat=W] [fg=G] [fband=lo:hi] [fpow=P] [fangle=DEG] [fwind=ring:tube[:hand]]
+//                   [wflat=W] [fg=G] [fmeasure=flat|mean|aniso|klo] [fpow=P] [fiso=I] [fangle=DEG] [fwind=ring:tube[:hand]]
 //                   [accel=anderson|chebyshev|anderson_chebyshev|none] [freshstop=0|1] [maxascent=K]
 //                   [dump=K] [res=ring:tube] [perturb=P] [wcenter=W] [recenter] [bend=W] [damp=D] [memory=W]
 //                   [qcwarn=Q] [noqc] [ascentrefresh] [ascenttol=T] [audit] [modes=K] [tau=T] [lmax=L]
@@ -207,12 +207,15 @@ int principal_curvature_probe_main(int argc, char **argv) {
       cfg.position.w_flat_growth = std::atof(flag.c_str() + 6);
     } else if (flag.rfind("fg=", 0) == 0) {
       cfg.position.flat_growth.g = std::atof(flag.c_str() + 3);
-    } else if (flag.rfind("fband=", 0) == 0) {
-      const std::string v = flag.substr(6);
-      const size_t c = v.find(':');
-      cfg.position.flat_growth.lo = std::atof(v.substr(0, c).c_str());
-      if (c != std::string::npos)
-        cfg.position.flat_growth.hi = std::atof(v.substr(c + 1).c_str());
+    } else if (flag.rfind("fmeasure=", 0) == 0) {
+      const std::string v = flag.substr(9);
+      using gm = hepworth::block::growth_measure;
+      cfg.position.flat_growth.measure = v == "mean"    ? gm::mean_curvature
+                                         : v == "aniso" ? gm::anisotropy
+                                         : v == "klo"   ? gm::k_lo
+                                                        : gm::flatness;
+    } else if (flag.rfind("fiso=", 0) == 0) {
+      cfg.position.flat_growth.iso = std::atof(flag.c_str() + 5);
     } else if (flag.rfind("fpow=", 0) == 0) {
       cfg.position.flat_growth.power = std::atof(flag.c_str() + 5);
     } else if (flag.rfind("fangle=", 0) == 0) {

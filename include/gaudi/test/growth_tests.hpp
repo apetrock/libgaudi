@@ -117,14 +117,15 @@ GAUDI_TEST(mobius_mean_curvature_inflates_volume) {
   GAUDI_EXPECT(V > V0 * 1.01);
 }
 
-/// Flat-direction growth: on the torus the loose direction is the hoop; the
-/// top of the tube (hoop curvature 0) gets the full weight, the outer equator
-/// less; the realized hoop edges lengthen accordingly.
+/// Directional growth on flatness (power 8): on the torus the loose
+/// direction is the hoop; the top of the tube (hoop curvature 0) gets far
+/// more weight than the outer equator, and the realized hoop edges lengthen
+/// accordingly.
 GAUDI_TEST(flat_growth_lengthens_the_top_hoop) {
   growth_t::rig r;
   hepworth::block::flat_growth_target spec;
   spec.g = 0.1;
-  spec.power = 0;
+  spec.power = 8;
   std::vector<real> w;
   std::vector<vec3> dir;
   hepworth::block::flat_growth_field(r.charts, spec, w, dir);
@@ -166,11 +167,11 @@ GAUDI_TEST(flat_growth_lengthens_the_top_hoop) {
   const real gt = hoop_len(x, true) / hoop_len(r.x, true) - 1, ge = hoop_len(x, false) / hoop_len(r.x, false) - 1;
   std::printf("  flat growth: weight top %.3f outer %.3f, hoop alignment %.3f; hoop growth top %+.3f outer %+.3f\n",
               w_top, w_eq, align, gt, ge);
-  GAUDI_EXPECT(w_top > 0.99);
-  GAUDI_EXPECT(w_eq < w_top);
+  GAUDI_EXPECT(w_top > 5 * w_eq);
   GAUDI_EXPECT(align > 0.99);
-  GAUDI_EXPECT(gt > ge);
-  GAUDI_EXPECT(gt > 0.02);
+  // One short solve with edge rows only: the top's extra length spreads into
+  // the connected circles, so the realized differential is smaller.
+  GAUDI_EXPECT(gt > real(1.3) * ge);
 }
 
 /// The growth axis turned a quarter (`angle` pi / 2) is the tight direction:
@@ -193,6 +194,36 @@ GAUDI_TEST(flat_growth_angle_turns_the_axis) {
   }
   std::printf("  flat growth at angle pi/2: min alignment with the tube circle %.3f\n", align);
   GAUDI_EXPECT(align > 0.99);
+}
+
+/// `iso = 1, power = 0`: every edge grows by the same fraction (a uniform
+/// scale growth).
+GAUDI_TEST(flat_growth_iso_is_uniform) {
+  growth_t::rig r;
+  hepworth::block::flat_growth_target spec;
+  spec.g = 0.1;
+  spec.power = 0;
+  spec.iso = 1;
+  std::vector<hepworth::projection_constraint::ptr> cs;
+  std::vector<vec3> x = r.x, v(x.size(), vec3::Zero()), f = v, m(x.size(), vec3::Constant(1e-8));
+  auto pos = hepworth::vec3_block::create(m, x, v, f);
+  std::vector<hepworth::sim_block::ptr> blocks{pos};
+  hepworth::block::init_flat_growth(r.t, x, r.charts, spec, real(1), cs, blocks);
+  hepworth::block::projection_solver solver;
+  solver.set_constraints(cs);
+  solver.step(blocks, real(0.1), real(1), 30);
+  real lo = 1e30, hi = -1e30;
+  for (int e = 0; e < r.t.n_edges; ++e) {
+    const auto ab = hepworth::block::growth_detail::edge_ends(r.t, e);
+    const real g = (x[static_cast<size_t>(ab[1])] - x[static_cast<size_t>(ab[0])]).norm() /
+                       (r.x[static_cast<size_t>(ab[1])] - r.x[static_cast<size_t>(ab[0])]).norm() -
+                   1;
+    lo = std::min(lo, g);
+    hi = std::max(hi, g);
+  }
+  std::printf("  iso growth: edge growth %.4f .. %.4f (asked 0.1)\n", lo, hi);
+  GAUDI_EXPECT(std::abs(lo - 0.1) < 0.01);
+  GAUDI_EXPECT(std::abs(hi - 0.1) < 0.01);
 }
 
 } // namespace test

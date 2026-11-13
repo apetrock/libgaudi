@@ -172,20 +172,20 @@ struct shape_distortion {
   /// The frame minimizer: each principal curvature differenced across its
   /// own lines between neighbours (across-line Dirichlet, frame-start
   /// principal frames). 0 leaves it off.
-  real w_minimizer = 0.5;
+  real w_minimizer = 0.000000000000001;
   /// Surface tension in curvature space: each vertex's mean curvature pulled
   /// to `tension.h0` (`constant`, Young-Laplace: pressure over twice the
   /// tension; outward normals make a sphere's `H` negative), to the
   /// frame-start mean (`mean`, constant-mean-curvature fairing), or to that
   /// mean corrected toward the first frame's volume (`volume`,
   /// `.volume_gain`); trace-free part kept. 0 leaves it off.
-  real w_tension = 0.15;
+  real w_tension = 0.0;
   hepworth::block::tension_target tension{};
   /// Dupin rows: each principal curvature held constant along its own
   /// direction, so curvature lines become circles and the surface is locally
   /// a Dupin cyclide (torus, cylinder, cone and their Moebius images); per
   /// spoke, along the frame-start principal frames. 0 leaves it off.
-  real w_dupin = 0.0;
+  real w_dupin = 0.1;
   /// The Dupin rows' stencil: 0 differences each principal curvature across
   /// one spoke; above 0 traces each curvature line `dupin_reach` mean edge
   /// lengths both ways from every vertex (one mean edge length per step,
@@ -193,7 +193,7 @@ struct shape_distortion {
   /// fit of its normal curvature along the line (0: constant, the line a
   /// circle; 1: linear change allowed). Traced at the frame start and frozen
   /// for the frame.
-  real dupin_reach = 0.0;
+  real dupin_reach = 3.0;
   int dupin_degree = 0;
   /// Directional curvature growth, the shape-space match of position
   /// `stretch`: each frame the normal curvature along `.angle` (radians from
@@ -209,7 +209,7 @@ struct shape_distortion {
                                                .winding = {.ring = 1, .tube = 5, .handedness = 1},
                                                .power = 0.5},
   };
-  real w_growth = 0.0;
+  real w_growth = 0.05;
   /// Holds each vertex ring's Gauss-image area (the solid angle of its
   /// faces' normals) at its frame-start value, the shape-space match of
   /// `area`. It does not resist a uniform tube shrink (the normals do not
@@ -254,12 +254,12 @@ struct position_distortion {
   real w_shear = 0.0;
   /// Cotangent one-ring. Holds the mean-curvature vector baked on first use,
   /// so it resists curvature edits. 0 leaves it off.
-  real w_bend = 1.00;
+  real w_bend = 1.0e-1;
   /// Per-triangle rest area: weight `.w` (0 leaves it off) and `.band`, the
   /// range of its step-start area each face may take freely (`{1, 1}`
   /// conserves it; `{0.5, 1.5}` lets it drift 50% per step before pushing
   /// back).
-  hepworth::block::area_config area{.w = 1.0, .band = {0.9, 1.1}};
+  hepworth::block::area_config area{.w = 1.0e-1, .band = {0.9, 1.1}};
   /// Moebius growth (`mobius_growth.hpp`): a vertex log-scale `u` per frame,
   /// then per edge a length row at `e^{(u_i + u_j) / 2}` times its
   /// frame-start length. `.source` (the frame charts' tensors):
@@ -277,18 +277,33 @@ struct position_distortion {
       .balanced = false,
   };
   real w_mobius = 0.0;
-  /// Flat-direction growth (`flat_growth.hpp`): per edge, extra length along
-  /// a growth axis, `l0 (1 + g w (dhat0 . a)^2)`, `w` from
-  /// `smoothstep(1 - |k_lo| / |k_hi|; lo, hi)` and
-  /// `(|k_hi| / mean |k_hi|)^power` (the curvature decides where), `a` at
-  /// `.angle` radians from the loose principal direction toward the tight one
-  /// (0 the loose direction; `pi / 2` the tight one) or from `.winding` (a
-  /// closed line on the fitted torus, as the shear's). With the loose
-  /// direction the top and bottom of the torus tube lengthen along the hoop
-  /// and ruffle. Fields in order: `.g`, `.lo`, `.hi`, `.power`, `.angle`,
-  /// `.winding`.
-  hepworth::block::flat_growth_target flat_growth{.g = 0.05, .lo = 0.5, .hi = 0.9, .power = 8.0};
-  real w_flat_growth = 10.1;
+  /// Directional growth with a curvature policy (`flat_growth.hpp`): per
+  /// edge, goal length `l0 (1 + g w ((1 - iso) (dhat0 . a)^2 + iso))`.
+  /// Where: `w = flatness^power`, or `(m / mean m)^power` for the other
+  /// measures, `m` the `.measure` of the frame charts' tensor (`power` 0
+  /// grows everywhere alike):
+  ///   flatness        1 - |k_lo| / |k_hi|: 1 where one curvature vanishes
+  ///                   (power 8 on the torus: top 1, outer 0.09, inner 0.004)
+  ///   mean_curvature  |H| (negative power favours flatter regions)
+  ///   anisotropy      |z|
+  ///   k_lo            |k_lo| (negative power favours a flat loose direction)
+  /// Along what: `a` at `.angle` radians from the loose principal direction
+  /// toward the tight one (0 the loose direction, pi / 2 the tight one) or
+  /// from `.winding` (a closed line on the fitted torus, as the shear's).
+  /// `.iso` mixes in direction-free growth (iso 1 with power 0: a plain
+  /// uniform scale growth). With flatness and the loose direction the top
+  /// and bottom of the torus tube lengthen along the hoop and ruffle.
+  /// Fields in order: `.g`, `.measure`, `.power`, `.angle`, `.winding`,
+  /// `.iso`.
+  hepworth::block::flat_growth_target flat_growth{
+      .g = 0.05,                                              // length added per frame at full weight
+      .measure = hepworth::block::growth_measure::mean_curvature,   // flatness, mean_curvature, anisotropy, k_lo
+      .power = -4.0,                                           // 0: uniform; high: only the extremes grow
+      .angle = 0.0,                                           // 0 loose direction, pi / 2 tight direction
+      .winding = {.ring = 0, .tube = 0, .handedness = 1},     // {ring, tube} replaces angle on the torus
+      .iso = 0.0,                                             // 0 directional, 1 direction-free
+  };
+  real w_flat_growth = 0.1;
   /// Intrinsic vector Dirichlet memory of the metric (`dirichlet_memory_gn`,
   /// rest at the frame start; factor the mean edge length). Required by the contact net (tangency
   /// alone leaves slides and scale free).
