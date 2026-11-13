@@ -1,7 +1,7 @@
 #include "gaudi/test/amap_tests.hpp"
 #include "gaudi/test/dupin_circle_tests.hpp"
 #include "gaudi/test/dupin_line_tests.hpp"
-#include "gaudi/test/kite_growth_tests.hpp"
+#include "gaudi/test/growth_tests.hpp"
 #include "gaudi/test/test.hpp"
 
 int main() {

@@ -705,6 +705,60 @@ GAUDI_TEST(contact_net_gn_store_free_frames) {
     GAUDI_EXPECT(p.allFinite());
 }
 
+/// Native traced Dupin lines (`frame_rows`, `dupin_reach` 3, degree 0): a
+/// torus is a Dupin cyclide, so its residual sits far below a noisy torus's.
+GAUDI_TEST(frame_rows_dupin_lines_hold_a_torus) {
+  using namespace contact_net_detail;
+  namespace hb = hepworth::block;
+  auto residual = [&](real noise) {
+    std::vector<vec3> x;
+    tri_list tris;
+    torus(1.0, 0.35, 32, 16, x, tris);
+    std::mt19937 rng(3);
+    std::normal_distribution<real> g(0, 1);
+    const int n = static_cast<int>(x.size());
+    const kusama::stencil_table t = table_of(n, tris);
+    const cnet::topology tp = cnet::build_topology(t);
+    {
+      const std::vector<vec3> N0 = cnet::vertex_normals(tp, x);
+      for (int i = 0; i < n; ++i)
+        x[static_cast<size_t>(i)] += noise * g(rng) * N0[static_cast<size_t>(i)];
+    }
+    const std::vector<vec3> N = cnet::vertex_normals(tp, x);
+    std::vector<vec4> Y(static_cast<size_t>(n)), ym(static_cast<size_t>(n), vec4::Constant(real(1e-8)));
+    for (int i = 0; i < n; ++i) {
+      const vec3 nn = N[static_cast<size_t>(i)];
+      vec3 tt = std::abs(nn[0]) < real(0.9) ? vec3::UnitX() : vec3::UnitY();
+      tt = (tt - nn * nn.dot(tt)).normalized();
+      mat3 R;
+      R.col(0) = tt;
+      R.col(1) = nn.cross(tt);
+      R.col(2) = nn;
+      Y[static_cast<size_t>(i)] = hb::quat_ops::quat_from_matrix(R);
+    }
+    std::vector<vec3> v(n, vec3::Zero()), f = v, m(n, vec3::Constant(real(1e-6)));
+    auto pos = hepworth::vec3_block::create(m, x, v, f);
+    auto fb = hepworth::vec4_block::create(ym, Y);
+    std::vector<vec3> S(static_cast<size_t>(n), vec3::Zero()), sv = S, sf = S,
+        sm(static_cast<size_t>(n), vec3::Constant(real(1e-8)));
+    auto sb = hepworth::vec3_block::create(sm, S, sv, sf);
+    std::vector<hepworth::sim_block::ptr> blocks{pos, fb, sb};
+    hb::frame_rows_config fc;
+    fc.w_dupin = 1;
+    fc.dupin_reach = 3;
+    fc.w_fit = 0;
+    auto rows = hb::frame_rows::create(&t, x, Y, fc, blocks);
+    S = rows->start_tensors();
+    vecX q;
+    for (auto &b : blocks)
+      b->map_to_x(q);
+    return rows->residual_sq(q);
+  };
+  const real clean = residual(0), noisy = residual(0.01);
+  std::printf("  traced Dupin lines: |r|^2 clean torus %.3e, noisy %.3e\n", clean, noisy);
+  GAUDI_EXPECT(clean < real(0.25) * noisy);
+}
+
 } // namespace test
 } // namespace gaudi
 

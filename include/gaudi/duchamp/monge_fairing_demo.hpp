@@ -20,28 +20,21 @@
 #include "gaudi/asawa/shell/operations.hpp"
 #include "gaudi/duchamp/fields.hpp"
 #include "gaudi/geometry_logger.hpp"
-#include "gaudi/hepworth/block/amap_gn.hpp"
 #include "gaudi/hepworth/block/contact_net_gn.hpp"
-#include "gaudi/hepworth/block/dupin_circle.hpp"
-#include "gaudi/hepworth/block/edge_shape_fair.hpp"
 #include "gaudi/hepworth/block/edge_shape_goals.hpp"
-#include "gaudi/hepworth/block/face_element.hpp"
+#include "gaudi/hepworth/block/flat_growth.hpp"
 #include "gaudi/hepworth/block/frame_rows.hpp"
 #include "gaudi/hepworth/block/generic_constraints.hpp"
-#include "gaudi/hepworth/block/kite_growth.hpp"
+#include "gaudi/hepworth/block/mobius_growth.hpp"
 #include "gaudi/hepworth/block/osculating_torus_ring.hpp"
-#include "gaudi/hepworth/block/shape_det_conserve.hpp"
 #include "gaudi/hepworth/block/shape_objectives.hpp"
 #include "gaudi/hepworth/block/shape_projection.hpp"
 #include "gaudi/hepworth/block/shell_constraints_init.hpp"
 #include "gaudi/hepworth/block/solver_composition.hpp"
 #include "gaudi/hepworth/block/weingarten_gn.hpp"
-#include "gaudi/hepworth/blocks/shell_cr_block.hpp"
+#include "gaudi/hepworth/blocks/shell_e3_block.hpp"
 #include "gaudi/hepworth/blocks/shell_position_block.hpp"
-#include "gaudi/hepworth/blocks/shell_shape_block.hpp"
 #include "gaudi/hepworth/nodes/solver_builder.hpp"
-#include "gaudi/kusama/material_direction.hpp"
-#include "gaudi/kusama/stripes.hpp"
 
 namespace gaudi {
 namespace duchamp {
@@ -100,36 +93,16 @@ struct fairing_step {
   hepworth::block::modal_config modal{};
 };
 
-/// Dirichlet bake onto edge tangents (golden field). `lambda` is the guidance
-/// weight. `reseed` starts square one each frame: replace carried tangents,
-/// rewrite vertex frames and shape operators (including pin rest). Off fills
-/// only unmarked zeros and leaves an existing rest. `frame_angle` turns every
-/// stored frame by this many radians once on write. Positive turns the
-/// tangent toward N × T. `w_pin` holds the operator at rest. 0 leaves the pin off.
-struct fairing_dirichlet {
-  real lambda = 200.0;
-  bool reseed = true;
-  real frame_angle = 0.0;
-  real w_pin = 0.0;
-};
-
-/// Vertex frames from the golden edge-tangent weingarten (`vertex_frames`),
-/// drawn after `relax` and before remesh. Red is k0 (larger eigenvalue),
-/// green is k1 (smaller), blue the normal. `edge_tangents` draws the stored
-/// tangents after the split, cyan, through the midpoint.
+/// The frame-start charts the position rows read (`shell_e3_block`), drawn
+/// after `relax` and before remesh: red the tight principal direction, green
+/// the loose one, blue the normal.
 struct fairing_draw {
   bool frames = true;
-  /// Scale red/green by raw `|κ|`: half-length is `nscale * |κ|` for that
-  /// principal value (k0 and k1 each get their own length). Off keeps fixed
-  /// `nscale` on both. Always reads the solved shape-block operator at vertices.
+  /// Scale red/green by raw `|κ|` (half-length `nscale * |κ|`); off keeps
+  /// fixed `nscale` on both.
   bool curvature = false;
-  bool edge_tangents = false;
   /// Axis half-length in mean edge lengths (`nscale = length * mean_edge`).
-  /// With `curvature`, red uses `nscale * |k0|` and green `nscale * |k1|`.
   real length = 1.5;
-  /// Orange: the carried `material` stretch axes, after
-  /// `relax` and before remesh.
-  bool material = false;
 };
 
 /// The curvature solver.
@@ -159,12 +132,9 @@ struct curvature_config {
 };
 
 /// Shape → position: the osculating-torus ring row and the curvature solver.
-/// `one_ring_operators` builds stretch, tilt and axis ratio on the vertex
-/// one-ring. Off keeps stretch on the face.
 struct shape_project {
-  bool one_ring_operators = true;
-  /// Osculating-torus ring row. The store sets both curvatures and the
-  /// principal angle at each foot. The 1-ring and 2-ring fit only the pose,
+  /// Osculating-torus ring row. The frame-start charts set both curvatures
+  /// and the principal angle at each foot. The 1-ring and 2-ring fit only the pose,
   /// the foot's normal offset and the normal's tilt. Every ring point lands
   /// on that posed torus. 0 is off.
   real w_osculating_torus = 0.0;
@@ -216,6 +186,15 @@ struct shape_distortion {
   /// a Dupin cyclide (torus, cylinder, cone and their Moebius images); per
   /// spoke, along the frame-start principal frames. 0 leaves it off.
   real w_dupin = 0.0;
+  /// The Dupin rows' stencil: 0 differences each principal curvature across
+  /// one spoke; above 0 traces each curvature line `dupin_reach` mean edge
+  /// lengths both ways from every vertex (one mean edge length per step,
+  /// about that many hops) and holds the residual of a degree-`dupin_degree`
+  /// fit of its normal curvature along the line (0: constant, the line a
+  /// circle; 1: linear change allowed). Traced at the frame start and frozen
+  /// for the frame.
+  real dupin_reach = 0.0;
+  int dupin_degree = 0;
   /// Directional curvature growth, the shape-space match of position
   /// `stretch`: each frame the normal curvature along `.angle` (radians from
   /// the tight direction toward the other) times `1 + x`, across it times
@@ -245,73 +224,10 @@ struct shape_distortion {
   hepworth::block::stretch_winding twist_winding{};
 };
 
-/// Position-space distortion: stretch, area ratio, area, bend, smooth.
+/// Position-space rows: the classic bend and area, the ring axis ratio and
+/// shear (axes from the frame charts), the two growths, the metric memory and
+/// the centroid pin.
 struct position_distortion {
-  /// Position spokes scaled on the live minor and major tangents. `angle` is
-  /// signed radians from the minor tangent toward the major. 0 leaves `x` on
-  /// the minor and `y` on the major. Those are extra fractions: 0 keeps that
-  /// axis, 0.1 makes it 1.1 times as long, and a negative value shrinks it.
-  /// `power` multiplies each fraction by `|κ|^power` of that axis. 0 leaves
-  /// the fractions. Negative pushes a flat direction more.
-  /// (0, 0) adds no row. Comment a line to drop it. `w_stretch` scales every
-  /// entry. 0 leaves the row off. `shape_project.one_ring_operators` builds
-  /// this on the vertex ring.
-  /// `.winding = {.ring, .tube, .handedness}` (last field) replaces `angle` at
-  /// startup with the angle of a closed line that winds `ring` times around
-  /// the ring and `tube` times around the tube of the fitted torus; {1, 1} is
-  /// the Hopf fiber (Villarceau circle). Both 0 keeps `angle`.
-  /// `.direction` (`hepworth::block::direction_source`) is where the axis
-  /// comes from each step: `angle` off the live principal frame, `material`
-  /// (set from the angle once, then carried with the surface;
-  /// `material_smooth`, `material_follow`), or `stripes` (the angle's
-  /// direction closed by a warm-started stripe pattern; `stripes`).
-  std::vector<hepworth::block::stretch_target> stretch{
-      hepworth::block::stretch_target{
-          .angle = 1.1,
-          .x = 0.2,
-          .y = -0.04,
-          .power = 0.5,
-          .winding = {.ring = 1, .tube = 5, .handedness = 1},
-      },
-      // Along the Hopf fiber, computed from the torus at startup:
-      //   hepworth::block::stretch_target{
-      //       .angle = 0.0, .x = 0.2, .y = -0.04, .power = 0.45,
-      //       .winding = {.ring = 1, .tube = 1, .handedness = 1}},
-      // Two turns around the tube per trip around the ring:
-      //   hepworth::block::stretch_target{
-      //       .angle = 0.0, .x = 0.2, .y = -0.04, .power = 0.45,
-      //       .winding = {.ring = 1, .tube = 2, .handedness = 1}},
-  };
-  real w_stretch = 0.0;
-  /// Ring tilt: each vertex's one-ring, as it was at the start of the frame,
-  /// is turned by `gain * metric * |κ|^power` radians per frame and held
-  /// there, so it never settles (the row also holds the ring's pose against
-  /// other drift). Fields (`hepworth::block::tilt_target`):
-  ///  axis   — k0 (red) or k1 (green) principal tangent.
-  ///  mode   — rigid: tilt the whole ring about the axis. spin: turn it
-  ///           about the normal (counter-clockwise from outside). twist:
-  ///           warp it into a saddle along the axis. bend: curl it across
-  ///           the axis.
-  ///  sign   — rigid only. gradient: tilt toward rising `metric`, scaled by
-  ///           how fast it rises across the axis (no seams). propagate: one
-  ///           axis direction for the whole mesh, seams only around round
-  ///           points.
-  ///  gain   — radians per frame. 0 leaves the entry off.
-  ///  metric — what multiplies `gain`: aniso `(ratio - 1) / (ratio + 1)`,
-  ///           log_ratio, or 1 / ratio.
-  ///  power  — exponent on `|κ|` along the axis; 0 leaves it out.
-  /// `w_tilt` scales every entry; 0 leaves the row off. One-ring operators
-  /// only.
-  std::vector<hepworth::block::tilt_target> tilt{
-      hepworth::block::tilt_target{
-          .axis = hepworth::block::principal_axis::k0,
-          .mode = hepworth::block::tilt_mode::rigid,
-          .gain = 0.1,
-          .metric = hepworth::block::curvature_metric::aniso,
-          .power = 1.0,
-      },
-  };
-  real w_tilt = 0.0;
   /// Locks each one ring's covariant anisotropy: spoke rms along the tight
   /// principal tangent over that along the other held at `ratio` (1 is
   /// round). Area, skew and rotation are free, so it composes with `area`.
@@ -320,109 +236,62 @@ struct position_distortion {
   std::vector<hepworth::block::axis_ratio_target> axis_ratio{
       hepworth::block::axis_ratio_target{.ratio = 0.5},
   };
-  real w_axis_ratio = 0.55;
-  /// Smoothing length, in mean edge lengths, of the vector heat step applied
-  /// to the `material` stretch axes at each step start. 0 only transports
-  /// them. The steps compound (about `sqrt(steps)` times this length), so
-  /// keep it small.
-  real material_smooth = 0.0;
-  /// Fraction each step by which the `material` stretch axes lean back
-  /// toward the direction `angle` reads from the step-start charts, so the
-  /// drive can follow the buckle. 0 is pure material; 1 follows the
-  /// principal frame as `angle` does.
-  real material_follow = 0.0;
-  /// Stripe period, in mean edge lengths, for `stripes` stretch axes
-  /// (`kusama::stripes`): the direction `angle` reads from the step-start
-  /// charts becomes the level lines of the stripe pattern running across it,
-  /// so the axis follows closed curves. The pattern is carried and
-  /// warm-started, so it keeps its winding from step to step. Below about 8
-  /// the mesh cannot resolve it.
-  real stripes = 1.0;
+  real w_axis_ratio = 0.0;
+  /// Shears each one ring every frame: stretch by `1 + shear` along `.angle`
+  /// (radians from the tight principal direction of the frame charts; NaN is
+  /// the 45-degree bisector) and `1 - shear` across, against the frame-start
+  /// ring. Only that ratio is held; area, skew and rotation are free.
+  /// `.winding = {.ring, .tube, .handedness}` sets the angle at startup from
+  /// the fitted torus (on the demo torus the bisector is about {1, 3}).
+  /// Comment a line to drop it. `w_shear` scales every entry; 0 leaves the
+  /// row off.
+  std::vector<hepworth::block::shear_target> shear{
+      hepworth::block::shear_target{
+          .shear = 0.125,
+          .winding = {.ring = 1, .tube = 10, .handedness = 1},
+      },
+  };
+  real w_shear = 0.0;
   /// Cotangent one-ring. Holds the mean-curvature vector baked on first use,
   /// so it resists curvature edits. 0 leaves it off.
-  real w_bend = 1.0e-1;
+  real w_bend = 1.00;
   /// Per-triangle rest area: weight `.w` (0 leaves it off) and `.band`, the
   /// range of its step-start area each face may take freely (`{1, 1}`
   /// conserves it; `{0.5, 1.5}` lets it drift 50% per step before pushing
   /// back).
-  hepworth::block::area_config area{.w = 1.0e-1, .band = {0.9, 1.1}};
-  /// Cotangent Laplacian on positions, target Δx = 0. 0 leaves it off.
-  real w_smooth = 0.0e-1;
-  /// Per-triangle conformal (closest similarity) against the start-of-step
-  /// shape. Scale is free, shear pays. 0 leaves it off.
-  real w_conformal = 0.0;
-  /// As-Moebius-as-possible rows (Vaxman, Mueller, Weber 2015; `amap_gn`):
-  /// per-vertex quaternions `Y_i` and, per edge, `x_k - x_i` against
-  /// `conj(Y_i) q_ik Y_k` (`q_ik` the frame-start edge). Vertex-based and
-  /// Moebius-exact, where `w_conformal` is per face and first order.
-  /// `amap_inversion` damps the inversions (scale variation; the paper's
-  /// `alpha_INV`, relative). 0 leaves it off.
-  real w_amap = 0.0;
-  real amap_inversion = 0.1;
-  /// Position-space Dupin rows (`dupin_circle.hpp`): four consecutive points
-  /// along a curvature line fitted to a planar circle and projected onto it.
-  /// One entry per row set; `.kind` picks where on the circle the points go:
-  ///   closest     the plain Dupin row (closest point on the live circle)
-  ///   slide       advance `.delta` mean edge lengths of arc per frame
-  ///   even        ends kept, inner points at thirds of the arc
-  ///   graded      ends kept, arcs in ratio 1 : `.g` : `.g`^2
-  ///   hyperbolic  Moebius regrading toward / away from the group's middle
-  ///               (`.lambda`), cross ratio kept
-  ///   parabolic   Moebius slide (`.beta`), cross ratio kept
-  ///   loxodromic  the line turned about its middle vertex by `.psi` on its
-  ///               curvature sphere (and scaled by `.lambda`)
-  /// `.family` 0 both, 1 tight, 2 loose. Direction-dependent kinds (slide,
-  /// graded, hyperbolic, parabolic) take their sign from `dupin_circle_ref`;
-  /// without it they
-  /// add no rows. `w_dupin_circle` scales every entry; 0 leaves them off.
-  /// One preset per mode; keep the one you want (several can be on at once).
-  /// Fields must be written in this order: `.kind`, `.family`, `.w`, `.delta`,
-  /// `.g`, `.lambda`, `.beta`, `.psi`, `.max_angle`, `.min_aniso`.
-  std::vector<hepworth::block::dupin_circle_spec> dupin_circle{
-      //hepworth::block::dupin_circle_spec{.kind = hepworth::block::dupin_circle_spec::mode::closest},
-      //hepworth::block::dupin_circle_spec{.kind = hepworth::block::dupin_circle_spec::mode::slide, .delta = 0.2},
-      //hepworth::block::dupin_circle_spec{.kind = hepworth::block::dupin_circle_spec::mode::even},
-      //hepworth::block::dupin_circle_spec{.kind = hepworth::block::dupin_circle_spec::mode::graded, .g = 1.5},
-      hepworth::block::dupin_circle_spec{.kind = hepworth::block::dupin_circle_spec::mode::hyperbolic, .lambda = 2.2},
-      //hepworth::block::dupin_circle_spec{.kind = hepworth::block::dupin_circle_spec::mode::parabolic, .beta = 0.2},
-      //hepworth::block::dupin_circle_spec{.kind = hepworth::block::dupin_circle_spec::mode::loxodromic, .psi = 0.3},
-      // Tight family only (1) or loose only (2), e.g.:
-      //hepworth::block::dupin_circle_spec{.kind = hepworth::block::dupin_circle_spec::mode::loxodromic, .family = 2, .psi = 0.1},
-  };
-  real w_dupin_circle = 0.2;
-  vec3 dupin_circle_ref = vec3::Zero();
-  /// Surface tension in position space: per-triangle area rows with a zero
-  /// target (`area_mode::zero`, the area gradient is the mean-curvature
-  /// normal). 0 leaves it off.
-  real w_tension = 0.0;
-  /// Moebius kites as an edge growth (`kite_growth.hpp`): a vertex log-scale
-  /// `u` per frame, then per edge a length row at `e^{(u_i + u_j) / 2}` times
-  /// its frame-start length (triangles change shape where their vertices'
-  /// `u` differ). `.source`:
-  ///   mean_curvature  u = alpha (-H - level): each element's Moebius map on
-  ///                   its mean-curvature sphere; convex grows, concave
-  ///                   shrinks, saddles (H ~ 0) stay
+  hepworth::block::area_config area{.w = 1.0, .band = {0.9, 1.1}};
+  /// Moebius growth (`mobius_growth.hpp`): a vertex log-scale `u` per frame,
+  /// then per edge a length row at `e^{(u_i + u_j) / 2}` times its
+  /// frame-start length. `.source` (the frame charts' tensors):
+  ///   mean_curvature  u = alpha (-H - level): convex grows, concave shrinks
   ///   anisotropy      u = alpha (|z| - level)
-  ///   tangent         the Dirichlet edge tangents turned by `.angle` (0
-  ///                   along them, trapezoids; pi / 4, kites), times
-  ///                   alpha |z|, through one Poisson solve (always mean zero;
-  ///                   on a torus they circulate and give almost no u)
-  /// `.balanced` removes the mean of a scalar source (redistributes scale, no
-  /// net growth). `.max_u` caps the per-frame `|u|`. `w_kite` scales the
-  /// rows; 0 leaves them off.
-  /// Fields must be written in this order: `.alpha`, `.angle`, `.max_u`,
-  /// `.source`, `.level`, `.balanced`.
-  hepworth::block::kite_target kite{
-      .alpha = 0.1,              // log-scale per unit curvature per frame (tangent: per unit |z|)
-      .angle = real(M_PI) / 4.0, // tangent source only: 0 along them (trapezoids), pi / 4 kites
-      .max_u = 0.1,              // cap on the per-frame |u|
-      .source = hepworth::block::kite_source::anisotropy, // mean_curvature, anisotropy, or tangent
-      .level = 0.0,              // curvature at which nothing changes (scalar sources)
-      .balanced = false,         // remove the mean: no net growth (scalar sources)
+  ///   flat            u = alpha (1 - |k_lo| / |k_hi| - level): grows around
+  ///                   parabolic lines, not at round points
+  /// `.balanced` removes the mean; `.max_u` caps the per-frame `|u|`.
+  /// Fields in order: `.alpha`, `.max_u`, `.source`, `.level`, `.balanced`.
+  hepworth::block::mobius_target mobius{
+      .alpha = 0.1,
+      .max_u = 0.1,
+      .source = hepworth::block::mobius_source::anisotropy,
+      .level = 0.0,
+      .balanced = false,
   };
-  real w_kite = 0.0;
+  real w_mobius = 0.0;
+  /// Flat-direction growth (`flat_growth.hpp`): per edge, extra length along
+  /// a growth axis, `l0 (1 + g w (dhat0 . a)^2)`, `w` from
+  /// `smoothstep(1 - |k_lo| / |k_hi|; lo, hi)` and
+  /// `(|k_hi| / mean |k_hi|)^power` (the curvature decides where), `a` at
+  /// `.angle` radians from the loose principal direction toward the tight one
+  /// (0 the loose direction; `pi / 2` the tight one) or from `.winding` (a
+  /// closed line on the fitted torus, as the shear's). With the loose
+  /// direction the top and bottom of the torus tube lengthen along the hoop
+  /// and ruffle. Fields in order: `.g`, `.lo`, `.hi`, `.power`, `.angle`,
+  /// `.winding`.
+  hepworth::block::flat_growth_target flat_growth{.g = 0.05, .lo = 0.5, .hi = 0.9, .power = 8.0};
+  real w_flat_growth = 10.1;
   /// Intrinsic vector Dirichlet memory of the metric (`dirichlet_memory_gn`,
-  /// rest at the frame start; factor the mean edge length). Contact net only.
+  /// rest at the frame start; factor the mean edge length). Required by the contact net (tangency
+  /// alone leaves slides and scale free).
   real w_memory = 0.5;
   /// Holds the area-weighted centroid where the scene started (translation
   /// only; shape and rotation are free). 0 is off.
@@ -442,7 +311,6 @@ struct monge_fairing_demo_config {
   /// Each live vertex draws a uniform sample in [-1, 1] along its normal.
   real perturb = 0.0;
   fairing_step step{};
-  fairing_dirichlet dirichlet{};
   fairing_draw draw{};
   shape_project project{};
   shape_distortion shape{};
@@ -461,8 +329,8 @@ struct monge_fairing_demo_config {
 
 inline const monge_fairing_demo_config k_monge_fairing_demo_default{};
 
-/// Shell positions and edge tangents. The frame is derived from that field.
-/// No rod, so nothing welds the surface.
+/// The fairing demo on the E3 contact net: positions and one quaternion frame
+/// per vertex, native curvature rows on the frames, and a few position rows.
 class monge_fairing_demo {
 public:
   using ptr = std::shared_ptr<monge_fairing_demo>;
@@ -479,46 +347,23 @@ public:
     std::vector<vec3> &x = asawa::get_vec_data(*__M, 0);
     asawa::center(x);
     perturb_vertices_noise(*__M, x, _cfg.perturb);
-
     _center0 = area_centroid(x);
     _volume_ref = std::numeric_limits<real>::quiet_NaN();
-    _volume_ref = std::numeric_limits<real>::quiet_NaN();
-    set_stretch_angles(x);
-
+    _torus_fit = fit_torus(x, _torus_R, _torus_r);
     asawa::init_vert_datum<vec3>(*__M, vec3::Zero());
-    const size_t n_stretch = _cfg.position.stretch.size();
-    _material_slot.assign(n_stretch, -1);
     // Persistent one-ring medial depth for the torus row's volume term,
     // carried through the remesher (NaN until first seen).
     _torus_depth_slot = asawa::init_vert_datum<real>(*__M, std::numeric_limits<real>::quiet_NaN());
-    _stripe_slot.assign(n_stretch, -1);
-    _stripe_dirs.assign(n_stretch, {});
-    for (size_t t = 0; t < n_stretch; ++t) {
-      const hepworth::block::direction_source d = _cfg.position.stretch[t].direction;
-      if (d == hepworth::block::direction_source::material)
-        _material_slot[t] = asawa::init_vert_datum<vec3>(*__M, vec3::Zero());
-      if (d == hepworth::block::direction_source::stripes)
-        _stripe_slot[t] = asawa::init_vert_datum<vec3>(*__M, vec3::Zero());
-    }
-    _material_seeded.assign(_material_slot.size(), 0);
-    _material_x0.clear();
     auto xs = std::make_shared<shell_vert_positions>(__M, 0);
     auto vs = std::make_shared<shell_vert_velocities>(__M, 1);
     _shell = std::make_shared<hepworth::block::shell_position_block>(__M, xs, vs);
-    _cr = std::make_shared<hepworth::block::shell_cr_block>(__M);
-    _cr->face_site = !_cfg.project.one_ring_operators || _cfg.dirichlet.w_pin > 0.0;
-    const bool net = _cfg.project.curvature.kind == curvature_solver::contact_net;
-    _cr->normal_site = false;
-    _cr->frame_site = net;
-    _cr->shape_site = false;
+    _e3 = std::make_shared<hepworth::block::shell_e3_block>(__M);
+    _e3->frame_mass_scale = _cfg.project.curvature.contact_normal_mass;
     {
       const shape_distortion &s = _cfg.shape;
-      const bool rows = s.w_shape_arap > 0 || s.w_tension > 0 || s.w_minimizer > 0 || s.w_dupin > 0 ||
-                        s.w_growth > 0 || s.w_det > 0 || s.w_grad_traceless > 0 || s.w_twist > 0;
-      _cr->vertex_shape_site = _cr->frame_site && rows;
+      _e3->vertex_shape_site = s.w_shape_arap > 0 || s.w_tension > 0 || s.w_minimizer > 0 || s.w_dupin > 0 ||
+                               s.w_growth > 0 || s.w_det > 0 || s.w_grad_traceless > 0 || s.w_twist > 0;
     }
-    _cr->normal_mass_scale = _cfg.project.curvature.contact_normal_mass;
-    _cr->amap_site = _cfg.position.w_amap > 0.0;
     real C = 3.0;
     const real l0 = asawa::shell::avg_length(*__M, xs->get());
     __surf = asawa::shell::dynamic::create(__M, C * l0, real(1.5) * C * l0, C * real(1.0) * l0);
@@ -528,149 +373,43 @@ public:
         dump_bad_triangles("qc_left", false, 8, _cfg.qc.q_warn);
     });
 
+    namespace hb = hepworth::block;
     _solver_config =
-        hepworth::block::block_solver_builder<hepworth::block::shell_position_block,
-                                              hepworth::block::shell_cr_block>::create()
-            .with_blocks(_shell, _cr)
-            .with_presolve([this](hepworth::block::solver_context &) {
-              if (_cr)
-                hepworth::block::seed_cr_from_dirichlet(*__M, *_cr, _cfg.dirichlet.reseed,
-                                                        _cfg.dirichlet.lambda, _cfg.dirichlet.frame_angle);
-            })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
+        hb::block_solver_builder<hb::shell_position_block, hb::shell_e3_block>::create()
+            .with_blocks(_shell, _e3)
+            .with_recompute([this](hb::solver_context &ctx) {
               if (!(_cfg.position.area.w > 0.0) || !__M->verts_are_dense_packed())
                 return;
               ctx.shell_mesh = __M.get();
-              hepworth::block::init_area(*__M, ctx.constraints, _shell->xs->get(), _cfg.position.area,
-                                         hepworth::block::select_blocks<0>(ctx));
+              hb::init_area(*__M, ctx.constraints, _shell->xs->get(), _cfg.position.area, hb::select_blocks<0>(ctx));
             })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
+            .with_recompute([this](hb::solver_context &ctx) {
               if (!(_cfg.position.w_center > 0.0) || !__M->verts_are_dense_packed())
                 return;
               const std::vector<vec3> &x = _shell->xs->get();
               std::vector<index_t> ids(x.size());
               for (size_t i = 0; i < x.size(); ++i)
                 ids[i] = static_cast<index_t>(i);
-              ctx.constraints.push_back(hepworth::block::centroid_pin::create(
-                  ids, vertex_areas(x), _center0, _cfg.position.w_center,
-                  hepworth::block::select_blocks<0>(ctx)));
+              ctx.constraints.push_back(hb::centroid_pin::create(ids, vertex_areas(x), _center0,
+                                                                 _cfg.position.w_center, hb::select_blocks<0>(ctx)));
             })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
-              if (!(_cfg.position.w_conformal > 0.0) || !__M->verts_are_dense_packed())
-                return;
-              ctx.shell_mesh = __M.get();
-              hepworth::block::init_triangle_conformal(*__M, ctx.constraints, _shell->xs->get(),
-                                                       _cfg.position.w_conformal,
-                                                       hepworth::block::select_blocks<0>(ctx));
-            })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
-              if (!(_cfg.position.w_amap > 0.0) || !_cr || !_cr->amap_dof() || ctx.blocks.empty() ||
-                  !__M->verts_are_dense_packed())
-                return;
-              const std::vector<vec3> &x = _shell->xs->get();
-              if (_cr->table.n_verts != static_cast<int>(x.size()))
-                return;
-              ctx.constraints.push_back(hepworth::block::amap_gn::create(
-                  &_cr->table, x, _cfg.position.w_amap, _cfg.position.amap_inversion,
-                  std::vector<hepworth::sim_block::ptr>{ctx.blocks[0], _cr->amap_dof()}));
-            })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
-              if (!(_cfg.position.w_dupin_circle > 0.0) || !_cr || ctx.blocks.empty() ||
-                  !__M->verts_are_dense_packed())
-                return;
-              const std::vector<vec3> &x = _shell->xs->get();
-              if (_cr->table.n_verts != static_cast<int>(x.size()) || _cr->vertex_frames.size() != x.size())
-                return;
-              std::vector<vec3> ref;
-              if (_cfg.position.dupin_circle_ref.squaredNorm() > 0.0) {
-                ref.assign(x.size(), vec3::Zero());
-                for (size_t i = 0; i < x.size(); ++i) {
-                  const vec3 n = _cr->vertex_frames[i].N.normalized();
-                  ref[i] = _cfg.position.dupin_circle_ref - n * n.dot(_cfg.position.dupin_circle_ref);
-                  if (ref[i].squaredNorm() > 0.0)
-                    ref[i].normalize();
-                }
-              }
-              hepworth::block::init_dupin_circles(_cr->table, x, _cr->vertex_frames, _cfg.position.dupin_circle,
-                                                  _cfg.position.w_dupin_circle, ref.empty() ? nullptr : &ref,
-                                                  ctx.constraints, hepworth::block::select_blocks<0>(ctx));
-            })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
-              if (!(_cfg.position.w_kite > 0.0) || !_cr || ctx.blocks.empty() || !__M->verts_are_dense_packed())
-                return;
-              const std::vector<vec3> &x = _shell->xs->get();
-              if (_cr->table.n_verts != static_cast<int>(x.size()) ||
-                  _cr->shape.size() != static_cast<size_t>(_cr->table.n_edges))
-                return;
-              const std::vector<real> u = hepworth::block::init_kite_growth(
-                  _cr->table, x, _cr->edge_tangent_dirs(x), _cr->carried_edge_tangents(), _cr->shape,
-                  _cfg.position.kite, _cfg.position.w_kite, ctx.constraints,
-                  hepworth::block::select_blocks<0>(ctx));
-              if (!u.empty()) {
-                const auto mm = std::minmax_element(u.begin(), u.end());
-                _kite_u_range = *mm.second - *mm.first;
-              }
-            })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
-              if (!(_cfg.position.w_tension > 0.0) || !__M->verts_are_dense_packed())
-                return;
-              ctx.shell_mesh = __M.get();
-              hepworth::block::init_area(*__M, ctx.constraints, _shell->xs->get(), _cfg.position.w_tension,
-                                         hepworth::block::select_blocks<0>(ctx), hepworth::block::area_mode::zero);
-            })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
-              if (_cfg.position.w_smooth <= 0.0)
-                return;
-              ctx.shell_mesh = __M.get();
-              hepworth::block::init_laplacian(*__M, ctx.constraints, _shell->xs->get(),
-                                              hepworth::block::laplacian_mode::null,
-                                              hepworth::block::laplacian_stencil::cotan,
-                                              _cfg.position.w_smooth, hepworth::block::select_blocks<0>(ctx));
-            })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
-              ctx.shell_mesh = __M.get();
-              if (!__M->verts_are_dense_packed())
-                return;
-              if (_cr && !ctx.blocks.empty()) {
-                hepworth::block::init_shell_caches(*__M, *_cr, ctx.blocks[0], ctx.computes);
-                hepworth::block::init_face_shape_pin(*__M, *_cr, ctx.blocks[0], ctx.constraints,
-                                                     _cfg.dirichlet.w_pin);
-                if (_cfg.project.one_ring_operators) {
-                  std::vector<char> live(static_cast<size_t>(__M->vert_count()), 1);
-                  hepworth::block::init_directed_stretch(
-                      *__M, ctx.constraints, _shell->xs->get(), live, {ctx.blocks[0]},
-                      _cfg.position.w_stretch, stretch_now(), &_cr->vertex_frames,
-                      _cfg.position.w_stretch > 0.0 ? stretch_dirs_now()
-                                                    : std::vector<const std::vector<vec3> *>{});
-                  hepworth::block::init_directed_tilt(*__M, ctx.constraints, _shell->xs->get(), live,
-                                                      {ctx.blocks[0]}, _cfg.position.w_tilt,
-                                                      _cfg.position.tilt, &_cr->vertex_frames);
-                  hepworth::block::init_axis_ratio(*__M, ctx.constraints, _shell->xs->get(), live,
-                                                   {ctx.blocks[0]}, _cfg.position.w_axis_ratio,
-                                                   _cfg.position.axis_ratio, &_cr->vertex_frames);
-                } else {
-                  hepworth::block::init_face_stretch(*__M, *_cr, ctx.blocks[0], ctx.constraints,
-                                                     _cfg.position.w_stretch, stretch_now());
-                }
-              }
-            })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
+            .with_recompute([this](hb::solver_context &ctx) {
               if (!(_cfg.position.w_bend > 0.0) || !__M->verts_are_dense_packed())
                 return;
               ctx.shell_mesh = __M.get();
-              hepworth::block::init_bending(*__M, ctx.constraints, _shell->xs->get(), _cfg.position.w_bend,
-                                            hepworth::block::select_blocks<0>(ctx));
+              hb::init_bending(*__M, ctx.constraints, _shell->xs->get(), _cfg.position.w_bend,
+                               hb::select_blocks<0>(ctx));
             })
-            .with_recompute([this](hepworth::block::solver_context &ctx) { push_curvature(ctx); })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
-              if (!(_cfg.project.w_osculating_torus > 0.0) || !_cr || ctx.blocks.empty() ||
+            .with_recompute([this](hb::solver_context &ctx) { push_position_rows(ctx); })
+            .with_recompute([this](hb::solver_context &ctx) { push_curvature(ctx); })
+            .with_recompute([this](hb::solver_context &ctx) {
+              if (!(_cfg.project.w_osculating_torus > 0.0) || !_e3 || ctx.blocks.empty() ||
                   !__M->verts_are_dense_packed())
                 return;
               ctx.shell_mesh = __M.get();
-              hepworth::block::init_osculating_torus_ring(
-                  *__M, ctx.constraints, _cfg.project.w_osculating_torus, {ctx.blocks[0], _cr->shape_dof()},
-                  &_cr->vertex_frames, &_cr->stars, _cfg.project.osculating_torus,
-                  &asawa::get_real_data(*__M, _torus_depth_slot));
+              hb::init_osculating_torus_ring(*__M, ctx.constraints, _cfg.project.w_osculating_torus, {ctx.blocks[0]},
+                                             &_e3->vertex_frames, nullptr, _cfg.project.osculating_torus,
+                                             &asawa::get_real_data(*__M, _torus_depth_slot));
             })
             .dt(_cfg.step.h)
             .damping(_cfg.step.damping)
@@ -678,85 +417,7 @@ public:
             .build();
   }
 
-  /// The contact net on positions and frames, the metric memory and the
-  /// native frame rows.
-  void push_curvature(hepworth::block::solver_context &ctx) {
-    namespace hb = hepworth::block;
-    const curvature_config &c = _cfg.project.curvature;
-    if (c.kind != curvature_solver::contact_net || !(c.w_coupling > 0.0) || !_cr || !_shell ||
-        ctx.blocks.empty() || !_cr->frame_dof() || !__M->verts_are_dense_packed() || _cr->table.n_edges <= 0)
-      return;
-    const std::vector<vec3> &x = _shell->xs->get();
-    if (static_cast<int>(x.size()) != _cr->table.n_verts || _cr->normal.size() != x.size())
-      return;
-    ctx.shell_mesh = __M.get();
-    hepworth::sim_block::ptr pos = ctx.blocks[0];
-    ctx.constraints.push_back(hb::contact_net_gn::create(&_cr->table, x, _cr->normal, std::vector<vec3>{},
-                                                         c.w_coupling,
-                                                         std::vector<hepworth::sim_block::ptr>{pos, _cr->frame_dof()}));
-    if (_cfg.position.w_memory > 0.0)
-      ctx.constraints.push_back(hb::dirichlet_memory_gn::create(&_cr->table, x, _cfg.position.w_memory,
-                                                                std::vector<hepworth::sim_block::ptr>{pos}));
-    push_frame_rows(ctx);
-  }
-
-  /// `shape_distortion` as native rows on positions and frames (`frame_rows`).
-  void push_frame_rows(hepworth::block::solver_context &ctx) {
-    namespace hb = hepworth::block;
-    const std::vector<vec3> &x = _shell->xs->get();
-    if (!_cr->frame_dof() || _cr->frame.size() != x.size())
-      return;
-    const shape_distortion &s = _cfg.shape;
-    hb::frame_rows_config fc;
-    fc.w_memory = s.w_shape_arap;
-    fc.memory_mean = s.shape_arap_mean;
-    fc.w_tension = s.w_tension;
-    fc.tension = s.tension.kind == hb::tension_target::mode::constant ? hb::frame_tension::constant
-                 : s.tension.kind == hb::tension_target::mode::volume ? hb::frame_tension::volume
-                                                                      : hb::frame_tension::frame_mean;
-    fc.h0 = s.tension.h0;
-    fc.volume_gain = s.tension.volume_gain;
-    if (!std::isfinite(_volume_ref))
-      _volume_ref = enclosed_volume(x);
-    fc.volume_ref = _volume_ref;
-    fc.w_minimizer = s.w_minimizer;
-    fc.w_dupin = s.w_dupin;
-    fc.w_det = s.w_det;
-    fc.w_gradtl = s.w_grad_traceless;
-    fc.w_twist = s.w_twist;
-    fc.tau0 = s.tau0;
-    std::vector<real> growth_angle, twist_angle;
-    if (!s.growth.empty()) {
-      const hb::curvature_growth_target &g = s.growth.front();
-      fc.w_growth = s.w_growth;
-      fc.growth_x = g.x;
-      fc.growth_y = g.y;
-      growth_angle.assign(x.size(), winding_angle(g.winding, g.angle));
-    }
-    twist_angle.assign(x.size(), winding_angle(s.twist_winding, s.twist_angle));
-    const bool any = fc.w_memory > 0 || fc.w_tension > 0 || fc.w_minimizer > 0 || fc.w_dupin > 0 ||
-                     fc.w_growth > 0 || fc.w_det > 0 || fc.w_gradtl > 0 || fc.w_twist > 0;
-    if (!any)
-      return;
-    std::vector<hepworth::sim_block::ptr> blocks{ctx.blocks[0], _cr->frame_dof()};
-    const bool aux = _cr->vertex_shape_dof() && _cr->vertex_shape.size() == x.size();
-    if (aux)
-      blocks.push_back(_cr->vertex_shape_dof());
-    auto rows = hb::frame_rows::create(&_cr->table, x, _cr->frame, fc, blocks, growth_angle, twist_angle);
-    if (aux)
-      _cr->vertex_shape = rows->start_tensors();
-    ctx.constraints.push_back(rows);
-  }
-
-  real enclosed_volume(const std::vector<vec3> &x) const {
-    real v = 0;
-    for (const auto &id : _cr->table.ids)
-      v += x[static_cast<size_t>(id[0])].dot(x[static_cast<size_t>(id[1])].cross(x[static_cast<size_t>(id[2])])) /
-           real(6);
-    return v;
-  }
-
-  /// One solver pass. Does not remesh, so a meridional seam stays a seam.
+  /// One solver pass. Does not remesh.
   void relax() {
     _solver_config.dt = _cfg.step.h;
     _solver_config.damping = _cfg.step.damping;
@@ -776,24 +437,16 @@ public:
     _solver.gn_on_ascent = _cfg.step.gn_refresh_on_ascent
                                ? hepworth::block::projection_solver::ascent_policy::refresh
                                : hepworth::block::projection_solver::ascent_policy::stop;
-    if (_cr)
-      _cr->frame_angle = _cfg.dirichlet.frame_angle;
-
     hepworth::block::run_solver_step(_solver_config, _solver);
-    transport_material_dirs();
+    if (_e3)
+      _e3->commit_gauge();
   }
 
   void step(int frame, bool remesh = true) {
     _frame = frame;
     relax();
     recenter_mesh();
-    transport_tangents();
-    if (_cr)
-      _cr->commit_edge_tangents();
-    // Frames before remesh: projection field from vertex_weingarten.
     draw_solved_frames();
-    measure_material_deflection();
-    draw_material_dirs();
     // A solve that blew up, went non-finite or stopped short of converging
     // dumps its worst triangles even when none is below the threshold.
     const auto &r = _solver.last_step;
@@ -802,15 +455,10 @@ public:
                                           r.dq_last > real(1e-3) * r.q_norm);
     if (!remesh)
       return;
-    //step N times to relax topology
-    // I suspect that bad sheet breakage
-    for (int i = 0; i < 2; ++i) {
-      //ideally step should report whether or not it did anywork...
+    for (int i = 0; i < 2; ++i)
       __surf->step(true);
-    }
     if (!_cfg.qc.enabled)
       dump_bad_triangles("after_remesh");
-    draw_remeshed_edge_tangents();
   }
 
   /// Faces below `q_below` (quality `4 sqrt3 A / sum l^2`; default the
@@ -903,15 +551,15 @@ public:
     return n_bad;
   }
 
-  /// Same charts projection uses: `vertex_frames` with `ok`. No invent path.
+  /// The frame-start charts (red tight, green loose, blue normal).
   void draw_solved_frames() {
-    if (!_cfg.draw.frames || !_cr || !__M || !__M->verts_are_dense_packed())
+    if (!_cfg.draw.frames || !_e3 || !__M || !__M->verts_are_dense_packed())
       return;
     const std::vector<vec3> &x = asawa::const_get_vec_data(*__M, 0);
     const int nV = __M->vert_count();
     if (static_cast<int>(x.size()) < nV)
       return;
-    const std::vector<hepworth::block::vertex_chart> &frames = _cr->vertex_frames;
+    const std::vector<hepworth::block::vertex_chart> &frames = _e3->vertex_frames;
     if (frames.empty())
       return;
     const real l0 = asawa::shell::avg_length(*__M, x);
@@ -960,170 +608,137 @@ public:
     }
   }
 
-  /// World tangents on the edge datum after the split. Cyan, through the
-  /// midpoint. Empty slots are the ones the next seed still has to fill.
-  void draw_remeshed_edge_tangents() {
-    if (!_cfg.draw.edge_tangents || !_cr || !_cr->tangents || !__M)
-      return;
-    const std::vector<vec3> &Tx = _cr->tangents->data();
-    const std::vector<vec3> &px = asawa::const_get_vec_data(*__M, 0);
-    const real nscale =
-        std::max(asawa::shell::avg_length(*__M, px) * _cfg.draw.length * real(0.5), real(1e-3));
-    const vec4 cyan(0, 0.85, 1, 1);
-    for (const index_t c : __M->get_edge_range()) {
-      const int slot = static_cast<int>(c) / 2;
-      if (slot < 0 || static_cast<size_t>(slot) >= Tx.size())
-        continue;
-      vec3 dir = Tx[static_cast<size_t>(slot)];
-      if (!dir.allFinite() || !(dir.squaredNorm() > real(1e-16)))
-        continue;
-      dir.normalize();
-      const int v0 = static_cast<int>(__M->vert(asawa::shell::corner_id(c)));
-      const int v1 = static_cast<int>(__M->vert(__M->other(asawa::shell::corner_id(c))));
-      if (v0 < 0 || v1 < 0 || v0 >= static_cast<int>(px.size()) || v1 >= static_cast<int>(px.size()))
-        continue;
-      const vec3 mid = real(0.5) * (px[static_cast<size_t>(v0)] + px[static_cast<size_t>(v1)]);
-      geometry_logger::line(mid - nscale * dir, mid + nscale * dir, cyan);
-    }
-  }
-
-  /// Edge-tangent polar on the solved positions, then rebuild golden
-  /// `vertex_frames` from that field (same weingarten as projection).
-  void transport_tangents() {
-    if (!_shell || !_shell->dof_vec3())
-      return;
-    vecX q;
-    _shell->dof_vec3()->map_to_x(q);
-    for (const hepworth::cache_compute::ptr &compute : _solver._computes) {
-      const auto tang = std::dynamic_pointer_cast<hepworth::block::tangent_cache_compute>(compute);
-      if (tang)
-        tang->compute(q);
-    }
-    if (!_cr || !__M || _cr->topology.nE <= 0 || static_cast<int>(_cr->u.size()) < 2 * _cr->topology.nE)
-      return;
-    const std::vector<vec3> &x = asawa::const_get_vec_data(*__M, 0);
-    const int n = __M->vert_count();
-    std::vector<vec3> H(static_cast<size_t>(n), vec3::Zero());
-    std::vector<vec3> tang(static_cast<size_t>(n), vec3::Zero());
-    std::vector<vec3> axes(static_cast<size_t>(n), vec3::Zero());
-    std::vector<char> wrote(static_cast<size_t>(n), 0);
-    const std::vector<vec3> *gpar = _cr->g_par.empty() ? nullptr : &_cr->g_par;
-    const std::vector<vec3> *gperp = _cr->g_perp.empty() ? nullptr : &_cr->g_perp;
-    hepworth::block::vertex_weingarten(*__M, x, _cr->u, H, tang, axes, wrote, &_cr->vertex_frames, gpar,
-                                       gperp);
-  }
-
-  /// |ωz| against the tilt |(ωx, ωy)| along one tube of the built-in torus,
-  /// after relax(). ωz is the spin about the frame normal.
-  void report_tube_spin(std::ostream &out) {
-    const real R = 1;
-    const real half = real(0.75) * (real(2) * M_PI / real(48));
-    const std::vector<vec3> &x = asawa::const_get_vec_data(*__M, 0);
-    struct seam_vert {
-      int i = -1;
-      real phi = 0;
-    };
-    std::vector<seam_vert> seam;
-    const int n = __M->vert_count();
-    for (int i = 0; i < n; ++i) {
-      if (i >= static_cast<int>(x.size()))
-        continue;
-      const vec3 &p = x[static_cast<size_t>(i)];
-      const real rho = std::hypot(p.x(), p.y());
-      if (!(rho > real(1e-8)))
-        continue;
-      const real theta = std::atan2(p.y(), p.x());
-      if (std::abs(theta) > half)
-        continue;
-      seam.push_back(seam_vert{i, std::atan2(p.z(), rho - R)});
-    }
-    std::sort(seam.begin(), seam.end(), [](const seam_vert &a, const seam_vert &b) { return a.phi < b.phi; });
-    out << "tube seam vertices=" << seam.size() << "  w_z is spin about N, tilt is hypot(w_x, w_y)\n";
-    int edges = 0;
-    int flips = 0;
-    real spin_abs = 0;
-    real tilt_abs = 0;
-    real prev_z = 0;
-    bool have_prev = false;
-    const int m = static_cast<int>(seam.size());
-    for (int k = 0; k < m; ++k) {
-      const int i = seam[static_cast<size_t>(k)].i;
-      const int j = seam[static_cast<size_t>((k + 1) % m)].i;
-      const auto ring = __M->get_one_ring(asawa::shell::vert_id(i));
-      bool linked = false;
-      for (asawa::shell::VertId vj : ring) {
-        if (static_cast<int>(vj) == j) {
-          linked = true;
-          break;
-        }
-      }
-      if (!linked)
-        continue;
-      vec3 Ti, Bi, Ni, Tj, Bj, Nj;
-      if (!vertex_dirichlet_frame(i, x, Ti, Bi, Ni, nullptr) ||
-          !vertex_dirichlet_frame(j, x, Tj, Bj, Nj, nullptr))
-        continue;
-      const quat qi = hepworth::block::frame_quat_from_axes(Ti, Bi, Ni, quat::Identity());
-      const quat qj = hepworth::block::frame_quat_from_axes(Tj, Bj, Nj, qi);
-      const hepworth::block::frame_body_omega w = hepworth::block::frame_body_omega_of(qi, qj);
-      if (!w.ok)
-        continue;
-      const real tilt = std::hypot(w.x, w.y);
-      out << "  phi " << seam[static_cast<size_t>(k)].phi << " -> "
-          << seam[static_cast<size_t>((k + 1) % m)].phi << "  w_z " << w.z << "  tilt " << tilt << "\n";
-      spin_abs += std::abs(w.z);
-      tilt_abs += tilt;
-      if (have_prev && w.z * prev_z < real(0))
-        ++flips;
-      prev_z = w.z;
-      have_prev = true;
-      ++edges;
-    }
-    out << "edges=" << edges;
-    if (edges > 0) {
-      out << "  mean |w_z|=" << spin_abs / real(edges) << "  mean tilt=" << tilt_abs / real(edges)
-          << "  sign flips=" << flips;
-    }
-    out << "\n";
-  }
-
-  const hepworth::block::shell_cr_block::ptr &cr() const { return _cr; }
+  const hepworth::block::shell_e3_block::ptr &e3() const { return _e3; }
   /// Convergence of the last solver step (iterates, energies, last step).
   const hepworth::block::projection_solver::step_report &last_solve() const { return _solver.last_step; }
-  /// Mean angle (radians, sign free) between the first carried stretch axis
-  /// and the one its target's `angle` reads from the solved charts,
-  /// after the last solve: how far the principal frame turned away from the
-  /// material. NaN without a carried direction.
-  real material_deflection() const { return _material_deflection; }
-
-  /// Mean distance of the curvature-line groups' points to their fitted
-  /// circles, over the mean edge length (`dupin_circle_residual`): 0 when every
-  /// curvature line is a circle (a Dupin cyclide). NaN without charts.
-  real kite_u_range() const { return _kite_u_range; }
-
-  real dupin_circle_residual() const {
-    if (!_cr || !_shell)
-      return std::numeric_limits<real>::quiet_NaN();
-    const std::vector<vec3> &x = _shell->xs->get();
-    if (_cr->table.n_verts != static_cast<int>(x.size()) || _cr->vertex_frames.size() != x.size())
-      return std::numeric_limits<real>::quiet_NaN();
-    return hepworth::block::dupin_circle_residual(_cr->table, x, _cr->vertex_frames);
-  }
-
-
-  /// The last `stripes` solve: energy per unit mass (`lambda`),
-  /// faces its read-out skipped, and whether it started cold.
-  struct stripe_report {
-    real lambda = std::numeric_limits<real>::quiet_NaN();
-    int skipped = 0;
-    bool cold = false;
-  };
-  const stripe_report &last_stripes() const { return _stripe_report; }
+  /// Range of the last frame's Moebius log-scale `u` (0 when off).
+  real mobius_u_range() const { return _mobius_u_range; }
 
   asawa::shell::shell::ptr __M;
   asawa::shell::dynamic::ptr __surf;
 
 private:
+  /// The ring axis ratio and shear, and the two growths, on the frame charts.
+  void push_position_rows(hepworth::block::solver_context &ctx) {
+    namespace hb = hepworth::block;
+    if (!_e3 || ctx.blocks.empty() || !__M->verts_are_dense_packed())
+      return;
+    const std::vector<vec3> &x = _shell->xs->get();
+    if (_e3->vertex_frames.size() != x.size() || _e3->table.n_verts != static_cast<int>(x.size()))
+      return;
+    ctx.shell_mesh = __M.get();
+    const position_distortion &p = _cfg.position;
+    const std::vector<char> live(x.size(), 1);
+    hb::init_axis_ratio(*__M, ctx.constraints, x, live, {ctx.blocks[0]}, p.w_axis_ratio, p.axis_ratio,
+                        &_e3->vertex_frames);
+    hb::init_shear(*__M, ctx.constraints, x, live, {ctx.blocks[0]}, p.w_shear, shear_now(), &_e3->vertex_frames);
+    _mobius_u_range = 0;
+    if (p.w_mobius > 0.0) {
+      const std::vector<real> u = hb::init_mobius_growth(_e3->table, x, _e3->vertex_frames, p.mobius, p.w_mobius,
+                                                         ctx.constraints, hb::select_blocks<0>(ctx));
+      if (!u.empty()) {
+        const auto mm = std::minmax_element(u.begin(), u.end());
+        _mobius_u_range = *mm.second - *mm.first;
+      }
+    }
+    hb::flat_growth_target fg = p.flat_growth;
+    // A winding gives the angle from the tight direction; the growth axis is
+    // measured from the loose one.
+    if (_torus_fit && (fg.winding.ring != 0 || fg.winding.tube != 0))
+      fg.angle = real(0.5 * M_PI) - winding_angle(fg.winding, real(0));
+    hb::init_flat_growth(_e3->table, x, _e3->vertex_frames, fg, p.w_flat_growth, ctx.constraints,
+                         hb::select_blocks<0>(ctx));
+  }
+
+  /// The contact net on positions and frames, the metric memory and the
+  /// native frame rows.
+  void push_curvature(hepworth::block::solver_context &ctx) {
+    namespace hb = hepworth::block;
+    const curvature_config &c = _cfg.project.curvature;
+    if (c.kind != curvature_solver::contact_net || !(c.w_coupling > 0.0) || !_e3 || !_shell ||
+        ctx.blocks.empty() || !_e3->frame_dof() || !__M->verts_are_dense_packed() || _e3->table.n_edges <= 0)
+      return;
+    const std::vector<vec3> &x = _shell->xs->get();
+    if (static_cast<int>(x.size()) != _e3->table.n_verts || _e3->normal.size() != x.size())
+      return;
+    ctx.shell_mesh = __M.get();
+    hepworth::sim_block::ptr pos = ctx.blocks[0];
+    ctx.constraints.push_back(hb::contact_net_gn::create(&_e3->table, x, _e3->normal, std::vector<vec3>{},
+                                                         c.w_coupling,
+                                                         std::vector<hepworth::sim_block::ptr>{pos, _e3->frame_dof()}));
+    if (_cfg.position.w_memory > 0.0)
+      ctx.constraints.push_back(hb::dirichlet_memory_gn::create(&_e3->table, x, _cfg.position.w_memory,
+                                                                std::vector<hepworth::sim_block::ptr>{pos}));
+    push_frame_rows(ctx);
+  }
+
+  /// `shape_distortion` as native rows on positions and frames (`frame_rows`).
+  void push_frame_rows(hepworth::block::solver_context &ctx) {
+    namespace hb = hepworth::block;
+    const std::vector<vec3> &x = _shell->xs->get();
+    if (!_e3->frame_dof() || _e3->frame.size() != x.size())
+      return;
+    const shape_distortion &s = _cfg.shape;
+    hb::frame_rows_config fc;
+    fc.w_memory = s.w_shape_arap;
+    fc.memory_mean = s.shape_arap_mean;
+    fc.w_tension = s.w_tension;
+    fc.tension = s.tension.kind == hb::tension_target::mode::constant ? hb::frame_tension::constant
+                 : s.tension.kind == hb::tension_target::mode::volume ? hb::frame_tension::volume
+                                                                      : hb::frame_tension::frame_mean;
+    fc.h0 = s.tension.h0;
+    fc.volume_gain = s.tension.volume_gain;
+    if (!std::isfinite(_volume_ref))
+      _volume_ref = enclosed_volume(x);
+    fc.volume_ref = _volume_ref;
+    fc.w_minimizer = s.w_minimizer;
+    fc.w_dupin = s.w_dupin;
+    fc.dupin_reach = s.dupin_reach;
+    fc.dupin_degree = s.dupin_degree;
+    fc.w_det = s.w_det;
+    fc.w_gradtl = s.w_grad_traceless;
+    fc.w_twist = s.w_twist;
+    fc.tau0 = s.tau0;
+    std::vector<real> growth_angle, twist_angle;
+    if (!s.growth.empty()) {
+      const hb::curvature_growth_target &g = s.growth.front();
+      fc.w_growth = s.w_growth;
+      fc.growth_x = g.x;
+      fc.growth_y = g.y;
+      growth_angle.assign(x.size(), winding_angle(g.winding, g.angle));
+    }
+    twist_angle.assign(x.size(), winding_angle(s.twist_winding, s.twist_angle));
+    const bool any = fc.w_memory > 0 || fc.w_tension > 0 || fc.w_minimizer > 0 || fc.w_dupin > 0 ||
+                     fc.w_growth > 0 || fc.w_det > 0 || fc.w_gradtl > 0 || fc.w_twist > 0;
+    if (!any)
+      return;
+    std::vector<hepworth::sim_block::ptr> blocks{ctx.blocks[0], _e3->frame_dof()};
+    const bool aux = _e3->vertex_shape_dof() && _e3->vertex_shape.size() == x.size();
+    if (aux)
+      blocks.push_back(_e3->vertex_shape_dof());
+    auto rows = hb::frame_rows::create(&_e3->table, x, _e3->frame, fc, blocks, growth_angle, twist_angle);
+    if (aux)
+      _e3->vertex_shape = rows->start_tensors();
+    ctx.constraints.push_back(rows);
+  }
+
+  real enclosed_volume(const std::vector<vec3> &x) const {
+    real v = 0;
+    for (const auto &id : _e3->table.ids)
+      v += x[static_cast<size_t>(id[0])].dot(x[static_cast<size_t>(id[1])].cross(x[static_cast<size_t>(id[2])])) /
+           real(6);
+    return v;
+  }
+
+  /// The config's shear list with each `winding` entry's angle set from the
+  /// startup torus.
+  std::vector<hepworth::block::shear_target> shear_now() const {
+    std::vector<hepworth::block::shear_target> out = _cfg.position.shear;
+    for (hepworth::block::shear_target &s : out)
+      s.angle = winding_angle(s.winding, s.angle);
+    return out;
+  }
+
   /// One normal wave. Normals are taken before any vertex moves.
   static void perturb_vertices(asawa::shell::shell &M, std::vector<vec3> &x, real amp_edges) {
     if (!(std::abs(amp_edges) > real(0)))
@@ -1248,50 +863,6 @@ private:
     return asawa::shell::load_obj(path);
   }
 
-  /// Fan normal and the average incident edge vector. `lock` keeps the red
-  /// axis from flipping between draws.
-  bool vertex_dirichlet_frame(int i, const std::vector<vec3> &x, vec3 &T, vec3 &B, vec3 &N,
-                              const vec3 *lock) const {
-    if (!_cr || !__M)
-      return false;
-    const int nE = _cr->count();
-    const std::vector<real> &coeff = _cr->u;
-    if (nE <= 0 || static_cast<int>(coeff.size()) < 2 * nE)
-      return false;
-    const asawa::shell::VertId vi = asawa::shell::vert_id(i);
-    if (static_cast<int>(__M->vbegin(vi)) < 0)
-      return false;
-    N = asawa::shell::vert_normal(*__M, vi, x);
-    if (!N.allFinite() || !(N.squaredNorm() > real(1e-12)))
-      return false;
-    N.normalize();
-    const std::vector<int> &slot = _cr->topology.slot_map;
-    T = vec3::Zero();
-    __M->const_for_each_vertex(vi, [&](asawa::shell::CornerId ci, const asawa::shell::shell &S) {
-      const int s = static_cast<int>(ci) / 2;
-      if (s < 0 || s >= static_cast<int>(slot.size()))
-        return;
-      const int e = slot[static_cast<size_t>(s)];
-      if (e < 0 || e >= nE)
-        return;
-      vec3 W = kusama::edge_guidance_vector_3d(S, ci, x, N, coeff[static_cast<size_t>(e)],
-                                               coeff[static_cast<size_t>(e + nE)]);
-      W -= N * W.dot(N);
-      T += W;
-    });
-    if (!T.allFinite() || !(T.squaredNorm() > real(1e-16)))
-      return false;
-    if (lock && lock->allFinite() && T.dot(*lock) < real(0))
-      T = -T;
-    T.normalize();
-    B = N.cross(T);
-    if (!(B.squaredNorm() > real(1e-24)))
-      return false;
-    B.normalize();
-    T = B.cross(N);
-    return T.allFinite() && B.allFinite();
-  }
-
   /// Per-vertex dual areas (a third of each incident face) and their
   /// area-weighted centroid.
   std::vector<real> vertex_areas(const std::vector<vec3> &x) const {
@@ -1375,20 +946,6 @@ private:
     return r > real(0) && r < R;
   }
 
-  /// Fits the startup torus once (`_torus_R`, `_torus_r`) for the stretch
-  /// windings and logs the angles it gives.
-  void set_stretch_angles(const std::vector<vec3> &x) {
-    _torus_fit = fit_torus(x, _torus_R, _torus_r);
-    auto log = [&](const char *what, const hepworth::block::stretch_winding &w, real angle) {
-      if (w.ring != 0 || w.tube != 0)
-        std::cout << "[monge] " << what << " winding (" << w.ring << ", " << w.tube
-                  << "): " << (_torus_fit ? "torus R " : "no torus fit, R ") << _torus_R << " r " << _torus_r
-                  << ", angle " << angle << std::endl;
-    };
-    for (const hepworth::block::stretch_target &s : stretch_now())
-      log("stretch", s.winding, s.angle);
-  }
-
   /// The angle from the tube circle (the tight tangent) of a line winding
   /// `w` on the startup torus, `handedness * atan2(ring * sqrt(R^2 - r^2),
   /// tube * r)`; `fallback` without a fit or windings.
@@ -1398,195 +955,22 @@ private:
     return hepworth::block::loxodrome_angle(w, _torus_R, _torus_r, fallback);
   }
 
-  /// The config's stretch list with each `winding` entry's angle set from the
-  /// startup torus.
-  std::vector<hepworth::block::stretch_target> stretch_now() const {
-    std::vector<hepworth::block::stretch_target> out = _cfg.position.stretch;
-    for (hepworth::block::stretch_target &s : out)
-      s.angle = winding_angle(s.winding, s.angle);
-    return out;
-  }
 
-  /// Per stretch target its axis field for the step (`direction`), null for
-  /// `angle`. A `material` target carries its field: seeded from the
-  /// step-start charts at the target's angle and oriented, later leaned
-  /// toward those charts by `material_follow` and smoothed, with the
-  /// step-start positions kept for `transport_material_dirs`. A `stripes`
-  /// target takes the oriented chart directions and closes them with its
-  /// stripe pattern.
-  std::vector<const std::vector<vec3> *> stretch_dirs_now() {
-    std::vector<const std::vector<vec3> *> out(_material_slot.size(), nullptr);
-    if (!_cr || !_shell || !__M->verts_are_dense_packed())
-      return out;
-    const std::vector<vec3> &x = _shell->xs->get();
-    const std::vector<hepworth::block::stretch_target> targets = stretch_now();
-    const real t = std::pow(_cfg.position.material_smooth * asawa::shell::avg_length(*__M, x), 2);
-    for (size_t k = 0; k < _material_slot.size() && k < targets.size(); ++k) {
-      if (_stripe_slot[k] >= 0 && _cfg.position.stripes > 0.0) {
-        std::vector<vec3> &u = _stripe_dirs[k];
-        u = hepworth::block::chart_directions(_cr->vertex_frames, targets[k].angle);
-        u.resize(x.size(), vec3::Zero());
-        kusama::material_direction::orient(*__M, u);
-        close_with_stripes(u, _stripe_slot[k], x);
-        out[k] = &u;
-        continue;
-      }
-      if (_material_slot[k] < 0)
-        continue;
-      std::vector<vec3> &u = asawa::get_vec_data(*__M, _material_slot[k]);
-      if (u.size() != x.size())
-        continue;
-      if (!_material_seeded[k]) {
-        u = hepworth::block::chart_directions(_cr->vertex_frames, targets[k].angle);
-        u.resize(x.size(), vec3::Zero());
-        kusama::material_direction::orient(*__M, u);
-        _material_seeded[k] = 1;
-      } else if (_cfg.position.material_follow > 0.0) {
-        kusama::material_direction::lean_toward(
-            u, hepworth::block::chart_directions(_cr->vertex_frames, targets[k].angle),
-            _cfg.position.material_follow);
-      }
-      kusama::material_direction::smooth(*__M, x, u, t);
-      out[k] = &u;
-      _material_x0 = x;
-    }
-    return out;
-  }
-
-  /// Replaces `u` by the level lines of the stripe pattern across it
-  /// (`stripes`), warm-started from the pattern in vertex datum `slot`
-  /// (`(Re, Im, 0)`; all zero is a cold start). Reversing `u` conjugates the
-  /// pattern, so the warm start is the carried pattern or its conjugate,
-  /// whichever has the lower energy. Vertices the pattern cannot read (zeros,
-  /// field flips) keep `u`; a failed solve keeps all of it and drops the
-  /// pattern.
-  void close_with_stripes(std::vector<vec3> &u, index_t slot, const std::vector<vec3> &x) {
-    if (slot < 0)
-      return;
-    const size_t n = x.size();
-    std::vector<vec3> across(n, vec3::Zero());
-    for (size_t i = 0; i < n && i < u.size(); ++i) {
-      const vec3 nrm = kusama::material_direction::unit_vert_normal(*__M, static_cast<int>(i), x);
-      const vec3 c = nrm.cross(u[i]);
-      if (c.squaredNorm() > real(1e-24))
-        across[i] = c.normalized();
-    }
-    const real nu = real(2) * real(M_PI) / (_cfg.position.stripes * asawa::shell::avg_length(*__M, x));
-    const kusama::stripes::system S = kusama::stripes::build(*__M, x, across, nu);
-    std::vector<vec3> &P = asawa::get_vec_data(*__M, slot);
-    P.resize(n, vec3::Zero());
-    vecX psi(2 * static_cast<int>(n));
-    bool cold = true;
-    for (size_t i = 0; i < n; ++i) {
-      psi[2 * i] = P[i].x();
-      psi[2 * i + 1] = P[i].y();
-      cold &= !(P[i].squaredNorm() > real(0));
-    }
-    if (cold) {
-      psi.resize(0);
-    } else {
-      vecX conj = psi;
-      for (size_t i = 0; i < n; ++i)
-        conj[2 * i + 1] = -conj[2 * i + 1];
-      if (kusama::stripes::rayleigh(S, conj) < kusama::stripes::rayleigh(S, psi))
-        psi = conj;
-    }
-    _stripe_report = {};
-    _stripe_report.cold = cold;
-    _stripe_report.lambda = kusama::stripes::solve(S, psi, cold ? 40 : 2);
-    if (!std::isfinite(_stripe_report.lambda)) {
-      std::fill(P.begin(), P.end(), vec3::Zero());
-      return;
-    }
-    for (size_t i = 0; i < n; ++i)
-      P[i] = vec3(psi[2 * i], psi[2 * i + 1], 0);
-    const std::vector<vec3> d = kusama::stripes::level_directions(*__M, x, S, psi, &_stripe_report.skipped);
-    for (size_t i = 0; i < n && i < u.size(); ++i)
-      if (d[i].squaredNorm() > real(0))
-        u[i] = d[i].dot(u[i]) < real(0) ? vec3(-d[i]) : d[i];
-  }
-
-  /// Turns the carried directions with the solve (`stretch_dirs_now` kept
-  /// the step-start positions; same topology until the remesh).
-  void transport_material_dirs() {
-    if (_material_x0.empty() || !__M)
-      return;
-    const std::vector<vec3> &x = asawa::const_get_vec_data(*__M, 0);
-    if (x.size() == _material_x0.size())
-      for (const index_t slot : _material_slot)
-        if (slot >= 0)
-          kusama::material_direction::transport(*__M, _material_x0, x, asawa::get_vec_data(*__M, slot));
-    _material_x0.clear();
-  }
-
-  /// `material_deflection` after the solve, before remesh.
-  void measure_material_deflection() {
-    _material_deflection = std::numeric_limits<real>::quiet_NaN();
-    if (!_cr || !__M)
-      return;
-    const std::vector<hepworth::block::stretch_target> targets = stretch_now();
-    for (size_t k = 0; k < _material_slot.size() && k < targets.size(); ++k) {
-      if (_material_slot[k] < 0)
-        continue;
-      const std::vector<vec3> &u = asawa::get_vec_data(*__M, _material_slot[k]);
-      const std::vector<vec3> c = hepworth::block::chart_directions(_cr->vertex_frames, targets[k].angle);
-      real sum = 0;
-      int n = 0;
-      for (size_t i = 0; i < u.size() && i < c.size(); ++i) {
-        if (!(u[i].squaredNorm() > real(0)) || !(c[i].squaredNorm() > real(0)))
-          continue;
-        sum += std::acos(std::clamp(std::abs(u[i].dot(c[i])), real(0), real(1)));
-        ++n;
-      }
-      if (n > 0)
-        _material_deflection = sum / real(n);
-      return;
-    }
-  }
-
-  /// Orange segments along each carried stretch axis
-  /// (`fairing_draw::material`), through the vertex.
-  void draw_material_dirs() {
-    if (!_cfg.draw.material || !__M)
-      return;
-    const std::vector<vec3> &x = asawa::const_get_vec_data(*__M, 0);
-    const real half = std::max(asawa::shell::avg_length(*__M, x) * _cfg.draw.length, real(1e-3));
-    const vec4 orange(1, 0.55, 0, 1);
-    for (const index_t slot : _material_slot) {
-      if (slot < 0)
-        continue;
-      const std::vector<vec3> &u = asawa::get_vec_data(*__M, slot);
-      for (size_t i = 0; i < x.size() && i < u.size(); ++i)
-        if (u[i].allFinite() && u[i].squaredNorm() > real(0))
-          geometry_logger::line(x[i] - half * u[i], x[i] + half * u[i], orange);
-    }
-  }
 
   monge_fairing_demo_config _cfg;
   /// First frame's enclosed volume (the `volume` tension's reference).
   real _volume_ref = std::numeric_limits<real>::quiet_NaN();
   /// Vertex datum holding the torus row's persistent one-ring medial depth.
   index_t _torus_depth_slot = -1;
-  /// Vertex datum per stretch target with `material` (-1 without), its
-  /// seeded flag, and the step-start positions while a solve is open.
-  std::vector<index_t> _material_slot;
-  /// Vertex datum per `stripes` stretch target holding its stripe pattern
-  /// (-1 without), and its closed axes for the step.
-  std::vector<index_t> _stripe_slot;
-  std::vector<std::vector<vec3>> _stripe_dirs;
-  stripe_report _stripe_report;
-  std::vector<char> _material_seeded;
-  std::vector<vec3> _material_x0;
-  real _material_deflection = std::numeric_limits<real>::quiet_NaN();
-  /// Range of the last frame's kite log-scale `u` (0 when off).
-  real _kite_u_range = 0;
+  /// Range of the last frame's Moebius log-scale `u` (0 when off).
+  real _mobius_u_range = 0;
   bool _torus_fit = false;
   real _torus_R = 0, _torus_r = 0;
   vec3 _center0 = vec3::Zero();
   int _frame = 0;
   hepworth::block::shell_position_block::ptr _shell;
-  hepworth::block::shell_cr_block::ptr _cr;
-  hepworth::block::block_solver_config<hepworth::block::shell_position_block, hepworth::block::shell_cr_block>
+  hepworth::block::shell_e3_block::ptr _e3;
+  hepworth::block::block_solver_config<hepworth::block::shell_position_block, hepworth::block::shell_e3_block>
       _solver_config;
   hepworth::block::projection_solver _solver;
 };

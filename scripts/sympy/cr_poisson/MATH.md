@@ -2707,10 +2707,42 @@ three frames:
 | growth 0.3 + det 2 | 0.191 | 0.156 (0.182 with the store) | 2.3 |
 
 Kite inflates as before (area 7.33 -> 7.56); `osculating_torus` reads the
-frame-start charts (no store) and holds at idle. Not yet native:
-`dupin_line` (the traced-line Dupin rows; the per-spoke Dupin rows are), the
-growth `power`, and the frames as the position rows' principal directions
-(they still read the CR charts).
+frame-start charts (no store) and holds at idle.
+
+**CR field out of the demo (2026-11-13).** The demo now runs on
+`shell_e3_block`: frames reseeded each frame from the area normals with the
+tangent from a carried gauge datum (the solved frames' `T`, kept through
+remeshing), optional vertex tensors, and frame-start charts (`T, B, N` from
+`Y`, `h` the vertex fit). The Dirichlet edge-tangent field, its seeding, the
+CR caches, the face site and the edge store reading are gone from the demo
+(`shell_cr_block` stays for the library tests and `engman`). Position rows
+kept: bend, area, `axis_ratio`, the restored shear (axes from the charts),
+memory, centroid; stretch, tilt, `dupin_circle`, AMAP, conformal, smooth and
+the position tension removed. With the shear back the default torus no
+longer shrinks (tube 0.248 -> 0.261 in three frames, 1.7 to 2.3 s a frame;
+idle 0.3 s, exact fixed point).
+
+Growth split in two: **Möbius growth** (`mobius_growth.hpp`, kite's edge
+rows `e^{(u_i + u_j)/2}`, sources from the charts: `mean_curvature`,
+`anisotropy`, and `flat`, `1 - |k_lo| / |k_hi|`; the tangent source and its
+Poisson solve removed) and **flat-direction growth** (`flat_growth.hpp`,
+edges `l0 (1 + g w (dhat0 . a)^2)` along the loose principal direction,
+`w = smoothstep(1 - |k_lo| / |k_hi|) (|k_hi| / mean)^power`). On the probe
+torus, flat growth `g = 0.1` raises the area 7.33 -> 8.79 and the roughness
+0.16 -> 0.44 in three frames: the tube's top and bottom ruffle along the
+hoop. The Möbius `flat` source grows smoothly (area 7.33 -> 7.52).
+
+**Native traced Dupin lines** (`frame_rows`, `dupin_reach` in mean edge
+lengths, `dupin_degree`): from each face centroid both principal lines are
+walked one mean edge length per step, snapped to the reached face's
+principal direction from its corners' tensors, at the frame start; samples
+(face, barycentric weights, direction, arc length, per-corner projection
+weights) are frozen, so the rows (residual after a degree-`d` fit in arc
+length) are linear in the vertex tensors. Torus against a noisy torus:
+`|r|^2` 0.086 against 1.58. On the probe reach 3 costs about 8 s a frame
+(each line couples a dozen or more tensors). The minimizer stays a
+shape-space row: the contact net carries it to the positions in the same
+solve, so a separate position-space ring row would duplicate it.
 
 **Advection.** Semi-Lagrangian on the vertex `(H, z)` field: RK2 back trace
 walking across faces (straightest path), barycentric sampling of the

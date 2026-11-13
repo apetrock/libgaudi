@@ -34,11 +34,6 @@ target_link_libraries(monge_fairing_smoke PRIVATE gaudi::core gaudi::headless)
 gaudi_msvc_disable_parallel_cl_writers(monge_fairing_smoke)
 add_test(NAME monge_fairing_smoke COMMAND monge_fairing_smoke)
 
-add_executable(frame_spin_probe frame_spin_probe.cpp)
-target_include_directories(frame_spin_probe PRIVATE ${CMAKE_SOURCE_DIR}/ext/liblombardi/include)
-target_link_libraries(frame_spin_probe PRIVATE gaudi::core gaudi::headless)
-gaudi_msvc_disable_parallel_cl_writers(frame_spin_probe)
-
 add_executable(osculating_torus_probe osculating_torus_probe.cpp)
 target_include_directories(osculating_torus_probe PRIVATE ${CMAKE_SOURCE_DIR}/ext/liblombardi/include)
 target_link_libraries(osculating_torus_probe PRIVATE gaudi::core gaudi::headless)

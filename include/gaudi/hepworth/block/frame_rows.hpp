@@ -24,7 +24,15 @@
 /// - minimizer: per directed spoke, `k1` and `k2` (along the frame start's
 ///   principal directions of the spoke's foot) differenced across their own
 ///   lines (across-line Dirichlet);
-/// - dupin: the same differences along their lines;
+/// - dupin: the same differences along their lines; with `dupin_reach > 0`
+///   (and the vertex-tensor block) instead the traced-line form: from each
+///   face's centroid both principal lines are walked `dupin_reach` mean edge
+///   lengths each way (one mean edge length per step, snapped to the reached
+///   face's principal direction), each sample's normal curvature is the
+///   barycentric blend of its face's vertex tensors along the line, and the
+///   rows hold the residual of a degree-`dupin_degree` fit in arc length.
+///   Traced at construction and frozen (samples, weights, projections), so
+///   the rows are linear in the tensors;
 /// - growth: the normal curvature along `growth_dir` times `1 + x`, across it
 ///   times `1 + y`, the torsion along it held;
 /// - det: each vertex's sum of its faces' normal solid angles (the Gauss
@@ -45,6 +53,7 @@
 
 #include "gaudi/hepworth/block/block_constraint.hpp"
 #include "gaudi/hepworth/block/quat_util.hpp"
+#include "gaudi/hepworth/block/surface_walk.hpp"
 #include "gaudi/kusama/contact_net.hpp"
 #include "gaudi/kusama/stencil_table.hpp"
 
@@ -77,6 +86,10 @@ struct frame_rows_config {
   real volume_ref = std::numeric_limits<real>::quiet_NaN();
   real w_minimizer = 0;
   real w_dupin = 0;
+  /// Traced-line Dupin rows: reach each way in mean edge lengths (0: the
+  /// per-spoke rows) and the fit degree along the line.
+  real dupin_reach = 0;
+  int dupin_degree = 0;
   real w_growth = 0;
   real growth_x = 0, growth_y = 0;
   real w_det = 0;
@@ -129,6 +142,36 @@ inline real relative_turn(const frame3 &fi, const frame3 &fj) {
 
 inline real solid_angle(const vec3 &a, const vec3 &b, const vec3 &c) {
   return real(2) * std::atan2(a.dot(b.cross(c)), real(1) + a.dot(b) + b.dot(c) + c.dot(a));
+}
+
+/// `S_v = (s11, s12, s22)` in `F[v]`'s `(T, B)`: the least-squares fit of the
+/// spokes' Rodrigues normal curvature and twist from positions and frames.
+inline vec3 fit_vertex_tensor(const kusama::contact_net::topology &tp, int v, const std::vector<vec3> &x,
+                              const std::vector<frame3> &F) {
+  Eigen::Matrix<real, 3, 3> M = Eigen::Matrix<real, 3, 3>::Identity() * real(1e-12);
+  vec3 rhs = vec3::Zero();
+  const size_t vi = static_cast<size_t>(v);
+  for (int s = tp.spoke_begin[vi]; s < tp.spoke_begin[vi + 1]; ++s) {
+    const size_t j = static_cast<size_t>(tp.spokes[static_cast<size_t>(s)][1]);
+    const vec3 dx = x[j] - x[vi], dn = F[j].N - F[vi].N;
+    const vec3 nb = (F[vi].N + F[j].N).normalized();
+    const vec3 dxt = dx - nb * dx.dot(nb);
+    const real L = dxt.norm();
+    if (!(L > real(0)))
+      continue;
+    const vec3 t = dxt / L, b = nb.cross(t);
+    const real k = -dn.dot(t) / L, tau = -dn.dot(b) / L;
+    real a = t.dot(F[vi].T), c = t.dot(F[vi].B);
+    const real r = std::sqrt(a * a + c * c);
+    if (!(r > real(0)))
+      continue;
+    a /= r;
+    c /= r;
+    const vec3 r1(a * a, 2 * a * c, c * c), r2(-a * c, a * a - c * c, a * c);
+    M += r1 * r1.transpose() + r2 * r2.transpose();
+    rhs += r1 * k + r2 * tau;
+  }
+  return M.ldlt().solve(rhs);
 }
 
 } // namespace frame_detail
@@ -245,6 +288,8 @@ public:
     _Om0.assign(nv, 0);
     for (int v = 0; v < n; ++v)
       _Om0[static_cast<size_t>(v)] = gauss_area(v, N0);
+    if (_cfg.w_dupin > 0 && _cfg.dupin_reach > 0 && _aux)
+      build_dupin_lines(x0);
     _rest_initialized = true;
   }
 
@@ -281,30 +326,7 @@ private:
 
   /// `S_v` from positions and frames.
   vec3 fit(int v, const std::vector<vec3> &x, const std::vector<frame3> &F) const {
-    Eigen::Matrix<real, 3, 3> M = Eigen::Matrix<real, 3, 3>::Identity() * real(1e-12);
-    vec3 rhs = vec3::Zero();
-    const size_t vi = static_cast<size_t>(v);
-    for (int s = _tp.spoke_begin[vi]; s < _tp.spoke_begin[vi + 1]; ++s) {
-      const size_t j = static_cast<size_t>(_tp.spokes[static_cast<size_t>(s)][1]);
-      const vec3 dx = x[j] - x[vi], dn = F[j].N - F[vi].N;
-      const vec3 nb = (F[vi].N + F[j].N).normalized();
-      const vec3 dxt = dx - nb * dx.dot(nb);
-      const real L = dxt.norm();
-      if (!(L > real(0)))
-        continue;
-      const vec3 t = dxt / L, b = nb.cross(t);
-      const real k = -dn.dot(t) / L, tau = -dn.dot(b) / L;
-      real a = t.dot(F[vi].T), c = t.dot(F[vi].B);
-      const real r = std::sqrt(a * a + c * c);
-      if (!(r > real(0)))
-        continue;
-      a /= r;
-      c /= r;
-      const vec3 r1(a * a, 2 * a * c, c * c), r2(-a * c, a * a - c * c, a * c);
-      M += r1 * r1.transpose() + r2 * r2.transpose();
-      rhs += r1 * k + r2 * tau;
-    }
-    return M.ldlt().solve(rhs);
+    return frame_detail::fit_vertex_tensor(_tp, v, x, F);
   }
 
   real gauss_area(int v, const std::vector<vec3> &N) const {
@@ -315,6 +337,135 @@ private:
                                       N[static_cast<size_t>(tr[2])]);
     }
     return om;
+  }
+
+  /// A traced Dupin line: the vertices whose tensors it reads and the rows
+  /// `C S` (stacked `(s11, s12, s22)` per vertex, `w_dupin` applied later).
+  struct dupin_line {
+    std::vector<int> verts;
+    matX C;
+  };
+
+  /// The face's principal directions from its corners' frame-start tensors
+  /// (world tensors averaged, read in the face plane).
+  bool face_dirs(const std::vector<vec3> &x, int f, vec3 &d1, vec3 &d2) const {
+    const auto &id = _t->ids[static_cast<size_t>(f)];
+    const vec3 a = x[static_cast<size_t>(id[0])], b = x[static_cast<size_t>(id[1])],
+               c = x[static_cast<size_t>(id[2])];
+    vec3 nf = (b - a).cross(c - a);
+    if (!(nf.norm() > real(0)))
+      return false;
+    nf.normalize();
+    mat3 W = mat3::Zero();
+    for (int k = 0; k < 3; ++k) {
+      const size_t u = static_cast<size_t>(id[static_cast<size_t>(k)]);
+      const vec3 &S = _S0[u];
+      const vec3 &T = _F0[u].T, &B = _F0[u].B;
+      W += S[0] * T * T.transpose() + S[1] * (T * B.transpose() + B * T.transpose()) + S[2] * B * B.transpose();
+    }
+    const vec3 t1 = (b - a).normalized(), t2 = nf.cross(t1);
+    const real p = t1.dot(W * t1), q = t1.dot(W * t2), r = t2.dot(W * t2);
+    const real th = real(0.5) * std::atan2(2 * q, p - r);
+    d1 = std::cos(th) * t1 + std::sin(th) * t2;
+    d2 = nf.cross(d1);
+    return d1.allFinite() && d2.allFinite();
+  }
+
+  void build_dupin_lines(const std::vector<vec3> &x0) {
+    const kusama::stencil_table &t = *_t;
+    const int steps = std::max(1, static_cast<int>(std::lround(_cfg.dupin_reach)));
+    const int deg = std::max(0, _cfg.dupin_degree);
+    const real step = _hl;
+    auto walk = [&](int f, const vec3 &p0, const vec3 &d0) {
+      std::vector<walk_sample> out;
+      int g = f;
+      vec3 p = p0, d = d0;
+      for (int k = 0; k < steps; ++k) {
+        const std::vector<walk_sample> w = trace_on_surface(t, x0, g, p, d, step, step);
+        if (w.empty())
+          break;
+        walk_sample ws = w.back();
+        vec3 e1, e2;
+        if (face_dirs(x0, ws.face, e1, e2)) {
+          const vec3 &best = std::abs(e1.dot(ws.dir)) >= std::abs(e2.dot(ws.dir)) ? e1 : e2;
+          ws.dir = best.dot(ws.dir) >= 0 ? best : vec3(-best);
+        }
+        ws.s = real(k + 1) * step;
+        out.push_back(ws);
+        g = ws.face;
+        p = ws.p;
+        d = ws.dir;
+      }
+      return out;
+    };
+    for (int f = 0; f < t.n_faces; ++f) {
+      vec3 d1, d2;
+      if (!face_dirs(x0, f, d1, d2))
+        continue;
+      const auto &id = t.ids[static_cast<size_t>(f)];
+      const vec3 c =
+          (x0[static_cast<size_t>(id[0])] + x0[static_cast<size_t>(id[1])] + x0[static_cast<size_t>(id[2])]) / real(3);
+      const real Af = real(0.5) * (x0[static_cast<size_t>(id[1])] - x0[static_cast<size_t>(id[0])])
+                                      .cross(x0[static_cast<size_t>(id[2])] - x0[static_cast<size_t>(id[0])])
+                                      .norm();
+      for (const vec3 &d : {d1, d2}) {
+        const std::vector<walk_sample> fwd = walk(f, c, d), bwd = walk(f, c, -d);
+        std::vector<walk_sample> line;
+        for (auto it = bwd.rbegin(); it != bwd.rend(); ++it) {
+          walk_sample w = *it;
+          w.s = -w.s;
+          line.push_back(w);
+        }
+        walk_sample w0;
+        w0.face = f;
+        w0.bary = vec3::Constant(real(1) / real(3));
+        w0.p = c;
+        w0.dir = d;
+        w0.s = 0;
+        line.push_back(w0);
+        line.insert(line.end(), fwd.begin(), fwd.end());
+        const int m = static_cast<int>(line.size());
+        if (m < deg + 2)
+          continue;
+        dupin_line dl;
+        std::vector<int> slot(static_cast<size_t>(_tp.n), -1);
+        for (const walk_sample &w : line)
+          for (int k = 0; k < 3; ++k) {
+            const int u = t.ids[static_cast<size_t>(w.face)][static_cast<size_t>(k)];
+            if (slot[static_cast<size_t>(u)] < 0) {
+              slot[static_cast<size_t>(u)] = static_cast<int>(dl.verts.size());
+              dl.verts.push_back(u);
+            }
+          }
+        const Eigen::Index nv3 = 3 * static_cast<Eigen::Index>(dl.verts.size());
+        matX K = matX::Zero(m, nv3);
+        matX V(m, deg + 1);
+        const real sc = std::max(_cfg.dupin_reach * step, real(1e-12));
+        for (int i = 0; i < m; ++i) {
+          const walk_sample &w = line[static_cast<size_t>(i)];
+          for (int k = 0; k < 3; ++k) {
+            const size_t u = static_cast<size_t>(t.ids[static_cast<size_t>(w.face)][static_cast<size_t>(k)]);
+            real a = w.dir.dot(_F0[u].T), b = w.dir.dot(_F0[u].B);
+            const real r = std::sqrt(a * a + b * b);
+            if (!(r > real(0)))
+              continue;
+            a /= r;
+            b /= r;
+            const Eigen::Index col = 3 * slot[u];
+            K(i, col + 0) += w.bary[k] * a * a;
+            K(i, col + 1) += w.bary[k] * 2 * a * b;
+            K(i, col + 2) += w.bary[k] * b * b;
+          }
+          for (int pw = 0; pw <= deg; ++pw)
+            V(i, pw) = std::pow(w.s / sc, real(pw));
+        }
+        const Eigen::HouseholderQR<matX> qr(V);
+        const matX Q = qr.householderQ() * matX::Identity(m, deg + 1);
+        const matX P = matX::Identity(m, m) - Q * Q.transpose();
+        dl.C = (k_frame_rows * Af / std::sqrt(real(m))) * P * K;
+        _lines.push_back(std::move(dl));
+      }
+    }
   }
 
   /// One row unit: `m` residuals from the cached vertex tensors `Sc` of
@@ -462,8 +613,21 @@ private:
                          }});
       }
     }
-    if (c.w_minimizer > 0 || c.w_dupin > 0) {
-      const real wm = c.w_minimizer, wd = c.w_dupin;
+    const bool lines = c.w_dupin > 0 && c.dupin_reach > 0 && _aux;
+    if (lines)
+      for (const dupin_line &dl : _lines) {
+        const real wd = c.w_dupin;
+        units.push_back({static_cast<int>(dl.C.rows()), dl.verts, {}, [&, wd](real *o) {
+                           vecX Sv(3 * static_cast<Eigen::Index>(dl.verts.size()));
+                           for (size_t a = 0; a < dl.verts.size(); ++a)
+                             Sv.segment<3>(3 * static_cast<Eigen::Index>(a)) = Sc[static_cast<size_t>(dl.verts[a])];
+                           const vecX r = wd * (dl.C * Sv);
+                           for (Eigen::Index a = 0; a < r.size(); ++a)
+                             o[a] = r[a];
+                         }});
+      }
+    if (c.w_minimizer > 0 || (c.w_dupin > 0 && !lines)) {
+      const real wm = c.w_minimizer, wd = lines ? real(0) : c.w_dupin;
       const int m = (wm > 0 ? 2 : 0) + (wd > 0 ? 2 : 0);
       for (size_t sp = 0; sp < _tp.spokes.size(); ++sp) {
         const int v = _tp.spokes[sp][0], w = _tp.spokes[sp][1];
@@ -540,8 +704,12 @@ private:
       total += u.m;
     r.resize(total);
     index_t row = 0;
-    real buf[8], bp[8], bm[8];
-    std::vector<std::pair<index_t, real>> acc[8];
+    int mmax = 1;
+    for (const unit &u : units)
+      mmax = std::max(mmax, u.m);
+    std::vector<real> bufv(static_cast<size_t>(mmax)), bpv(static_cast<size_t>(mmax)), bmv(static_cast<size_t>(mmax));
+    real *buf = bufv.data(), *bp = bpv.data(), *bm = bmv.data();
+    std::vector<std::vector<std::pair<index_t, real>>> acc(static_cast<size_t>(mmax));
     auto add = [&](int a, index_t col, real val) {
       if (val == real(0))
         return;
@@ -636,6 +804,7 @@ private:
   std::vector<std::complex<real>> _z0, _zring0;
   real _Ht = 0;
   bool _aux = false;
+  std::vector<dupin_line> _lines;
 };
 
 } // namespace block

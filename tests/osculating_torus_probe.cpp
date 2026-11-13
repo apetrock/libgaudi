@@ -127,7 +127,6 @@ int main(int argc, char **argv) {
     base.shape.w_growth = 0.0;
     base.shape.w_det = 0.0;
     base.position.w_bend = 0.0;
-    base.position.w_conformal = 0.0;
   }
   base.project.osculating_torus.relative = relative;
   base.project.osculating_torus.closest_point = closest;

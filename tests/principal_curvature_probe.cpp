@@ -7,6 +7,8 @@
 #include <string>
 
 #include "gaudi/duchamp/monge_fairing_demo.hpp"
+#include "gaudi/hepworth/block/shape_det_conserve.hpp"
+#include "gaudi/hepworth/block/edge_shape_fair.hpp"
 #include "gaudi/kusama/principal_curvature_solver.hpp"
 
 // Runs the monge fairing demo headless with the curvature solver and prints,
@@ -17,20 +19,17 @@
 //   principal_curvature_probe [frames] [label] [w] [pd iterations]
 //                   [remesh] [nodrive] [refresh=K] [backtracks=K] [areafree] [areaband=lo:hi] [warea=W]
 //                   [solver=contact_net|off] [nmass=C]
-//                   [wdcircle=W] [dcmode=closest|slide|even|graded|hyperbolic|parabolic|loxodromic] [dcfam=0|1|2]
-//                   [dcamt=A] [dcangle=DEG] [dcref=x,y,z] [wamap=W] [amapinv=A] [wconf=W] [wtension=W]
-//                   [dupin=W] [wgradtl=W] [wotorus=W] [sarap=W] [sarapfree]
-//                   [wkite=W] [kalpha=A] [kangle=DEG] [kmaxu=U] [ksrc=tangent|mean|aniso] [klevel=L] [kbalanced]
-//                   [wcmc=W] [cmch0=H] [cmcvol] [wtwist=W] [tau0=T] [twangle=A] [wmin=W] [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W]
+//                   [dupin=W] [dupinreach=R] [dupindeg=D] [wgradtl=W] [wotorus=W] [sarap=W] [sarapfree]
+//                   [wcmc=W] [cmch0=H] [cmcvol] [wtwist=W] [tau0=T] [twangle=A] [wmin=W]
+//                   [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W]
+//                   [aratio=W] [wshear=W] [samt=S] [swind=ring:tube[:hand]]
+//                   [wmobius=W] [malpha=A] [mmaxu=U] [msrc=mean|aniso|flat] [mlevel=L] [mbalanced]
+//                   [wflat=W] [fg=G] [fband=lo:hi] [fpow=P] [fangle=DEG] [fwind=ring:tube[:hand]]
 //                   [accel=anderson|chebyshev|anderson_chebyshev|none] [freshstop=0|1] [maxascent=K]
-//                   [dump=K] [res=ring:tube] [perturb=P] [wcenter=W] [recenter]
-//                   [wstretch=W] [wind=ring:tube[:hand]] [sdir=angle|material|stripes] [msmooth=L] [mfollow=F]
-//                   [stripes=P] [tilt=G] [wtilt=W] [tiltaxis=k0|k1] [tiltmode=rigid|spin|twist|bend]
-//                   [tiltsign=gradient|propagate] [aratio=W] [bend=W] [damp=D] [memory=W]
+//                   [dump=K] [res=ring:tube] [perturb=P] [wcenter=W] [recenter] [bend=W] [damp=D] [memory=W]
 //                   [qcwarn=Q] [noqc] [ascentrefresh] [ascenttol=T] [audit] [modes=K] [tau=T] [lmax=L]
 //
-// `tilt=` sets the position tilt gain (`w_tilt` 1 unless `wtilt=`). Each
-// frame also prints the mean log ratio and anisotropy q of the live edge
+// Each frame also prints the mean log ratio and anisotropy q of the live edge
 // readings, elliptic and saddle edges apart, and the mean turn of their
 // principal axes since the previous frame. `label` is printed only; `w` is
 // the coupling weight.
@@ -151,42 +150,10 @@ int principal_curvature_probe_main(int argc, char **argv) {
       // The axis-ratio rows' area free, as before the band.
       for (auto &e : cfg.position.axis_ratio)
         e.area = hepworth::block::area_band::free();
-    } else if (flag.rfind("tiltsign=", 0) == 0) {
-      cfg.position.tilt.at(0).sign = std::string(flag.c_str() + 9) == "propagate"
-                                         ? hepworth::block::tilt_sign::propagate
-                                         : hepworth::block::tilt_sign::gradient;
-    } else if (flag.rfind("tilt=", 0) == 0) {
-      cfg.position.tilt.at(0).gain = std::atof(flag.c_str() + 5);
-      if (!(cfg.position.w_tilt > 0))
-        cfg.position.w_tilt = 1;
-    } else if (flag.rfind("wtilt=", 0) == 0) {
-      cfg.position.w_tilt = std::atof(flag.c_str() + 6);
-    } else if (flag.rfind("tiltaxis=", 0) == 0) {
-      cfg.position.tilt.at(0).axis = std::string(flag.c_str() + 9) == "k0"
-                                         ? hepworth::block::principal_axis::k0
-                                         : hepworth::block::principal_axis::k1;
-    } else if (flag.rfind("tiltmode=", 0) == 0) {
-      const std::string m = flag.c_str() + 9;
-      cfg.position.tilt.at(0).mode = m == "twist"  ? hepworth::block::tilt_mode::twist
-                                     : m == "bend" ? hepworth::block::tilt_mode::bend
-                                     : m == "spin" ? hepworth::block::tilt_mode::spin
-                                                   : hepworth::block::tilt_mode::rigid;
     } else if (flag.rfind("sarap=", 0) == 0) {
       cfg.shape.w_shape_arap = std::atof(flag.c_str() + 6);
     } else if (flag == "sarapfree") {
       cfg.shape.shape_arap_mean = false;
-    } else if (flag.rfind("wind=", 0) == 0) {
-      // ring:tube[:handedness] on the first stretch entry.
-      auto &w = cfg.position.stretch.at(0).winding;
-      const std::string v = flag.substr(5);
-      const size_t a = v.find(':'), b = a == std::string::npos ? a : v.find(':', a + 1);
-      w.ring = std::atoi(v.substr(0, a).c_str());
-      w.tube = a == std::string::npos ? 0 : std::atoi(v.substr(a + 1, b - a - 1).c_str());
-      w.handedness = b == std::string::npos ? 1 : std::atoi(v.substr(b + 1).c_str());
-      if (!(cfg.position.w_stretch > 0))
-        cfg.position.w_stretch = 0.5;
-    } else if (flag.rfind("wstretch=", 0) == 0) {
-      cfg.position.w_stretch = std::atof(flag.c_str() + 9);
     } else if (flag.rfind("wgradtl=", 0) == 0) {
       cfg.shape.w_grad_traceless = std::atof(flag.c_str() + 8);
     } else if (flag.rfind("wotorus=", 0) == 0) {
@@ -208,77 +175,60 @@ int principal_curvature_probe_main(int argc, char **argv) {
                                                    : sa::anderson;
     } else if (flag.rfind("nmass=", 0) == 0) {
       eig.contact_normal_mass = std::atof(flag.c_str() + 6);
-    } else if (flag.rfind("wdcircle=", 0) == 0) {
-      cfg.position.w_dupin_circle = std::atof(flag.c_str() + 9);
-    } else if (flag.rfind("dcmode=", 0) == 0) {
-      using dm = hepworth::block::dupin_circle_spec::mode;
-      const std::string s = flag.substr(7);
-      dm m = dm::closest;
-      if (s == "slide")
-        m = dm::slide;
-      else if (s == "even")
-        m = dm::even;
-      else if (s == "graded")
-        m = dm::graded;
-      else if (s == "hyperbolic")
-        m = dm::hyperbolic;
-      else if (s == "parabolic")
-        m = dm::parabolic;
-      else if (s == "loxodromic")
-        m = dm::loxodromic;
-      for (auto &d : cfg.position.dupin_circle)
-        d.kind = m;
-    } else if (flag.rfind("dcfam=", 0) == 0) {
-      for (auto &d : cfg.position.dupin_circle)
-        d.family = std::atoi(flag.c_str() + 6);
-    } else if (flag.rfind("dcamt=", 0) == 0) {
-      // The active mode's amount: delta, g, lambda, beta or psi.
-      const real a = std::atof(flag.c_str() + 6);
-      using dm = hepworth::block::dupin_circle_spec::mode;
-      for (auto &d : cfg.position.dupin_circle) {
-        if (d.kind == dm::slide)
-          d.delta = a;
-        else if (d.kind == dm::graded)
-          d.g = a;
-        else if (d.kind == dm::hyperbolic)
-          d.lambda = a;
-        else if (d.kind == dm::parabolic)
-          d.beta = a;
-        else if (d.kind == dm::loxodromic)
-          d.psi = a;
-      }
-    } else if (flag.rfind("dcangle=", 0) == 0) {
-      for (auto &d : cfg.position.dupin_circle)
-        d.max_angle = std::atof(flag.c_str() + 8) * real(M_PI / 180.0);
-    } else if (flag.rfind("dcref=", 0) == 0) {
-      real a = 0, b = 0, c = 0;
-      std::sscanf(flag.c_str() + 6, "%lf,%lf,%lf", &a, &b, &c);
-      cfg.position.dupin_circle_ref = vec3(a, b, c);
-    } else if (flag.rfind("wamap=", 0) == 0) {
-      cfg.position.w_amap = std::atof(flag.c_str() + 6);
-    } else if (flag.rfind("amapinv=", 0) == 0) {
-      cfg.position.amap_inversion = std::atof(flag.c_str() + 8);
-    } else if (flag.rfind("wconf=", 0) == 0) {
-      cfg.position.w_conformal = std::atof(flag.c_str() + 6);
-    } else if (flag.rfind("wtension=", 0) == 0) {
-      cfg.position.w_tension = std::atof(flag.c_str() + 9);
-    } else if (flag.rfind("wkite=", 0) == 0) {
-      cfg.position.w_kite = std::atof(flag.c_str() + 6);
-    } else if (flag.rfind("kalpha=", 0) == 0) {
-      cfg.position.kite.alpha = std::atof(flag.c_str() + 7);
-    } else if (flag.rfind("kangle=", 0) == 0) {
-      cfg.position.kite.angle = std::atof(flag.c_str() + 7) * real(M_PI) / real(180);
-    } else if (flag.rfind("kmaxu=", 0) == 0) {
-      cfg.position.kite.max_u = std::atof(flag.c_str() + 6);
-    } else if (flag.rfind("ksrc=", 0) == 0) {
+    } else if (flag.rfind("wshear=", 0) == 0) {
+      cfg.position.w_shear = std::atof(flag.c_str() + 7);
+    } else if (flag.rfind("samt=", 0) == 0) {
+      for (auto &e : cfg.position.shear)
+        e.shear = std::atof(flag.c_str() + 5);
+    } else if (flag.rfind("swind=", 0) == 0) {
+      // ring:tube[:handedness] on the first shear entry.
+      auto &w = cfg.position.shear.at(0).winding;
+      const std::string v = flag.substr(6);
+      const size_t a = v.find(':'), b = a == std::string::npos ? a : v.find(':', a + 1);
+      w.ring = std::atoi(v.substr(0, a).c_str());
+      w.tube = a == std::string::npos ? 0 : std::atoi(v.substr(a + 1, b - a - 1).c_str());
+      w.handedness = b == std::string::npos ? 1 : std::atoi(v.substr(b + 1).c_str());
+    } else if (flag.rfind("wmobius=", 0) == 0) {
+      cfg.position.w_mobius = std::atof(flag.c_str() + 8);
+    } else if (flag.rfind("malpha=", 0) == 0) {
+      cfg.position.mobius.alpha = std::atof(flag.c_str() + 7);
+    } else if (flag.rfind("mmaxu=", 0) == 0) {
+      cfg.position.mobius.max_u = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("msrc=", 0) == 0) {
       const std::string v = flag.substr(5);
-      cfg.position.kite.source = v == "mean"    ? hepworth::block::kite_source::mean_curvature
-                                 : v == "aniso" ? hepworth::block::kite_source::anisotropy
-                                                : hepworth::block::kite_source::tangent;
-    } else if (flag.rfind("klevel=", 0) == 0) {
-      cfg.position.kite.level = std::atof(flag.c_str() + 7);
-    } else if (flag == "kbalanced") {
-      cfg.position.kite.balanced = true;
+      cfg.position.mobius.source = v == "mean"   ? hepworth::block::mobius_source::mean_curvature
+                                   : v == "flat" ? hepworth::block::mobius_source::flat
+                                                 : hepworth::block::mobius_source::anisotropy;
+    } else if (flag.rfind("mlevel=", 0) == 0) {
+      cfg.position.mobius.level = std::atof(flag.c_str() + 7);
+    } else if (flag == "mbalanced") {
+      cfg.position.mobius.balanced = true;
+    } else if (flag.rfind("wflat=", 0) == 0) {
+      cfg.position.w_flat_growth = std::atof(flag.c_str() + 6);
+    } else if (flag.rfind("fg=", 0) == 0) {
+      cfg.position.flat_growth.g = std::atof(flag.c_str() + 3);
+    } else if (flag.rfind("fband=", 0) == 0) {
+      const std::string v = flag.substr(6);
+      const size_t c = v.find(':');
+      cfg.position.flat_growth.lo = std::atof(v.substr(0, c).c_str());
+      if (c != std::string::npos)
+        cfg.position.flat_growth.hi = std::atof(v.substr(c + 1).c_str());
+    } else if (flag.rfind("fpow=", 0) == 0) {
+      cfg.position.flat_growth.power = std::atof(flag.c_str() + 5);
+    } else if (flag.rfind("fangle=", 0) == 0) {
+      cfg.position.flat_growth.angle = std::atof(flag.c_str() + 7) * real(M_PI) / real(180);
+    } else if (flag.rfind("fwind=", 0) == 0) {
+      // ring:tube[:handedness] for the flat growth's axis.
+      auto &w = cfg.position.flat_growth.winding;
+      const std::string v = flag.substr(6);
+      const size_t a = v.find(':'), b = a == std::string::npos ? a : v.find(':', a + 1);
+      w.ring = std::atoi(v.substr(0, a).c_str());
+      w.tube = a == std::string::npos ? 0 : std::atoi(v.substr(a + 1, b - a - 1).c_str());
+      w.handedness = b == std::string::npos ? 1 : std::atoi(v.substr(b + 1).c_str());
+    } else if (flag.rfind("dupinreach=", 0) == 0) {
+      cfg.shape.dupin_reach = std::atof(flag.c_str() + 11);
+    } else if (flag.rfind("dupindeg=", 0) == 0) {
+      cfg.shape.dupin_degree = std::atoi(flag.c_str() + 9);
     } else if (flag.rfind("wcmc=", 0) == 0) {
       cfg.shape.w_tension = std::atof(flag.c_str() + 5);
     } else if (flag.rfind("cmch0=", 0) == 0) {
@@ -338,18 +288,6 @@ int principal_curvature_probe_main(int argc, char **argv) {
       cfg.step.audit_variational = true;
     } else if (flag == "ascentrefresh") {
       cfg.step.gn_refresh_on_ascent = true;
-    } else if (flag.rfind("sdir=", 0) == 0) {
-      const std::string v = flag.substr(5);
-      for (auto &s : cfg.position.stretch)
-        s.direction = v == "material"  ? hepworth::block::direction_source::material
-                      : v == "stripes" ? hepworth::block::direction_source::stripes
-                                       : hepworth::block::direction_source::angle;
-    } else if (flag.rfind("msmooth=", 0) == 0) {
-      cfg.position.material_smooth = std::atof(flag.c_str() + 8);
-    } else if (flag.rfind("mfollow=", 0) == 0) {
-      cfg.position.material_follow = std::atof(flag.c_str() + 8);
-    } else if (flag.rfind("stripes=", 0) == 0) {
-      cfg.position.stripes = std::atof(flag.c_str() + 8);
     }
   }
   std::cout << "target " << target << "  w_coupling " << eig.w_coupling << "  backtracks " << cfg.step.gn_backtracks << "  refresh "
@@ -544,7 +482,7 @@ int principal_curvature_probe_main(int argc, char **argv) {
     real rho_ell = 0, rho_sad = 0, an_ell = 0, an_sad = 0, turn = 0, turn2 = 0, skew = 0;
     real kdrift = std::numeric_limits<real>::quiet_NaN();
     int n_ell = 0, n_sad = 0, nt = 0;
-    const auto &tb = demo->cr()->table;
+    const auto &tb = demo->e3()->table;
     if (tb.n_verts == static_cast<int>(x.size())) {
       const std::vector<vec3> h = kusama::weingarten::edge_readings(tb, x);
       {
@@ -625,11 +563,7 @@ int principal_curvature_probe_main(int argc, char **argv) {
               << std::sqrt(std::max(turn2 / std::max(nt, 1) -
                                         std::pow(turn / std::max(nt, 1), 2),
                                     real(0)))
-              << "  asym " << asym << "  dcres " << demo->dupin_circle_residual()
-              << "  kiteu " << demo->kite_u_range()
-              << "  defl " << demo->material_deflection()
-              << "  stripes " << demo->last_stripes().lambda << " skip "
-              << demo->last_stripes().skipped
+              << "  asym " << asym << "  mobiusu " << demo->mobius_u_range()
               << "  |L| " << Lmom.norm() << "  verts " << x.size()
               << "  wall " << wall << " s"
               << "  solve its " << demo->last_solve().its << " E " << demo->last_solve().E_first
