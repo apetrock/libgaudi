@@ -543,6 +543,85 @@ GAUDI_TEST(contact_net_gn_converges_in_projection_solver) {
   }
 }
 
+/// Frames mode (per-vertex quaternions in place of the normals block) lands
+/// where the normals mode does on the closed suite cases: exact target
+/// offsets, edge tangency, the net's own `(k, tau)` increments.
+GAUDI_TEST(contact_net_gn_frames_match_normals) {
+  using namespace contact_net_detail;
+  namespace hb = hepworth::block;
+  const int frames = 12;
+  auto run = [&](const auto &c, bool quat) {
+    std::vector<vec3> x = c.x0;
+    const int n = static_cast<int>(x.size());
+    const kusama::stencil_table t = table_of(n, c.tris);
+    const cnet::topology tp = cnet::build_topology(t);
+    const cnet::targets T1 = cnet::read(tp, c.xt, cnet::vertex_normals(tp, c.xt));
+    std::vector<vec3> v(n, vec3::Zero()), f = v, m(n, vec3::Constant(real(1e-6)));
+    auto pos = hepworth::vec3_block::create(m, x, v, f);
+    const size_t nE = static_cast<size_t>(t.n_edges);
+    std::map<std::pair<int, int>, int> eo;
+    for (size_t e = 0; e < nE; ++e)
+      eo[{tp.edges[e][0], tp.edges[e][1]}] = static_cast<int>(e);
+    std::vector<real> coff(tp.spokes.size());
+    for (size_t s = 0; s < tp.spokes.size(); ++s) {
+      const int i = tp.spokes[s][0], j = tp.spokes[s][1];
+      const int e = eo[{std::min(i, j), std::max(i, j)}];
+      coff[s] = T1.c[s] - real(0.5) * T1.k[static_cast<size_t>(e)] *
+                              (c.xt[static_cast<size_t>(j)] - c.xt[static_cast<size_t>(i)]).norm();
+    }
+    hb::projection_solver solver;
+    solver.gn_refresh_every = 5;
+    solver.gn_backtracks = 8;
+    int its = 0;
+    for (int k = 0; k < frames; ++k) {
+      std::vector<vec3> N = cnet::vertex_normals(tp, x), nv0(n, vec3::Zero()), nf = nv0,
+                        nm(n, vec3::Constant(real(1e-8)));
+      std::vector<vec4> Y(n), ym(n, vec4::Constant(real(1e-8)));
+      for (int i = 0; i < n; ++i) {
+        const vec3 nn = N[static_cast<size_t>(i)];
+        vec3 tt = std::abs(nn[0]) < real(0.9) ? vec3::UnitX() : vec3::UnitY();
+        tt = (tt - nn * nn.dot(tt)).normalized();
+        mat3 R;
+        R.col(0) = tt;
+        R.col(1) = nn.cross(tt);
+        R.col(2) = nn;
+        Y[static_cast<size_t>(i)] = hb::quat_ops::quat_from_matrix(R);
+      }
+      hepworth::sim_block::ptr nb = quat ? hepworth::sim_block::ptr(hepworth::vec4_block::create(ym, Y))
+                                         : hepworth::sim_block::ptr(hepworth::vec3_block::create(nm, N, nv0, nf));
+      const cnet::targets T0 = cnet::read(tp, x, N);
+      std::vector<vec3> h0(nE, vec3::Zero()), hs(nE), hv(nE, vec3::Zero()), hf = hv,
+          hm(nE, vec3::Constant(real(1e12)));
+      for (size_t e = 0; e < nE; ++e)
+        hs[e] = vec3(T1.k[e] - T0.k[e], T1.tau[e] - T0.tau[e], 0);
+      auto store = hepworth::vec3_block::create(hm, hs, hv, hf);
+      std::vector<hepworth::sim_block::ptr> blocks{pos, nb, store};
+      auto row = hb::contact_net_gn::create(&t, x, N, h0, real(1), blocks, hb::k_contact_gn, &coff);
+      row->tangency_target = hb::contact_net_gn::tangency::edge;
+      if (const char *eg = std::getenv("CNET_GAUGE"))
+        row->w_frame_gauge = std::atof(eg);
+      solver.set_constraints({row});
+      for (vec3 &vv : v)
+        vv.setZero();
+      solver.step(blocks, real(0.1), real(1), 30);
+      its += solver.last_step.its;
+      if (std::getenv("CNET_DEBUG"))
+        std::printf("    %s frame %d its %d shape %.2e E %.3e -> %.3e\n", quat ? "quat" : "nrm ", k,
+                    solver.last_step.its, shape_error(x, c.xt), solver.last_step.E_first, solver.last_step.E_last);
+    }
+    return std::make_pair(shape_error(x, c.xt), its);
+  };
+  for (const auto &c : suite()) {
+    const bool closed = c.name.rfind("torus", 0) == 0 || c.name.rfind("cube", 0) == 0;
+    if (!closed)
+      continue;
+    const auto a = run(c, false), b = run(c, true);
+    std::printf("  frames vs normals %-22s shape %.1e (its %d) against %.1e (its %d)\n", c.name.c_str(), b.first,
+                b.second, a.first, a.second);
+    GAUDI_EXPECT(b.first < 1e-6);
+  }
+}
+
 } // namespace test
 } // namespace gaudi
 

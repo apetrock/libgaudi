@@ -157,6 +157,10 @@ struct curvature_config {
   /// Normals' mass per unit vertex dual area: a pull toward the frame-start
   /// normals that damps steps on a stale factor (0: none).
   real contact_normal_mass = 0.0;
+  /// One quaternion frame per vertex in place of the normals (MATH.md 19.21,
+  /// E3): the normal is `Y e3 conj(Y) / |Y|^2`. Lands where the normals do
+  /// on the contact-net suite. Off by default.
+  bool contact_frames = false;
 };
 
 /// Shape → position: the osculating-torus ring row and the curvature solver.
@@ -510,7 +514,9 @@ public:
     _shell = std::make_shared<hepworth::block::shell_position_block>(__M, xs, vs);
     _cr = std::make_shared<hepworth::block::shell_cr_block>(__M);
     _cr->face_site = !_cfg.project.one_ring_operators || _cfg.dirichlet.w_pin > 0.0;
-    _cr->normal_site = _cfg.project.curvature.kind == curvature_solver::contact_net;
+    const bool net = _cfg.project.curvature.kind == curvature_solver::contact_net;
+    _cr->normal_site = net && !_cfg.project.curvature.contact_frames;
+    _cr->frame_site = net && _cfg.project.curvature.contact_frames;
     _cr->normal_mass_scale = _cfg.project.curvature.contact_normal_mass;
     _cr->amap_site = _cfg.position.w_amap > 0.0;
     real C = 3.0;
@@ -685,11 +691,12 @@ public:
       return;
     ctx.shell_mesh = __M.get();
     hepworth::sim_block::ptr pos = ctx.blocks[0];
-    if (c.kind == curvature_solver::contact_net && c.w_coupling > 0.0 && _cr->normal_dof() &&
-        _cr->normal.size() == x.size()) {
-      // The net's rows couple positions, normals and the store in the one
-      // solve; the store answers to them and its shape rows.
-      std::vector<hepworth::sim_block::ptr> net_blocks{pos, _cr->normal_dof(), _cr->shape_dof()};
+    hepworth::sim_block::ptr normals = c.contact_frames ? hepworth::sim_block::ptr(_cr->frame_dof())
+                                                        : hepworth::sim_block::ptr(_cr->normal_dof());
+    if (c.kind == curvature_solver::contact_net && c.w_coupling > 0.0 && normals && _cr->normal.size() == x.size()) {
+      // The net's rows couple positions, normals (or frames) and the store in
+      // the one solve; the store answers to them and its shape rows.
+      std::vector<hepworth::sim_block::ptr> net_blocks{pos, normals, _cr->shape_dof()};
       auto net = hb::contact_net_gn::create(&_cr->table, x, _cr->normal, _cr->shape, c.w_coupling, net_blocks);
       net->tangency_target = c.contact_tangency;
       ctx.constraints.push_back(net);

@@ -18,6 +18,14 @@
 /// - tangency, per directed spoke (1): `n_i . d / |d| - c`, `c` the frame-start
 ///   offset plus `dk |d0| / 2`;
 /// - unit length, per vertex (1): `|n_i| - 1`.
+/// Frames mode (MATH.md 19.21, E3): `blocks[1]` a `vec4_block` of per-vertex
+/// quaternions `Y` (`shell_cr_block::frame_dof`), the normal
+/// `n = Y e3 conj(Y) / |Y|^2` with analytic `dn/dY`; the unit rows hold
+/// `|Y| = 1` and a gauge row per vertex (weight `w_frame_gauge`) holds the
+/// twist of `conj(Y0) Y` about the body normal (its `z` component, linear in
+/// `Y`) at zero. A gauge carried by the shortest arc from the frame-start
+/// normal stalled cube -> sphere: under large turns of the normal the arc's
+/// holonomy fights the frames.
 /// Rows scaled `w k_contact_gn A_e / |e|`: the Rodrigues and tangency
 /// residuals are curvature times length, so the scaled rows are integrated
 /// curvatures, the unit of `weingarten_gn` and `bend`; `k_contact_gn` is
@@ -27,6 +35,7 @@
 /// the neighbour free to slide on the sphere; MATH.md 19.13.)
 
 #include "gaudi/hepworth/block/block_constraint.hpp"
+#include "gaudi/hepworth/block/quat_util.hpp"
 #include "gaudi/kusama/contact_net.hpp"
 #include "gaudi/kusama/stencil_table.hpp"
 #include "gaudi/kusama/weingarten.hpp"
@@ -48,6 +57,19 @@ namespace block {
 /// `sqrt(1 / 0.005)`.
 constexpr real k_contact_gn = real(14.2);
 
+/// `n = M(Y) / |Y|^2` with `M` the quadratic `Y e3 conj(Y)`, and `dn/dY`.
+inline vec3 frame_normal(const vec4 &Y, Eigen::Matrix<real, 3, 4> *dn = nullptr) {
+  const real w = Y[0], x = Y[1], y = Y[2], z = Y[3];
+  const real l2 = Y.squaredNorm();
+  const vec3 M(2 * (x * z + w * y), 2 * (y * z - w * x), w * w - x * x - y * y + z * z);
+  if (dn && l2 > real(0)) {
+    Eigen::Matrix<real, 3, 4> dM;
+    dM << 2 * y, 2 * z, 2 * w, 2 * x, -2 * x, -2 * w, 2 * z, 2 * y, 2 * w, -2 * x, -2 * y, 2 * z;
+    *dn = dM / l2 - (real(2) / (l2 * l2)) * M * Y.transpose();
+  }
+  return l2 > real(0) ? vec3(M / l2) : vec3::UnitZ();
+}
+
 class contact_net_gn : public block_constraint {
 public:
   DEFINE_CREATE_FUNC(contact_net_gn)
@@ -58,6 +80,10 @@ public:
                  const std::vector<vec3> &h0, real w, std::vector<sim_block::ptr> blocks, real k = k_contact_gn,
                  const std::vector<real> *c_off = nullptr)
       : block_constraint({}, w, std::move(blocks)), _t(table), _h0(h0) {
+    if (auto fb = std::dynamic_pointer_cast<vec4_block>(_blocks[1])) {
+      _frames = true;
+      _Y0 = fb->_x;
+    }
     _tp = kusama::contact_net::build_topology(*_t);
     _T0 = kusama::contact_net::read(_tp, x0, n0);
     // Per edge `A_e / |e|`: a third of the incident faces' area over length.
@@ -138,6 +164,8 @@ public:
   /// offset (holds the old shape's offsets under large edits).
   enum class tangency { vertex, edge };
   tangency tangency_target = tangency::vertex;
+  /// Frames mode: weight of the gauge rows (relative to the unit rows).
+  real w_frame_gauge = real(1e-3);
 
   std::string name() override { return "contact_net_gn"; }
   bool gauss_newton() const override { return true; }
@@ -163,7 +191,7 @@ public:
   }
 
   index_t rows() const {
-    return static_cast<index_t>(3 * _tp.edges.size() + _tp.spokes.size()) + _tp.n;
+    return static_cast<index_t>(3 * _tp.edges.size() + _tp.spokes.size()) + (_frames ? 2 : 1) * _tp.n;
   }
 
 private:
@@ -173,9 +201,16 @@ private:
     const int n = _tp.n;
     const size_t nE = _tp.edges.size(), nS = _tp.spokes.size();
     std::vector<vec3> x(static_cast<size_t>(n)), N(static_cast<size_t>(n));
+    std::vector<Eigen::Matrix<real, 3, 4>> dN(_frames ? static_cast<size_t>(n) : 0);
+    std::vector<vec4> Y(_frames ? static_cast<size_t>(n) : 0);
     for (int v = 0; v < n; ++v) {
       x[static_cast<size_t>(v)] = _blocks[0]->get_vec3(v, q);
-      N[static_cast<size_t>(v)] = _blocks[1]->get_vec3(v, q);
+      if (_frames) {
+        Y[static_cast<size_t>(v)] = get_elem<vec4>(v, q, _blocks[1]->_offset);
+        N[static_cast<size_t>(v)] = frame_normal(Y[static_cast<size_t>(v)], &dN[static_cast<size_t>(v)]);
+      } else {
+        N[static_cast<size_t>(v)] = _blocks[1]->get_vec3(v, q);
+      }
     }
     std::vector<real> dk(nE, 0), dt(nE, 0);
     for (size_t e = 0; e < nE; ++e) {
@@ -186,6 +221,19 @@ private:
     r.resize(rows());
     auto xc = [&](int v) { return _blocks[0]->get_offset_idx(v); };
     auto nc = [&](int v) { return _blocks[1]->get_offset_idx(v); };
+    // A row's derivative `g` in vertex `v`'s normal, onto the normal's or
+    // the frame's columns.
+    auto emit_n = [&](index_t r, int v, const vec3 &g) {
+      if (_frames) {
+        const Eigen::Matrix<real, 1, 4> gy = g.transpose() * dN[static_cast<size_t>(v)];
+        for (int c = 0; c < 4; ++c)
+          if (gy[c] != real(0))
+            jt->emplace_back(r, nc(v) + c, gy[c]);
+      } else {
+        for (int c = 0; c < 3; ++c)
+          jt->emplace_back(r, nc(v) + c, g[c]);
+      }
+    };
     auto sc = [&](size_t e) { return _blocks[2]->get_offset_idx(static_cast<index_t>(e)); };
     Eigen::Index row = 0;
     for (size_t e = 0; e < nE; ++e, row += 3) {
@@ -204,11 +252,13 @@ private:
       kusama::contact_generated::contact_rodrigues_kt(unused, in, y, J);
       r.segment<3>(row) = s * y;
       if (jt) {
-        const index_t cols[4] = {xc(i), xc(j), nc(i), nc(j)};
+        const index_t cols[2] = {xc(i), xc(j)};
         for (int a = 0; a < 3; ++a) {
-          for (int b = 0; b < 4; ++b)
+          for (int b = 0; b < 2; ++b)
             for (int c = 0; c < 3; ++c)
               jt->emplace_back(id0 + row + a, cols[b] + c, s * J(a, 3 * b + c));
+          emit_n(id0 + row + a, i, s * vec3(J(a, 6), J(a, 7), J(a, 8)));
+          emit_n(id0 + row + a, j, s * vec3(J(a, 9), J(a, 10), J(a, 11)));
           jt->emplace_back(id0 + row + a, sc(e) + 0, s * J(a, 12));
           jt->emplace_back(id0 + row + a, sc(e) + 1, s * J(a, 13));
         }
@@ -242,16 +292,17 @@ private:
       r[row] = s * y[0];
       if (jt && s != real(0)) {
         const vec3 dh = len > real(0) ? vec3(d / len) : vec3::Zero();
-        const index_t cols[3] = {xc(i), xc(j), nc(i)};
-        for (int b = 0; b < 3; ++b)
+        const index_t cols[2] = {xc(i), xc(j)};
+        for (int b = 0; b < 2; ++b)
           for (int cc = 0; cc < 3; ++cc) {
             real v = J(0, 3 * b + cc);
             if (b == 0)
               v += real(0.5) * k * dh[cc]; // -d(k |d| / 2)/dx_i
-            else if (b == 1)
+            else
               v -= real(0.5) * k * dh[cc];
             jt->emplace_back(id0 + row, cols[b] + cc, s * v);
           }
+        emit_n(id0 + row, i, s * vec3(J(0, 6), J(0, 7), J(0, 8)));
         if (vertex) {
           for (const auto &[ee, coef] : _kappa_from[sp])
             for (int cc = 0; cc < 3; ++cc)
@@ -262,14 +313,35 @@ private:
         }
       }
     }
+    const real su = _w * _s_unit;
     for (int v = 0; v < n; ++v, ++row) {
+      if (_frames) {
+        const vec4 &yv = Y[static_cast<size_t>(v)];
+        const real len = yv.norm();
+        r[row] = su * (len - real(1));
+        if (jt && len > real(0))
+          for (int c = 0; c < 4; ++c)
+            jt->emplace_back(id0 + row, nc(v) + c, su * yv[c] / len);
+        continue;
+      }
       const vec3 &nv = N[static_cast<size_t>(v)];
       const real len = nv.norm();
-      const real s = _w * _s_unit;
-      r[row] = s * (len - real(1));
+      r[row] = su * (len - real(1));
       if (jt && len > real(0))
         for (int c = 0; c < 3; ++c)
-          jt->emplace_back(id0 + row, nc(v) + c, s * nv[c] / len);
+          jt->emplace_back(id0 + row, nc(v) + c, su * nv[c] / len);
+    }
+    if (!_frames)
+      return;
+    const real sg = su * std::sqrt(std::max(w_frame_gauge, real(0)));
+    for (int v = 0; v < n; ++v, ++row) {
+      // `(conj(Y0) Y)_z = w0 z - z0 w - x0 y + y0 x`.
+      const vec4 &a0 = _Y0[static_cast<size_t>(v)];
+      const vec4 g(-a0[3], a0[2], -a0[1], a0[0]);
+      r[row] = sg * g.dot(Y[static_cast<size_t>(v)]);
+      if (jt && sg != real(0))
+        for (int c = 0; c < 4; ++c)
+          jt->emplace_back(id0 + row, nc(v) + c, sg * g[c]);
     }
   }
 
@@ -277,6 +349,8 @@ private:
   kusama::contact_net::topology _tp;
   kusama::contact_net::targets _T0;
   std::vector<vec3> _h0;
+  bool _frames = false;
+  std::vector<vec4> _Y0;
   std::vector<real> _s, _spoke_len, _c_off, _kappa0;
   std::vector<std::vector<std::pair<int, vec3>>> _kappa_from;
   std::vector<int> _spoke_edge;

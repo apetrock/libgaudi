@@ -16,7 +16,7 @@
 //
 //   principal_curvature_probe [frames] [label] [w] [pd iterations]
 //                   [remesh] [nodrive] [refresh=K] [backtracks=K] [areafree] [areaband=lo:hi] [warea=W]
-//                   [solver=contact_net|off] [cntan=vertex|edge] [nmass=C]
+//                   [solver=contact_net|off] [cntan=vertex|edge] [cnframes] [nmass=C]
 //                   [wdcircle=W] [dcmode=closest|slide|even|graded|hyperbolic|parabolic|loxodromic] [dcfam=0|1|2]
 //                   [dcamt=A] [dcangle=DEG] [dcref=x,y,z] [wamap=W] [amapinv=A] [wconf=W] [wtension=W]
 //                   [dupin=W] [dupinreach=R] [dupindeg=D] [wgradtl=W] [wotorus=W] [sarap=W] [sarapfree]
@@ -213,6 +213,8 @@ int principal_curvature_probe_main(int argc, char **argv) {
     } else if (flag.rfind("cntan=", 0) == 0) {
       eig.contact_tangency = flag.substr(6) == "edge" ? gaudi::hepworth::block::contact_net_gn::tangency::edge
                                                       : gaudi::hepworth::block::contact_net_gn::tangency::vertex;
+    } else if (flag == "cnframes") {
+      eig.contact_frames = true;
     } else if (flag.rfind("nmass=", 0) == 0) {
       eig.contact_normal_mass = std::atof(flag.c_str() + 6);
     } else if (flag.rfind("wdcircle=", 0) == 0) {

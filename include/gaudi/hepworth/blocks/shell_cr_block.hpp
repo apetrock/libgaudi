@@ -10,6 +10,7 @@
 #include "gaudi/asawa/shell/stencil_walker.hpp"
 #include "gaudi/hepworth/block/cr_field.hpp"
 #include "gaudi/hepworth/block/cr_shape.hpp"
+#include "gaudi/hepworth/block/quat_util.hpp"
 #include "gaudi/hepworth/block/sim_block.hpp"
 #include "gaudi/hepworth/block/solver_composition.hpp"
 #include "gaudi/hepworth/blocks/block_wrapper.hpp"
@@ -363,6 +364,27 @@ public:
       normal_mass[i] = vec3::Constant(std::max(normal_mass_scale * area[i], real(1e-8)));
     amap_y.assign(x.size(), vec4(1, 0, 0, 0));
     amap_mass.assign(x.size(), vec4::Constant(real(1e-8)));
+    // Per-vertex quaternion frames (`frame_site`): normal from the area
+    // normals, tangent from the vertex charts (any tangent without one),
+    // unit scale. Mass as the normals'.
+    frame.assign(x.size(), vec4(1, 0, 0, 0));
+    frame_mass.resize(x.size());
+    for (size_t i = 0; i < x.size(); ++i) {
+      const vec3 n = normal[i].norm() > real(0) ? normal[i] : vec3::UnitZ();
+      vec3 t = i < vertex_frames.size() && vertex_frames[i].ok ? vertex_frames[i].T : vec3::Zero();
+      t -= n * n.dot(t);
+      if (!(t.norm() > real(1e-9))) {
+        t = std::abs(n[0]) < real(0.9) ? vec3::UnitX() : vec3::UnitY();
+        t -= n * n.dot(t);
+      }
+      t.normalize();
+      mat3 R;
+      R.col(0) = t;
+      R.col(1) = n.cross(t);
+      R.col(2) = n;
+      frame[i] = quat_ops::quat_from_matrix(R);
+      frame_mass[i] = vec4::Constant(std::max(normal_mass_scale * area[i], real(1e-8)));
+    }
   }
 
   void apply_external_input(const std::vector<vec3> &input, real scale = 1.0) override {
@@ -392,7 +414,19 @@ public:
       _amap_dof = vec4_block::create(amap_mass, amap_y);
       out.push_back(_amap_dof);
     }
+    _frame_dof = nullptr;
+    if (frame_site) {
+      _frame_dof = vec4_block::create(frame_mass, frame);
+      out.push_back(_frame_dof);
+    }
   }
+
+  /// Per-vertex quaternion frames for the contact net's frames mode
+  /// (`contact_net_gn` with a `vec4` second block): `n = Y e3 conj(Y) / |Y|^2`.
+  std::vector<vec4> frame;
+  std::vector<vec4> frame_mass;
+  bool frame_site = false;
+  vec4_block::ptr frame_dof() const { return _frame_dof; }
 
   /// Emit the per-vertex AMAP quaternions (`amap_y`) for `amap_gn`; off unless
   /// `position_distortion::w_amap` is on.
@@ -419,6 +453,7 @@ private:
   vec3_block::ptr _face_dof;
   vec3_block::ptr _normal_dof;
   vec4_block::ptr _amap_dof;
+  vec4_block::ptr _frame_dof;
 };
 
 } // namespace block

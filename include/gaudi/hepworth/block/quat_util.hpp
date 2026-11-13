@@ -10,7 +10,7 @@
 namespace gaudi {
 namespace hepworth {
 namespace block {
-namespace quat {
+namespace quat_ops {
 
 inline vec4 qmul(const vec4 &a, const vec4 &b) {
   return vec4(a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
@@ -53,7 +53,7 @@ inline vec4 quat_from_matrix(const mat3 &R) {
   return q.normalized();
 }
 
-} // namespace quat
+} // namespace quat_ops
 } // namespace block
 } // namespace hepworth
 } // namespace gaudi
