@@ -238,26 +238,37 @@ struct position_distortion {
   };
   real w_axis_ratio = 0.0;
   /// Shears each one ring every frame: stretch by `1 + shear` along `.angle`
-  /// (radians from the tight principal direction of the frame charts; NaN is
-  /// the 45-degree bisector) and `1 - shear` across, against the frame-start
-  /// ring. Only that ratio is held; area, skew and rotation are free.
-  /// `.winding = {.ring, .tube, .handedness}` sets the angle at startup from
-  /// the fitted torus (on the demo torus the bisector is about {1, 3}).
-  /// `.policy_power` scales each ring's shear in log space by
-  /// `(1 - cusp)^power`, `cusp = (1 - q) min(1, |H| / mean |H|)`
-  /// (`q = |z| / (|H| + |z|)`): curved round points get none (left to
-  /// tension), flat and anisotropic regions the full shear; 0 is uniform.
-  /// Below `.axis_q` the principal direction is noise and the axis comes from
-  /// the carried frame tangent instead (coherent across flats and round
-  /// points). Comment a line to drop it. `w_shear` scales every entry; 0
-  /// leaves the row off. Fields in order: `.shear`, `.angle`, `.winding`,
-  /// `.area`, `.policy_power`, `.axis_q`.
+  /// (radians from the axis; NaN is the 45-degree bisector) and `1 - shear`
+  /// across, against the frame-start ring. Only that ratio is held; area,
+  /// skew and rotation are free. `.winding = {.ring, .tube, .handedness}`
+  /// sets the angle at startup from the fitted torus (on the demo torus the
+  /// bisector is about {1, 3}).
+  /// Where: each ring's shear is scaled in log space, ratio `r^w`, with
+  /// `w = m^power` (the measures in [0, 1]) or `(m / mean m)^power`, `m` the
+  /// `.measure` of the frame chart's tensor (`power` 0: uniform everywhere):
+  ///   off_umbilic     1 - (1 - q) min(1, |H| / mean |H|), q = |z| / (|H| + |z|):
+  ///                   0 at curved round points (left to tension), 1 on flats
+  ///                   and anisotropic regions
+  ///   flatness        1 - |k_lo| / |k_hi|: 1 where one curvature vanishes
+  ///   mean_curvature  |H| (negative power favours flatter regions)
+  ///   anisotropy      |z|
+  ///   k_lo            |k_lo|
+  /// The axis `.angle` turns from (`.axis`):
+  ///   principal       the tight principal direction (noise at round points)
+  ///   frame           the carried frame tangent (coherent everywhere, but
+  ///                   not tied to the curvature lines)
+  ///   automatic       principal where `q >= .axis_q`, frame below it
+  /// Comment a line to drop it. `w_shear` scales every entry; 0 leaves the
+  /// row off. Fields in order: `.shear`, `.angle`, `.winding`, `.area`,
+  /// `.measure`, `.power`, `.axis`, `.axis_q`.
   std::vector<hepworth::block::shear_target> shear{
       hepworth::block::shear_target{
           .shear = 0.125,                                        // (1 + s) / (1 - s) per frame along the axis
           .winding = {.ring = 1, .tube = 10, .handedness = 1},   // sets the angle at startup on the torus
-          .policy_power = 2.0,                                   // 0: uniform; higher: umbilic cusps keep out
-          .axis_q = 0.2,                                         // below: axis from the carried frame tangent
+          .measure = hepworth::block::growth_measure::off_umbilic,   // where the shear acts (table above)
+          .power = 2.0,                                          // 0: uniform; higher: sharper
+          .axis = hepworth::block::shear_axis::automatic,       // principal, frame, automatic
+          .axis_q = 0.2,                                         // automatic: below this q the frame tangent
       },
   };
   real w_shear = 0.0;
