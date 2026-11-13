@@ -208,3 +208,11 @@
 # Nabizadeh, Wang, Ramamoorthi, Chern 2022 — Covector Fluids (ACM TOG 41(4), Article 113)
 # https://doi.org/10.1145/3528223.3530120
 # https://cseweb.ucsd.edu/~viscomp/projects/SIG22CovectorFluids/paper/CovectorFluids.pdf  (local: nabizadeh2022-covector-fluids.pdf)
+# Goriely 2006 — Twisted Elastic Rings and the Rediscoveries of Michell's Instability (J. Elasticity 84, 281–299)
+# https://doi.org/10.1007/s10659-006-9055-3
+# http://goriely.com/wp-content/uploads/2006-JElastmichell-1.pdf  (local: goriely2006-michell-instability.pdf)
+# Armon, Efrati, Kupferman, Sharon 2011 — Geometry and Mechanics in the Opening of Chiral Seed Pods (Science 333, 1726–1730)
+# https://doi.org/10.1126/science.1203874
+# http://ma.huji.ac.il/~razk/iWeb/My_Site/Publications_files/AESK11.pdf  (local: armon2011-chiral-seed-pods.pdf)
+# Hunt, Ario 2005 — Twist buckling and the foldable cylinder: an exercise in origami (Int. J. Non-Linear Mech. 40, 833–843)
+# https://doi.org/10.1016/j.ijnonlinmec.2004.08.011

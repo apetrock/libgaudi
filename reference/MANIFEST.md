@@ -164,6 +164,29 @@ Provenance URLs/DOIs: [SOURCES.txt](SOURCES.txt). PDFs may move to external stor
 - **maps_to:** [`docs/knot_project_descend.md`](../docs/knot_project_descend.md) min-twist / Bishop / holonomy story; rod Bishop frames in `asawa/rod/rod.hpp` (`_update_frames`); braid / torque-loop twist–writhe dump; Cauchy TP as thickness while descending \(E_{\mathrm{Tw}}\).
 - **cites / related:** Crane repulsive curves (TP barrier); White 1969 / Fuller DNA writhe.
 
+## Goriely 2006 — Twisted Elastic Rings and the Rediscoveries of Michell's Instability
+- **file:** `goriely2006-michell-instability.pdf`
+- **url:** http://goriely.com/wp-content/uploads/2006-JElastmichell-1.pdf
+- **doi:** https://doi.org/10.1007/s10659-006-9055-3
+- **tags:** `[twist, writhe, rods, Kirchhoff, instability, ring, Michell, shear]`
+- **summary:** A closed elastic ring twisted past Michell's threshold writhes out of plane (subcritical, to a figure-eight with self-contact). Linearizing Kirchhoff's equations about the twisted circle gives `Gamma tau = sqrt(3) K` (`Gamma` torsional over flexural rigidity, `K = 1/R`), total critical twist `Tw_c = 2 pi sqrt(3) / Gamma`, about two full turns. Twist energy grows as twist squared and is relieved by bending: the twist-to-writhe conversion.
+- **maps_to:** The shear / writhe study (`scripts/sympy/shear_writhe.py`, MATH.md 19.24): a tube's twist is a metric shear `r phi'`, free on a round tube until closure or other rows stop the slide, then converted to writhe at a Michell-like threshold.
+
+## Armon, Efrati, Kupferman, Sharon 2011 — Geometry and Mechanics in the Opening of Chiral Seed Pods (Science 333, 1726)
+- **file:** `armon2011-chiral-seed-pods.pdf`
+- **url:** http://ma.huji.ac.il/~razk/iWeb/My_Site/Publications_files/AESK11.pdf
+- **doi:** https://doi.org/10.1126/science.1203874
+- **tags:** `[incompatible-elasticity, growth, twist, helix, chirality, rest-state, shear, developable]`
+- **summary:** A strip with a flat reference metric and a saddle-like reference curvature at 45 degrees to its axis (`k0` along one diagonal, `-k0` along the other) is incompatible; it becomes a twisted helicoid (straight centerline, `H ~ 0`) when narrow and a cylindrical helix (curved centerline, `K ~ 0`, one principal curvature at the reference, the other zero) when wide. The transition is sharp at dimensionless width `w sqrt(k0 / t) ~ 2.5`, set by bending (`t^3 w k0^2`) against stretching (`t w (k0 w)^4`).
+- **maps_to:** A curvature-space chiral drive on the E3 frame rows (target tensor a saddle at an angle to the local axis, metric held): the solver should pick twist or writhe by scale as the paper predicts; a researched shear constraint (MATH.md 19.24).
+
+## Hunt, Ario 2005 — Twist Buckling and the Foldable Cylinder: an Exercise in Origami (Int. J. Non-Linear Mech. 40, 833)
+- **file:** none (paywalled)
+- **doi:** https://doi.org/10.1016/j.ijnonlinmec.2004.08.011
+- **tags:** `[shell-buckling, torsion, Kresling, origami, shear, folding]`
+- **summary:** A thin cylinder under torsion carries circumferential shear; membrane compression peaks at an oblique angle, so crest and valley lines run obliquely. The circumferential wave number is fixed at the instability and kept through folding; crest and valley lines rotate by different amounts until they meet as the fold lines of a flat-foldable triangulated (Kresling) mechanism.
+- **maps_to:** What the valleys and ridges of a shear buckle do (MATH.md 19.24): diagnostics for the shear drives.
+
 ## Peng, Deng, Zhang, Geng, Qin, Liu 2018 — Anderson Acceleration for Geometry Optimization and Physics Simulation
 - **file:** `peng2018-anderson-acceleration.pdf`
 - **url:** https://arxiv.org/pdf/1805.05715

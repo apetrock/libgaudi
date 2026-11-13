@@ -2875,3 +2875,44 @@ Next, if this goes to the demo: `frame` transport against the shear axis
 as a target driver for the store (C++: the advector, the increment targets
 into `contact_net_gn`), BFECC for travelling patterns, MacCormack for
 creases; a capped pullback only where the drive should stretch curvature.
+
+### 19.22 Shear, twist and writhe (`scripts/sympy/shear_writhe.py`)
+
+**Derivations.**
+1. A tube of radius `r` about an axis (Bishop curvatures `k1, k2`), its
+   cross-sections turned by `phi(s)`: in material coordinates `(s, t)` the
+   metric is `g_st = r^2 phi'`, `g_tt = r^2`,
+   `g_ss = (1 - r (k1 cos + k2 sin))^2 + r^2 phi'^2`. The surface is the same
+   for every `phi` (a reparametrization): a uniform helical shear on a round
+   tube is a free slide; only the material lines turn.
+2. A shear varying around the tube cannot come from turning sections
+   (`phi'` cannot depend on `t`): its once-around part tilts the sections
+   (an axial displacement `a(s) sin t` bends the axis by `a' / r`), so it is
+   writhe directly; higher harmonics squash the sections (shell wrinkles).
+3. The quaternionic cross ratio of a small rhombus quad on
+   `h = (k1 x^2 + k2 y^2) / 2` (diagonal `e` along `alpha`, the other
+   `sqrt(3) e`): planar part `-1/2 - (sqrt 3 / 2) k`, first-order part
+   `(sqrt(3) e / 4)(2 D cos 2 alpha - H)` along the edge direction
+   (`D = (k1 - k2) / 2`), the height difference between the quad's two
+   diagonals. For a square quad the `H` term cancels and the deviation is
+   `2 Re(z e^{-2 i alpha})`, the traceless curvature along the edge
+   (Möbius-invariant, as spheres are Möbius images of planes). The twist,
+   `Im(z e^{-2 i alpha})`, does not enter at first order.
+
+**Literature** (`reference/MANIFEST.md`): Michell's instability (Goriely
+2006): a closed twisted ring writhes out of plane at `Gamma tau = sqrt(3) K`,
+about two full turns. Chiral seed pods (Armon et al. 2011): a flat-metric
+strip with a saddle reference curvature at 45 degrees twists into a helicoid
+when narrow and coils into a cylindrical helix (`K ~ 0`) when wide, a sharp
+transition at dimensionless width about 2.5. Twisted thin cylinders (Hunt and
+Ario 2005): oblique crests and valleys along the maximum compression, the
+wave number fixed at onset, crests and valleys rotating apart into Kresling
+fold lines.
+
+**What it says for the drives.** The one-ring shear (`axis_ratio`) is a
+metric drive; on a round tube its uniform part is absorbed as a slide and
+only incompatibility makes shape (19.21's shear policy keeps it off umbilic
+cusps). A drive with known outcomes is the Armon one: hold the metric and
+ask for a saddle curvature at an angle to the local axis; the surface
+chooses twist (helicoid) or writhe (helix) by scale. That is a curvature
+target, which the E3 frame rows can take directly (19.21's spoke targets).
