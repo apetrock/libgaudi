@@ -2685,8 +2685,32 @@ three frames, `axis_ratio` off (idle: exact fixed point):
 | twist 0.5, `tau0` 0.05 | 0.249 | 0.167 | |
 | + stretch 0.5 | 0.318 | 0.176 | lines turn at frame 2 (anisotropy 0.70 -> 0.66) |
 
-Next: drop the edge store from frames mode (store-free tangency as in the
-prototype), the medial shear.
+**Store-free (2026-11-13).** With only positions and frames as blocks,
+`contact_net_gn` drops the Rodrigues rows (the curvature is the frames'
+own) and each directed spoke's tangency reads the frames' normal curvature,
+`n_i . d / |d| - k_ij |d| / 2 - c0` (`k_ij = -(n_j - n_i) . t / |d_t|`,
+`c0` the frame start's), as in the prototype. Frame start: an exact fixed
+point (`|r|^2` 1e-31); a growth drive through `frame_rows` beside the
+metric memory tightens a torus steadily (tube 0.350 -> 0.227 in three
+frames; without the memory, tangency alone leaves slides and scale free and
+the second frame blows up). The demo now runs only this path
+(`curvature_config::contact_frames` and the normals / edge-row path are
+gone; the library's edge rows stay for the tests and `engman`). Probe,
+three frames:
+
+| run | tube | roughness | s / frame |
+|---|---|---|---|
+| normals + edge store + edge rows (before) | 0.147 | 0.193 | 2.0 |
+| frames + edge store as slack + native rows | 0.154 | 0.146 | 7 |
+| frames, store-free, native rows (now) | 0.154 | 0.145 | 2.7 |
+| idle (`axis_ratio` and the defaults off) | 0.248 | 0.163 | 0.45 |
+| growth 0.3 + det 2 | 0.191 | 0.156 (0.182 with the store) | 2.3 |
+
+Kite inflates as before (area 7.33 -> 7.56); `osculating_torus` reads the
+frame-start charts (no store) and holds at idle. Not yet native:
+`dupin_line` (the traced-line Dupin rows; the per-spoke Dupin rows are), the
+growth `power`, and the frames as the position rows' principal directions
+(they still read the CR charts).
 
 **Advection.** Semi-Lagrangian on the vertex `(H, z)` field: RK2 back trace
 walking across faces (straightest path), barycentric sampling of the

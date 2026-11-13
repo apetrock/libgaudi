@@ -400,8 +400,11 @@ public:
 
   void emit_dof_blocks(std::vector<sim_block::ptr> &out) override {
     _dof = cr_coeff_block::create(u, v, mass, topology.nE);
-    _shape_dof = vec3_block::create(shape_mass, shape, shape_velocity, shape_force);
-    out.push_back(_shape_dof);
+    _shape_dof = nullptr;
+    if (shape_site) {
+      _shape_dof = vec3_block::create(shape_mass, shape, shape_velocity, shape_force);
+      out.push_back(_shape_dof);
+    }
     _face_dof = nullptr;
     if (face_site) {
       _face_dof =
@@ -443,6 +446,10 @@ public:
   std::vector<vec4> frame;
   std::vector<vec4> frame_mass;
   bool frame_site = false;
+  /// Emit the edge store (`shape`) as unknowns. Off in the contact net's
+  /// store-free frames mode; `shape` is still filled as the frame start's
+  /// reading.
+  bool shape_site = true;
   vec4_block::ptr frame_dof() const { return _frame_dof; }
 
   /// Emit the per-vertex AMAP quaternions (`amap_y`) for `amap_gn`; off unless

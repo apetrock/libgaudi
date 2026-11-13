@@ -8,6 +8,7 @@
 #include "gaudi/asawa/shell/asset_loader.hpp"
 #include "gaudi/asawa/shell/stencil_walker.hpp"
 #include "gaudi/hepworth/block/contact_net_gn.hpp"
+#include "gaudi/hepworth/block/frame_rows.hpp"
 #include "gaudi/hepworth/block/shell_constraints_init.hpp"
 #include "gaudi/hepworth/block/solver.hpp"
 #include "gaudi/hepworth/block/weingarten_gn.hpp"
@@ -620,6 +621,88 @@ GAUDI_TEST(contact_net_gn_frames_match_normals) {
                 b.second, a.first, a.second);
     GAUDI_EXPECT(b.first < 1e-6);
   }
+}
+
+/// Store-free frames mode: positions and quaternion frames only. The frame
+/// start is an exact fixed point, and a growth drive through `frame_rows`
+/// (vertex tensors as their own block) beside the metric memory tightens the
+/// tube.
+GAUDI_TEST(contact_net_gn_store_free_frames) {
+  using namespace contact_net_detail;
+  namespace hb = hepworth::block;
+  std::vector<vec3> x;
+  tri_list tris;
+  torus(1.0, 0.35, 32, 16, x, tris);
+  const int n = static_cast<int>(x.size());
+  const kusama::stencil_table t = table_of(n, tris);
+  const cnet::topology tp = cnet::build_topology(t);
+  auto frames_of = [&](const std::vector<vec3> &N) {
+    std::vector<vec4> Y(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i) {
+      const vec3 nn = N[static_cast<size_t>(i)];
+      vec3 tt = std::abs(nn[0]) < real(0.9) ? vec3::UnitX() : vec3::UnitY();
+      tt = (tt - nn * nn.dot(tt)).normalized();
+      mat3 R;
+      R.col(0) = tt;
+      R.col(1) = nn.cross(tt);
+      R.col(2) = nn;
+      Y[static_cast<size_t>(i)] = hb::quat_ops::quat_from_matrix(R);
+    }
+    return Y;
+  };
+  auto tube = [&]() {
+    real rmin = 1e30, rmax = 0;
+    for (const vec3 &p : x) {
+      rmin = std::min(rmin, std::hypot(p[0], p[1]));
+      rmax = std::max(rmax, std::hypot(p[0], p[1]));
+    }
+    const real R = real(0.5) * (rmin + rmax);
+    real s = 0;
+    for (const vec3 &p : x)
+      s += std::hypot(std::hypot(p[0], p[1]) - R, p[2]);
+    return s / real(n);
+  };
+  std::vector<vec3> v(n, vec3::Zero()), f = v, m(n, vec3::Constant(real(1e-6)));
+  auto pos = hepworth::vec3_block::create(m, x, v, f);
+  hb::projection_solver solver;
+  solver.gn_refresh_every = 5;
+  solver.gn_backtracks = 8;
+  const real tube0 = tube();
+  for (int k = 0; k < 3; ++k) {
+    const std::vector<vec3> N = cnet::vertex_normals(tp, x);
+    std::vector<vec4> Y = frames_of(N), ym(static_cast<size_t>(n), vec4::Constant(real(1e-8)));
+    auto fb = hepworth::vec4_block::create(ym, Y);
+    std::vector<vec3> S(static_cast<size_t>(n), vec3::Zero()), sv = S, sf = S,
+        sm(static_cast<size_t>(n), vec3::Constant(real(1e-8)));
+    auto sb = hepworth::vec3_block::create(sm, S, sv, sf);
+    std::vector<hepworth::sim_block::ptr> blocks{pos, fb, sb};
+    auto net = hb::contact_net_gn::create(&t, x, N, std::vector<vec3>{}, real(1),
+                                          std::vector<hepworth::sim_block::ptr>{pos, fb});
+    hb::frame_rows_config fc;
+    fc.w_growth = 0.5;
+    fc.growth_x = 0.2;
+    auto rows = hb::frame_rows::create(&t, x, Y, fc, blocks);
+    S = rows->start_tensors();
+    vecX q;
+    for (auto &b : blocks)
+      b->map_to_x(q);
+    if (k == 0) {
+      const real r0 = net->residual_sq(q);
+      std::printf("  store-free net at the frame start: |r|^2 %.2e\n", r0);
+      GAUDI_EXPECT(r0 < 1e-20);
+    }
+    // The demo's metric memory: tangency alone leaves slides and scale free.
+    auto mem = hb::dirichlet_memory_gn::create(&t, x, real(0.5), std::vector<hepworth::sim_block::ptr>{pos});
+    solver.set_constraints({net, rows, mem});
+    for (vec3 &vv : v)
+      vv.setZero();
+    solver.step(blocks, real(0.1), real(1), 20);
+    std::printf("  store-free growth frame %d: tube %.4f (start %.4f) its %d\n", k, tube(), tube0,
+                solver.last_step.its);
+  }
+  GAUDI_EXPECT(tube() < tube0);
+  for (const vec3 &p : x)
+    GAUDI_EXPECT(p.allFinite());
 }
 
 } // namespace test

@@ -26,6 +26,12 @@
 /// `Y`) at zero. A gauge carried by the shortest arc from the frame-start
 /// normal stalled cube -> sphere: under large turns of the normal the arc's
 /// holonomy fights the frames.
+/// Store-free (frames mode with no third block): the curvature is the
+/// frames' own, so there are no Rodrigues rows; each directed spoke's
+/// tangency reads the frames' normal curvature,
+/// `n_i . d / |d| - k_ij |d| / 2 - c0`, `k_ij = -(n_j - n_i) . t / |d_t|`
+/// (`t` the spoke tangent against the mean normal), `c0` the frame start's
+/// offset; the native rows (`frame_rows`) act on the frames.
 /// Rows scaled `w k_contact_gn A_e / |e|`: the Rodrigues and tangency
 /// residuals are curvature times length, so the scaled rows are integrated
 /// curvatures, the unit of `weingarten_gn` and `bend`; `k_contact_gn` is
@@ -83,6 +89,7 @@ public:
     if (auto fb = std::dynamic_pointer_cast<vec4_block>(_blocks[1])) {
       _frames = true;
       _Y0 = fb->_x;
+      _store_free = _blocks.size() < 3 || !_blocks[2];
     }
     _tp = kusama::contact_net::build_topology(*_t);
     _T0 = kusama::contact_net::read(_tp, x0, n0);
@@ -155,6 +162,17 @@ public:
     }
     if (c_off && c_off->size() == _c_off.size())
       _c_off = *c_off;
+    if (_store_free) {
+      std::vector<vec3> N0(_Y0.size());
+      for (size_t v = 0; v < _Y0.size(); ++v)
+        N0[v] = frame_normal(_Y0[v]);
+      _c_free.resize(nS);
+      for (size_t s = 0; s < nS; ++s) {
+        const int i = _tp.spokes[s][0], j = _tp.spokes[s][1];
+        _c_free[s] = free_tangency(x0[static_cast<size_t>(i)], x0[static_cast<size_t>(j)], N0[static_cast<size_t>(i)],
+                                   N0[static_cast<size_t>(j)]);
+      }
+    }
     _rest_initialized = true;
   }
 
@@ -191,10 +209,24 @@ public:
   }
 
   index_t rows() const {
-    return static_cast<index_t>(3 * _tp.edges.size() + _tp.spokes.size()) + (_frames ? 2 : 1) * _tp.n;
+    return static_cast<index_t>((_store_free ? 0 : 3) * _tp.edges.size() + _tp.spokes.size()) +
+           (_frames ? 2 : 1) * _tp.n;
   }
 
 private:
+  /// Store-free tangency, `n_i . d / |d| - k_ij |d| / 2`, before the offset.
+  static real free_tangency(const vec3 &xi, const vec3 &xj, const vec3 &ni, const vec3 &nj) {
+    const vec3 d = xj - xi;
+    const real len = d.norm();
+    const vec3 nb = (ni + nj).normalized();
+    const vec3 dt = d - nb * d.dot(nb);
+    const real L = dt.norm();
+    if (!(len > real(0)) || !(L > real(0)))
+      return real(0);
+    const real k = -(nj - ni).dot(dt / L) / L;
+    return ni.dot(d) / len - real(0.5) * k * len;
+  }
+
   /// The weighted residual `r` (rows from 0) and, optionally, its Jacobian
   /// triplets with rows offset by `id0` and the solver's global columns.
   void linearize(const vecX &q, vecX &r, std::vector<trip> *jt, index_t id0) const {
@@ -213,7 +245,7 @@ private:
       }
     }
     std::vector<real> dk(nE, 0), dt(nE, 0);
-    for (size_t e = 0; e < nE; ++e) {
+    for (size_t e = 0; e < (_store_free ? 0 : nE); ++e) {
       const vec3 h = _blocks[2]->get_vec3(static_cast<index_t>(e), q);
       dk[e] = h[0] - _h0[e][0];
       dt[e] = h[1] - _h0[e][1];
@@ -236,7 +268,7 @@ private:
     };
     auto sc = [&](size_t e) { return _blocks[2]->get_offset_idx(static_cast<index_t>(e)); };
     Eigen::Index row = 0;
-    for (size_t e = 0; e < nE; ++e, row += 3) {
+    for (size_t e = 0; e < (_store_free ? 0 : nE); ++e, row += 3) {
       const int i = _tp.edges[e][0], j = _tp.edges[e][1];
       if (i < 0 || !(_s[e] > real(0))) {
         r.segment<3>(row).setZero();
@@ -270,7 +302,37 @@ private:
     // one-sided offset against the edge's `k` held as a constant
     // (`_c_off = c0 - k0 |d0| / 2`), so the target follows edge stretch.
     const bool vertex = tangency_target == tangency::vertex;
-    for (size_t sp = 0; sp < nS; ++sp, ++row) {
+    for (size_t sp = 0; sp < (_store_free ? nS : 0); ++sp, ++row) {
+      const int i = _tp.spokes[sp][0], j = _tp.spokes[sp][1];
+      const size_t ii = static_cast<size_t>(i), jj = static_cast<size_t>(j);
+      const real s = _w * _s[static_cast<size_t>(_spoke_edge[sp])];
+      r[row] = s * (free_tangency(x[ii], x[jj], N[ii], N[jj]) - _c_free[sp]);
+      if (!jt || s == real(0))
+        continue;
+      // Positions: central differences; frames: through `dn/dY`.
+      for (int side = 0; side < 2; ++side) {
+        const size_t v = side == 0 ? ii : jj;
+        vec3 gn;
+        for (int c = 0; c < 3; ++c) {
+          const real h = real(1e-7) * std::max(real(1), std::abs(x[v][c]));
+          std::vector<vec3> xp{x[ii], x[jj]}, xm{x[ii], x[jj]};
+          xp[side][c] += h;
+          xm[side][c] -= h;
+          jt->emplace_back(id0 + row, xc(static_cast<int>(v)) + c,
+                           s * (free_tangency(xp[0], xp[1], N[ii], N[jj]) - free_tangency(xm[0], xm[1], N[ii], N[jj])) /
+                               (real(2) * h));
+          const real hn = real(1e-7);
+          vec3 np = N[v], nm = N[v];
+          np[c] += hn;
+          nm[c] -= hn;
+          gn[c] = side == 0 ? (free_tangency(x[ii], x[jj], np, N[jj]) - free_tangency(x[ii], x[jj], nm, N[jj]))
+                            : (free_tangency(x[ii], x[jj], N[ii], np) - free_tangency(x[ii], x[jj], N[ii], nm));
+          gn[c] /= real(2) * hn;
+        }
+        emit_n(id0 + row, static_cast<int>(v), s * gn);
+      }
+    }
+    for (size_t sp = 0; sp < (_store_free ? 0 : nS); ++sp, ++row) {
       const int i = _tp.spokes[sp][0], j = _tp.spokes[sp][1];
       const size_t e = static_cast<size_t>(_spoke_edge[sp]);
       const real s = _w * _s[e];
@@ -351,6 +413,8 @@ private:
   std::vector<vec3> _h0;
   bool _frames = false;
   std::vector<vec4> _Y0;
+  bool _store_free = false;
+  std::vector<real> _c_free;
   std::vector<real> _s, _spoke_len, _c_off, _kappa0;
   std::vector<std::vector<std::pair<int, vec3>>> _kappa_from;
   std::vector<int> _spoke_edge;

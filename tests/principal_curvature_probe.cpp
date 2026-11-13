@@ -16,10 +16,10 @@
 //
 //   principal_curvature_probe [frames] [label] [w] [pd iterations]
 //                   [remesh] [nodrive] [refresh=K] [backtracks=K] [areafree] [areaband=lo:hi] [warea=W]
-//                   [solver=contact_net|off] [cntan=vertex|edge] [cnframes] [nmass=C]
+//                   [solver=contact_net|off] [nmass=C]
 //                   [wdcircle=W] [dcmode=closest|slide|even|graded|hyperbolic|parabolic|loxodromic] [dcfam=0|1|2]
 //                   [dcamt=A] [dcangle=DEG] [dcref=x,y,z] [wamap=W] [amapinv=A] [wconf=W] [wtension=W]
-//                   [dupin=W] [dupinreach=R] [dupindeg=D] [wgradtl=W] [wotorus=W] [sarap=W] [sarapfree]
+//                   [dupin=W] [wgradtl=W] [wotorus=W] [sarap=W] [sarapfree]
 //                   [wkite=W] [kalpha=A] [kangle=DEG] [kmaxu=U] [ksrc=tangent|mean|aniso] [klevel=L] [kbalanced]
 //                   [wcmc=W] [cmch0=H] [cmcvol] [wtwist=W] [tau0=T] [twangle=A] [wmin=W] [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W]
 //                   [accel=anderson|chebyshev|anderson_chebyshev|none] [freshstop=0|1] [maxascent=K]
@@ -187,10 +187,6 @@ int principal_curvature_probe_main(int argc, char **argv) {
         cfg.position.w_stretch = 0.5;
     } else if (flag.rfind("wstretch=", 0) == 0) {
       cfg.position.w_stretch = std::atof(flag.c_str() + 9);
-    } else if (flag.rfind("dupinreach=", 0) == 0) {
-      cfg.shape.dupin_reach = std::atof(flag.c_str() + 11);
-    } else if (flag.rfind("dupindeg=", 0) == 0) {
-      cfg.shape.dupin_degree = std::atoi(flag.c_str() + 9);
     } else if (flag.rfind("wgradtl=", 0) == 0) {
       cfg.shape.w_grad_traceless = std::atof(flag.c_str() + 8);
     } else if (flag.rfind("wotorus=", 0) == 0) {
@@ -210,11 +206,6 @@ int principal_curvature_probe_main(int argc, char **argv) {
                        : a == "chebyshev"          ? sa::chebyshev
                        : a == "anderson_chebyshev" ? sa::anderson_chebyshev
                                                    : sa::anderson;
-    } else if (flag.rfind("cntan=", 0) == 0) {
-      eig.contact_tangency = flag.substr(6) == "edge" ? gaudi::hepworth::block::contact_net_gn::tangency::edge
-                                                      : gaudi::hepworth::block::contact_net_gn::tangency::vertex;
-    } else if (flag == "cnframes") {
-      eig.contact_frames = true;
     } else if (flag.rfind("nmass=", 0) == 0) {
       eig.contact_normal_mass = std::atof(flag.c_str() + 6);
     } else if (flag.rfind("wdcircle=", 0) == 0) {

@@ -132,36 +132,30 @@ struct fairing_draw {
   bool material = false;
 };
 
-/// What couples the edge curvature store to positions.
-///  off         — nothing; the store holds its frame-start value.
-///  contact_net — the principal contact element net (MATH.md 19.10 to 19.12):
-///                positions and normals solved together as Gauss-Newton rows
-///                in the projection solver, one sphere per edge through the
-///                Rodrigues relation with twist, the store's `(k11, k12)` per
-///                edge as its targets.
+/// The curvature solver.
+///  off         — no curvature rows.
+///  contact_net — the principal contact element net on vertex quaternion
+///                frames (MATH.md 19.10 to 19.12, 19.21 E3): positions and one
+///                quaternion `Y` per vertex solved together as Gauss-Newton
+///                rows in the projection solver; the normal is
+///                `Y e3 conj(Y) / |Y|^2` and the curvature is the frames' own
+///                (no edge store). Each directed spoke's tangency reads the
+///                frames' normal curvature; `shape_distortion` acts through
+///                the native frame rows (`frame_rows`) on per-vertex tensors.
 enum class curvature_solver { off, contact_net };
 
-/// `w_coupling` is the contact net's row weight between position space and
-/// shape space: `shape_distortion` rows act on the edge store,
+/// `w_coupling` is the contact net's row weight between positions and frames:
+/// `shape_distortion` rows act on the frames' vertex tensors,
 /// `position_distortion` rows on the positions, and the coupling keeps the
-/// two in sync. A shape row at the same weight lands the store halfway; keep
-/// it at or above the position rows that hold curvature (`w_bend`) for shape
-/// edits to show in the mesh. Without it (`off`) the store reads its
-/// frame-start value at weight 1.
+/// two in sync. Keep it at or above the position rows that hold curvature
+/// (`w_bend`) for shape edits to show in the mesh.
 struct curvature_config {
   /// `curvature_solver::off` or `curvature_solver::contact_net`.
   curvature_solver kind = curvature_solver::contact_net;
   real w_coupling = 0.5;
-  /// Tangency target: `vertex` (default) from the store's vertex tensor;
-  /// `edge` the edge's `k` plus the frame start's one-sided offset.
-  hepworth::block::contact_net_gn::tangency contact_tangency = hepworth::block::contact_net_gn::tangency::vertex;
-  /// Normals' mass per unit vertex dual area: a pull toward the frame-start
-  /// normals that damps steps on a stale factor (0: none).
+  /// Frames' mass per unit vertex dual area: a pull toward the frame-start
+  /// frames that damps steps on a stale factor (0: none).
   real contact_normal_mass = 0.0;
-  /// One quaternion frame per vertex in place of the normals (MATH.md 19.21,
-  /// E3): the normal is `Y e3 conj(Y) / |Y|^2`. Lands where the normals do
-  /// on the contact-net suite. Off by default.
-  bool contact_frames = false;
 };
 
 /// Shape → position: the osculating-torus ring row and the curvature solver.
@@ -182,17 +176,17 @@ struct shape_project {
       .volume = {.mode = hepworth::block::ring_volume_mode::corotational,
                  .corotational = {.w_proj = 1.0, .w_rest = 0, .w_stay = 0, .w_volume = 5.0e-1}},
   };
-  /// Edge curvature store → positions.
+  /// Frames ↔ positions.
   curvature_config curvature{};
 };
 
-/// Curvature edits on the edge curvature store (one 2x2 curvature tensor per
-/// edge). The mesh follows through `shape_project.curvature.w_coupling`: at
-/// equal weights the store lands halfway between the mesh and the edit.
+/// Curvature edits as native rows on the contact net's frames (`frame_rows`):
+/// each vertex carries a curvature tensor in its own frame, tied to the frames
+/// by fit rows. The mesh follows through `shape_project.curvature.w_coupling`.
 struct shape_distortion {
-  /// Shape ARAP: holds each edge's curvature at its frame-start value (how
-  /// anisotropic it is, and the pattern of its lines) but lets each patch
-  /// turn its curvature lines together. Edits pushed harder than this have
+  /// Shape ARAP (AMAP-style memory): holds each vertex's curvature at its
+  /// frame-start value (how anisotropic it is, and the pattern of its lines)
+  /// but lets each ring turn its curvature lines together. Edits pushed harder than this have
   /// to give somewhere. 0 is off.
   real w_shape_arap = 0.0;
   /// Shape ARAP also holds the mean curvature; off holds only the
@@ -205,41 +199,30 @@ struct shape_distortion {
   /// restriction. 0 leaves it off.
   real w_grad_traceless = 0.0;
 
-  /// The frame minimizer: pin toward each edge's principal curvatures set to
-  /// the neighbors' normal curvature along the same directions. 0 leaves it
-  /// off.
+  /// The frame minimizer: each principal curvature differenced across its
+  /// own lines between neighbours (across-line Dirichlet, frame-start
+  /// principal frames). 0 leaves it off.
   real w_minimizer = 0.5;
-  /// Surface tension in curvature space (`goal_mean_tension`): each edge's
-  /// mean curvature pulled to `tension.h0` (`constant`, Young-Laplace:
-  /// pressure over twice the tension; outward normals make a sphere's `H`
-  /// negative), to the store's mean (`mean`, constant-mean-curvature
-  /// fairing), or, with `contact_frames`, to the frame mean corrected toward
-  /// the first frame's volume (`volume`, `.volume_gain`); trace-free part
-  /// kept. 0 leaves it off.
+  /// Surface tension in curvature space: each vertex's mean curvature pulled
+  /// to `tension.h0` (`constant`, Young-Laplace: pressure over twice the
+  /// tension; outward normals make a sphere's `H` negative), to the
+  /// frame-start mean (`mean`, constant-mean-curvature fairing), or to that
+  /// mean corrected toward the first frame's volume (`volume`,
+  /// `.volume_gain`); trace-free part kept. 0 leaves it off.
   real w_tension = 0.15;
   hepworth::block::tension_target tension{};
   /// Dupin rows: each principal curvature held constant along its own
   /// direction, so curvature lines become circles and the surface is locally
-  /// a Dupin cyclide (torus, cylinder, cone and their Moebius images). A
-  /// fixed quadratic per frame (frames frozen at the frame start). 0 leaves
-  /// it off.
+  /// a Dupin cyclide (torus, cylinder, cone and their Moebius images); per
+  /// spoke, along the frame-start principal frames. 0 leaves it off.
   real w_dupin = 0.0;
-  /// The Dupin rows' stencil: 0 reads each principal curvature's derivative
-  /// on one face; above 0 traces each curvature line `dupin_reach` mean edge
-  /// lengths both ways and holds the residual of a degree-`dupin_degree` fit
-  /// of its normal curvature along the line (0: constant, the line a circle;
-  /// 1: linear change allowed). Longer reaches settle lower-frequency
-  /// departures from Dupin.
-  real dupin_reach = 0.0;
-  int dupin_degree = 0;
   /// Directional curvature growth, the shape-space match of position
   /// `stretch`: each frame the normal curvature along `.angle` (radians from
   /// the tight direction toward the other) times `1 + x`, across it times
-  /// `1 + y`, against the frame-start store; negative bends less that way.
-  /// `.power` scales each fraction by `(|k| / mean |k|)^power` of that axis's
-  /// frame-start curvature, so positive grows the more curved edges faster.
-  /// `.winding` sets the angle at startup like stretch. Comment a line to
-  /// drop it. `w_growth` scales every entry; 0 leaves the row off.
+  /// `1 + y`, against the frame start; negative bends less that way; the
+  /// torsion along it held. `.winding` sets the angle at startup like
+  /// stretch. Only the first entry is used (`.power` is not yet read).
+  /// `w_growth` scales it; 0 leaves the row off.
   std::vector<hepworth::block::curvature_growth_target> growth{
       hepworth::block::curvature_growth_target{.angle = 1.0,
                                                .x = 1.0,
@@ -248,15 +231,12 @@ struct shape_distortion {
                                                .power = 0.5},
   };
   real w_growth = 0.0;
-  /// Holds each vertex ring's total Gauss-image area `sum K dA` of the store
-  /// at its frame-start value and lets it redistribute between the ring's
-  /// edges and between their mean curvature and anisotropy
-  /// (`ring_det_conserve`), the shape-space match of `area`. `K` is
-  /// intrinsic, so this leaves bending free and resists only what would
-  /// change the metric. 0 leaves it off.
+  /// Holds each vertex ring's Gauss-image area (the solid angle of its
+  /// faces' normals) at its frame-start value, the shape-space match of
+  /// `area`. It does not resist a uniform tube shrink (the normals do not
+  /// change). 0 leaves it off.
   real w_det = 0.0;
-  /// Frames mode only (`curvature_config::contact_frames`): the geodesic
-  /// torsion along `twist_angle` (radians from the tight direction; winding
+  /// The geodesic torsion along `twist_angle` (radians from the tight direction; winding
   /// like growth) raised by `tau0` per frame, a uniform twist. Pair it with a
   /// position growth (stretch, kite). 0 leaves it off.
   real w_twist = 0.0;
@@ -528,8 +508,9 @@ public:
     _cr = std::make_shared<hepworth::block::shell_cr_block>(__M);
     _cr->face_site = !_cfg.project.one_ring_operators || _cfg.dirichlet.w_pin > 0.0;
     const bool net = _cfg.project.curvature.kind == curvature_solver::contact_net;
-    _cr->normal_site = net && !_cfg.project.curvature.contact_frames;
-    _cr->frame_site = net && _cfg.project.curvature.contact_frames;
+    _cr->normal_site = false;
+    _cr->frame_site = net;
+    _cr->shape_site = false;
     {
       const shape_distortion &s = _cfg.shape;
       const bool rows = s.w_shape_arap > 0 || s.w_tension > 0 || s.w_minimizer > 0 || s.w_dupin > 0 ||
@@ -697,46 +678,29 @@ public:
             .build();
   }
 
-  /// Couples the edge store to positions with the configured solver, then
-  /// adds the target rows on the store at the read-out row's unit.
+  /// The contact net on positions and frames, the metric memory and the
+  /// native frame rows.
   void push_curvature(hepworth::block::solver_context &ctx) {
     namespace hb = hepworth::block;
     const curvature_config &c = _cfg.project.curvature;
-    if (!_cr || !_shell || ctx.blocks.empty() || !_cr->shape_dof() || !__M->verts_are_dense_packed() ||
-        _cr->table.n_edges <= 0)
+    if (c.kind != curvature_solver::contact_net || !(c.w_coupling > 0.0) || !_cr || !_shell ||
+        ctx.blocks.empty() || !_cr->frame_dof() || !__M->verts_are_dense_packed() || _cr->table.n_edges <= 0)
       return;
     const std::vector<vec3> &x = _shell->xs->get();
-    if (static_cast<int>(x.size()) != _cr->table.n_verts)
+    if (static_cast<int>(x.size()) != _cr->table.n_verts || _cr->normal.size() != x.size())
       return;
     ctx.shell_mesh = __M.get();
     hepworth::sim_block::ptr pos = ctx.blocks[0];
-    hepworth::sim_block::ptr normals = c.contact_frames ? hepworth::sim_block::ptr(_cr->frame_dof())
-                                                        : hepworth::sim_block::ptr(_cr->normal_dof());
-    if (c.kind == curvature_solver::contact_net && c.w_coupling > 0.0 && normals && _cr->normal.size() == x.size()) {
-      // The net's rows couple positions, normals (or frames) and the store in
-      // the one solve; the store answers to them and its shape rows.
-      std::vector<hepworth::sim_block::ptr> net_blocks{pos, normals, _cr->shape_dof()};
-      auto net = hb::contact_net_gn::create(&_cr->table, x, _cr->normal, _cr->shape, c.w_coupling, net_blocks);
-      net->tangency_target = c.contact_tangency;
-      ctx.constraints.push_back(net);
-      if (_cfg.position.w_memory > 0.0)
-        ctx.constraints.push_back(hb::dirichlet_memory_gn::create(
-            &_cr->table, x, _cfg.position.w_memory, std::vector<hepworth::sim_block::ptr>{pos}));
-      if (c.contact_frames)
-        push_frame_rows(ctx);
-      else
-        push_edge_fairing(ctx);
-      return;
-    }
-    // No live read-out row: the store reads its frame-start value at weight 1.
-    ctx.constraints.push_back(hb::edge_shape_fair::create(
-        &_cr->table, x, hb::edge_fair_rows::pin, real(1),
-        std::vector<hepworth::sim_block::ptr>{_cr->shape_dof()}, hb::goal_fixed(_cr->shape)));
-    push_edge_fairing(ctx);
+    ctx.constraints.push_back(hb::contact_net_gn::create(&_cr->table, x, _cr->normal, std::vector<vec3>{},
+                                                         c.w_coupling,
+                                                         std::vector<hepworth::sim_block::ptr>{pos, _cr->frame_dof()}));
+    if (_cfg.position.w_memory > 0.0)
+      ctx.constraints.push_back(hb::dirichlet_memory_gn::create(&_cr->table, x, _cfg.position.w_memory,
+                                                                std::vector<hepworth::sim_block::ptr>{pos}));
+    push_frame_rows(ctx);
   }
 
-  /// `shape_distortion` as native rows on positions and frames
-  /// (`frame_rows`); the edge store is then left to the contact net alone.
+  /// `shape_distortion` as native rows on positions and frames (`frame_rows`).
   void push_frame_rows(hepworth::block::solver_context &ctx) {
     namespace hb = hepworth::block;
     const std::vector<vec3> &x = _shell->xs->get();
@@ -790,43 +754,6 @@ public:
       v += x[static_cast<size_t>(id[0])].dot(x[static_cast<size_t>(id[1])].cross(x[static_cast<size_t>(id[2])])) /
            real(6);
     return v;
-  }
-
-  /// `shape_distortion` as `edge_shape_fair` rows on the edge store.
-  void push_edge_fairing(hepworth::block::solver_context &ctx) {
-    namespace hb = hepworth::block;
-    const std::vector<vec3> &x = _shell->xs->get();
-    hepworth::sim_block::ptr store = _cr->shape_dof();
-    const std::vector<hepworth::sim_block::ptr> held{store};
-    auto fair = [&](hb::edge_fair_rows rows, real w, hb::edge_goal_fn goal, real lambda = real(1),
-                    const std::vector<vec3> *frames = nullptr, bool tensor_metric = false) {
-      if (w > 0.0 && std::isfinite(w))
-        ctx.constraints.push_back(hb::edge_shape_fair::create(&_cr->table, x, rows, w, held, std::move(goal),
-                                                              lambda, frames, tensor_metric));
-    };
-    const shape_distortion &s = _cfg.shape;
-    // The store is the live reading at prepare: the rest the knobs measure against.
-    const std::vector<vec3> &h0 = _cr->shape;
-    fair(hb::edge_fair_rows::pin, s.w_shape_arap,
-         hb::goal_shape_arap(store, &_cr->table, h0, s.shape_arap_mean));
-    if (s.dupin_reach > 0.0) {
-      if (s.w_dupin > 0.0 && std::isfinite(s.w_dupin))
-        ctx.constraints.push_back(hb::edge_shape_fair::create(
-            &_cr->table, x, hb::edge_fair_rows::dupin_line, s.w_dupin, held, hb::goal_zero(), real(1), &h0, false,
-            real(0), hb::dupin_line_spec{s.dupin_reach, s.dupin_degree}));
-    } else {
-      fair(hb::edge_fair_rows::dupin, s.w_dupin, hb::goal_zero(), real(1), &h0);
-    }
-    fair(hb::edge_fair_rows::dirichlet_traceless, s.w_grad_traceless, hb::goal_zero());
-    for (hb::curvature_growth_target spec : s.growth) {
-      spec.angle = winding_angle(spec.winding, spec.angle);
-      fair(hb::edge_fair_rows::pin, s.w_growth, hb::goal_curvature_growth(spec, h0), real(1), nullptr, true);
-    }
-    hb::init_ring_det(_cr->table, x, h0, s.w_det, store, ctx.constraints);
-    if (s.w_minimizer > 0.0)
-      fair(hb::edge_fair_rows::pin, s.w_minimizer,
-           hb::goal_principal_mean(store, hb::build_edge_frames(_cr->table, x)));
-    fair(hb::edge_fair_rows::pin, s.w_tension, hb::goal_mean_tension(store, s.tension));
   }
 
   /// One solver pass. Does not remesh, so a meridional seam stays a seam.
