@@ -694,36 +694,7 @@ GAUDI_TEST(weingarten_edge_goals_move_toward_targets) {
     console_logger::info << "goal fixed: err " << e0 << " -> " << e1 << std::endl;
     GAUDI_EXPECT(e1 < real(1e-3) * e0);
   }
-  {
-    // Zero knobs are idle on either row kind.
-    store_fixture fx;
-    fx.run({hb::edge_shape_fair::create(&fx.t, fx.x, rows::pin, real(100), blocks(fx),
-                                        hb::goal_anisotropy(fx.store, hb::anisotropy_target{}, fx.hs)),
-            hb::edge_shape_fair::create(&fx.t, fx.x, rows::h1, real(100), blocks(fx),
-                                        hb::goal_anisotropy(fx.store, hb::anisotropy_target{}, fx.hs))},
-           3);
-    console_logger::info << "goal anisotropy (zero knobs): drift " << fx.err(fx.clean)
-                         << std::endl;
-    GAUDI_EXPECT(fx.err(fx.clean) < real(1e-10));
-  }
-  {
-    // Ratio 2 on every edge that has axes, saddle and parabolic ones included.
-    store_fixture fx;
-    hb::anisotropy_target spec;
-    spec.ratio = 2;
-    std::vector<char> has_axes(fx.hs.size());
-    for (size_t e = 0; e < fx.hs.size(); ++e)
-      has_axes[e] = hb::edge_q(fx.hs[e]) > real(1e-6);
-    fx.run({hb::edge_shape_fair::create(&fx.t, fx.x, rows::pin, real(100), blocks(fx),
-                                        hb::goal_anisotropy(fx.store, spec, fx.hs))});
-    real worst = 0;
-    for (size_t e = 0; e < fx.hs.size(); ++e)
-      if (has_axes[e])
-        worst = std::max(worst, std::abs(std::log(hb::edge_ratio(fx.hs[e]) / real(2))));
-    console_logger::info << "goal anisotropy ratio 2: worst |log(r / 2)| " << worst << std::endl;
-    GAUDI_EXPECT(worst < real(1e-2));
-  }
-  for (int which = 0; which < 4; ++which) {
+  for (int which = 0; which < 3; ++which) {
     // Smoothers on a noisy store reduce the error to the clean field.
     store_fixture fx(real(0.1));
     const real e0 = fx.err(fx.clean);
@@ -737,17 +708,13 @@ GAUDI_TEST(weingarten_edge_goals_move_toward_targets) {
       name = "dirichlet_trace zero (curvature_mean)";
       c = hb::edge_shape_fair::create(&fx.t, fx.x, rows::dirichlet_trace, real(1),
                                       blocks(fx), hb::goal_zero());
-    } else if (which == 2) {
-      name = "ratio smooth (curvature_ratio)";
-      c = hb::edge_shape_fair::create(&fx.t, fx.x, rows::pin, real(10), blocks(fx),
-                                      hb::goal_ratio_smooth(fx.store, fx.frames));
     } else {
       name = "principal step (frame minimizer)";
       c = hb::edge_shape_fair::create(&fx.t, fx.x, rows::pin, real(10), blocks(fx),
                                       hb::goal_principal_mean(fx.store, fx.frames));
     }
-    // Ratio smoothing is not a denoiser of the tensor: it is judged by the
-    // roughness of the log ratio across neighboring edges.
+    // The minimizer is judged by the roughness of the anisotropy across
+    // neighboring edges.
     auto roughness = [&]() {
       real s = 0;
       for (size_t e = 0; e < fx.hs.size(); ++e) {
@@ -764,174 +731,13 @@ GAUDI_TEST(weingarten_edge_goals_move_toward_targets) {
     const real e1 = fx.err(fx.clean), r1 = roughness();
     console_logger::info << "goal " << name << ": err to clean " << e0 << " -> " << e1
                          << ", log-ratio roughness " << r0 << " -> " << r1 << std::endl;
-    // Ratio smoothing and the minimizer smooth the field rather than denoise
-    // it (the clean torus is not their fixed point): judge them by roughness.
+    // The minimizer smooths the field rather than denoising it (the clean
+    // torus is not its fixed point): judge it by roughness.
     GAUDI_EXPECT(which >= 2 ? r1 < r0 : e1 < e0);
   }
 }
 
 // ------------------------------------------------ one scale, edits drive
-
-/// Each knob's goal maps a tensor already at its target to itself, so
-/// re-projecting every iterate does not compound the edit.
-GAUDI_TEST(weingarten_anisotropy_goals_are_idempotent) {
-  const vec3 h0(2.0, 0.3, -0.5);
-  // A live tensor away from the rest: the goal must not depend on how far
-  // the store has got.
-  const vec3 h(1.7, -0.2, 0.1);
-  real worst = 0;
-  auto check = [&](const hb::anisotropy_target &spec) {
-    // One application reaches the target; a second must not move it.
-    const vec3 g1 = hb::anisotropy_edge(h, h0, spec);
-    const vec3 g2 = hb::anisotropy_edge(g1, h0, spec);
-    worst = std::max(worst, (g2 - g1).norm() / g1.norm());
-    return g1;
-  };
-  hb::anisotropy_target mean, ratio, logr, rel, rel_log, mixed;
-  mean.mean = 1.2;
-  ratio.ratio = 1.5;
-  logr.ratio = 0.3;
-  logr.log = true;
-  rel.ratio = 0.8;
-  rel.relative = true;
-  rel_log.ratio = -0.2;
-  rel_log.log = true;
-  rel_log.relative = true;
-  mixed.mean = 1.1;
-  mixed.ratio = 0.1;
-  mixed.log = true;
-  mixed.relative = true;
-  for (const auto *s : {&mean, &ratio, &logr, &rel, &rel_log, &mixed})
-    check(*s);
-  console_logger::info << "anisotropy goals: worst second-application change " << worst << std::endl;
-  GAUDI_EXPECT(worst < real(1e-12));
-  GAUDI_EXPECT((hb::anisotropy_edge(h, h0, hb::anisotropy_target{}) - h).norm() < real(1e-14));
-}
-
-/// The shape-space ARAP shear: at zero shear the goal is the live store
-/// (an identity ARAP); with a shear it turns the store's lines and leaves
-/// the mean curvature and the anisotropy where they are.
-GAUDI_TEST(weingarten_curvature_shear_goal) {
-  store_fixture fx;
-  // Analytic charts of the fixture torus (R 2, r 0.7, about z).
-  std::vector<hb::vertex_chart> charts(fx.x.size());
-  for (size_t i = 0; i < fx.x.size(); ++i) {
-    const vec3 &p = fx.x[i];
-    const real rho = std::hypot(p.x(), p.y());
-    const vec3 c(p.x() / rho * real(2), p.y() / rho * real(2), 0);
-    const vec3 n = (p - c).normalized();
-    const vec3 hoop(-p.y() / rho, p.x() / rho, 0);
-    charts[i].ok = true;
-    charts[i].N = n;
-    charts[i].T = n.cross(hoop).normalized();
-    charts[i].B = n.cross(charts[i].T);
-    charts[i].h = vec3(real(1) / real(0.7), 0, ((rho - real(2)) / real(0.7)) / rho);
-  }
-  vecX q;
-  fx.store->map_to_x(q);
-  auto goal_of = [&](real shear) {
-    hb::curvature_shear_target spec;
-    spec.shear = shear;
-    std::vector<vec3> g(fx.hs.size());
-    hb::goal_curvature_shear(fx.store, &fx.t, *fx.frames, charts, spec, fx.hs)(q, g);
-    return g;
-  };
-  real idle = 0, moved = 0, dH = 0, dD = 0;
-  const std::vector<vec3> g0 = goal_of(0), g1 = goal_of(0.3);
-  auto D = [](const vec3 &h) { return std::hypot(real(0.5) * (h[0] - h[2]), h[1]); };
-  for (size_t e = 0; e < fx.hs.size(); ++e) {
-    idle = std::max(idle, (g0[e] - fx.hs[e]).norm());
-    moved += (g1[e] - fx.hs[e]).norm();
-    dH = std::max(dH, std::abs((g1[e][0] + g1[e][2]) - (fx.hs[e][0] + fx.hs[e][2])));
-    dD = std::max(dD, std::abs(D(g1[e]) - D(fx.hs[e])));
-  }
-  moved /= real(fx.hs.size());
-  console_logger::info << "curvature shear: zero-shear drift " << idle << ", mean move at 0.3 "
-                       << moved << ", worst mean-curvature change " << dH
-                       << ", worst anisotropy change " << dD << std::endl;
-  GAUDI_EXPECT(idle < real(1e-10));
-  GAUDI_EXPECT(moved > real(1e-2));
-  GAUDI_EXPECT(dH < real(1e-12));
-  GAUDI_EXPECT(dD < real(1e-12));
-}
-
-/// What each knob does to one tensor, on elliptic, saddle and parabolic
-/// tensors (signed `k0 >= k1`, ratio `r = |k_hi| / |k_lo|`).
-GAUDI_TEST(weingarten_anisotropy_knob_identities) {
-  auto H_of = [](const vec3 &g) { return real(0.5) * (g[0] + g[2]); };
-  auto D_of = [](const vec3 &g) { return std::hypot(real(0.5) * (g[0] - g[2]), g[1]); };
-  auto axis_of = [](const vec3 &g) { return real(0.5) * std::atan2(g[1], real(0.5) * (g[0] - g[2])); };
-  auto ratio_of = [](const vec3 &g) {
-    real k0, k1;
-    hb::signed_principals(g, k0, k1);
-    return std::max(std::abs(k0), std::abs(k1)) / std::min(std::abs(k0), std::abs(k1));
-  };
-  struct tcase {
-    vec3 h;
-    bool saddle;
-  };
-  const std::vector<tcase> cases{{hb::coeffs_at_angle(2.0, 0.5, 0.4), false},   // elliptic
-                                 {hb::coeffs_at_angle(3.0, -1.0, -0.7), true},  // saddle
-                                 {hb::coeffs_at_angle(1.0, -1.0, 0.3), true},   // minimal
-                                 {hb::coeffs_at_angle(1.5, 0.0, 1.1), false},   // parabolic
-                                 {hb::coeffs_at_angle(-0.3, -2.0, 0.2), false}}; // concave
-  real worst = 0;
-  int check = 0, which = -1;
-  auto gap = [&](real a, real b) {
-    ++check;
-    if (std::abs(a - b) > worst) {
-      worst = std::abs(a - b);
-      which = check;
-    }
-  };
-  auto knob = [](real ratio, bool log = false, bool relative = false) {
-    hb::anisotropy_target s;
-    s.ratio = ratio;
-    s.log = log;
-    s.relative = relative;
-    return s;
-  };
-  for (const tcase &c : cases) {
-    const vec3 &h = c.h;
-    // Ratio 2.5: measured |k_hi| / |k_lo| is 2.5; elliptic keeps H, saddle
-    // keeps |D|; axes kept.
-    const vec3 g = hb::anisotropy_edge(h, h, knob(2.5));
-    gap(ratio_of(g), 2.5);
-    gap(c.saddle ? D_of(g) : H_of(g), c.saddle ? D_of(h) : H_of(h));
-    gap(std::remainder(axis_of(g) - axis_of(h), real(M_PI)), 0);
-    // The same target as a log, and below 1 read as its inverse.
-    gap((hb::anisotropy_edge(h, h, knob(std::log(2.5), true)) - g).norm(), 0);
-    gap((hb::anisotropy_edge(h, h, knob(0.4)) - g).norm(), 0);
-    // Ratio 1: round at the same H, or a minimal saddle at the same |D|.
-    const vec3 g1 = hb::anisotropy_edge(h, h, knob(1));
-    gap(c.saddle ? H_of(g1) : D_of(g1), 0);
-    gap(c.saddle ? D_of(g1) : H_of(g1), c.saddle ? D_of(h) : H_of(h));
-    gap((hb::anisotropy_edge(h, h, knob(0, true)) - g1).norm(), 0);
-    // Relative: a huge negative log stops at ratio 1; times 0.5 halves r.
-    gap((hb::anisotropy_edge(h, h, knob(-50, true, true)) - g1).norm(), 0);
-    if (std::isfinite(ratio_of(h)) && ratio_of(h) > real(2.5)) {
-      const vec3 gh = hb::anisotropy_edge(h, h, knob(0.5, false, true));
-      gap(ratio_of(gh), real(0.5) * ratio_of(h));
-    }
-    // Mean: H scaled, deviator kept.
-    hb::anisotropy_target mn;
-    mn.mean = 1.5;
-    const vec3 gm = hb::anisotropy_edge(h, h, mn);
-    gap(H_of(gm), real(1.5) * H_of(h));
-    gap(D_of(gm), D_of(h));
-  }
-  // Ratio leaves a round tensor (no axes) alone.
-  const vec3 um(0.8, 0.0, 0.8);
-  gap((hb::anisotropy_edge(um, um, knob(3)) - um).norm(), 0);
-  // The metrics are functions of r: q, log r, 1 / r.
-  gap(hb::curvature_measure(hb::curvature_metric::aniso, 3.0, 1.0), 0.5);
-  gap(hb::curvature_measure(hb::curvature_metric::aniso, 3.0, -1.0), 0.5);
-  gap(hb::curvature_measure(hb::curvature_metric::log_ratio, 3.0, 1.0), std::log(real(3)));
-  gap(hb::curvature_measure(hb::curvature_metric::ratio, -1.0, 3.0), real(1) / 3);
-  console_logger::info << "anisotropy knob identities: worst gap " << worst << " (check " << which
-                       << " of " << check << ")" << std::endl;
-  GAUDI_EXPECT(worst < real(1e-10));
-}
 
 /// One degenerate triangle (two vertices welded, as a remesh can leave)
 /// must not poison the coupling and memory rows: they leave its edges out,
@@ -1148,113 +954,6 @@ GAUDI_TEST(weingarten_ring_det_conserves_and_redistributes) {
   GAUDI_EXPECT(drift_held < real(0.2) * drift_free);
 }
 
-/// The vertex Gauss row: its vertex tensor is `vertex_tensor`'s, it is idle
-/// at the baked `K0`, its projection lands each vertex (elliptic, saddle,
-/// near-parabolic) exactly on `K0`, it is variational, and with a growth
-/// pin it keeps the vertices' `K` that the growth alone would change.
-GAUDI_TEST(weingarten_vertex_gauss_conserves) {
-  store_fixture fx;
-  const hb::vertex_star_charts ch = hb::build_vertex_star_charts(fx.t, fx.x);
-  const kusama::weingarten::vertex_stars stars = kusama::weingarten::build_vertex_stars(fx.t, fx.x);
-  const std::vector<vec3> hv = hb::vertex_tensors(ch, fx.hs);
-  real chart_gap = 0;
-  for (int v = 0; v < fx.t.n_verts; ++v) {
-    const vec3 ref = kusama::weingarten::vertex_tensor(
-        stars, v, [&](int i) { return fx.x[static_cast<size_t>(i)]; },
-        [&](int e) { return fx.hs[static_cast<size_t>(e)]; }, ch.T[static_cast<size_t>(v)],
-        ch.B[static_cast<size_t>(v)], ch.N[static_cast<size_t>(v)]);
-    chart_gap = std::max(chart_gap, (ref - hv[static_cast<size_t>(v)]).norm());
-  }
-  const std::vector<real> K0 = hb::vertex_gauss(ch, fx.hs);
-  std::vector<hepworth::projection_constraint::ptr> rows;
-  hb::init_vertex_gauss(fx.t, fx.x, ch, K0, real(1), fx.store, rows);
-  GAUDI_ASSERT(!rows.empty());
-  vecX q;
-  fx.store->map_to_x(q);
-  real idle = 0;
-  for (auto &r : rows) {
-    index_t id0 = 0;
-    std::vector<trip> trips;
-    r->fill_A(id0, trips);
-    vecX Aq = vecX::Zero(id0), p = vecX::Zero(id0);
-    for (const trip &t : trips)
-      Aq[t.row()] += t.value() * q[t.col()];
-    r->project(q, p);
-    idle = std::max(idle, (Aq - p).norm() / std::max(Aq.norm(), real(1e-30)));
-  }
-  // Perturbed spokes land on K0.
-  const std::vector<real> c = kusama::weingarten::coupling_factor(fx.t, fx.x);
-  std::mt19937 rng(11);
-  std::normal_distribution<real> nd(0, 0.2);
-  real Kmean = 0;
-  for (real k : K0)
-    Kmean += std::abs(k) / real(K0.size());
-  real worst = 0;
-  int ell = 0, sad = 0, flat = 0;
-  for (size_t v = 0; v < ch.at.size(); ++v) {
-    if (ch.at[v].empty())
-      continue;
-    std::vector<real> cs;
-    std::vector<vec3> h;
-    for (const auto &sp : ch.at[v]) {
-      cs.push_back(c[static_cast<size_t>(sp.edge)]);
-      const vec3 &h0 = fx.hs[static_cast<size_t>(sp.edge)];
-      h.push_back(h0 + h0.norm() * vec3(nd(rng), nd(rng), nd(rng)));
-    }
-    hb::vertex_gauss_conserve row(ch.at[v], cs, K0[v], real(1),
-                                  std::vector<hepworth::sim_block::ptr>{fx.store});
-    const vec3 g = row.vertex_tensor(row.project_spokes(h));
-    worst = std::max(worst, std::abs(g[0] * g[2] - g[1] * g[1] - K0[v]) /
-                                std::max(std::abs(K0[v]), real(1e-3) * Kmean));
-    (std::abs(K0[v]) < real(0.05) * Kmean ? flat : K0[v] > 0 ? ell : sad)++;
-  }
-  // Audit a perturbed store on a sample of rows.
-  std::vector<vec3> hp = fx.hs;
-  for (vec3 &h : hp)
-    h += h.norm() * vec3(nd(rng), nd(rng), nd(rng));
-  std::vector<vec3> hvel(hp.size(), vec3::Zero()), hf = hvel;
-  auto store2 = hepworth::vec3_block::create(fx.hm, hp, hvel, hf);
-  std::vector<hepworth::projection_constraint::ptr> rows2, sample;
-  hb::init_vertex_gauss(fx.t, fx.x, ch, K0, real(1), store2, rows2);
-  for (size_t i = 0; i < rows2.size(); i += 17)
-    sample.push_back(rows2[i]);
-  vecX q2;
-  store2->map_to_x(q2);
-  real audit = 0;
-  for (const auto &a : hb::audit_variational(sample, q2))
-    audit = std::max(audit, a.max);
-  // Isotropic growth pin with and without the rows, store only.
-  auto run = [&](bool held) {
-    store_fixture f2;
-    hb::curvature_growth_target g;
-    g.x = g.y = 0.2;
-    std::vector<hepworth::projection_constraint::ptr> cs{hb::edge_shape_fair::create(
-        &f2.t, f2.x, hb::edge_fair_rows::pin, real(1), std::vector<hepworth::sim_block::ptr>{f2.store},
-        hb::goal_curvature_growth(g, f2.hs), real(1), nullptr, true)};
-    if (held)
-      hb::init_vertex_gauss(f2.t, f2.x, ch, K0, real(10), f2.store, cs);
-    f2.run(cs, 5);
-    const std::vector<real> K = hb::vertex_gauss(ch, f2.hs);
-    real num = 0, den = 0;
-    for (size_t v = 0; v < K.size(); ++v) {
-      num += std::abs(K[v] - K0[v]);
-      den += std::abs(K0[v]);
-    }
-    return num / den;
-  };
-  const real drift_free = run(false), drift_held = run(true);
-  console_logger::info << "vertex gauss: chart gap " << chart_gap << ", idle " << idle
-                       << ", projected worst " << worst << " (" << ell << " elliptic, " << sad
-                       << " saddle, " << flat << " near flat), audit " << audit
-                       << ", growth drift free " << drift_free << " held " << drift_held << std::endl;
-  GAUDI_EXPECT(chart_gap < real(1e-12));
-  GAUDI_EXPECT(idle < real(1e-12));
-  GAUDI_EXPECT(worst < real(1e-9));
-  GAUDI_EXPECT(ell > 0 && sad > 0);
-  GAUDI_EXPECT(audit < real(1e-4));
-  GAUDI_EXPECT(drift_held < real(0.2) * drift_free);
-}
-
 /// Dupin rows with a target scale hold that multiple of the frame-start
 /// gradients: at the frame-start store the residual is zero at scale 1 and
 /// plus or minus the plain Dupin residual at scales 0 and 2.
@@ -1335,91 +1034,6 @@ GAUDI_TEST(weingarten_dupin_rows_hold_a_torus) {
   const real rough = dupin_ratio(bumpy, tris);
   console_logger::info << "dupin residual / |h|: torus " << clean << " bumpy " << rough << std::endl;
   GAUDI_EXPECT(clean < real(0.25) * rough);
-}
-
-GAUDI_TEST(weingarten_willmore_equalizer) {
-  auto goal_at = [](const hb::edge_goal_fn &goal, hepworth::sim_block::ptr store,
-                    const std::vector<vec3> &h) {
-    vecX q;
-    store->map_to_x(q);
-    for (size_t e = 0; e < h.size(); ++e)
-      q.segment<3>(store->get_offset_idx(static_cast<index_t>(e))) = h[e];
-    std::vector<vec3> g(h.size());
-    goal(q, g);
-    return g;
-  };
-  // Plain: one band at gain 0.2 shrinks the anisotropic part by 20%.
-  store_fixture fx;
-  hb::willmore_target plain;
-  plain.bands = {{0.0, 0.2}};
-  const std::vector<vec3> g = goal_at(hb::goal_willmore_eq(fx.store, fx.t, fx.x, fx.hs, plain),
-                                      fx.store, fx.hs);
-  real worst = 0;
-  for (size_t e = 0; e < g.size(); ++e) {
-    const vec3 &h = fx.hs[e];
-    const real H = real(0.5) * (h[0] + h[2]), d = real(0.5) * (h[0] - h[2]);
-    const vec3 want(H + real(0.8) * d, real(0.8) * h[1], H - real(0.8) * d);
-    worst = std::max(worst, (g[e] - want).norm());
-  }
-  // Flat grid: constant field and edge noise.
-  std::vector<vec3> xg;
-  std::vector<std::array<int, 3>> tris;
-  unit_grid(9, xg, tris);
-  const kusama::stencil_table tg =
-      kusama::build_stencil_table(asawa::shell::triangle_walker(static_cast<int>(xg.size()), tris));
-  const std::vector<vec3> hc = sample_edges_planar(tg, xg, [](const vec3 &) {
-    mat3 S;
-    S << 1.0, 0.3, 0, 0.3, -0.5, 0, 0, 0, 0;
-    return S;
-  });
-  std::mt19937 rng(7);
-  std::uniform_real_distribution<real> u(-1, 1);
-  std::vector<vec3> noise(hc.size());
-  for (vec3 &n : noise)
-    n = vec3(u(rng), u(rng), u(rng));
-  auto norm = [](const std::vector<vec3> &a) {
-    real s = 0;
-    for (const vec3 &v : a)
-      s += v.squaredNorm();
-    return std::sqrt(s);
-  };
-  const hb::edge_tensor_blur blur(tg, xg, {real(3)});
-  std::vector<vec3> d_const = blur.apply(0, hc), d_noise = blur.apply(0, noise);
-  for (size_t e = 0; e < hc.size(); ++e)
-    d_const[e] -= hc[e];
-  const real keep = norm(d_const) / norm(hc), damp = norm(d_noise) / norm(noise);
-  // Balloon preset: fine band free, coarse band active. Noise added to the
-  // store moves the residual (goal - S) far less than the noise itself.
-  std::vector<vec3> hm(hc.size(), vec3::Constant(real(1e-8))), hv(hc.size(), vec3::Zero()),
-      hf = hv, hs = hc;
-  auto store = hepworth::vec3_block::create(hm, hs, hv, hf);
-  hb::willmore_target balloon;
-  balloon.bands = {{0.0, 0.0}, {3.0, 0.2}};
-  const hb::edge_goal_fn gb = hb::goal_willmore_eq(store, tg, xg, hc, balloon);
-  std::vector<vec3> noisy = hc;
-  for (size_t e = 0; e < hc.size(); ++e)
-    noisy[e] += noise[e];
-  const std::vector<vec3> g0 = goal_at(gb, store, hc), g1 = goal_at(gb, store, noisy);
-  std::vector<vec3> r0(hc.size()), r1(hc.size());
-  for (size_t e = 0; e < hc.size(); ++e) {
-    r0[e] = g0[e] - hc[e];
-    r1[e] = g1[e] - noisy[e];
-  }
-  // The goal is taken at the frame-start store and held (a fixed pin, so the
-  // row is variational): it does not depend on the live store, so within a
-  // frame the free bands are held at their frame-start values too; each
-  // frame re-reads them.
-  std::vector<vec3> dg(hc.size());
-  for (size_t e = 0; e < hc.size(); ++e)
-    dg[e] = g1[e] - g0[e];
-  const real moves = norm(dg) / norm(g0);
-  console_logger::info << "willmore equalizer: plain vs shrink " << worst
-                       << ", blur keeps a flat constant to " << keep << ", damps noise to "
-                       << damp << ", goal change with the live store " << moves << std::endl;
-  GAUDI_EXPECT(worst < real(1e-12));
-  GAUDI_EXPECT(keep < real(1e-6));
-  GAUDI_EXPECT(damp < real(0.3));
-  GAUDI_EXPECT(moves < real(1e-12));
 }
 
 /// Shape ARAP on the torus store: idle at rest, free under a uniform turn of
@@ -1617,107 +1231,6 @@ inline real mean_displacement(const std::vector<vec3> &a, const std::vector<vec3
   for (size_t i = 0; i < a.size(); ++i)
     d += (a[i] - b[i]).norm();
   return d / real(a.size());
-}
-
-GAUDI_TEST(weingarten_shape_edits_drive_the_mesh) {
-  std::vector<vec3> x0;
-  std::vector<std::array<int, 3>> tris;
-  torus_tris(2.0, 0.7, 24, 12, x0, tris);
-  const kusama::stencil_table t =
-      kusama::build_stencil_table(asawa::shell::triangle_walker(static_cast<int>(x0.size()), tris));
-  using rows = hb::edge_fair_rows;
-  using cvec = std::vector<hepworth::projection_constraint::ptr>;
-  const real w_c = 1e3;
-  // Target weights beside the read-out's: `w_c` is an even blend.
-  auto knob = [w_c](rows r, hb::anisotropy_target spec, real w = real(-1)) {
-    const real wt = w > 0 ? w : w_c;
-    return [r, spec, wt](const kusama::stencil_table &tt, const std::vector<vec3> &x,
-                         hepworth::sim_block::ptr store, const std::vector<vec3> &h0) {
-      return cvec{hb::edge_shape_fair::create(&tt, x, r, wt,
-                                              std::vector<hepworth::sim_block::ptr>{store},
-                                              hb::goal_anisotropy(store, spec, h0))};
-    };
-  };
-  {
-    // Zero knobs: nothing moves.
-    const auto xs = run_edit_frames(x0, tris, 3, w_c, knob(rows::h1, hb::anisotropy_target{}));
-    const real d = mean_displacement(xs.back(), x0);
-    console_logger::info << "edits: zero knobs, mean displacement over 3 frames " << d << std::endl;
-    GAUDI_EXPECT(d < real(1e-8));
-  }
-  // Mean q on elliptic edges (on saddles q = |H| / |D| rises as D shrinks).
-  auto mean_aniso = [&](const std::vector<vec3> &x) {
-    real s = 0;
-    int c = 0;
-    for (const vec3 &h : wg::edge_readings(t, x)) {
-      real k0, k1;
-      hb::signed_principals(h, k0, k1);
-      if (k0 * k1 > 0) {
-        s += hb::edge_q(h);
-        ++c;
-      }
-    }
-    return s / real(std::max(c, 1));
-  };
-  // Mean |log r - target| (log r capped at log 1000).
-  auto mean_log_gap = [&](const std::vector<vec3> &x, real target) {
-    real s = 0;
-    const std::vector<vec3> hs = wg::edge_readings(t, x);
-    for (const vec3 &h : hs) {
-      real k0, k1;
-      hb::signed_principals(h, k0, k1);
-      s += std::abs(hb::curvature_measure(hb::curvature_metric::log_ratio, k0, k1) - target);
-    }
-    return s / real(std::max<size_t>(hs.size(), 1));
-  };
-  {
-    // Ratio times 0.8 per frame: the measured anisotropy drops. (Compounding
-    // far past what a torus can carry runs away here: the harness holds the
-    // positions with the memory alone.)
-    hb::anisotropy_target spec;
-    spec.ratio = 0.8;
-    spec.relative = true;
-    const auto xs = run_edit_frames(x0, tris, 3, w_c, knob(rows::h1, spec));
-    for (size_t k = 1; k < xs.size(); ++k)
-      console_logger::info << "  frame " << k << " aniso " << mean_aniso(xs[k]) << " |dx| "
-                           << mean_displacement(xs[k], xs[k - 1]) << std::endl;
-    const real a0 = mean_aniso(x0), a1 = mean_aniso(xs.back());
-    console_logger::info << "edits: ratio x0.8 per frame, mean aniso " << a0 << " -> " << a1
-                         << ", displacement " << mean_displacement(xs.back(), x0) << std::endl;
-    GAUDI_EXPECT(a1 < real(0.95) * a0);
-  }
-  {
-    // Ratio 1.5: the measured log ratio moves toward log 1.5. (The harness
-    // keeps full velocity between frames, so past the target it overshoots.)
-    hb::anisotropy_target spec;
-    spec.ratio = 1.5;
-    const real L = std::log(real(1.5));
-    const auto xs = run_edit_frames(x0, tris, 2, w_c, knob(rows::h1, spec));
-    for (size_t k = 1; k < xs.size(); ++k)
-      console_logger::info << "  frame " << k << " |log r - log 1.5| " << mean_log_gap(xs[k], L)
-                           << " |dx| " << mean_displacement(xs[k], xs[k - 1]) << std::endl;
-    const real g0 = mean_log_gap(x0, L), g1 = mean_log_gap(xs.back(), L);
-    console_logger::info << "edits: ratio 1.5, mean |log r - log 1.5| " << g0 << " -> " << g1
-                         << ", displacement " << mean_displacement(xs.back(), x0) << std::endl;
-    GAUDI_EXPECT(g1 < real(0.8) * g0);
-  }
-  {
-    // h1 rows against Dirichlet rows on the same edit, across weights.
-    hb::anisotropy_target spec;
-    spec.ratio = 0.8;
-    spec.relative = true;
-    for (real w : {real(0.1) * w_c, w_c, real(10) * w_c}) {
-      const real d_h1 =
-          mean_displacement(run_edit_frames(x0, tris, 1, w_c, knob(rows::h1, spec, w))[1], x0);
-      const real d_dir =
-          mean_displacement(run_edit_frames(x0, tris, 1, w_c, knob(rows::dirichlet, spec, w))[1], x0);
-      console_logger::info << "edits: ratio x0.8 one frame, w " << w << " displacement h1 " << d_h1
-                           << " dirichlet " << d_dir << std::endl;
-      // A relative ratio edit varies over the torus, so the
-      // Dirichlet rows see it as well as the pin part of h1.
-      GAUDI_EXPECT(d_h1 > real(1e-2) && d_dir > real(1e-2));
-    }
-  }
 }
 
 /// With the positions held, the least-squares solve puts the store at the

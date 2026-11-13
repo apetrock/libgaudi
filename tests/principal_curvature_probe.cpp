@@ -14,31 +14,26 @@
 // principal-curvature roughness (mean |H_i - H_j| over edges), the angular
 // momentum of the vertex velocities, the vertex count, and wall time.
 //
-//   principal_curvature_probe [frames] [target: delta|scale|torus] [w] [pd iterations]
-//                   [remesh] [nodrive] [refresh=K]
-//                   [backtracks=K] [ratio=R | logr=L] [rel] [shear=S] [wsshear=W] [skew=W] [skewscale=S] [areafree] [areaband=lo:hi] [warea=W] [fshear=W] [fsamt=S]
-//                   [solver=weingarten|exponent|eigensatz|contact_net|off] [cnmode=native|inner] [cntan=vertex|edge] [cnrot] [nmass=C] [wdcircle=W] [dcmode=closest|slide|even|graded|hyperbolic|parabolic|loxodromic] [dcfam=0|1|2] [dcamt=A] [dcangle=DEG] [dcref=x,y,z] [wamap=W] [amapinv=A] [wconf=W] [wtension=W] [dupinreach=R] [dupindeg=D] [wgradtl=W] [wcmean=W] [wcratio=W] [wotorus=W] [wodupin=W] [wodupinshape=W] [wframefair=W] [walbers=W] [wkite=W] [kalpha=A] [kangle=DEG] [kmaxu=U] [ksrc=tangent|mean|aniso] [klevel=L] [kbalanced] [wcmc=W] [cmch0=H] [cnsolver=gn|pd] [cnsolves=K] [cnits=K] [cnmem=W] [cnaccel=anderson|chebyshev|anderson_chebyshev|none] [accel=anderson|chebyshev|anderson_chebyshev|none] [xkm=K] [xkb=K] [xmass=M] [xrefresh=K] [xrest=initial] [xconf=W] [xarea=W] [wmin=W] [freshstop=0|1] [maxascent=K] [dump=K] [res=ring:tube] [wstretch=W] [wgrad=W] [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W] [wgauss=W] [grelax=A]
-//                   [mean=M]
-//                   [tilt=G] [wtilt=W]
-//                   [tiltaxis=k0|k1] [tiltmode=rigid|spin|twist|bend]
-//                   [tiltsign=gradient|propagate] [wmbands=r:g,r:g,...]
-//                   [wmmean=M] [wwm=W] [sarap=W] [sarapfree] [sdamp=W]
-//                   [perturb=P] [wcenter=W] [recenter] [wind=ring:tube[:hand]]
-//                   [swind=ring:tube[:hand]]
-//                   [smooth=L] [aratio=W] [wshear=W] [wc=W]
-//                   [sdir=angle|material|stripes] [msmooth=L] [mfollow=F] [stripes=P]
-//                   [bend=W] [damp=D] [memory=W] [test=W]
-//                   [qcwarn=Q] [noqc] [ascentrefresh] [ascenttol=T] [audit] [dupin=W] [modes=K] [tau=T] [lmax=L]
+//   principal_curvature_probe [frames] [label] [w] [pd iterations]
+//                   [remesh] [nodrive] [refresh=K] [backtracks=K] [areafree] [areaband=lo:hi] [warea=W]
+//                   [solver=contact_net|off] [cntan=vertex|edge] [nmass=C]
+//                   [wdcircle=W] [dcmode=closest|slide|even|graded|hyperbolic|parabolic|loxodromic] [dcfam=0|1|2]
+//                   [dcamt=A] [dcangle=DEG] [dcref=x,y,z] [wamap=W] [amapinv=A] [wconf=W] [wtension=W]
+//                   [dupin=W] [dupinreach=R] [dupindeg=D] [wgradtl=W] [wotorus=W] [sarap=W] [sarapfree]
+//                   [wkite=W] [kalpha=A] [kangle=DEG] [kmaxu=U] [ksrc=tangent|mean|aniso] [klevel=L] [kbalanced]
+//                   [wcmc=W] [cmch0=H] [wmin=W] [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W]
+//                   [accel=anderson|chebyshev|anderson_chebyshev|none] [freshstop=0|1] [maxascent=K]
+//                   [dump=K] [res=ring:tube] [perturb=P] [wcenter=W] [recenter]
+//                   [wstretch=W] [wind=ring:tube[:hand]] [sdir=angle|material|stripes] [msmooth=L] [mfollow=F]
+//                   [stripes=P] [tilt=G] [wtilt=W] [tiltaxis=k0|k1] [tiltmode=rigid|spin|twist|bend]
+//                   [tiltsign=gradient|propagate] [aratio=W] [bend=W] [damp=D] [memory=W]
+//                   [qcwarn=Q] [noqc] [ascentrefresh] [ascenttol=T] [audit] [modes=K] [tau=T] [lmax=L]
 //
-// The knob flags (`ratio=` .. `mean=`) replace `shape.anisotropy` with one entry
-// built from them: `ratio=R` targets |k_hi| / |k_lo| = R, `logr=L` its log,
-// `rel` makes either relative to the frame start. `tilt=` sets the position
-// tilt gain (`w_tilt` 1 unless `wtilt=`). Each frame also prints the mean log
-// ratio and anisotropy q of the live edge readings, elliptic and saddle edges
-// apart, and the mean turn of their principal axes since the previous frame.
-//
-// `delta` leaves the store to the shape drives. `scale` and `torus` set
-// `curvature_test`. `w` is the solver stiffness relative to inertia.
+// `tilt=` sets the position tilt gain (`w_tilt` 1 unless `wtilt=`). Each
+// frame also prints the mean log ratio and anisotropy q of the live edge
+// readings, elliptic and saddle edges apart, and the mean turn of their
+// principal axes since the previous frame. `label` is printed only; `w` is
+// the coupling weight.
 
 namespace gaudi {
 
@@ -100,47 +95,28 @@ int principal_curvature_probe_main(int argc, char **argv) {
   if (argc > 1 && std::string(argv[1]) == "bench")
     return principal_curvature_bench();
   const int frames = argc > 1 ? std::atoi(argv[1]) : 10;
-  const std::string target = argc > 2 ? argv[2] : "torus";
+  const std::string target = argc > 2 ? argv[2] : "delta";
   gaudi::duchamp::monge_fairing_demo_config cfg{};
   auto &eig = cfg.project.curvature;
-  auto &test = cfg.curvature_test;
-  using mode = gaudi::duchamp::curvature_test_target::mode;
-  if (target == "scale") {
-    test.kind = mode::scale;
-    test.scale = 1.05;
-  } else if (target == "torus") {
-    test.kind = mode::torus;
-  }
   if (argc > 3)
     eig.w_coupling = std::atof(argv[3]);
   if (argc > 4)
     cfg.step.iterations = std::atoi(argv[4]);
   bool remesh = false;
   int dump_every = 0;
-  // The first knob flag replaces `anisotropy` with a neutral knob.
-  bool knob_set = false;
-  auto knob = [&]() -> hepworth::block::anisotropy_target & {
-    if (!knob_set)
-      cfg.shape.anisotropy = {hepworth::block::anisotropy_target{}};
-    knob_set = true;
-    return cfg.shape.anisotropy.front();
-  };
   for (int a = 5; a < argc; ++a) {
     const std::string flag = argv[a];
     if (flag == "remesh") {
       remesh = true;
     } else if (flag == "nodrive") {
-      cfg.shape.w_anisotropy = 0;
-      cfg.shape.w_willmore = 0;
-      cfg.shape.w_grad = 0;
-      cfg.shape.w_curvature_mean = 0;
-      cfg.shape.w_curvature_ratio = 0;
+      cfg.shape.w_growth = 0;
+      cfg.shape.w_det = 0;
+      cfg.shape.w_dupin = 0;
+      cfg.shape.w_grad_traceless = 0;
+      cfg.shape.w_shape_arap = 0;
       std::cout << "shape drives off\n";
     } else if (flag.rfind("refresh=", 0) == 0) {
       cfg.step.gn_refresh_every = std::atoi(flag.c_str() + 8);
-    } else if (flag.rfind("shear=", 0) == 0) {
-      // The store's curvature shear (`shape_distortion::shear`).
-      cfg.shape.shear = {hepworth::block::curvature_shear_target{.shear = std::atof(flag.c_str() + 6)}};
     } else if (flag.rfind("areaband=", 0) == 0) {
       // lo:hi on the triangle area rows.
       const std::string v = flag.substr(9);
@@ -169,39 +145,12 @@ int principal_curvature_probe_main(int argc, char **argv) {
         g.power = std::atof(flag.c_str() + 7);
     } else if (flag.rfind("wgrowth=", 0) == 0) {
       cfg.shape.w_growth = std::atof(flag.c_str() + 8);
-    } else if (flag.rfind("wgauss=", 0) == 0) {
-      cfg.shape.w_gauss = std::atof(flag.c_str() + 7);
-    } else if (flag.rfind("grelax=", 0) == 0) {
-      cfg.shape.gauss_relax = std::atof(flag.c_str() + 7);
     } else if (flag.rfind("wdet=", 0) == 0) {
       cfg.shape.w_det = std::atof(flag.c_str() + 5);
-    } else if (flag.rfind("fshear=", 0) == 0) {
-      cfg.position.w_face_shear = std::atof(flag.c_str() + 7);
-    } else if (flag.rfind("fsamt=", 0) == 0) {
-      for (auto &e : cfg.position.face_shear)
-        e.shear = std::atof(flag.c_str() + 6);
     } else if (flag == "areafree") {
-      // The axis-ratio and shear rows' area free, as before the band.
+      // The axis-ratio rows' area free, as before the band.
       for (auto &e : cfg.position.axis_ratio)
         e.area = hepworth::block::area_band::free();
-      for (auto &e : cfg.position.shear)
-        e.area = hepworth::block::area_band::free();
-    } else if (flag.rfind("skew=", 0) == 0) {
-      cfg.shape.w_skew = std::atof(flag.c_str() + 5);
-    } else if (flag.rfind("skewscale=", 0) == 0) {
-      cfg.shape.skew_scale = std::atof(flag.c_str() + 10);
-    } else if (flag.rfind("wsshear=", 0) == 0) {
-      cfg.shape.w_shear = std::atof(flag.c_str() + 8);
-    } else if (flag.rfind("mean=", 0) == 0) {
-      knob().mean = std::atof(flag.c_str() + 5);
-    } else if (flag.rfind("ratio=", 0) == 0) {
-      knob().ratio = std::atof(flag.c_str() + 6);
-      knob().log = false;
-    } else if (flag.rfind("logr=", 0) == 0) {
-      knob().ratio = std::atof(flag.c_str() + 5);
-      knob().log = true;
-    } else if (flag == "rel") {
-      knob().relative = true;
     } else if (flag.rfind("tiltsign=", 0) == 0) {
       cfg.position.tilt.at(0).sign = std::string(flag.c_str() + 9) == "propagate"
                                          ? hepworth::block::tilt_sign::propagate
@@ -222,35 +171,10 @@ int principal_curvature_probe_main(int argc, char **argv) {
                                      : m == "bend" ? hepworth::block::tilt_mode::bend
                                      : m == "spin" ? hepworth::block::tilt_mode::spin
                                                    : hepworth::block::tilt_mode::rigid;
-    } else if (flag.rfind("wmbands=", 0) == 0) {
-      // radius:gain,radius:gain,... replaces the willmore list with one entry.
-      hepworth::block::willmore_target wm;
-      std::string rest = flag.substr(8);
-      while (!rest.empty()) {
-        const size_t comma = rest.find(',');
-        const std::string pair = rest.substr(0, comma);
-        const size_t colon = pair.find(':');
-        if (colon != std::string::npos)
-          wm.bands.push_back({std::atof(pair.substr(0, colon).c_str()),
-                              std::atof(pair.substr(colon + 1).c_str())});
-        rest = comma == std::string::npos ? "" : rest.substr(comma + 1);
-      }
-      const real mean = cfg.shape.willmore.empty() ? 0 : cfg.shape.willmore.front().mean;
-      wm.mean = mean;
-      cfg.shape.willmore = {wm};
-      if (!(cfg.shape.w_willmore > 0))
-        cfg.shape.w_willmore = 0.5;
-    } else if (flag.rfind("wmmean=", 0) == 0) {
-      for (auto &wm : cfg.shape.willmore)
-        wm.mean = std::atof(flag.c_str() + 7);
-    } else if (flag.rfind("wwm=", 0) == 0) {
-      cfg.shape.w_willmore = std::atof(flag.c_str() + 4);
     } else if (flag.rfind("sarap=", 0) == 0) {
       cfg.shape.w_shape_arap = std::atof(flag.c_str() + 6);
     } else if (flag == "sarapfree") {
       cfg.shape.shape_arap_mean = false;
-    } else if (flag.rfind("smooth=", 0) == 0) {
-      cfg.shape.smooth = std::atof(flag.c_str() + 7);
     } else if (flag.rfind("wind=", 0) == 0) {
       // ring:tube[:handedness] on the first stretch entry.
       auto &w = cfg.position.stretch.at(0).winding;
@@ -263,50 +187,22 @@ int principal_curvature_probe_main(int argc, char **argv) {
         cfg.position.w_stretch = 0.5;
     } else if (flag.rfind("wstretch=", 0) == 0) {
       cfg.position.w_stretch = std::atof(flag.c_str() + 9);
-    } else if (flag.rfind("wgrad=", 0) == 0) {
-      cfg.shape.w_grad = std::atof(flag.c_str() + 6);
     } else if (flag.rfind("dupinreach=", 0) == 0) {
       cfg.shape.dupin_reach = std::atof(flag.c_str() + 11);
     } else if (flag.rfind("dupindeg=", 0) == 0) {
       cfg.shape.dupin_degree = std::atoi(flag.c_str() + 9);
     } else if (flag.rfind("wgradtl=", 0) == 0) {
       cfg.shape.w_grad_traceless = std::atof(flag.c_str() + 8);
-    } else if (flag.rfind("wcmean=", 0) == 0) {
-      cfg.shape.w_curvature_mean = std::atof(flag.c_str() + 7);
-    } else if (flag.rfind("wcratio=", 0) == 0) {
-      cfg.shape.w_curvature_ratio = std::atof(flag.c_str() + 8);
     } else if (flag.rfind("wotorus=", 0) == 0) {
       cfg.project.w_osculating_torus = std::atof(flag.c_str() + 8);
-    } else if (flag.rfind("wodupin=", 0) == 0) {
-      cfg.project.w_osculating_dupin = std::atof(flag.c_str() + 8);
-    } else if (flag.rfind("wodupinshape=", 0) == 0) {
-      cfg.project.w_osculating_dupin_shape = std::atof(flag.c_str() + 13);
-    } else if (flag.rfind("wframefair=", 0) == 0) {
-      cfg.project.w_frame_fair = std::atof(flag.c_str() + 11);
-    } else if (flag.rfind("walbers=", 0) == 0) {
-      cfg.project.w_fair_albers = std::atof(flag.c_str() + 8);
-    } else if (flag.rfind("swind=", 0) == 0) {
-      // ring:tube[:handedness] on the first shear entry.
-      auto &w = cfg.position.shear.at(0).winding;
-      const std::string v = flag.substr(6);
-      const size_t a = v.find(':'), b = a == std::string::npos ? a : v.find(':', a + 1);
-      w.ring = std::atoi(v.substr(0, a).c_str());
-      w.tube = a == std::string::npos ? 0 : std::atoi(v.substr(a + 1, b - a - 1).c_str());
-      w.handedness = b == std::string::npos ? 1 : std::atoi(v.substr(b + 1).c_str());
     } else if (flag.rfind("wcenter=", 0) == 0) {
       cfg.position.w_center = std::atof(flag.c_str() + 8);
     } else if (flag == "recenter") {
       cfg.position.recenter = true;
-    } else if (flag.rfind("sdamp=", 0) == 0) {
-      eig.w_store_damping = std::atof(flag.c_str() + 6);
     } else if (flag.rfind("solver=", 0) == 0) {
       const std::string v = flag.substr(7);
       using cs = gaudi::duchamp::curvature_solver;
-      eig.kind = v == "exponent"      ? cs::exponent
-                 : v == "eigensatz"   ? cs::eigensatz
-                 : v == "contact_net" ? cs::contact_net
-                 : v == "off"         ? cs::off
-                                      : cs::weingarten;
+      eig.kind = v == "off" ? cs::off : cs::contact_net;
     } else if (flag.rfind("accel=", 0) == 0) {
       const std::string a = flag.substr(6);
       using sa = gaudi::hepworth::block::step_accel;
@@ -314,17 +210,9 @@ int principal_curvature_probe_main(int argc, char **argv) {
                        : a == "chebyshev"          ? sa::chebyshev
                        : a == "anderson_chebyshev" ? sa::anderson_chebyshev
                                                    : sa::anderson;
-    } else if (flag.rfind("cnsolver=", 0) == 0) {
-      eig.contact.solver = flag.substr(9) == "pd" ? gaudi::kusama::contact_net::kind::pd
-                                                  : gaudi::kusama::contact_net::kind::gn;
-    } else if (flag.rfind("cnmode=", 0) == 0) {
-      eig.contact_mode = flag.substr(7) == "inner" ? gaudi::duchamp::contact_net_mode::inner
-                                                   : gaudi::duchamp::contact_net_mode::native;
     } else if (flag.rfind("cntan=", 0) == 0) {
       eig.contact_tangency = flag.substr(6) == "edge" ? gaudi::hepworth::block::contact_net_gn::tangency::edge
                                                       : gaudi::hepworth::block::contact_net_gn::tangency::vertex;
-    } else if (flag == "cnrot") {
-      eig.contact_rotations = true;
     } else if (flag.rfind("nmass=", 0) == 0) {
       eig.contact_normal_mass = std::atof(flag.c_str() + 6);
     } else if (flag.rfind("wdcircle=", 0) == 0) {
@@ -403,39 +291,12 @@ int principal_curvature_probe_main(int argc, char **argv) {
     } else if (flag.rfind("cmch0=", 0) == 0) {
       cfg.shape.tension.kind = hepworth::block::tension_target::mode::constant;
       cfg.shape.tension.h0 = std::atof(flag.c_str() + 6);
-    } else if (flag.rfind("cnsolves=", 0) == 0) {
-      eig.contact.solves_per_frame = std::atoi(flag.c_str() + 9);
-    } else if (flag.rfind("cnits=", 0) == 0) {
-      eig.contact.iterations = std::atoi(flag.c_str() + 6);
-    } else if (flag.rfind("cnmem=", 0) == 0) {
-      eig.contact.w_memory = std::atof(flag.c_str() + 6);
-    } else if (flag.rfind("cnaccel=", 0) == 0) {
-      const std::string a = flag.substr(8);
-      using ca = gaudi::kusama::contact_net::accel;
-      eig.contact.acceleration = a == "none"                 ? ca::none
-                                 : a == "chebyshev"          ? ca::chebyshev
-                                 : a == "anderson_chebyshev" ? ca::anderson_chebyshev
-                                                             : ca::anderson;
-    } else if (flag.rfind("xkm=", 0) == 0) {
-      eig.exponent.km = std::atof(flag.c_str() + 4);
-    } else if (flag.rfind("xkb=", 0) == 0) {
-      eig.exponent.kb = std::atof(flag.c_str() + 4);
     } else if (flag.rfind("freshstop=", 0) == 0) {
       cfg.step.gn_stop_on_fresh_ascent = std::atoi(flag.c_str() + 10) != 0;
     } else if (flag.rfind("maxascent=", 0) == 0) {
       cfg.step.gn_max_ascent_refreshes = std::atoi(flag.c_str() + 10);
     } else if (flag.rfind("wmin=", 0) == 0) {
       cfg.shape.w_minimizer = std::atof(flag.c_str() + 5);
-    } else if (flag.rfind("xconf=", 0) == 0) {
-      eig.eigensatz.w_conformal = std::atof(flag.c_str() + 6);
-    } else if (flag.rfind("xarea=", 0) == 0) {
-      eig.eigensatz.w_area = std::atof(flag.c_str() + 6);
-    } else if (flag.rfind("xmass=", 0) == 0) {
-      eig.exponent.mass = std::atof(flag.c_str() + 6);
-    } else if (flag.rfind("xrefresh=", 0) == 0) {
-      eig.exponent.refresh_every = std::atoi(flag.c_str() + 9);
-    } else if (flag == "xrest=initial") {
-      eig.exponent.rest = gaudi::duchamp::exponent_rest::initial;
     } else if (flag.rfind("dump=", 0) == 0) {
       dump_every = std::atoi(flag.c_str() + 5);
     } else if (flag.rfind("res=", 0) == 0) {
@@ -449,18 +310,12 @@ int principal_curvature_probe_main(int argc, char **argv) {
       cfg.perturb = std::atof(flag.c_str() + 8);
     } else if (flag.rfind("aratio=", 0) == 0) {
       cfg.position.w_axis_ratio = std::atof(flag.c_str() + 7);
-    } else if (flag.rfind("wshear=", 0) == 0) {
-      cfg.position.w_shear = std::atof(flag.c_str() + 7);
-    } else if (flag.rfind("wc=", 0) == 0) {
-      cfg.shape.w_anisotropy = std::atof(flag.c_str() + 3);
     } else if (flag.rfind("bend=", 0) == 0) {
       cfg.position.w_bend = std::atof(flag.c_str() + 5);
     } else if (flag.rfind("damp=", 0) == 0) {
       cfg.step.damping = std::atof(flag.c_str() + 5);
     } else if (flag.rfind("memory=", 0) == 0) {
       cfg.position.w_memory = std::atof(flag.c_str() + 7);
-    } else if (flag.rfind("test=", 0) == 0) {
-      cfg.curvature_test.w = std::atof(flag.c_str() + 5);
     } else if (flag.rfind("backtracks=", 0) == 0) {
       cfg.step.gn_backtracks = std::atoi(flag.c_str() + 11);
     } else if (flag.rfind("qcwarn=", 0) == 0) {
@@ -498,9 +353,7 @@ int principal_curvature_probe_main(int argc, char **argv) {
   }
   std::cout << "target " << target << "  w_coupling " << eig.w_coupling << "  backtracks " << cfg.step.gn_backtracks << "  refresh "
             << cfg.step.gn_refresh_every << "  pd iterations "
-            << cfg.step.iterations << "  remesh " << remesh << "  torus R "
-            << test.torus_R << " tube " << test.torus_tube << "  scale "
-            << test.scale << "\n";
+            << cfg.step.iterations << "  remesh " << remesh << "\n";
 
   auto demo = gaudi::duchamp::monge_fairing_demo::create(cfg);
   std::vector<vec3> h_prev;
@@ -545,42 +398,6 @@ int principal_curvature_probe_main(int argc, char **argv) {
     for (const vec3 &p : x)
       tube += std::hypot(std::hypot(p[0], p[1]) - Rc, p[2]);
     tube /= real(x.size());
-    // The position shear's axis at each vertex (as the rows read it) against
-    // the loxodrome on the fitted torus and its mirror: how uniform it is.
-    if (!cfg.position.shear.empty() && demo->cr() &&
-        demo->cr()->vertex_frames.size() == x.size() && tube > real(0) && Rc > tube) {
-      const auto &sh = cfg.position.shear.front();
-      const real beta = hepworth::block::loxodrome_angle(sh.winding, Rc, tube, sh.angle);
-      const std::vector<vec3> u = hepworth::block::chart_directions(demo->cr()->vertex_frames, beta);
-      int n_ok = 0, n_same = 0, n_mirror_in = 0, n_in = 0;
-      real err = 0;
-      for (size_t i = 0; i < x.size(); ++i) {
-        if (!(u[i].squaredNorm() > 0))
-          continue;
-        const vec3 &q = x[i];
-        const real rho = std::hypot(q[0], q[1]);
-        const vec3 c(q[0] / rho * Rc, q[1] / rho * Rc, 0);
-        const vec3 nrm = (q - c).normalized();
-        const vec3 phi(-q[1] / rho, q[0] / rho, 0);
-        const vec3 theta = phi.cross(nrm);
-        const vec3 ideal = std::cos(beta) * theta + std::sin(beta) * phi;
-        const vec3 mirror = std::cos(beta) * theta - std::sin(beta) * phi;
-        const real a = std::abs(u[i].dot(ideal)), b = std::abs(u[i].dot(mirror));
-        const bool inner = rho < Rc;
-        ++n_ok;
-        n_in += inner;
-        if (a >= b) {
-          ++n_same;
-        } else if (inner) {
-          ++n_mirror_in;
-        }
-        err += std::acos(std::clamp(std::max(a, b), real(0), real(1)));
-      }
-      if (n_ok > 0)
-        std::cout << "  shear axis: " << n_ok << " charted, " << n_same << " on one helix, "
-                  << n_ok - n_same << " on its mirror (" << n_mirror_in << " of those inner, of "
-                  << n_in << " inner), mean angle to the nearer " << err / n_ok << " rad\n";
-    }
     // Total area, and the part on the inner (saddle) side of the ring.
     // Area-weighted centroid too (|center|: drift from the origin).
     real area = 0, area_in = 0;
@@ -725,7 +542,6 @@ int principal_curvature_probe_main(int argc, char **argv) {
     // since the previous frame.
     real rho_ell = 0, rho_sad = 0, an_ell = 0, an_sad = 0, turn = 0, turn2 = 0, skew = 0;
     real kdrift = std::numeric_limits<real>::quiet_NaN();
-    real gdrift = std::numeric_limits<real>::quiet_NaN();
     int n_ell = 0, n_sad = 0, nt = 0;
     const auto &tb = demo->cr()->table;
     if (tb.n_verts == static_cast<int>(x.size())) {
@@ -769,19 +585,6 @@ int principal_curvature_probe_main(int argc, char **argv) {
         }
         ring_k_prev = ring_k;
       }
-      if (cfg.shape.w_gauss > 0) {
-        // Each vertex's live K against the held rest K0.
-        const std::vector<real> &K0 = demo->gauss_rest();
-        const std::vector<real> K =
-            hepworth::block::vertex_gauss(hepworth::block::build_vertex_star_charts(tb, x), h);
-        real num = 0, den = 0;
-        for (size_t v = 0; v < K.size() && v < K0.size(); ++v)
-          if (std::isfinite(K[v]) && std::isfinite(K0[v])) {
-            num += std::abs(K[v] - K0[v]);
-            den += std::abs(K0[v]);
-          }
-        gdrift = den > real(0) ? num / den : real(0);
-      }
       for (size_t e = 0; e < h.size(); ++e) {
         const auto p = hepworth::block::principals_of(h[e]);
         real k0, k1;
@@ -817,7 +620,7 @@ int principal_curvature_probe_main(int argc, char **argv) {
               << "  log r ell " << rho_ell / std::max(n_ell, 1) << " sad "
               << rho_sad / std::max(n_sad, 1) << "  aniso ell " << an_ell / std::max(n_ell, 1)
               << " sad " << an_sad / std::max(n_sad, 1) << " (" << n_ell << "/" << n_sad << ")"
-              << "  skew " << skew << "  kdrift " << kdrift << "  gdrift " << gdrift << "  turn " << turn / std::max(nt, 1) << " sd "
+              << "  skew " << skew << "  kdrift " << kdrift << "  turn " << turn / std::max(nt, 1) << " sd "
               << std::sqrt(std::max(turn2 / std::max(nt, 1) -
                                         std::pow(turn / std::max(nt, 1), 2),
                                     real(0)))

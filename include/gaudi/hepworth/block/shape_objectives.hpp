@@ -236,27 +236,6 @@ struct curvature_shear_target {
   stretch_winding winding{};
 };
 
-/// One feature-size band of a `willmore_target`: sizes from `radius` up to
-/// the next band's radius (the last band runs to the whole surface), in
-/// mean edge lengths.
-struct willmore_band {
-  real radius = 0;
-  /// Fraction of the Willmore flow taken per frame in this band. 0 leaves
-  /// the band free: the row ignores it, so position rows can bend it.
-  real gain = 0;
-};
-
-/// Willmore flow on the edge store with a feature-size equalizer
-/// (`shape_distortion::willmore`). Designated initializers must follow this
-/// order.
-struct willmore_target {
-  /// Bands in ascending radius. A first radius above 0 leaves the finer
-  /// sizes free. Empty is off.
-  std::vector<willmore_band> bands;
-  /// 0 flows only the anisotropic part (rounds); 1 also the mean curvature.
-  real mean = 0;
-};
-
 /// Which principal tangent a position row turns about: `k0` (larger signed
 /// curvature, red) or `k1` (green).
 enum class principal_axis { k0, k1 };

@@ -25,18 +25,6 @@
 /// (Lie sphere rows `<s_ij, P_j>`, `<s_ij, T_j>` were tried in place of
 /// Rodrigues / tangency and fail off curvature-line edges: the twist leaves
 /// the neighbour free to slide on the sphere; MATH.md 19.13.)
-///
-/// Rotation store (a fourth block, per-edge quaternions `q_e`; MATH.md
-/// 19.21, E2): each edge's Rodrigues rows become a rotation row
-/// `n_j - q_e n_i conj(q_e)` (3), coupling rows holding `q_e`'s bending and
-/// twist at the store's `(k, tau)` (2), a gauge row holding its geodesic
-/// curvature at the frame-start value (1, weight `w_gauge`, off by default)
-/// and a unit row (1). The
-/// read-out is exact: bending and twist from `q_e`'s action on `n_i` by the
-/// Rodrigues chord form, the geodesic curvature from the rest of `q_e` (its
-/// turn about the image normal relative to the shortest arc). Seed the
-/// block with `contact_rot::seed_edge_rotations` and pass the same seeds to
-/// `set_rotation_seeds`.
 
 #include "gaudi/hepworth/block/block_constraint.hpp"
 #include "gaudi/kusama/contact_net.hpp"
@@ -60,122 +48,6 @@ namespace block {
 /// `sqrt(1 / 0.005)`.
 constexpr real k_contact_gn = real(14.2);
 
-/// Quaternions `(w, x, y, z)` and the per-edge rotation store's read-out.
-namespace contact_rot {
-
-inline vec4 qmul(const vec4 &a, const vec4 &b) {
-  return vec4(a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
-              a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
-              a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
-              a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0]);
-}
-inline vec4 qconj(const vec4 &a) { return vec4(a[0], -a[1], -a[2], -a[3]); }
-
-inline vec3 qrot(const vec4 &q, const vec3 &v) {
-  const real l = q.norm();
-  const vec4 u = l > real(0) ? vec4(q / l) : vec4(1, 0, 0, 0);
-  const vec4 r = qmul(qmul(u, vec4(0, v[0], v[1], v[2])), qconj(u));
-  return vec3(r[1], r[2], r[3]);
-}
-
-/// The rotation vector `2 log q` (shortest).
-inline vec3 qlog(vec4 q) {
-  const real l = q.norm();
-  if (!(l > real(0)))
-    return vec3::Zero();
-  q /= l;
-  if (q[0] < 0)
-    q = -q;
-  const vec3 v(q[1], q[2], q[3]);
-  const real s = v.norm();
-  if (!(s > real(1e-12)))
-    return real(2) * v;
-  return real(2) * std::atan2(s, q[0]) * v / s;
-}
-
-inline vec4 shortest_arc(const vec3 &a, const vec3 &b) {
-  const vec3 c = a.cross(b);
-  vec4 q(1 + a.dot(b), c[0], c[1], c[2]);
-  const real l = q.norm();
-  return l > real(1e-300) ? vec4(q / l) : vec4(0, 1, 0, 0);
-}
-
-inline vec4 quat_from_matrix(const mat3 &R) {
-  vec4 q;
-  const real tr = R.trace();
-  if (tr > 0) {
-    const real s = real(2) * std::sqrt(tr + 1);
-    q = vec4(real(0.25) * s, (R(2, 1) - R(1, 2)) / s, (R(0, 2) - R(2, 0)) / s, (R(1, 0) - R(0, 1)) / s);
-  } else {
-    int i = 0;
-    if (R(1, 1) > R(i, i))
-      i = 1;
-    if (R(2, 2) > R(i, i))
-      i = 2;
-    const int j = (i + 1) % 3, k = (i + 2) % 3;
-    const real s = real(2) * std::sqrt(1 + R(i, i) - R(j, j) - R(k, k));
-    vec3 v;
-    v[i] = real(0.25) * s;
-    v[j] = (R(j, i) + R(i, j)) / s;
-    v[k] = (R(k, i) + R(i, k)) / s;
-    q = vec4((R(k, j) - R(j, k)) / s, v[0], v[1], v[2]);
-  }
-  return q.normalized();
-}
-
-/// Bending, twist and geodesic curvature of an edge rotation.
-struct darboux {
-  real k = 0, tau = 0, g = 0;
-};
-
-inline darboux read(const vec3 &xi, const vec3 &xj, const vec3 &ni_in, const vec4 &q) {
-  darboux out;
-  const vec3 ni = ni_in.normalized();
-  const vec3 nq = qrot(q, ni);
-  const vec3 nb = (ni + nq).normalized();
-  const vec3 dx = xj - xi;
-  const vec3 dxt = dx - nb * dx.dot(nb);
-  const real L = dxt.norm();
-  if (!(L > real(0)))
-    return out;
-  const vec3 t = dxt / L, b = nb.cross(t), dn = nq - ni;
-  out.k = -dn.dot(t) / L;
-  out.tau = -dn.dot(b) / L;
-  const vec4 rel = qmul(q.normalized(), qconj(shortest_arc(ni, nq)));
-  out.g = qlog(rel).dot(nq) / L;
-  return out;
-}
-
-/// Per edge the rotation taking vertex `i`'s frame to vertex `j`'s, the
-/// frames `(T, N x T, N)` with `T` the gauge tangent (projected).
-inline std::vector<vec4> seed_edge_rotations(const kusama::contact_net::topology &tp, const std::vector<vec3> &N,
-                                             const std::vector<vec3> &T) {
-  auto frame = [&](int v) {
-    const vec3 n = N[static_cast<size_t>(v)].normalized();
-    vec3 t = T[static_cast<size_t>(v)] - n * n.dot(T[static_cast<size_t>(v)]);
-    if (!(t.norm() > real(1e-9))) {
-      t = std::abs(n[0]) < real(0.9) ? vec3::UnitX() : vec3::UnitY();
-      t -= n * n.dot(t);
-    }
-    t.normalize();
-    mat3 R;
-    R.col(0) = t;
-    R.col(1) = n.cross(t);
-    R.col(2) = n;
-    return R;
-  };
-  std::vector<vec4> q(tp.edges.size(), vec4(1, 0, 0, 0));
-  for (size_t e = 0; e < tp.edges.size(); ++e) {
-    const int i = tp.edges[e][0], j = tp.edges[e][1];
-    if (i < 0)
-      continue;
-    q[e] = quat_from_matrix(frame(j) * frame(i).transpose());
-  }
-  return q;
-}
-
-} // namespace contact_rot
-
 class contact_net_gn : public block_constraint {
 public:
   DEFINE_CREATE_FUNC(contact_net_gn)
@@ -185,8 +57,7 @@ public:
   contact_net_gn(const kusama::stencil_table *table, const std::vector<vec3> &x0, const std::vector<vec3> &n0,
                  const std::vector<vec3> &h0, real w, std::vector<sim_block::ptr> blocks, real k = k_contact_gn,
                  const std::vector<real> *c_off = nullptr)
-      : block_constraint({}, w, std::move(blocks)), _t(table), _h0(h0), _x0(x0), _n0(n0) {
-    _rot = _blocks.size() > 3 && _blocks[3] != nullptr;
+      : block_constraint({}, w, std::move(blocks)), _t(table), _h0(h0) {
     _tp = kusama::contact_net::build_topology(*_t);
     _T0 = kusama::contact_net::read(_tp, x0, n0);
     // Per edge `A_e / |e|`: a third of the incident faces' area over length.
@@ -268,28 +139,6 @@ public:
   enum class tangency { vertex, edge };
   tangency tangency_target = tangency::vertex;
 
-  /// Rotation store: the frame-start rotations the block was seeded with
-  /// (their geodesic curvatures are the gauge rows' targets).
-  void set_rotation_seeds(const std::vector<vec4> &q0) {
-    _g0.assign(_tp.edges.size(), real(0));
-    _l0.assign(_tp.edges.size(), real(0));
-    for (size_t e = 0; e < _tp.edges.size() && e < q0.size(); ++e) {
-      const int i = _tp.edges[e][0], j = _tp.edges[e][1];
-      if (i < 0)
-        continue;
-      _g0[e] = contact_rot::read(_x0[static_cast<size_t>(i)], _x0[static_cast<size_t>(j)],
-                                 _n0[static_cast<size_t>(i)], q0[e])
-                   .g;
-      _l0[e] = (_x0[static_cast<size_t>(j)] - _x0[static_cast<size_t>(i)]).norm();
-    }
-  }
-  /// Weight of the rotation store's gauge rows (relative to the others).
-  /// Off by default: the turn about the normal does not enter the coupling,
-  /// and with a fast-turning gauge (a fixed axis projected near the poles)
-  /// edges sit near a half turn where the logarithm jumps, which stalls the
-  /// solve. Turn it on only with a smooth gauge (the Dirichlet tangents).
-  real w_gauge = real(0);
-
   std::string name() override { return "contact_net_gn"; }
   bool gauss_newton() const override { return true; }
 
@@ -314,7 +163,7 @@ public:
   }
 
   index_t rows() const {
-    return static_cast<index_t>((_rot ? 7 : 3) * _tp.edges.size() + _tp.spokes.size()) + _tp.n;
+    return static_cast<index_t>(3 * _tp.edges.size() + _tp.spokes.size()) + _tp.n;
   }
 
 private:
@@ -339,9 +188,7 @@ private:
     auto nc = [&](int v) { return _blocks[1]->get_offset_idx(v); };
     auto sc = [&](size_t e) { return _blocks[2]->get_offset_idx(static_cast<index_t>(e)); };
     Eigen::Index row = 0;
-    if (_rot)
-      row = rotation_rows(q, x, N, dk, dt, r, jt, id0);
-    for (size_t e = 0; e < (_rot ? 0 : nE); ++e, row += 3) {
+    for (size_t e = 0; e < nE; ++e, row += 3) {
       const int i = _tp.edges[e][0], j = _tp.edges[e][1];
       if (i < 0 || !(_s[e] > real(0))) {
         r.segment<3>(row).setZero();
@@ -426,75 +273,10 @@ private:
     }
   }
 
-  /// The rotation store's rows per edge (7: rotation 3, coupling 2, gauge 1,
-  /// unit 1); returns the next row. Jacobians by central differences over
-  /// the edge's 16 local unknowns; the coupling rows' store columns exact.
-  Eigen::Index rotation_rows(const vecX &q, const std::vector<vec3> &x, const std::vector<vec3> &N,
-                             const std::vector<real> &dk, const std::vector<real> &dt, vecX &r,
-                             std::vector<trip> *jt, index_t id0) const {
-    const size_t nE = _tp.edges.size();
-    auto xc = [&](int v) { return _blocks[0]->get_offset_idx(v); };
-    auto nc = [&](int v) { return _blocks[1]->get_offset_idx(v); };
-    auto sc = [&](size_t e) { return _blocks[2]->get_offset_idx(static_cast<index_t>(e)); };
-    auto qc = [&](size_t e) { return _blocks[3]->get_offset_idx(static_cast<index_t>(e)); };
-    const real sg = std::sqrt(std::max(w_gauge, real(0)));
-    Eigen::Index row = 0;
-    for (size_t e = 0; e < nE; ++e, row += 7) {
-      const int i = _tp.edges[e][0], j = _tp.edges[e][1];
-      if (i < 0 || !(_s[e] > real(0))) {
-        r.segment<7>(row).setZero();
-        continue;
-      }
-      const real s = _w * _s[e];
-      const real l0 = e < _l0.size() && _l0[e] > real(0) ? _l0[e] : (x[static_cast<size_t>(j)] - x[static_cast<size_t>(i)]).norm();
-      const real g0 = e < _g0.size() ? _g0[e] : real(0);
-      const real kt = _T0.k[e] + dk[e], tt = _T0.tau[e] + dt[e];
-      Eigen::Matrix<real, 16, 1> in;
-      const vec4 qe = get_elem<vec4>(static_cast<index_t>(e), q, _blocks[3]->_offset);
-      in << x[static_cast<size_t>(i)], x[static_cast<size_t>(j)], N[static_cast<size_t>(i)], N[static_cast<size_t>(j)], qe;
-      auto f = [&](const Eigen::Matrix<real, 16, 1> &v) {
-        const vec3 xi = v.segment<3>(0), xj = v.segment<3>(3), ni = v.segment<3>(6), nj = v.segment<3>(9);
-        const vec4 qq = v.segment<4>(12);
-        const contact_rot::darboux d = contact_rot::read(xi, xj, ni, qq);
-        Eigen::Matrix<real, 7, 1> o;
-        o.segment<3>(0) = nj - contact_rot::qrot(qq, ni);
-        o[3] = l0 * (d.k - kt);
-        o[4] = l0 * (d.tau - tt);
-        o[5] = sg * l0 * (d.g - g0);
-        o[6] = qq.norm() - real(1);
-        return o;
-      };
-      r.segment<7>(row) = s * f(in);
-      if (!jt)
-        continue;
-      const index_t cols[5] = {xc(i), xc(j), nc(i), nc(j), qc(e)};
-      const int width[5] = {3, 3, 3, 3, 4};
-      int off = 0;
-      for (int b = 0; b < 5; ++b) {
-        for (int c = 0; c < width[b]; ++c) {
-          const real h = real(1e-7) * std::max(real(1), std::abs(in[off + c]));
-          Eigen::Matrix<real, 16, 1> ip = in, im = in;
-          ip[off + c] += h;
-          im[off + c] -= h;
-          const Eigen::Matrix<real, 7, 1> D = s * (f(ip) - f(im)) / (real(2) * h);
-          for (int a = 0; a < 7; ++a)
-            if (D[a] != real(0))
-              jt->emplace_back(id0 + row + a, cols[b] + c, D[a]);
-        }
-        off += width[b];
-      }
-      jt->emplace_back(id0 + row + 3, sc(e) + 0, -s * l0);
-      jt->emplace_back(id0 + row + 4, sc(e) + 1, -s * l0);
-    }
-    return row;
-  }
-
   const kusama::stencil_table *_t = nullptr;
   kusama::contact_net::topology _tp;
   kusama::contact_net::targets _T0;
-  std::vector<vec3> _h0, _x0, _n0;
-  bool _rot = false;
-  std::vector<real> _g0, _l0;
+  std::vector<vec3> _h0;
   std::vector<real> _s, _spoke_len, _c_off, _kappa0;
   std::vector<std::vector<std::pair<int, vec3>>> _kappa_from;
   std::vector<int> _spoke_edge;

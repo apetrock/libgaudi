@@ -78,7 +78,6 @@ void run(const char *label, gaudi::duchamp::monge_fairing_demo_config cfg, int f
   for (int f = 0; f < frames; ++f) {
     const auto t0 = std::chrono::steady_clock::now();
     gaudi::hepworth::block::osculating_torus_ring_stats::reset();
-    gaudi::hepworth::block::osculating_dupin_ring_stats::reset();
     demo->step(f, !std::getenv("PROBE_NOREMESH"));
     const real dt = std::chrono::duration<real>(std::chrono::steady_clock::now() - t0).count();
     const tube_stats s = measure(*demo->__M);
@@ -91,12 +90,6 @@ void run(const char *label, gaudi::duchamp::monge_fairing_demo_config cfg, int f
                 << st::k_lo / std::max<long>(st::shapes, 1) << " mesh/store height slope "
                 << st::hm_hs / std::max(st::hs_hs.load(), 1e-30) << "\n";
     st::reset();
-    using dst = gaudi::hepworth::block::osculating_dupin_ring_stats;
-    if (dst::calls > 0)
-      std::cout << label << "      dupin rows: calls " << dst::calls << " no_frame " << dst::no_frame
-                << " no_fit " << dst::no_fit << " landed " << dst::landed << "/" << dst::points
-                << " pull/reach " << dst::move / std::max(dst::reach.load(), 1e-30) << "\n";
-    dst::reset();
     const auto &r = demo->last_solve();
     std::cout << label << "  [" << f << "] tube r " << s.mean << " roughness " << s.rel_std << " max|x| "
               << s.max_abs << " verts " << s.verts << " E " << r.E_first << " -> " << r.E_last << " s " << dt
@@ -108,7 +101,6 @@ void run(const char *label, gaudi::duchamp::monge_fairing_demo_config cfg, int f
 
 int main(int argc, char **argv) {
   gaudi::hepworth::block::osculating_torus_ring_stats::enabled = true;
-  gaudi::hepworth::block::osculating_dupin_ring_stats::enabled = true;
   const bool relative = std::getenv("PROBE_RELATIVE") != nullptr;
   const bool closest = std::getenv("PROBE_CLOSEST") != nullptr;
   const int frames = argc > 1 ? std::atoi(argv[1]) : 8;
@@ -117,12 +109,7 @@ int main(int argc, char **argv) {
   base.perturb = perturb;
 
   if (std::getenv("PROBE_ALL"))
-    run("frame_fair", base, frames);
-
-  auto both = base;
-  both.project.w_osculating_torus = 1.0;
-  if (std::getenv("PROBE_ALL"))
-    run("frame_fair+torus", both, frames);
+    run("base", base, frames);
 
   if (std::getenv("PROBE_ITS"))
     base.step.iterations = std::atoi(std::getenv("PROBE_ITS"));
@@ -139,77 +126,27 @@ int main(int argc, char **argv) {
   if (std::getenv("PROBE_ALONE")) {
     base.shape.w_growth = 0.0;
     base.shape.w_det = 0.0;
-    base.shape.w_anisotropy = 0.0;
     base.position.w_bend = 0.0;
     base.position.w_conformal = 0.0;
   }
   base.project.osculating_torus.relative = relative;
   base.project.osculating_torus.closest_point = closest;
-  if (std::getenv("PROBE_WEINGARTEN"))
-    base.project.curvature.kind = gaudi::duchamp::curvature_solver::weingarten;
-  if (std::getenv("PROBE_DUPIN")) {
-    base.project.w_osculating_torus = 0.0;
-    base.project.w_frame_fair = 0.0;
-    base.project.w_osculating_dupin = std::atof(std::getenv("PROBE_DUPIN"));
-    base.project.w_osculating_dupin_shape =
-        std::getenv("PROBE_DUPIN_SHAPE") ? std::atof(std::getenv("PROBE_DUPIN_SHAPE")) : 0.0;
-  }
-  if (std::getenv("PROBE_DUPIN_POSE_ITS"))
-    base.project.osculating_dupin.pose_iterations = std::atoi(std::getenv("PROBE_DUPIN_POSE_ITS"));
-  if (std::getenv("PROBE_DUPIN_TWO"))
-    base.project.osculating_dupin.two_ring = std::atof(std::getenv("PROBE_DUPIN_TWO"));
-  if (std::getenv("PROBE_DUPIN_GAIN"))
-    base.project.osculating_dupin.store_gain = std::atof(std::getenv("PROBE_DUPIN_GAIN"));
-  if (std::getenv("PROBE_DUPIN_JOINT"))
-    base.project.osculating_dupin.direct_shape = false;
-  if (std::getenv("PROBE_DUPIN_VW"))
-    base.project.osculating_dupin.volume.weight = std::atof(std::getenv("PROBE_DUPIN_VW"));
-  if (std::getenv("PROBE_DUPIN_NOB"))
-    base.project.osculating_dupin.third_order = false;
-  if (std::getenv("PROBE_DUPIN_BCAP"))
-    base.project.osculating_dupin.b_cap = std::atof(std::getenv("PROBE_DUPIN_BCAP"));
-  if (std::getenv("PROBE_DUPIN_RIDGE"))
-    base.project.osculating_dupin.b_ridge = std::atof(std::getenv("PROBE_DUPIN_RIDGE"));
-  if (std::getenv("PROBE_DUPIN_FD"))
-    base.project.osculating_dupin.exact_gradient = false;
   if (const char *v = std::getenv("PROBE_VOLUME")) {
     using gaudi::hepworth::block::ring_volume_mode;
-    const std::string name(v);
-    const ring_volume_mode mode = name == "hard"    ? ring_volume_mode::hard
-                                  : name == "fit"   ? ring_volume_mode::fit
-                                  : name == "corot" ? ring_volume_mode::corotational
-                                                    : ring_volume_mode::soft;
-    const bool land = std::getenv("PROBE_VOLUME_ONLY") == nullptr;
-    const gaudi::real weight = std::getenv("PROBE_VOLUME_W") ? std::atof(std::getenv("PROBE_VOLUME_W")) : 1.0;
-    const gaudi::real store = std::getenv("PROBE_STORE_W") ? std::atof(std::getenv("PROBE_STORE_W")) : 10.0;
-    for (auto *vol : {&base.project.osculating_torus.volume, &base.project.osculating_dupin.volume}) {
-      *vol = {};
-      vol->mode = mode;
-      vol->weight = weight;
-      vol->land = land;
-      vol->store_weight = store;
-      vol->held_medial = std::getenv("PROBE_FOLLOW") == nullptr;
-      vol->corotational.w_volume = weight;
-      if (std::getenv("PROBE_PERSIST"))
-        vol->persistent = std::atoi(std::getenv("PROBE_PERSIST")) != 0;
-      if (std::getenv("PROBE_FOOT_K"))
-        vol->corotational.foot_stiffness = std::atof(std::getenv("PROBE_FOOT_K"));
-      if (std::getenv("PROBE_REST_W"))
-        vol->corotational.w_rest = std::atof(std::getenv("PROBE_REST_W"));
-      if (std::getenv("PROBE_FOOT_W"))
-        vol->foot_weight = std::atof(std::getenv("PROBE_FOOT_W"));
-      if (std::getenv("PROBE_LO_STIFF"))
-        vol->lo_stiffness = std::atof(std::getenv("PROBE_LO_STIFF"));
-    }
+    auto &vol = base.project.osculating_torus.volume;
+    vol = {};
+    vol.mode = std::string(v) == "off" ? ring_volume_mode::off : ring_volume_mode::corotational;
+    if (std::getenv("PROBE_VOLUME_W"))
+      vol.corotational.w_volume = std::atof(std::getenv("PROBE_VOLUME_W"));
+    if (std::getenv("PROBE_FOOT_K"))
+      vol.corotational.foot_stiffness = std::atof(std::getenv("PROBE_FOOT_K"));
+    if (std::getenv("PROBE_REST_W"))
+      vol.corotational.w_rest = std::atof(std::getenv("PROBE_REST_W"));
+    if (std::getenv("PROBE_FOOT_W"))
+      vol.foot_weight = std::atof(std::getenv("PROBE_FOOT_W"));
   }
   auto torus = base;
-  torus.project.w_frame_fair =
-      std::getenv("PROBE_FRAME_FAIR") ? std::atof(std::getenv("PROBE_FRAME_FAIR")) : 0.0;
-  // A cyclide run keeps the torus row off unless PROBE_W asks for it too.
-  if (std::getenv("PROBE_W"))
-    torus.project.w_osculating_torus = std::atof(std::getenv("PROBE_W"));
-  else if (!std::getenv("PROBE_DUPIN"))
-    torus.project.w_osculating_torus = 1.0;
+  torus.project.w_osculating_torus = std::getenv("PROBE_W") ? std::atof(std::getenv("PROBE_W")) : 1.0;
   run("torus", torus, frames);
   return 0;
 }

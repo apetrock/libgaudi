@@ -1,5 +1,4 @@
 #include "gaudi/test/weingarten_tests.hpp"
-#include "gaudi/test/exponent_tests.hpp"
 #include "gaudi/test/engman_tests.hpp"
 #include "gaudi/test/modal_corrector_tests.hpp"
 #include "gaudi/test/material_direction_tests.hpp"

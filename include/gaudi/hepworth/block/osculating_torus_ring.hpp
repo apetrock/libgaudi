@@ -176,24 +176,10 @@ inline bool land_on_posed_torus(const torus_ring_shape &shape, const torus_ring_
   return land.allFinite() && std::isfinite(gap);
 }
 
-/// How a ring row treats the volume of its one-ring cone.
+/// How a ring row treats the volume of its one-ring.
 enum class ring_volume_mode {
   /// No volume term.
   off,
-  /// Restore a fraction `weight / (1 + weight)` of the volume error at each
-  /// projection.
-  soft,
-  /// Restore the volume exactly at each projection.
-  hard,
-  /// Variational: the volume is a term of the ring's own fit. Each projection
-  /// minimizes the ring points' gaps, a pull of both curvatures toward the
-  /// store (`store_weight`), and the one-ring medial volume's error (`weight`)
-  /// together over the pose and both curvatures, then lands the ring on the
-  /// fitted shape. The volume is measured on the model, between the landed
-  /// patch and each point's curvature-sphere centre, so it is a cone at an
-  /// umbilic and a wedge on a tube, and only a change of shape can meet it.
-  /// See `ring_variational_fit.hpp`.
-  fit,
   /// Corotational (ARAP / Müller): the row lands its ring as it does with
   /// the volume off, then the landings are adjusted so each fan prism, from a
   /// fan triangle to its points' tube-axis points, keeps its rest volume. The
@@ -205,255 +191,33 @@ enum class ring_volume_mode {
   corotational,
 };
 
-/// Volume of the cone from the foot's medial (spine) point to its one-ring fan.
-///
-/// The spine point sits `1 / k_hi` along the normal from the foot: the tube
-/// centre of the osculating torus, the centre of the larger curvature sphere,
-/// the local medial-axis point. The cone is one tetrahedron per fan triangle
-/// `(foot, x_j, x_j+1)` with that apex, so its volume is the slice of solid
-/// between this patch and the medial axis. On a tube of radius `r` it scales
-/// like `r^2` per unit length, the tube's own volume.
-///
-/// The spine point is found at the step's first projection and then held
-/// fixed in space for the step, the fixed spine reference: a store curvature
-/// edit does not move the apex, so it cannot inflate or deflate the cone on its
-/// own. The term holds the cone volume at its first-projection value by the
-/// smallest change of the ring's targets and the foot's position in the row's
-/// metric. As the surface flattens the apex runs off to infinity. It is capped at `apex_cap`
-/// times the ring's reach, and in that limit the term becomes "no
-/// area-weighted mean normal motion". The apex side is fixed at the first
-/// projection, so a curvature crossing zero mid-step does not flip the cone.
 struct ring_volume_config {
   ring_volume_mode mode = ring_volume_mode::off;
-  /// Soft mode only. The fraction of the volume error restored at each
-  /// projection is `weight / (1 + weight)`.
-  real weight = 1;
-  /// Land the ring on the fitted shape before the volume correction. False,
-  /// with a volume `mode` on, keeps the ring points where they are and applies
-  /// only the volume correction, with the spine read from the store at the
-  /// vertex chart, and skips the fit. The row is then a pure local volume
-  /// constraint, for use beside a curvature solver that already realizes the
-  /// shape. With `mode` off the row always lands: "volume only" with no volume
-  /// would be a row that does nothing.
-  bool land = true;
-
-  /// Whether the row lands on its shape (see `land`).
-  bool lands() const { return land || mode == ring_volume_mode::off; }
-  /// Farthest apex, in multiples of the ring's reach.
+  /// Farthest tube-axis point, in multiples of the ring's reach.
   real apex_cap = 10;
-  /// Weight of the foot's absolute row, relative to a one-ring row (soft and
-  /// hard modes; `fit` mode has no foot row). The ring
+  /// Weight of the foot's absolute row, relative to a one-ring row. The ring
   /// rows are differences, so their forces cancel in sum and cannot move the
-  /// patch as a whole toward or away from the spine; this row can, and the
-  /// volume correction moves the foot along with the ring. Between
-  /// corrections it holds the foot where it is, like a little extra mass. 0
-  /// drops it, leaving only shape corrections relative to the foot.
+  /// patch as a whole; this row carries the corotational step's foot shift.
+  /// 0 drops it.
   real foot_weight = 1;
-  /// Hold a persistent reference instead of re-recording the volume at each
-  /// step. The reference is the cone's volume per unit fan area, a local
-  /// medial depth (about r / 3 on a tube) that survives remeshing: it is set
-  /// the first time a vertex is seen and the demo carries it through the
-  /// remesher as a vertex datum. Each step's target is that depth times the
-  /// ring's area at the step's start. Without it the reference resets every
-  /// step, so whatever a step loses (to remesh splits, or to the compromise
-  /// with other terms in the solve) is kept. Needs the row to be given a depth
-  /// store; without one it falls back to the per-step reference.
-  bool persistent = true;
-  /// `fit` mode only: pull of both curvatures toward the store, per one-ring
-  /// point, in the height a mismatch bends a point at the reach. The volume
-  /// term (`weight`, on the same per-point scale) has to win against it to
-  /// change the shape.
-  real store_weight = 10;
-  /// `fit` mode only: the low curvature's store pull as a multiple of
-  /// `store_weight`, so the volume acts through the tube radius rather than
-  /// by bending the patch around the major circle.
-  real lo_stiffness = 10;
-  /// `fit` mode only, experimental: hold each one-ring point's tube-axis
-  /// point in space for the step, so the fit's volume is the region between
-  /// the moving patch and a fixed skeleton, a real volume, and free the foot
-  /// offset to move the patch relative to it through the foot row. In the
-  /// monge growth run this is unstable: every vertex sits in about seven
-  /// rings' cells, each restores its whole volume error at every projection,
-  /// and the tube inflates or tears (a weaker foot row makes it worse). Off,
-  /// the axis points follow the model: stable, but the volume then measures
-  /// the local tube radius, which an undulating surface can hold while its
-  /// enclosed volume shrinks.
-  bool held_medial = false;
-  /// `corotational` mode: the spring weights of its local solve.
+  /// The spring weights of the corotational local solve.
   corotational_config corotational{};
 };
 
-/// Signed volume of the cone from `c` over the fan `(f, d_j, d_j+1)`, for the
-/// first `n` entries of `d` in cyclic order: one tetrahedron
-/// `(c, f, d_j, d_j+1)` per fan triangle. `f` is the foot, the origin unless
-/// given.
-inline real fan_cone_volume(const std::vector<vec3> &d, size_t n, const vec3 &c,
-                            const vec3 &f = vec3::Zero()) {
-  real v = 0;
-  const vec3 w = f - c;
-  for (size_t j = 0; j < n; ++j)
-    v += (d[j] - c).dot((d[(j + 1) % n] - c).cross(w));
-  return v / real(6);
-}
-
-/// Area of the fan `(0, d_j, d_j+1)` over the first `n` entries of `d`.
-inline real fan_area(const std::vector<vec3> &d, size_t n) {
-  real a = 0;
-  for (size_t j = 0; j < n; ++j)
-    a += real(0.5) * d[j].cross(d[(j + 1) % n]).norm();
-  return a;
-}
-
-/// Gradient of `fan_cone_volume` in each `d_j`, and in the foot `f` when
-/// `g_foot` is given.
-inline void fan_cone_gradient(const std::vector<vec3> &d, size_t n, const vec3 &c, std::vector<vec3> &g,
-                              const vec3 &f = vec3::Zero(), vec3 *g_foot = nullptr) {
-  g.assign(n, vec3::Zero());
-  const vec3 w = f - c;
-  vec3 gf = vec3::Zero();
-  for (size_t j = 0; j < n; ++j) {
-    const vec3 here = d[j] - c;
-    const vec3 next = d[(j + 1) % n] - c;
-    const vec3 prev = d[(j + n - 1) % n] - c;
-    g[j] = (next.cross(w) + w.cross(prev)) / real(6);
-    gf += here.cross(next) / real(6);
-  }
-  if (g_foot)
-    *g_foot = gf;
-}
-
-/// Moves the first `n` targets (the cyclic one-ring, relative to the foot) and
-/// the foot itself by the smallest change in the metric
-/// `sum_j s_j^2 |dt_j|^2 + foot^2 |delta|^2` that brings the cone volume about
-/// the fixed apex `c` to `v0` (`hard`), or a fraction `weight / (1 + weight)`
-/// of the way (`soft`). The ring rows are relative to the foot, so a foot
-/// shift `delta` carries the whole ring with it: the cone is evaluated over
-/// the ring at `delta + t_j` with the foot at `delta`. Returns `delta`; with
-/// `foot` 0 it stays zero. Linearized steps, at most eight, absorb the
-/// volume's cubic dependence; a ring a tenth off converges in four or five.
-inline vec3 hold_fan_cone_volume(std::vector<vec3> &t, size_t n, const std::vector<real> &scales,
-                                 const vec3 &c, real v0, const ring_volume_config &cfg, real foot = 0) {
-  vec3 delta = vec3::Zero();
-  if (cfg.mode == ring_volume_mode::off || n < 3 || !std::isfinite(v0))
-    return delta;
-  const real fraction = cfg.mode == ring_volume_mode::hard
-                            ? real(1)
-                            : std::max(cfg.weight, real(0)) / (real(1) + std::max(cfg.weight, real(0)));
-  if (!(fraction > real(0)))
-    return delta;
-  const real foot2 = foot > real(0) ? foot * foot : real(0);
-  std::vector<vec3> P(n), g;
-  auto volume = [&]() {
-    for (size_t j = 0; j < n; ++j)
-      P[j] = delta + t[j];
-    return fan_cone_volume(P, n, c, delta);
-  };
-  const real now = volume();
-  const real goal = now + fraction * (v0 - now);
-  for (int it = 0; it < 8; ++it) {
-    const real err = goal - volume();
-    if (!(std::abs(err) > real(1e-14) * std::abs(goal)))
-      break;
-    vec3 g_foot;
-    fan_cone_gradient(P, n, c, g, delta, &g_foot);
-    // d/d delta moves the foot and every ring point together.
-    vec3 g_delta = g_foot;
-    for (size_t j = 0; j < n; ++j)
-      g_delta += g[j];
-    real denom = foot2 > real(0) ? g_delta.squaredNorm() / foot2 : real(0);
-    for (size_t j = 0; j < n; ++j)
-      denom += g[j].squaredNorm() / std::max(scales[j] * scales[j], real(1e-12));
-    if (!(denom > real(1e-30)))
-      break;
-    const real lambda = err / denom;
-    for (size_t j = 0; j < n; ++j)
-      t[j] += lambda * g[j] / std::max(scales[j] * scales[j], real(1e-12));
-    if (foot2 > real(0))
-      delta += lambda * g_delta / foot2;
-  }
-  return delta;
-}
-
-/// Spine point relative to the unposed foot: the posed foot plus `1 / |k_hi|`
-/// along the posed normal on `side`, capped at `cap`.
-inline vec3 ring_spine_point(real k_hi, real offset, const vec3 &normal, real side, real cap) {
-  real a = std::abs(k_hi) > real(0) ? real(1) / std::abs(k_hi) : cap;
-  if (!(a < cap) || !std::isfinite(a))
-    a = cap;
-  return (offset + side * a) * normal;
-}
-
-/// Per-row state of the one-ring volume term: the one-ring's size at the front
-/// of the ring points, the spine point held in space for the step, and the
-/// cone volume it holds.
+/// Per-row state of the one-ring volume term.
 struct ring_volume_term {
+  /// The one-ring's size at the front of the ring points.
   size_t n_ring1 = 0;
-  bool apex_set = false;
-  vec3 apex = vec3::Zero();
-  real v0 = std::numeric_limits<real>::quiet_NaN();
   /// This vertex's entry in the persistent depth store (NaN until set), or
   /// null for a per-step reference.
   real *depth = nullptr;
 
-  /// The spine point relative to the foot `xi`. The first call places it from
-  /// the tube curvature (`1 / |k_hi|` along the posed normal, on the side of
-  /// `k_hi`, capped) and holds it in space; later calls only re-express it
-  /// relative to the moving foot. `d(k)` reads ring point `k` relative to the
-  /// unposed foot.
-  template <class D>
-  vec3 spine(real k_hi, real offset, const vec3 &normal, D &&d, const ring_volume_config &cfg,
-             const vec3 &xi) {
-    if (!apex_set) {
-      real reach2 = 0;
-      for (size_t k = 0; k < n_ring1; ++k)
-        reach2 = std::max(reach2, d(k).squaredNorm());
-      const real side = k_hi < real(0) ? real(-1) : real(1);
-      apex = xi + ring_spine_point(k_hi, offset, normal, side, cfg.apex_cap * std::sqrt(reach2));
-      apex_set = true;
-    }
-    return apex - xi;
-  }
-
-  /// Records the cone volume of the points `d` on the first call, then moves
-  /// the one-ring `target`s, and returns the foot shift, to hold it.
-  template <class D>
-  vec3 hold(std::vector<vec3> &target, D &&d, const std::vector<real> &scales, const vec3 &spine,
-            const ring_volume_config &cfg) {
-    if (cfg.mode == ring_volume_mode::off || cfg.mode == ring_volume_mode::fit ||
-        cfg.mode == ring_volume_mode::corotational || n_ring1 < 3)
-      return vec3::Zero();
-    if (!std::isfinite(v0)) {
-      std::vector<vec3> d0(n_ring1);
-      for (size_t k = 0; k < n_ring1; ++k)
-        d0[k] = d(k);
-      v0 = fan_cone_volume(d0, n_ring1, spine);
-      const real area = fan_area(d0, n_ring1);
-      if (cfg.persistent && depth && area > real(0)) {
-        if (std::isfinite(*depth))
-          v0 = *depth * area;
-        else
-          *depth = v0 / area;
-      }
-    }
-    return hold_fan_cone_volume(target, n_ring1, scales, spine, v0, cfg, cfg.foot_weight);
-  }
-
   /// Whether the row carries the foot's absolute row.
-  /// In `fit` mode only with `held_medial`. Without it the volume is
-  /// intrinsic to the fitted shape, the ring's difference rows carry it, and
-  /// the fit's normal offset is only the model's least-squares placement
-  /// against the ring: moving the foot to it every projection ratchets the
-  /// vertex along its normal.
   bool foot_row(const ring_volume_config &cfg) const {
-    return cfg.mode != ring_volume_mode::off && (cfg.mode != ring_volume_mode::fit || cfg.held_medial) &&
-           cfg.foot_weight > real(0) && n_ring1 >= 3;
+    return cfg.mode == ring_volume_mode::corotational && cfg.foot_weight > real(0) && n_ring1 >= 3;
   }
 
-  /// `fit` mode with `held_medial`: the step's skeleton in world coordinates.
-  bool medial_set = false;
-  std::vector<vec3> medial_world;
-  vec3 medial_foot_world = vec3::Zero();
-  /// `corotational` mode: the step's rest pose and skeleton.
+  /// The step's rest pose and skeleton.
   corotational_rest corot;
 };
 
@@ -477,7 +241,7 @@ struct osculating_torus_ring_config {
   /// Land on the closest point of the torus instead of dropping along the
   /// normal. About ten times the cost of a projection.
   bool closest_point = false;
-  /// One-ring cone volume about the spine. See `ring_volume_config`.
+  /// One-ring volume. See `ring_volume_config`.
   ring_volume_config volume{};
 };
 
@@ -729,13 +493,8 @@ public:
     shape_w W;
     vec3 T, B, N;
     _last_ok = false;
-    vec3 spine = vec3::Zero();
-    bool have_spine = false;
-    bool variational = false;
-    vec3 variational_foot = vec3::Zero();
     bool corot_done = false;
     vec3 corot_foot = vec3::Zero();
-    auto ring_d = [&](size_t k) -> const vec3 & { return pts[k].d; };
     if (vertex_row_frame(_blocks, _charts, vi, q, W, T, B, N, _stars)) {
       W = shape_with_axes(W);
       if (W.ok) {
@@ -779,17 +538,8 @@ public:
           stats::hm_hs.fetch_add(a, std::memory_order_relaxed);
           stats::hs_hs.fetch_add(b, std::memory_order_relaxed);
         }
-        variational = _cfg.volume.mode == ring_volume_mode::fit && _cfg.volume.lands();
-        if (variational && fit_variational(shape, T, B, N, xi, pts, target, variational_foot))
-          _last_ok = true;
-        if (!_cfg.volume.lands()) {
-          spine = _volume.spine(shape.k_hi, 0, N, ring_d, _cfg.volume, xi);
-          have_spine = true;
-        }
         std::vector<char> in;
-        const torus_ring_fit fit = _cfg.volume.lands() && !variational
-                                       ? fit_torus_ring_pose(shape, T, B, N, pts, in, _cfg)
-                                       : torus_ring_fit{};
+        const torus_ring_fit fit = fit_torus_ring_pose(shape, T, B, N, pts, in, _cfg);
         const torus_ring_frame f = tilt_frame(T, B, N, fit.pose);
         static const int debug_vert =
             std::getenv("GAUDI_TORUS_DEBUG") ? std::atoi(std::getenv("GAUDI_TORUS_DEBUG")) : -1;
@@ -833,16 +583,12 @@ public:
           }
           _last_ok = true;
           _last_fit = fit;
-          spine = _volume.spine(shape.k_hi, fit.pose.offset, f.N, ring_d, _cfg.volume, xi);
-          have_spine = true;
           if (_cfg.volume.mode == ring_volume_mode::corotational)
             corot_done = corotational_targets(shape, f, fit.pose.offset, pts, target, corot_foot);
         }
       }
     }
-    vec3 foot_shift = variational ? variational_foot : vec3::Zero();
-    if (have_spine)
-      foot_shift = _volume.hold(target, ring_d, _scales, spine, _cfg.volume);
+    vec3 foot_shift = vec3::Zero();
     if (corot_done)
       foot_shift = corot_foot;
     using stats = osculating_torus_ring_stats;
@@ -906,125 +652,6 @@ public:
 
   bool last_ok() const { return _last_ok; }
   const torus_ring_fit &last_fit() const { return _last_fit; }
-  /// Cone volume the volume term holds (NaN before the first projection).
-  real reference_volume() const { return _volume.v0; }
-
-  /// `fit` volume mode: the variational fit over pose and both curvatures on
-  /// the torus model (vertical landing, as the row's default), with the
-  /// store's curvatures as the pull target. Writes the landed `target`s and
-  /// the posed foot's offset from the unposed one.
-  bool fit_variational(const torus_ring_shape &shape, const vec3 &T, const vec3 &B, const vec3 &N,
-                       const vec3 &xi, const std::vector<torus_ring_point> &pts, std::vector<vec3> &target,
-                       vec3 &foot_offset) {
-    const size_t n = pts.size();
-    thread_local std::vector<vec3> d;
-    thread_local std::vector<real> sc;
-    d.resize(n);
-    sc.resize(n);
-    for (size_t k = 0; k < n; ++k) {
-      d[k] = pts[k].d;
-      sc[k] = pts[k].s;
-    }
-    auto land = [&](const ring_fit_params &x, const vec3 &dk) {
-      ring_model_point e;
-      const torus_ring_frame fr = tilt_frame(T, B, N, {.offset = x[0], .tilt_t = x[1], .tilt_b = x[2]});
-      if (!fr.ok)
-        return e;
-      const vec3 eh = shape.hx * fr.T + shape.hy * fr.B;
-      const vec3 el = shape.lx * fr.T + shape.ly * fr.B;
-      const vec3 p = dk - x[0] * fr.N;
-      const real u = p.dot(eh), v = p.dot(el);
-      real h = 0, hu = 0, hv = 0;
-      if (!osculating_torus_height_grad(x[3], x[4], u, v, h, hu, hv))
-        return e;
-      e.gap = p.dot(fr.N) - h;
-      e.land = x[0] * fr.N + u * eh + v * el + h * fr.N;
-      e.normal = (fr.N - hu * eh - hv * el).normalized();
-      e.ok = e.land.allFinite() && e.normal.allFinite();
-      return e;
-    };
-    auto foot = [&](const ring_fit_params &x, vec3 &F, vec3 &NF) {
-      const torus_ring_frame fr = tilt_frame(T, B, N, {.offset = x[0], .tilt_t = x[1], .tilt_b = x[2]});
-      NF = fr.ok ? fr.N : N;
-      F = x[0] * NF;
-    };
-    ring_fit_params start;
-    start << 0, 0, 0, shape.k_hi, shape.k_lo;
-    ring_variational_config vcfg{.w_store = _cfg.volume.store_weight,
-                                 .lo_stiffness = _cfg.volume.lo_stiffness,
-                                 .w_volume = _cfg.volume.weight,
-                                 .prior = _cfg.prior,
-                                 .iterations = _cfg.iterations,
-                                 .apex_cap = _cfg.volume.apex_cap};
-    // A held skeleton gives the foot offset a meaning: it moves the patch
-    // relative to the skeleton. Without one it is only a nuisance and is pinned.
-    if (_cfg.volume.held_medial)
-      vcfg.offset_weight = 0;
-    const size_t n1 = _volume.n_ring1;
-    const real cap = vcfg.apex_cap * ring_reach(d, n1);
-    // The step's skeleton, held in space, re-expressed about the moving foot.
-    if (_cfg.volume.held_medial && !_volume.medial_set) {
-      std::vector<vec3> M;
-      vec3 MF;
-      if (!ring_medial_images(start, d, n1, land, foot, cap, M, MF))
-        return false;
-      _volume.medial_world.resize(n1);
-      for (size_t j = 0; j < n1; ++j)
-        _volume.medial_world[j] = xi + M[j];
-      _volume.medial_foot_world = xi + MF;
-      _volume.medial_set = true;
-    }
-    ring_medial_hold hold;
-    if (_volume.medial_set) {
-      hold.M.resize(n1);
-      for (size_t j = 0; j < n1; ++j)
-        hold.M[j] = _volume.medial_world[j] - xi;
-      hold.MF = _volume.medial_foot_world - xi;
-    }
-    const ring_medial_hold *held = _volume.medial_set ? &hold : nullptr;
-    if (!std::isfinite(_volume.v0)) {
-      real v = 0, a = 0;
-      if (!ring_medial_volume(start, d, n1, land, foot, cap, v, a, held))
-        return false;
-      _volume.v0 = v;
-      if (_cfg.volume.persistent && _volume.depth) {
-        if (std::isfinite(*_volume.depth))
-          _volume.v0 = *_volume.depth * a;
-        else
-          *_volume.depth = v / a;
-      }
-    }
-    if (_have_theta)
-      start = _theta;
-    const ring_variational_fit fit =
-        fit_ring_variational(start, shape.k_hi, shape.k_lo, d, sc, n1, _volume.v0, vcfg, land, foot, held);
-    if (!fit.ok)
-      return false;
-    _theta = fit.theta;
-    _have_theta = true;
-    static const int debug_vert =
-        std::getenv("GAUDI_RING_DEBUG") ? std::atoi(std::getenv("GAUDI_RING_DEBUG")) : -1;
-    if (debug_vert == static_cast<int>(_ids[0]) && !_debug_printed) {
-      _debug_printed = true;
-      real v_start = 0, a_start = 0;
-      ring_fit_params s0;
-      s0 << 0, 0, 0, shape.k_hi, shape.k_lo;
-      ring_medial_volume(s0, d, n1, land, foot, vcfg.apex_cap * ring_reach(d, n1), v_start, a_start);
-      std::cerr << "[ring_fit] v " << _ids[0] << " store k " << shape.k_hi << " " << shape.k_lo << " depth "
-                << (_volume.depth ? *_volume.depth : real(-1)) << " v0 " << _volume.v0 << " V@store "
-                << v_start << " A " << a_start << " | fit k " << fit.theta[3] << " " << fit.theta[4]
-                << " offset " << fit.theta[0] << " V " << fit.volume << " A " << fit.area << "\n";
-    }
-    for (size_t k = 0; k < n; ++k) {
-      const ring_model_point e = land(fit.theta, d[k]);
-      if (e.ok)
-        target[k] = e.land;
-    }
-    vec3 NF;
-    foot(fit.theta, foot_offset, NF);
-    return true;
-  }
-
   /// `corotational` mode: the skeleton from the posed torus's normals at the
   /// landings, then the corotational step on top of the row's landings.
   /// Rewrites `target` (relative to the foot) and gives the foot's shift.
@@ -1111,10 +738,6 @@ public:
   torus_ring_fit _last_fit;
   ring_volume_term _volume;
   int _corot_calls = 0;
-  /// `fit` volume mode: the previous projection's fitted parameters, the warm
-  /// start of the next.
-  bool _have_theta = false;
-  ring_fit_params _theta = ring_fit_params::Zero();
 };
 
 /// The 1-ring of `vi`, then the 2-ring, without the foot or repeats.

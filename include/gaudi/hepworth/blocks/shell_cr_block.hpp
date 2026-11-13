@@ -363,10 +363,6 @@ public:
       normal_mass[i] = vec3::Constant(std::max(normal_mass_scale * area[i], real(1e-8)));
     amap_y.assign(x.size(), vec4(1, 0, 0, 0));
     amap_mass.assign(x.size(), vec4::Constant(real(1e-8)));
-    // Per-edge rotations (`edge_quat_site`): identity until the contact net
-    // seeds them from the frame-start frames; floor mass only.
-    edge_quat.assign(static_cast<size_t>(std::max(nE, 0)), vec4(1, 0, 0, 0));
-    edge_quat_mass.assign(edge_quat.size(), vec4::Constant(real(1e-8)));
   }
 
   void apply_external_input(const std::vector<vec3> &input, real scale = 1.0) override {
@@ -396,19 +392,7 @@ public:
       _amap_dof = vec4_block::create(amap_mass, amap_y);
       out.push_back(_amap_dof);
     }
-    _edge_quat_dof = nullptr;
-    if (edge_quat_site) {
-      _edge_quat_dof = vec4_block::create(edge_quat_mass, edge_quat);
-      out.push_back(_edge_quat_dof);
-    }
   }
-
-  /// Per-edge rotations for the contact net's rotation store
-  /// (`contact_net_gn` with a fourth block; `curvature_config::contact_rotations`).
-  std::vector<vec4> edge_quat;
-  std::vector<vec4> edge_quat_mass;
-  bool edge_quat_site = false;
-  vec4_block::ptr edge_quat_dof() const { return _edge_quat_dof; }
 
   /// Emit the per-vertex AMAP quaternions (`amap_y`) for `amap_gn`; off unless
   /// `position_distortion::w_amap` is on.
@@ -435,7 +419,6 @@ private:
   vec3_block::ptr _face_dof;
   vec3_block::ptr _normal_dof;
   vec4_block::ptr _amap_dof;
-  vec4_block::ptr _edge_quat_dof;
 };
 
 } // namespace block

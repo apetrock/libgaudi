@@ -21,16 +21,13 @@
 #include "gaudi/duchamp/fields.hpp"
 #include "gaudi/geometry_logger.hpp"
 #include "gaudi/hepworth/block/amap_gn.hpp"
-#include "gaudi/hepworth/block/contact_net_coupling.hpp"
 #include "gaudi/hepworth/block/contact_net_gn.hpp"
 #include "gaudi/hepworth/block/dupin_circle.hpp"
 #include "gaudi/hepworth/block/edge_shape_fair.hpp"
 #include "gaudi/hepworth/block/edge_shape_goals.hpp"
-#include "gaudi/hepworth/block/exponent_coupling.hpp"
 #include "gaudi/hepworth/block/face_element.hpp"
 #include "gaudi/hepworth/block/generic_constraints.hpp"
 #include "gaudi/hepworth/block/kite_growth.hpp"
-#include "gaudi/hepworth/block/osculating_dupin_ring.hpp"
 #include "gaudi/hepworth/block/osculating_torus_ring.hpp"
 #include "gaudi/hepworth/block/shape_det_conserve.hpp"
 #include "gaudi/hepworth/block/shape_objectives.hpp"
@@ -135,221 +132,50 @@ struct fairing_draw {
 };
 
 /// What couples the edge curvature store to positions.
-///  off        — nothing.
-///  weingarten — the store against the mean of each edge's two faces' live CR
-///               read-outs (`weingarten_gn`), with the intrinsic vector
-///               Dirichlet memory (`position_distortion.w_memory`).
-///  exponent   — per-face exponents (rotation + in-plane stretch) from one
-///               constant system per step, exponentiated and gathered by the
-///               CR Dirichlet operator (`exponent_coupling`, MATH.md section
-///               16); the store's edits are its targets; `exponent` holds the
-///               material.
-///  eigensatz  — the exponent system with Eigensatz's rows (2010, eq. 3.11-3.12):
-///               the store's change of principal curvatures (directions free),
-///               conformal and areal terms on the stretch; `exponent` holds
-///               the shared material, `eigensatz` these rows.
+///  off         — nothing; the store holds its frame-start value.
 ///  contact_net — the principal contact element net (MATH.md 19.10 to 19.12):
-///               positions and normals solved together, one sphere per edge
-///               through the Rodrigues relation with twist, the store's change
-///               of `(k11, k12)` per edge as its targets; gathered like
-///               `exponent` (`contact` holds its solver knobs).
-enum class curvature_solver { off, weingarten, exponent, eigensatz, contact_net };
+///                positions and normals solved together as Gauss-Newton rows
+///                in the projection solver, one sphere per edge through the
+///                Rodrigues relation with twist, the store's `(k11, k12)` per
+///                edge as its targets.
+enum class curvature_solver { off, contact_net };
 
-/// How `contact_net` enters the solve: `native` its rows as Gauss-Newton rows
-/// in the projection solver with normals as a block (one solve per frame, as
-/// `weingarten`); `inner` a standalone inner solve gathered like `exponent`.
-enum class contact_net_mode { native, inner };
-
-/// Where the `exponent` solver's stretch is measured from: `frame` the step
-/// start (plastic: `km` only damps each step), `initial` the first frame's
-/// triangles kept until the mesh changes (elastic: `km` resists total
-/// stretch, so frustrated curvature has to bend or buckle).
-enum class exponent_rest { frame, initial };
-
-/// Material of the `exponent` solver: `kb` bending prior (tiny: the rigid
-/// null space), `km` growth stiffness (relative to the curvature rows; large
-/// holds the metric), `w_compat` the compatibility weight, `line_search`
-/// halvings tried per step, `max_step` the cap on a face's exponent.
-struct exponent_material {
-  real kb = 1e-6;
-  real km = 0.0;
-  real w_compat = 1e8;
-  int line_search = 16;
-  real max_step = 0.5;
-  /// Exponent steps each time the store's goal moves (it settles in the first
-  /// iterates); the last target is held over the remaining iterates.
-  int steps_per_frame = 4;
-  /// Mass on the exponents (relative to the curvature rows): shorter, more
-  /// conservative steps; slows the response. 0 is off.
-  real mass = 0.0;
-  /// Frames one factorization is reused for; 1 (default) rebuilds it every
-  /// frame, so all its tangent geometry (dihedral axes, edge directions in
-  /// their faces, principal directions) is reseeded from the live mesh.
-  /// Above 1 reuses it, turned into each face's current frame (~7x faster
-  /// frames, 0.11 against 0.8 s on the demo torus); its tangents then lag by
-  /// up to that many frames. A stalled step and any change of the mesh
-  /// refactor at once.
-  int refresh_every = 1;
-  /// Stretch rest (`exponent_rest`), one of:
-  ///   exponent_rest::frame    plastic: measured from each frame's start
-  ///   exponent_rest::initial  elastic: the first frame's triangles, reset when
-  ///                           the face count changes
-  exponent_rest rest = exponent_rest::frame;
-};
-
-/// Eigensatz's rows for `curvature_solver::eigensatz` (the rest of the
-/// material is `exponent_material`): `w_conformal` holds angles (the
-/// stretch's trace-free part), `w_area` areas (its trace), both relative to
-/// the curvature rows and measured from `exponent_material::rest`; `umbilic`
-/// the relative gap under which both principal rows follow the mean
-/// curvature (Eigensatz A.6).
-struct eigensatz_rows {
-  real w_conformal = 1.0;
-  real w_area = 0.0;
-  real umbilic = 1e-3;
-};
-
-/// `w_coupling` is the coupling row between position space and shape space
-/// (`weingarten_gn`), like the rod rows that keep positions and frames in
-/// sync: `shape_distortion` rows act on the edge store, `position_distortion`
-/// rows on the positions, and the coupling keeps the two in sync. Its weight
-/// is a row weight like every other (`A = w * factor`, the factor the edge's
-/// dual area, so its residual is an integrated curvature, the quantity
-/// `bend` weighs). A shape row at the same weight lands the store halfway;
-/// keep it at or above the position rows that hold curvature (`w_bend`) for
-/// shape edits to show in the mesh. Without it (`off`) the store reads its
-/// frame-start value at weight 1. The same weight means the same under every
-/// solver: for `exponent` and `eigensatz` the row is the CR Dirichlet gather
-/// toward the stepped edge frames, calibrated to the same position stiffness
-/// as `bend` and the `weingarten` row (`exponent::k_gather`), and the store is
-/// anchored at its frame-start reading at `w_coupling` (the coupling there
-/// only reads the store), so a shape row at `w_coupling` lands it halfway.
+/// `w_coupling` is the contact net's row weight between position space and
+/// shape space: `shape_distortion` rows act on the edge store,
+/// `position_distortion` rows on the positions, and the coupling keeps the
+/// two in sync. A shape row at the same weight lands the store halfway; keep
+/// it at or above the position rows that hold curvature (`w_bend`) for shape
+/// edits to show in the mesh. Without it (`off`) the store reads its
+/// frame-start value at weight 1.
 struct curvature_config {
-  /// The solver (`curvature_solver`), one of:
-  ///   curvature_solver::off         no coupling; the store holds its frame-start value
-  ///   curvature_solver::weingarten  Gauss–Newton read-out rows + Dirichlet memory
-  ///   curvature_solver::exponent    per-face rotation + stretch exponents, gathered
-  ///                                 by the CR Dirichlet operator (material: `exponent`)
-  ///   curvature_solver::contact_net positions and normals as a principal contact
-  ///                                 element net, gathered as `exponent` (`contact`)
-  ///   curvature_solver::eigensatz   the same system on principal curvatures, with
-  ///                                 conformal / areal rows (`exponent` + `eigensatz`)
+  /// `curvature_solver::off` or `curvature_solver::contact_net`.
   curvature_solver kind = curvature_solver::contact_net;
   real w_coupling = 0.5;
-  /// Damping on the curvature store: every iterate it is also pulled toward
-  /// its previous iterate at this weight (the `w_coupling` scale). Like mass,
-  /// it slows the store's steps, but it vanishes once the iterates settle, so
-  /// the frame's result is unchanged. Helps the solve on large meshes. 0 is
-  /// off.
-  real w_store_damping = 0.0;
-  /// `exponent` solver material (kinds `exponent` and `eigensatz`).
-  exponent_material exponent{};
-  /// Eigensatz's rows (kind `eigensatz` only).
-  eigensatz_rows eigensatz{};
-  /// The contact net's inner solve (kind `contact_net` only): `solver`
-  /// (`gn` Levenberg-Marquardt, default, or `pd` the constant-factor
-  /// projection solve), `iterations` per solve, the row weights, the length
-  /// memory (`w_memory`, faded by the merit under `gn`), `gn_refresh`, and the
-  /// `pd` accelerator (`acceleration`, `anderson_m`, `cheb_delay`,
-  /// `cheb_window`).
-  kusama::contact_net::config contact{};
-  /// `native` (default): the net's rows inside the projection solver;
-  /// `inner`: the gathered inner solve (`contact` holds its knobs).
-  contact_net_mode contact_mode = contact_net_mode::native;
-  /// `native` tangency target: `vertex` (default) from the store's vertex
-  /// tensor; `edge` the edge's `k` plus the frame start's one-sided offset.
+  /// Tangency target: `vertex` (default) from the store's vertex tensor;
+  /// `edge` the edge's `k` plus the frame start's one-sided offset.
   hepworth::block::contact_net_gn::tangency contact_tangency = hepworth::block::contact_net_gn::tangency::vertex;
-  /// `native` normals' mass per unit vertex dual area: a pull toward the
-  /// frame-start normals that damps steps on a stale factor (0: none).
+  /// Normals' mass per unit vertex dual area: a pull toward the frame-start
+  /// normals that damps steps on a stale factor (0: none).
   real contact_normal_mass = 0.0;
-  /// `native` only: the rotation store (MATH.md 19.21, E2). Each edge carries
-  /// a quaternion, the rotation from one vertex frame to the next, seeded
-  /// from the vertex charts; the net's Rodrigues rows become rotation rows
-  /// plus rows coupling its bending and twist to the store. Matches the
-  /// default to round-off on the contact-net suite. Off by default.
-  bool contact_rotations = false;
 };
 
-/// Shape → position projectors: Monge, Albers, spine, frame fair, and the
-/// curvature solver. These land or couple stored curvature into immersion.
-/// `one_ring_operators` builds spine, Monge, and stretch on the vertex
-/// one-ring. Off keeps those on the face. Albers stays on the one-ring
-/// either way.
+/// Shape → position: the osculating-torus ring row and the curvature solver.
+/// `one_ring_operators` builds stretch, tilt and axis ratio on the vertex
+/// one-ring. Off keeps stretch on the face.
 struct shape_project {
-  /// One shape per line. Comment a line to drop it. `quadric` matches the
-  /// fitted jet, so it wins every spoke it is allowed into.
-  /// `cylinder_minor` projects onto the tight principal circle.
-  /// `cylinder_major` projects onto the loose one. The other axis is the ruling.
-  std::vector<hepworth::block::monge_shape> shapes{
-      //hepworth::block::monge_shape::cylinder_minor,
-      //hepworth::block::monge_shape::cylinder_major,
-      //hepworth::block::monge_shape::sphere,
-      hepworth::block::monge_shape::osculating_torus,
-      //hepworth::block::monge_shape::hyperboloid,
-      //hepworth::block::monge_shape::quadric,
-  };
-  /// Closest-point landings on the one ring. Comment a line to drop it.
-  /// `w_fair_albers` scales the row. 0 leaves it off.
-  std::vector<hepworth::block::albers_shape> albers{
-      //hepworth::block::albers_shape::quadric,
-      //hepworth::block::albers_shape::sphere,
-      //hepworth::block::albers_shape::darboux_cyclide,
-  };
-  real w_fair_albers = 0.0e-1;
-  /// Canal spines. Comment a line to drop it. The smaller ring residual wins.
-  /// `w_frame_fair` scales the row.
-  std::vector<hepworth::block::spine_kind> spine{
-      hepworth::block::spine_kind::cylinder,
-      //hepworth::block::spine_kind::sphere,
-      hepworth::block::spine_kind::torus,
-      //hepworth::block::spine_kind::ellipsoid,
-  };
   bool one_ring_operators = true;
-  real w_frame_fair = 0.0;
-  /// Canal-radial residual bite in [0, 1]. `1` lands fully each project;
-  /// `0.25` takes a quarter of `r_tgt − |p − C|` along the canal radial.
-  real spine_step = 0.0;
   /// Osculating-torus ring row. The store sets both curvatures and the
   /// principal angle at each foot. The 1-ring and 2-ring fit only the pose,
   /// the foot's normal offset and the normal's tilt. Every ring point lands
   /// on that posed torus. 0 is off.
   real w_osculating_torus = 0.0;
-  /// Row scale (`two_ring`), pose iterations, and pose prior. `.volume` holds
-  /// the one-ring's cone volume about the spine held for the step, the local
-  /// medial-axis volume: `.volume = {.mode = ring_volume_mode::hard}` holds it
-  /// on the landed ring, and `.land = false` makes the row a pure volume
-  /// constraint to run beside a curvature solver. It needs a weight that
-  /// dominates the coupling (around 10) to hold through the solve.
+  /// Row scale (`two_ring`), pose iterations, and pose prior. `.volume`
+  /// `corotational` keeps each one-ring fan prism's rest volume (to its
+  /// tube-axis points) while landing; `off` lands only.
   hepworth::block::osculating_torus_ring_config osculating_torus{
       .two_ring = true,
-      //.volume = { .mode = hepworth::block::ring_volume_mode::hard, .land = true, .weight = 0.01},
-      //.volume = {.mode = hepworth::block::ring_volume_mode::fit, .weight = 0.1, .store_weight = 1.0},
       .volume = {.mode = hepworth::block::ring_volume_mode::corotational,
-                .corotational = {.w_proj = 1.0, .w_rest = 0, .w_stay = 0, .w_volume = 5.0e-1}},
-  };
-  /// Osculating Dupin cyclide ring row: the osculating torus carried by a
-  /// special conformal map, which adds the cyclide's two cross third-order
-  /// terms. At each step's first projection its shape (both curvatures and
-  /// the third-order pair) and pose are fitted to the ring points and the
-  /// store's star of edge tensors. Through the step only the pose is refit,
-  /// and the curvatures follow the store's change. Position rows land the
-  /// ring on the cyclide at `w_osculating_dupin`. Shape rows pull the star's
-  /// stored tensors toward the cyclide's at `w_osculating_dupin_shape`, on the
-  /// `w_coupling` scale. 0 leaves each off.
-  real w_osculating_dupin = 0.0;
-  real w_osculating_dupin_shape = 0.0;
-  /// Row scale (`two_ring`), fit iterations, prior, the store's weight in the
-  /// shape fit (`fit_shape`), and `store_gain`. `.volume` is the same one-ring
-  /// cone volume term as the torus row's, about the cyclide's tube centre.
-  hepworth::block::osculating_dupin_ring_config osculating_dupin{
-    .two_ring = true,
-    .fit_shape = true,
-    .store_gain = 0.0,
-    //.volume = {.mode = hepworth::block::ring_volume_mode::soft,.land = true,.weight = 0.1},
-    //.volume = {.mode = hepworth::block::ring_volume_mode::fit, .weight = 1, .store_weight = 10},
-    .volume = {.mode = hepworth::block::ring_volume_mode::corotational, .land = false,
-               .corotational = {.w_proj = 1.0, .w_rest = 0.1, .w_stay = 0.1, .w_volume = 1e-1}},
-
+                 .corotational = {.w_proj = 1.0, .w_rest = 0, .w_stay = 0, .w_volume = 5.0e-1}},
   };
   /// Edge curvature store → positions.
   curvature_config curvature{};
@@ -359,82 +185,6 @@ struct shape_project {
 /// edge). The mesh follows through `shape_project.curvature.w_coupling`: at
 /// equal weights the store lands halfway between the mesh and the edit.
 struct shape_distortion {
-  /// One entry per edit, applied every frame against the start of the frame.
-  /// Fields, in the order they must be written (leave out what you do not
-  /// use); ratio means |larger curvature| / |smaller curvature|:
-  ///   .ratio        ratio to reach; 1 round (saddles: minimal). NaN off.
-  ///   .log          ratio is given as log(ratio); 0 round.
-  ///   .relative     ratio multiplies the frame-start ratio (log: adds).
-  ///   .mean         mean curvature times this, per frame. NaN off.
-  /// Examples: {.ratio = 1.0} round; {.ratio = 0.9, .relative = true} 10%
-  /// less anisotropic per frame. The lines' shear is its own row (`shear`).
-  std::vector<hepworth::block::anisotropy_target> anisotropy{
-      hepworth::block::anisotropy_target{
-          //.ratio = 1.0 / 1.6180339887498949, // golden ratio
-          .ratio = 3.0,
-          //.ratio = 1.1,
-          .log = false,
-      },
-  };
-  /// Weight of the `anisotropy` rows. 0 is off.
-  real w_anisotropy = 0.0e0;
-  /// Shears the curvature pattern of each vertex ring per frame, the
-  /// shape-space match of `position_distortion::shear`: the ring's
-  /// frame-start tensors pushed through the area-preserving shear by
-  /// `1 + shear` along `.angle` (radians from the tight tangent; NaN is the
-  /// 45-degree bisector) and `1 - shear` across, then turned by the ring's
-  /// best common turn (ARAP in shape space); mean curvature free.
-  /// `.winding = {.ring, .tube, .handedness}` sets the angle at startup like
-  /// stretch. Comment a line to drop it. `w_shear` scales every entry; 0
-  /// leaves the row off.
-  std::vector<hepworth::block::curvature_shear_target> shear{
-      hepworth::block::curvature_shear_target{.shear = 0.5},
-  };
-  real w_shear = 0.0;
-  /// Smoothing of the edits: 0 pulls each edge to its goal on its own; above
-  /// 0 also makes an edit that changes from edge to edge cost more, so it
-  /// lands smoothly (the old Crane spoke map).
-  real smooth = 0.0;
-
-  /// Willmore flow on the store with a feature-size equalizer. Fields, in
-  /// the order they must be written:
-  ///   .bands  {radius, gain} pairs in ascending radius (mean edge lengths).
-  ///           A band covers sizes from its radius to the next band's; the
-  ///           last runs to the whole surface. gain is the fraction of the
-  ///           flow per frame in that band; 0 leaves the band free (the row
-  ///           ignores it, so position rows can bend and buckle it).
-  ///   .mean   0 rounds only (anisotropic part); 1 also the mean curvature.
-  /// One band, or equal gains everywhere, is plain Willmore (no filtering).
-  /// Several entries can be active at once; each is its own row.
-  std::vector<hepworth::block::willmore_target> willmore{
-      // Plain Willmore, 30% per frame, every feature size:
-      //hepworth::block::willmore_target{.bands = {{0.0, 0.3}}},
-      // Plain Willmore, 10% per frame, every feature size:
-      //   hepworth::block::willmore_target{.bands = {{0.0, 0.1}}},
-      // Gentle plain Willmore, 2% per frame:
-      //   hepworth::block::willmore_target{.bands = {{0.0, 0.02}}},
-      // Full Willmore, mean curvature too (rounds and shrinks):
-      //   hepworth::block::willmore_target{.bands = {{0.0, 0.1}}, .mean = 1.0},
-      // Mids only: 2 to 6 edge lengths flow, finer and coarser free:
-      //   hepworth::block::willmore_target{
-      //       .bands = {{0.0, 0.0}, {2.0, 0.1}, {6.0, 0.0}}},
-      // Crane's high-pass: small features flow, the large shape is free:
-      //   hepworth::block::willmore_target{.bands = {{0.0, 0.1}, {6.0, 0.0}}},
-      // Fillet creases only, everything else free:
-      //   hepworth::block::willmore_target{.bands = {{0.0, 0.3}, {1.5, 0.0}}},
-      // Crease -> cylinder -> round, mids free to buckle:
-      //   hepworth::block::willmore_target{
-      //       .bands = {{0.0, 0.2}, {2.0, 0.0}, {8.0, 0.1}}, .mean = 0.5},
-      // Balloon only: the large scale rounds and evens out, the rest free:
-      //   hepworth::block::willmore_target{
-      //       .bands = {{0.0, 0.0}, {8.0, 0.1}}, .mean = 1.0},
-      // Strong crease plumping, slow balloon, wide free middle:
-      hepworth::block::willmore_target{.bands = {{0.0, 0.5}, {1.0, 0.0}, {12.0, 0.5}}, .mean = 0.5},
-      //.bands = {{0.0, 0.3}}}
-  };
-  /// Weight of the `willmore` rows. 0 is off.
-  real w_willmore = 0.0;
-
   /// Shape ARAP: holds each edge's curvature at its frame-start value (how
   /// anisotropic it is, and the pattern of its lines) but lets each patch
   /// turn its curvature lines together. Edits pushed harder than this have
@@ -444,24 +194,12 @@ struct shape_distortion {
   /// anisotropic part.
   bool shape_arap_mean = true;
 
-  /// Spin-2 Dirichlet rows toward zero: fairs the store. Do not run at full
-  /// weight with `w_curvature_ratio`. It is the sum of the trace part
-  /// (`w_curvature_mean`) and the traceless part (`w_grad_traceless`).
-  real w_grad = 0.0;
   /// The traceless spin-2 Dirichlet rows toward zero: smooths the principal
   /// direction field weighted by anisotropy, so directions turn freely near
   /// umbilics; mean curvature free. The Dupin rows are its directional
   /// restriction. 0 leaves it off.
   real w_grad_traceless = 0.0;
 
-  /// Dirichlet rows on the trace `k11 + k22` toward zero (fairs the mean
-  /// curvature). 0 leaves it off.
-  real w_curvature_mean = 0.0;
-  /// Evens out the anisotropy: pins each edge toward the mean anisotropy
-  /// `q = (ratio - 1) / (ratio + 1)` of itself and its face neighbors,
-  /// keeping its mean curvature (saddles: the anisotropic part) and axes.
-  /// 0 leaves it off.
-  real w_curvature_ratio = 0.0;
   /// The frame minimizer: pin toward each edge's principal curvatures set to
   /// the neighbors' normal curvature along the same directions. 0 leaves it
   /// off.
@@ -487,14 +225,6 @@ struct shape_distortion {
   /// departures from Dupin.
   real dupin_reach = 0.0;
   int dupin_degree = 0;
-  /// Skew rows: the Dupin rows holding each principal curvature's gradient
-  /// along its own direction (how the curvature changes from one side of
-  /// the ring to the other, per axis) at `skew_scale` times its frame-start
-  /// value instead of zero. 1 maintains the skew against the other edits,
-  /// above 1 grows it each frame, below 1 relaxes it toward Dupin. Shape
-  /// space only; the mesh follows through `w_coupling`. 0 leaves it off.
-  real w_skew = 0.0;
-  real skew_scale = 1.1;
   /// Directional curvature growth, the shape-space match of position
   /// `stretch`: each frame the normal curvature along `.angle` (radians from
   /// the tight direction toward the other) times `1 + x`, across it times
@@ -518,16 +248,6 @@ struct shape_distortion {
   /// intrinsic, so this leaves bending free and resists only what would
   /// change the metric. 0 leaves it off.
   real w_det = 0.0;
-  /// Holds each vertex's Gaussian curvature `det h_v` of the store at a rest
-  /// `K0` baked on its first frame and carried through remeshing
-  /// (`vertex_gauss_conserve`). Mean curvature and anisotropy are free, so
-  /// more curvature has to come out as anisotropy, not scale (pointwise `K`
-  /// changes as `1 / s^2`). 0 leaves it off.
-  real w_gauss = 0.0;
-  /// Rest relaxation of `w_gauss`, per frame `K0 += gauss_relax (K - K0)`:
-  /// 0 keeps the first frame's `K0`, 1 resets it every frame (like `w_det`),
-  /// small values let a pattern that persists (a buckle) creep into the rest.
-  real gauss_relax = 0.5;
 };
 
 /// Position-space distortion: stretch, area ratio, area, bend, smooth.
@@ -599,44 +319,13 @@ struct position_distortion {
   real w_tilt = 0.0;
   /// Locks each one ring's covariant anisotropy: spoke rms along the tight
   /// principal tangent over that along the other held at `ratio` (1 is
-  /// round). Area, skew and rotation are free, so it composes with `area`
-  /// and `shear`. Comment a line to drop it. `w_axis_ratio` scales every
-  /// entry; 0 leaves the row off.
+  /// round). Area, skew and rotation are free, so it composes with `area`.
+  /// Comment a line to drop it. `w_axis_ratio` scales every entry; 0 leaves
+  /// the row off.
   std::vector<hepworth::block::axis_ratio_target> axis_ratio{
       hepworth::block::axis_ratio_target{.ratio = 0.5},
   };
   real w_axis_ratio = 0.55;
-  /// Shears each one ring every frame: stretch by `1 + shear` along `.angle`
-  /// (radians from the tight tangent, as stretch; NaN is the 45-degree
-  /// bisector) and `1 - shear` across, against the frame-start ring. Only
-  /// thata ratio is held; area, skew and rotation are free. At 45 degrees it
-  /// is independent of `axis_ratio`; nearer the principal tangents the two
-  /// overlap. `.winding = {.ring, .tube, .handedness}` sets the angle at
-  /// startup like stretch (on the demo torus the bisector is about {1, 3}).
-  /// Comment a line to drop it. `w_shear` scales every entry; 0 leaves the
-  /// row off.
-  std::vector<hepworth::block::shear_target> shear{
-      hepworth::block::shear_target{
-          .shear = 0.125,
-          .winding = {.ring = 1, .tube = 10, .handedness = 1},
-      },
-      // Along the Hopf fiber, computed from the torus at startup:
-      //   hepworth::block::shear_target{
-      //       .shear = 0.125, .winding = {.ring = 1, .tube = 1, .handedness = 1}},
-  };
-  real w_shear = 1.0;
-  /// Shape-to-position shear on each triangle: the face's curvature tensor
-  /// (its edges' frame-start store tensors) is sheared as `shape.shear`
-  /// shears it (by `1 + shear` along `.angle` from its tight axis and
-  /// `1 - shear` across, `.winding` setting the angle at startup), and the
-  /// triangle is held at the in-plane stretch that carries its CR tensor
-  /// there with the edge normals held (`F = S*^-1 S`, area kept), any
-  /// rotation. Faces near parabolic are skipped. Comment a line to drop it.
-  /// `w_face_shear` scales every entry; 0 leaves the row off.
-  std::vector<hepworth::block::curvature_shear_target> face_shear{
-      hepworth::block::curvature_shear_target{.shear = 0.1},
-  };
-  real w_face_shear = 0.0;
   /// Smoothing length, in mean edge lengths, of the vector heat step applied
   /// to the `material` stretch axes at each step start. 0 only transports
   /// them. The steps compound (about `sqrt(steps)` times this length), so
@@ -688,8 +377,8 @@ struct position_distortion {
   ///   loxodromic  the line turned about its middle vertex by `.psi` on its
   ///               curvature sphere (and scaled by `.lambda`)
   /// `.family` 0 both, 1 tight, 2 loose. Direction-dependent kinds (slide,
-  /// graded, hyperbolic, parabolic) take their sign from the shear axis when
-  /// `w_shear` is on, otherwise from `dupin_circle_ref`; without either they
+  /// graded, hyperbolic, parabolic) take their sign from `dupin_circle_ref`;
+  /// without it they
   /// add no rows. `w_dupin_circle` scales every entry; 0 leaves them off.
   /// One preset per mode; keep the one you want (several can be on at once).
   /// Fields must be written in this order: `.kind`, `.family`, `.w`, `.delta`,
@@ -738,8 +427,7 @@ struct position_distortion {
   };
   real w_kite = 0.0;
   /// Intrinsic vector Dirichlet memory of the metric (`dirichlet_memory_gn`,
-  /// rest at the frame start; factor the mean edge length). Weingarten solver
-  /// only.
+  /// rest at the frame start; factor the mean edge length). Contact net only.
   real w_memory = 0.5;
   /// Holds the area-weighted centroid where the scene started (translation
   /// only; shape and rotation are free). 0 is off.
@@ -747,20 +435,6 @@ struct position_distortion {
   /// After each step, move the mesh back so its centroid is exactly where it
   /// started, and remove the mean velocity. Exact and free, outside the solve.
   bool recenter = false;
-};
-
-/// Demo-only check of the coupled loop: pins the edge store to a known
-/// shape. `scale` asks for `scale` times the frame-start curvature; `torus`
-/// for the analytic torus (`torus_R`, `torus_tube`) about +Z. `w` is
-/// a store pin like the `shape_distortion` rows.
-/// Off adds no pin.
-struct curvature_test_target {
-  enum class mode { off, scale, torus };
-  mode kind = mode::off;
-  real scale = 1.0;
-  real torus_R = 1.0;
-  real torus_tube = 0.4;
-  real w = 1.0;
 };
 
 struct monge_fairing_demo_config {
@@ -778,7 +452,6 @@ struct monge_fairing_demo_config {
   shape_project project{};
   shape_distortion shape{};
   position_distortion position{};
-  curvature_test_target curvature_test{};
   /// The remesher's element QC (`asawa::shell::qc_config`, fields in order):
   /// `datum`, `q_warn` (repair triangles below this quality), `q_min` (hard
   /// failure), `val_lo` / `val_hi` (interior valence band), `rounds`,
@@ -818,11 +491,9 @@ public:
     asawa::init_vert_datum<vec3>(*__M, vec3::Zero());
     const size_t n_stretch = _cfg.position.stretch.size();
     _material_slot.assign(n_stretch, -1);
-    _gauss_slot = -1;
-    // Persistent one-ring medial depths for the ring rows' volume term, one
-    // per row type, carried through the remesher (NaN until first seen).
+    // Persistent one-ring medial depth for the torus row's volume term,
+    // carried through the remesher (NaN until first seen).
     _torus_depth_slot = asawa::init_vert_datum<real>(*__M, std::numeric_limits<real>::quiet_NaN());
-    _dupin_depth_slot = asawa::init_vert_datum<real>(*__M, std::numeric_limits<real>::quiet_NaN());
     _stripe_slot.assign(n_stretch, -1);
     _stripe_dirs.assign(n_stretch, {});
     for (size_t t = 0; t < n_stretch; ++t) {
@@ -839,10 +510,8 @@ public:
     _shell = std::make_shared<hepworth::block::shell_position_block>(__M, xs, vs);
     _cr = std::make_shared<hepworth::block::shell_cr_block>(__M);
     _cr->face_site = !_cfg.project.one_ring_operators || _cfg.dirichlet.w_pin > 0.0;
-    _cr->normal_site = _cfg.project.curvature.kind == curvature_solver::contact_net &&
-                       _cfg.project.curvature.contact_mode == contact_net_mode::native;
+    _cr->normal_site = _cfg.project.curvature.kind == curvature_solver::contact_net;
     _cr->normal_mass_scale = _cfg.project.curvature.contact_normal_mass;
-    _cr->edge_quat_site = _cr->normal_site && _cfg.project.curvature.contact_rotations;
     _cr->amap_site = _cfg.position.w_amap > 0.0;
     real C = 3.0;
     const real l0 = asawa::shell::avg_length(*__M, xs->get());
@@ -907,11 +576,7 @@ public:
               if (_cr->table.n_verts != static_cast<int>(x.size()) || _cr->vertex_frames.size() != x.size())
                 return;
               std::vector<vec3> ref;
-              const std::vector<hepworth::block::shear_target> shear = shear_now();
-              if (_cfg.position.w_shear > 0.0 && !shear.empty()) {
-                ref = hepworth::block::chart_directions(_cr->vertex_frames, shear.front().angle);
-                kusama::material_direction::orient(*__M, ref);
-              } else if (_cfg.position.dupin_circle_ref.squaredNorm() > 0.0) {
+              if (_cfg.position.dupin_circle_ref.squaredNorm() > 0.0) {
                 ref.assign(x.size(), vec3::Zero());
                 for (size_t i = 0; i < x.size(); ++i) {
                   const vec3 n = _cr->vertex_frames[i].N.normalized();
@@ -977,8 +642,6 @@ public:
                   hepworth::block::init_axis_ratio(*__M, ctx.constraints, _shell->xs->get(), live,
                                                    {ctx.blocks[0]}, _cfg.position.w_axis_ratio,
                                                    _cfg.position.axis_ratio, &_cr->vertex_frames);
-                  hepworth::block::init_shear(*__M, ctx.constraints, _shell->xs->get(), live, {ctx.blocks[0]},
-                                              _cfg.position.w_shear, shear_now(), &_cr->vertex_frames);
                 } else {
                   hepworth::block::init_face_stretch(*__M, *_cr, ctx.blocks[0], ctx.constraints,
                                                      _cfg.position.w_stretch, stretch_now());
@@ -992,43 +655,6 @@ public:
               hepworth::block::init_bending(*__M, ctx.constraints, _shell->xs->get(), _cfg.position.w_bend,
                                             hepworth::block::select_blocks<0>(ctx));
             })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
-              const bool face = _cfg.project.w_frame_fair > 0.0;
-              const bool albers = _cfg.project.w_fair_albers > 0.0 && !_cfg.project.albers.empty();
-              if (!face && !albers)
-                return;
-              ctx.shell_mesh = __M.get();
-              if (face && _cr && !ctx.blocks.empty()) {
-                std::vector<hepworth::block::objective> diamond;
-                diamond.reserve(_cfg.project.shapes.size() + _cfg.project.spine.size());
-                for (const hepworth::block::monge_shape shape : _cfg.project.shapes)
-                  diamond.push_back(hepworth::block::monge_fairing{shape});
-                for (const hepworth::block::spine_kind shape : _cfg.project.spine) {
-                  if (shape == hepworth::block::spine_kind::none)
-                    continue;
-                  diamond.push_back(hepworth::block::spine_fairing{shape});
-                }
-                if (_cfg.project.one_ring_operators && !diamond.empty()) {
-                  std::vector<char> live(static_cast<size_t>(__M->vert_count()), 1);
-                  hepworth::block::init_frame_fair(*__M, ctx.constraints, _shell->xs->get(), live,
-                                                   _cfg.project.w_frame_fair, {ctx.blocks[0]}, diamond, -1,
-                                                   &_cr->vertex_frames, _cr->shape_dof(), &_cr->stars,
-                                                   _cfg.project.spine_step);
-                } else {
-                  hepworth::block::init_face_fair(*__M, *_cr, ctx.blocks[0], ctx.constraints,
-                                                  _cfg.project.w_frame_fair, diamond);
-                }
-              }
-              if (albers && !ctx.blocks.empty()) {
-                std::vector<hepworth::block::objective> spokes;
-                spokes.reserve(_cfg.project.albers.size());
-                for (const hepworth::block::albers_shape shape : _cfg.project.albers)
-                  spokes.push_back(hepworth::block::albers_fairing{shape});
-                std::vector<char> live(static_cast<size_t>(__M->vert_count()), 1);
-                hepworth::block::init_albers_fair(*__M, ctx.constraints, _shell->xs->get(), live,
-                                                  _cfg.project.w_fair_albers, {ctx.blocks[0]}, spokes);
-              }
-            })
             .with_recompute([this](hepworth::block::solver_context &ctx) { push_curvature(ctx); })
             .with_recompute([this](hepworth::block::solver_context &ctx) {
               if (!(_cfg.project.w_osculating_torus > 0.0) || !_cr || ctx.blocks.empty() ||
@@ -1039,17 +665,6 @@ public:
                   *__M, ctx.constraints, _cfg.project.w_osculating_torus, {ctx.blocks[0], _cr->shape_dof()},
                   &_cr->vertex_frames, &_cr->stars, _cfg.project.osculating_torus,
                   &asawa::get_real_data(*__M, _torus_depth_slot));
-            })
-            .with_recompute([this](hepworth::block::solver_context &ctx) {
-              const auto &project = _cfg.project;
-              if (!(project.w_osculating_dupin > 0.0 || project.w_osculating_dupin_shape > 0.0) || !_cr ||
-                  ctx.blocks.empty() || !__M->verts_are_dense_packed())
-                return;
-              ctx.shell_mesh = __M.get();
-              hepworth::block::init_osculating_dupin_ring(
-                  *__M, ctx.constraints, project.w_osculating_dupin, project.w_osculating_dupin_shape,
-                  {ctx.blocks[0], _cr->shape_dof()}, &_cr->vertex_frames, &_cr->stars,
-                  project.osculating_dupin, &asawa::get_real_data(*__M, _dupin_depth_slot));
             })
             .dt(_cfg.step.h)
             .damping(_cfg.step.damping)
@@ -1070,96 +685,17 @@ public:
       return;
     ctx.shell_mesh = __M.get();
     hepworth::sim_block::ptr pos = ctx.blocks[0];
-    if (c.kind == curvature_solver::weingarten && c.w_coupling > 0.0) {
-      ctx.constraints.push_back(hb::weingarten_gn::create(
-          &_cr->table, x, c.w_coupling, std::vector<hepworth::sim_block::ptr>{pos, _cr->shape_dof()}));
-      if (_cfg.position.w_memory > 0.0)
-        ctx.constraints.push_back(hb::dirichlet_memory_gn::create(
-            &_cr->table, x, _cfg.position.w_memory, std::vector<hepworth::sim_block::ptr>{pos}));
-      push_edge_fairing(ctx);
-      return;
-    }
-    if ((c.kind == curvature_solver::exponent || c.kind == curvature_solver::eigensatz) &&
-        c.w_coupling > 0.0) {
-      hb::exponent::config xc;
-      xc.kb = c.exponent.kb;
-      xc.km = c.exponent.km;
-      xc.w_compat = c.exponent.w_compat;
-      xc.line_search = c.exponent.line_search;
-      xc.max_step = c.exponent.max_step;
-      xc.steps_per_frame = c.exponent.steps_per_frame;
-      xc.mass = c.exponent.mass;
-      xc.refresh_every = c.exponent.refresh_every;
-      if (c.kind == curvature_solver::eigensatz) {
-        xc.kind = hb::exponent::residual::principal;
-        xc.w_conformal = c.eigensatz.w_conformal;
-        xc.w_area = c.eigensatz.w_area;
-        xc.umbilic = c.eigensatz.umbilic;
-      }
-      if (!_exponent_factor)
-        _exponent_factor = std::make_shared<hb::exponent::factor_cache>();
-      std::shared_ptr<const std::vector<std::array<vec3, 3>>> rest;
-      if (c.exponent.rest == exponent_rest::initial && hb::exponent::has_stretch(xc)) {
-        if (!_exponent_rest || static_cast<int>(_exponent_rest->size()) != _cr->table.n_faces) {
-          auto r =
-              std::make_shared<std::vector<std::array<vec3, 3>>>(static_cast<size_t>(_cr->table.n_faces));
-          for (int f = 0; f < _cr->table.n_faces; ++f)
-            for (int k = 0; k < 3; ++k)
-              (*r)[static_cast<size_t>(f)][static_cast<size_t>(k)] =
-                  x[static_cast<size_t>(_cr->table.ids[static_cast<size_t>(f)][static_cast<size_t>(k)])];
-          _exponent_rest = r;
-        }
-        rest = _exponent_rest;
-      }
-      ctx.constraints.push_back(hb::exponent_coupling::create(
-          &_cr->table, x, _cr->shape, c.w_coupling,
-          std::vector<hepworth::sim_block::ptr>{pos, _cr->shape_dof()}, xc, rest, _exponent_factor));
-      // The store answers only to its shape rows, anchored at its frame-start
-      // reading at the coupling's weight: a shape row at `w_coupling` lands it
-      // halfway, as against the `weingarten` coupling.
-      ctx.constraints.push_back(hb::edge_shape_fair::create(
-          &_cr->table, x, hb::edge_fair_rows::pin, c.w_coupling,
-          std::vector<hepworth::sim_block::ptr>{_cr->shape_dof()}, hb::goal_fixed(_cr->shape)));
-      push_edge_fairing(ctx);
-      return;
-    }
-    if (c.kind == curvature_solver::contact_net && c.w_coupling > 0.0 && c.contact_mode == contact_net_mode::native &&
-        _cr->normal_dof() && _cr->normal.size() == x.size()) {
-      // As `weingarten`: the net's rows couple positions, normals and the
-      // store in the one solve; the store answers to them and its shape rows.
+    if (c.kind == curvature_solver::contact_net && c.w_coupling > 0.0 && _cr->normal_dof() &&
+        _cr->normal.size() == x.size()) {
+      // The net's rows couple positions, normals and the store in the one
+      // solve; the store answers to them and its shape rows.
       std::vector<hepworth::sim_block::ptr> net_blocks{pos, _cr->normal_dof(), _cr->shape_dof()};
-      std::vector<vec4> seeds;
-      const bool rotations = c.contact_rotations && _cr->edge_quat_dof() &&
-                             _cr->edge_quat.size() == static_cast<size_t>(_cr->table.n_edges);
-      if (rotations) {
-        // Gauge: the vertex charts' tangents (from the Dirichlet edge tangents).
-        std::vector<vec3> T(x.size(), vec3::Zero());
-        for (size_t i = 0; i < x.size() && i < _cr->vertex_frames.size(); ++i)
-          T[i] = _cr->vertex_frames[i].T;
-        seeds = hb::contact_rot::seed_edge_rotations(kusama::contact_net::build_topology(_cr->table), _cr->normal, T);
-        _cr->edge_quat = seeds;
-        net_blocks.push_back(_cr->edge_quat_dof());
-      }
       auto net = hb::contact_net_gn::create(&_cr->table, x, _cr->normal, _cr->shape, c.w_coupling, net_blocks);
       net->tangency_target = c.contact_tangency;
-      if (rotations)
-        net->set_rotation_seeds(seeds);
       ctx.constraints.push_back(net);
       if (_cfg.position.w_memory > 0.0)
         ctx.constraints.push_back(hb::dirichlet_memory_gn::create(
             &_cr->table, x, _cfg.position.w_memory, std::vector<hepworth::sim_block::ptr>{pos}));
-      push_edge_fairing(ctx);
-      return;
-    }
-    if (c.kind == curvature_solver::contact_net && c.w_coupling > 0.0) {
-      ctx.constraints.push_back(hb::contact_net_coupling::create(
-          &_cr->table, x, _cr->shape, c.w_coupling,
-          std::vector<hepworth::sim_block::ptr>{pos, _cr->shape_dof()}, c.contact));
-      // As `exponent`: the store anchored at its frame-start reading at the
-      // coupling's weight.
-      ctx.constraints.push_back(hb::edge_shape_fair::create(
-          &_cr->table, x, hb::edge_fair_rows::pin, c.w_coupling,
-          std::vector<hepworth::sim_block::ptr>{_cr->shape_dof()}, hb::goal_fixed(_cr->shape)));
       push_edge_fairing(ctx);
       return;
     }
@@ -1170,8 +706,7 @@ public:
     push_edge_fairing(ctx);
   }
 
-  /// `shape_distortion`, the frame minimizer and the test target as
-  /// `edge_shape_fair` rows on the edge store.
+  /// `shape_distortion` as `edge_shape_fair` rows on the edge store.
   void push_edge_fairing(hepworth::block::solver_context &ctx) {
     namespace hb = hepworth::block;
     const std::vector<vec3> &x = _shell->xs->get();
@@ -1186,18 +721,8 @@ public:
     const shape_distortion &s = _cfg.shape;
     // The store is the live reading at prepare: the rest the knobs measure against.
     const std::vector<vec3> &h0 = _cr->shape;
-    const bool smooth = s.smooth > 0.0;
-    for (const hb::anisotropy_target &spec : s.anisotropy)
-      fair(smooth ? hb::edge_fair_rows::h1 : hb::edge_fair_rows::pin, s.w_anisotropy,
-           hb::goal_anisotropy(store, spec, h0), smooth ? s.smooth : real(1), nullptr, true);
     fair(hb::edge_fair_rows::pin, s.w_shape_arap,
          hb::goal_shape_arap(store, &_cr->table, h0, s.shape_arap_mean));
-    fair(hb::edge_fair_rows::pin, _cfg.project.curvature.w_store_damping, hb::goal_live(store));
-    if (s.w_willmore > 0.0)
-      for (const hb::willmore_target &spec : s.willmore)
-        if (hb::edge_goal_fn goal = hb::goal_willmore_eq(store, _cr->table, x, h0, spec))
-          fair(hb::edge_fair_rows::pin, s.w_willmore, std::move(goal));
-    fair(hb::edge_fair_rows::dirichlet, s.w_grad, hb::goal_zero());
     if (s.dupin_reach > 0.0) {
       if (s.w_dupin > 0.0 && std::isfinite(s.w_dupin))
         ctx.constraints.push_back(hb::edge_shape_fair::create(
@@ -1206,98 +731,16 @@ public:
     } else {
       fair(hb::edge_fair_rows::dupin, s.w_dupin, hb::goal_zero(), real(1), &h0);
     }
-    if (s.w_skew > 0.0 && std::isfinite(s.w_skew))
-      ctx.constraints.push_back(hb::edge_shape_fair::create(&_cr->table, x, hb::edge_fair_rows::dupin,
-                                                            s.w_skew, held, hb::goal_zero(), real(1), &h0,
-                                                            false, s.skew_scale));
-    fair(hb::edge_fair_rows::dirichlet_trace, s.w_curvature_mean, hb::goal_zero());
     fair(hb::edge_fair_rows::dirichlet_traceless, s.w_grad_traceless, hb::goal_zero());
-    std::shared_ptr<const hb::edge_frames> frames;
-    const bool shearing = s.w_shear > 0.0 && !s.shear.empty();
-    if (s.w_curvature_ratio > 0.0 || s.w_minimizer > 0.0 || shearing ||
-        _cfg.curvature_test.kind == curvature_test_target::mode::torus)
-      frames = hb::build_edge_frames(_cr->table, x);
-    const position_distortion &pd = _cfg.position;
-    if (pd.w_face_shear > 0.0 && !pd.face_shear.empty()) {
-      if (!frames)
-        frames = hb::build_edge_frames(_cr->table, x);
-      std::vector<hb::curvature_shear_target> fs = pd.face_shear;
-      for (hb::curvature_shear_target &spec : fs)
-        spec.angle = winding_angle(spec.winding, spec.angle);
-      hb::init_face_shear(_cr->table, *frames, h0, ctx.constraints, x, {ctx.blocks[0]}, pd.w_face_shear, fs);
-    }
     for (hb::curvature_growth_target spec : s.growth) {
       spec.angle = winding_angle(spec.winding, spec.angle);
       fair(hb::edge_fair_rows::pin, s.w_growth, hb::goal_curvature_growth(spec, h0), real(1), nullptr, true);
     }
     hb::init_ring_det(_cr->table, x, h0, s.w_det, store, ctx.constraints);
-    if (s.w_gauss > 0.0 && std::isfinite(s.w_gauss) && x.size() == static_cast<size_t>(__M->vert_count())) {
-      const hb::vertex_star_charts charts = hb::build_vertex_star_charts(_cr->table, x);
-      std::vector<real> &K0 = gauss_rest_mut();
-      const std::vector<real> K = hb::vertex_gauss(charts, h0);
-      const real a = std::clamp(s.gauss_relax, real(0), real(1));
-      for (size_t v = 0; v < K0.size() && v < K.size(); ++v) {
-        if (!std::isfinite(K[v]))
-          continue;
-        K0[v] = std::isfinite(K0[v]) ? K0[v] + a * (K[v] - K0[v]) : K[v];
-      }
-      hb::init_vertex_gauss(_cr->table, x, charts, K0, s.w_gauss, store, ctx.constraints);
-    }
-    if (shearing)
-      for (hb::curvature_shear_target spec : s.shear) {
-        spec.angle = winding_angle(spec.winding, spec.angle);
-        fair(hb::edge_fair_rows::pin, s.w_shear,
-             hb::goal_curvature_shear(store, &_cr->table, *frames, _cr->vertex_frames, spec, h0));
-      }
-    if (s.w_curvature_ratio > 0.0)
-      fair(hb::edge_fair_rows::pin, s.w_curvature_ratio, hb::goal_ratio_smooth(store, frames));
-    fair(hb::edge_fair_rows::pin, s.w_minimizer, hb::goal_principal_mean(store, frames));
+    if (s.w_minimizer > 0.0)
+      fair(hb::edge_fair_rows::pin, s.w_minimizer,
+           hb::goal_principal_mean(store, hb::build_edge_frames(_cr->table, x)));
     fair(hb::edge_fair_rows::pin, s.w_tension, hb::goal_mean_tension(store, s.tension));
-    const curvature_test_target &test = _cfg.curvature_test;
-    if (test.kind != curvature_test_target::mode::off)
-      fair(hb::edge_fair_rows::pin, test.w, hb::goal_fixed(test_targets(x, frames.get())));
-  }
-
-  /// `curvature_test` targets per edge, in the store's frames and sign.
-  std::vector<vec3> test_targets(const std::vector<vec3> &x,
-                                 const hepworth::block::edge_frames *frames) const {
-    const curvature_test_target &test = _cfg.curvature_test;
-    std::vector<vec3> h = _cr->shape;
-    if (test.kind == curvature_test_target::mode::scale) {
-      for (vec3 &v : h)
-        v *= test.scale;
-      return h;
-    }
-    if (!frames)
-      return h;
-    const kusama::stencil_table &t = _cr->table;
-    std::vector<vec3> mid(static_cast<size_t>(t.n_edges), vec3::Zero());
-    for (int f = 0; f < t.n_faces; ++f)
-      for (int i = 0; i < 3; ++i)
-        mid[static_cast<size_t>(t.face_edges[f][i])] =
-            real(0.5) * (x[static_cast<size_t>(t.ids[f][i])] + x[static_cast<size_t>(t.ids[f][(i + 1) % 3])]);
-    real agree = 0;
-    for (int e = 0; e < t.n_edges; ++e) {
-      const vec3 &p = mid[static_cast<size_t>(e)];
-      const real rho = std::hypot(p[0], p[1]);
-      const vec3 hoop = rho > real(0) ? vec3(-p[1] / rho, p[0] / rho, 0) : vec3::UnitX();
-      const vec3 c(p[0] / std::max(rho, real(1e-12)) * test.torus_R,
-                   p[1] / std::max(rho, real(1e-12)) * test.torus_R, 0);
-      const vec3 n = (p - c).normalized();
-      const vec3 tube = n.cross(hoop);
-      const real cphi = n.dot(vec3(c.normalized()));
-      const real k_tube = real(1) / test.torus_tube;
-      const real k_hoop = cphi / (test.torus_R + test.torus_tube * cphi);
-      const mat3 S = k_tube * tube * tube.transpose() + k_hoop * hoop * hoop.transpose();
-      const vec3 &te = frames->t[static_cast<size_t>(e)], &be = frames->b[static_cast<size_t>(e)];
-      const vec3 he(te.dot(S * te), te.dot(S * be), be.dot(S * be));
-      agree += (he[0] + he[2]) * (h[static_cast<size_t>(e)][0] + h[static_cast<size_t>(e)][2]);
-      h[static_cast<size_t>(e)] = he;
-    }
-    if (agree < real(0))
-      for (vec3 &v : h)
-        v = -v;
-    return h;
   }
 
   /// One solver pass. Does not remesh, so a meridional seam stays a seam.
@@ -1654,13 +1097,7 @@ public:
     return hepworth::block::dupin_circle_residual(_cr->table, x, _cr->vertex_frames);
   }
 
-  /// The `w_gauss` rest `K0` per vertex (NaN until baked).
-  const std::vector<real> &gauss_rest() { return gauss_rest_mut(); }
-  /// Rebake `K0` from the live surface on the next frame.
-  void reset_gauss() {
-    for (real &k : gauss_rest_mut())
-      k = std::numeric_limits<real>::quiet_NaN();
-  }
+
   /// The last `stripes` solve: energy per unit mass (`lambda`),
   /// faces its read-out skipped, and whether it started cold.
   struct stripe_report {
@@ -1937,8 +1374,6 @@ private:
     };
     for (const hepworth::block::stretch_target &s : stretch_now())
       log("stretch", s.winding, s.angle);
-    for (const hepworth::block::shear_target &s : shear_now())
-      log("shear", s.winding, s.angle);
   }
 
   /// The angle from the tube circle (the tight tangent) of a line winding
@@ -1955,15 +1390,6 @@ private:
   std::vector<hepworth::block::stretch_target> stretch_now() const {
     std::vector<hepworth::block::stretch_target> out = _cfg.position.stretch;
     for (hepworth::block::stretch_target &s : out)
-      s.angle = winding_angle(s.winding, s.angle);
-    return out;
-  }
-
-  /// The config's shear list with each `winding` entry's angle set from the
-  /// startup torus.
-  std::vector<hepworth::block::shear_target> shear_now() const {
-    std::vector<hepworth::block::shear_target> out = _cfg.position.shear;
-    for (hepworth::block::shear_target &s : out)
       s.angle = winding_angle(s.winding, s.angle);
     return out;
   }
@@ -2124,20 +1550,10 @@ private:
   }
 
   monge_fairing_demo_config _cfg;
+  /// Vertex datum holding the torus row's persistent one-ring medial depth.
+  index_t _torus_depth_slot = -1;
   /// Vertex datum per stretch target with `material` (-1 without), its
   /// seeded flag, and the step-start positions while a solve is open.
-  std::vector<real> &gauss_rest_mut() {
-    if (_gauss_slot < 0)
-      _gauss_slot = asawa::init_vert_datum<real>(*__M, std::numeric_limits<real>::quiet_NaN());
-    return asawa::get_real_data(*__M, _gauss_slot);
-  }
-  index_t _gauss_slot = -1;
-  /// Vertex datums holding each ring row's persistent one-ring medial depth.
-  index_t _torus_depth_slot = -1;
-  index_t _dupin_depth_slot = -1;
-  /// The `exponent_rest::initial` triangles (dropped when the face count changes).
-  std::shared_ptr<hepworth::block::exponent::factor_cache> _exponent_factor;
-  std::shared_ptr<const std::vector<std::array<vec3, 3>>> _exponent_rest;
   std::vector<index_t> _material_slot;
   /// Vertex datum per `stripes` stretch target holding its stripe pattern
   /// (-1 without), and its closed axes for the step.
