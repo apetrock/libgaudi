@@ -22,6 +22,8 @@
 //                   [dupin=W] [dupinreach=R] [dupindeg=D] [wgradtl=W] [wotorus=W] [sarap=W] [sarapfree]
 //                   [wcmc=W] [cmch0=H] [cmcvol] [wtwist=W] [tau0=T] [twangle=A] [wmin=W]
 //                   [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W]
+//                   [wchiral=W] [ck0=K] [cangle=DEG] [copen=DEG] [cwind=ring:tube[:hand]] [cmode=rate|held]
+//                   [cwrest=W] [caxis=principal|frame|automatic] [cmeasure=offumb|flat|mean|aniso|klo] [cpow=P]
 //                   [aratio=W] [wshear=W] [samt=S] [swind=ring:tube[:hand]] [spow=P]
 //                   [smeasure=offumb|flat|mean|aniso|klo] [saxis=principal|frame|automatic] [saxisq=Q]
 //                   [wmobius=W] [malpha=A] [mmaxu=U] [msrc=mean|aniso|flat] [mlevel=L] [mbalanced]
@@ -261,6 +263,40 @@ int principal_curvature_probe_main(int argc, char **argv) {
       cfg.shape.tension.h0 = std::atof(flag.c_str() + 6);
     } else if (flag == "cmcvol") {
       cfg.shape.tension.kind = hepworth::block::tension_target::mode::volume;
+    } else if (flag.rfind("wchiral=", 0) == 0) {
+      cfg.shape.w_chiral = std::atof(flag.c_str() + 8);
+    } else if (flag.rfind("cwrest=", 0) == 0) {
+      cfg.shape.w_chiral_rest = std::atof(flag.c_str() + 7);
+    } else if (flag.rfind("ck0=", 0) == 0) {
+      cfg.shape.chiral.k0 = std::atof(flag.c_str() + 4);
+    } else if (flag.rfind("cangle=", 0) == 0) {
+      cfg.shape.chiral.angle = std::atof(flag.c_str() + 7) * real(M_PI) / real(180);
+    } else if (flag.rfind("copen=", 0) == 0) {
+      cfg.shape.chiral.opening = std::atof(flag.c_str() + 6) * real(M_PI) / real(180);
+    } else if (flag.rfind("cpow=", 0) == 0) {
+      cfg.shape.chiral.power = std::atof(flag.c_str() + 5);
+    } else if (flag.rfind("cmode=", 0) == 0) {
+      cfg.shape.chiral.mode =
+          flag.substr(6) == "rate" ? hepworth::block::chiral_mode::rate : hepworth::block::chiral_mode::held;
+    } else if (flag.rfind("caxis=", 0) == 0) {
+      const std::string v = flag.substr(6);
+      using ax = hepworth::block::shear_axis;
+      cfg.shape.chiral.axis = v == "principal" ? ax::principal : v == "frame" ? ax::frame : ax::automatic;
+    } else if (flag.rfind("cmeasure=", 0) == 0) {
+      const std::string v = flag.substr(9);
+      using gm = hepworth::block::growth_measure;
+      cfg.shape.chiral.measure = v == "flat"    ? gm::flatness
+                                 : v == "mean"  ? gm::mean_curvature
+                                 : v == "aniso" ? gm::anisotropy
+                                 : v == "klo"   ? gm::k_lo
+                                                : gm::off_umbilic;
+    } else if (flag.rfind("cwind=", 0) == 0) {
+      auto &w = cfg.shape.chiral.winding;
+      const std::string v = flag.substr(6);
+      const size_t a = v.find(':'), b = a == std::string::npos ? a : v.find(':', a + 1);
+      w.ring = std::atoi(v.substr(0, a).c_str());
+      w.tube = a == std::string::npos ? 0 : std::atoi(v.substr(a + 1, b - a - 1).c_str());
+      w.handedness = b == std::string::npos ? 1 : std::atoi(v.substr(b + 1).c_str());
     } else if (flag.rfind("wtwist=", 0) == 0) {
       cfg.shape.w_twist = std::atof(flag.c_str() + 7);
     } else if (flag.rfind("tau0=", 0) == 0) {
@@ -404,6 +440,26 @@ int principal_curvature_probe_main(int argc, char **argv) {
         m /= nb;
         asym = std::sqrt(std::max(m2 / nb - m * m, real(0))) / std::max(m, real(1e-12));
       }
+    }
+    // Writhe of the core: rms height of the 24 sectors' mean z (0 while the
+    // ring stays planar; Michell's figure-eight lifts it).
+    real corez = 0;
+    {
+      std::array<real, 24> sz{}, cnt{};
+      for (const vec3 &p : x) {
+        const real phi = std::atan2(p[1], p[0]) + real(M_PI);
+        const int b = std::min(23, static_cast<int>(phi / (2 * M_PI) * 24));
+        sz[static_cast<size_t>(b)] += p[2];
+        cnt[static_cast<size_t>(b)] += 1;
+      }
+      int nb = 0;
+      for (int b = 0; b < 24; ++b)
+        if (cnt[static_cast<size_t>(b)] > 0) {
+          const real z = sz[static_cast<size_t>(b)] / cnt[static_cast<size_t>(b)];
+          corez += z * z;
+          ++nb;
+        }
+      corez = nb > 0 ? std::sqrt(corez / nb) : real(0);
     }
 
     std::vector<kusama::tri3> tris;
@@ -588,7 +644,7 @@ int principal_curvature_probe_main(int argc, char **argv) {
               << std::sqrt(std::max(turn2 / std::max(nt, 1) -
                                         std::pow(turn / std::max(nt, 1), 2),
                                     real(0)))
-              << "  asym " << asym << "  mobiusu " << demo->mobius_u_range()
+              << "  asym " << asym << "  corez " << corez << "  mobiusu " << demo->mobius_u_range()
               << "  |L| " << Lmom.norm() << "  verts " << x.size()
               << "  wall " << wall << " s"
               << "  solve its " << demo->last_solve().its << " E " << demo->last_solve().E_first

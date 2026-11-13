@@ -1,4 +1,5 @@
 #include "gaudi/test/amap_tests.hpp"
+#include "gaudi/test/chiral_tests.hpp"
 #include "gaudi/test/dupin_circle_tests.hpp"
 #include "gaudi/test/dupin_line_tests.hpp"
 #include "gaudi/test/growth_tests.hpp"

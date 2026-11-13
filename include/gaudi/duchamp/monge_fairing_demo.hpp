@@ -20,6 +20,7 @@
 #include "gaudi/asawa/shell/operations.hpp"
 #include "gaudi/duchamp/fields.hpp"
 #include "gaudi/geometry_logger.hpp"
+#include "gaudi/hepworth/block/chiral_drive.hpp"
 #include "gaudi/hepworth/block/contact_net_gn.hpp"
 #include "gaudi/hepworth/block/edge_shape_goals.hpp"
 #include "gaudi/hepworth/block/flat_growth.hpp"
@@ -222,6 +223,33 @@ struct shape_distortion {
   real tau0 = 0.05;
   real twist_angle = 0.6;
   hepworth::block::stretch_winding twist_winding{};
+  /// Chiral curvature drive (Armon's chiral seed pods, MATH.md 19.22): each
+  /// vertex's target tensor is its reference plus a saddle `k0 w` at
+  /// `+-.opening` (45 degrees) about an axis, pinned through the frames' spoke
+  /// readings. Held against a metric (`w_chiral_rest`) narrow regions twist
+  /// (a helicoid, `H ~ 0`) and wide ones coil (a helix, `K ~ 0`); which one
+  /// is set by `width sqrt(k0 / thickness)`, the solver chooses. `k0`'s sign
+  /// is the handedness.
+  ///   .mode     rate: reference the frame-start tensor (chirality added
+  ///             every frame); held: the first frame's tensor, carried
+  ///   .axis     as the shear's: principal (tight direction), frame (carried
+  ///             tangent), automatic (principal where q >= .axis_q)
+  ///   .angle    radians from the axis; `.winding` sets it on the torus
+  ///   .measure, .power   where it acts, as the shear's (power 0: uniform)
+  /// `w_chiral` scales the spoke rows; 0 leaves it off. Fields in order:
+  /// `.k0`, `.angle`, `.opening`, `.winding`, `.measure`, `.power`, `.axis`,
+  /// `.axis_q`, `.mode`.
+  hepworth::block::chiral_target chiral{
+      .k0 = 0.5,                                             // saddle per unit length; sign: handedness
+      .winding = {.ring = 0, .tube = 0, .handedness = 1},    // {ring, tube} replaces angle on the torus
+      .axis = hepworth::block::shear_axis::automatic,        // principal, frame, automatic
+      .mode = hepworth::block::chiral_mode::held,            // rate, held
+  };
+  real w_chiral = 0.0;
+  /// The metric the chiral drive pushes against: every edge held at its
+  /// length on the first frame (rest positions carried through remeshing).
+  /// 0 leaves it off.
+  real w_chiral_rest = 0.0;
 };
 
 /// Position-space rows: the classic bend and area, the ring axis ratio and
@@ -389,6 +417,10 @@ public:
     // Persistent one-ring medial depth for the torus row's volume term,
     // carried through the remesher (NaN until first seen).
     _torus_depth_slot = asawa::init_vert_datum<real>(*__M, std::numeric_limits<real>::quiet_NaN());
+    // The chiral drive's held reference tensor and rest positions (NaN until
+    // first seen).
+    _chiral_h_slot = asawa::init_vert_datum<vec3>(*__M, vec3::Constant(std::numeric_limits<real>::quiet_NaN()));
+    _chiral_x_slot = asawa::init_vert_datum<vec3>(*__M, vec3::Constant(std::numeric_limits<real>::quiet_NaN()));
     auto xs = std::make_shared<shell_vert_positions>(__M, 0);
     auto vs = std::make_shared<shell_vert_velocities>(__M, 1);
     _shell = std::make_shared<hepworth::block::shell_position_block>(__M, xs, vs);
@@ -678,6 +710,33 @@ private:
       fg.angle = real(0.5 * M_PI) - winding_angle(fg.winding, real(0));
     hb::init_flat_growth(_e3->table, x, _e3->vertex_frames, fg, p.w_flat_growth, ctx.constraints,
                          hb::select_blocks<0>(ctx));
+    push_chiral_rest(ctx, x);
+  }
+
+  /// The chiral drive's metric: each edge at its first-frame length, read
+  /// from rest positions carried as a vertex datum.
+  void push_chiral_rest(hepworth::block::solver_context &ctx, const std::vector<vec3> &x) {
+    namespace hb = hepworth::block;
+    const real w = _cfg.shape.w_chiral_rest;
+    if (!(w > 0.0) || _chiral_x_slot < 0)
+      return;
+    std::vector<vec3> &x0 = asawa::get_vec_data(*__M, _chiral_x_slot);
+    if (x0.size() != x.size())
+      return;
+    for (size_t i = 0; i < x.size(); ++i)
+      if (!x0[i].allFinite())
+        x0[i] = x[i];
+    for (int e = 0; e < _e3->table.n_edges; ++e) {
+      const std::array<int, 2> v = hb::growth_detail::edge_ends(_e3->table, e);
+      if (v[0] < 0)
+        continue;
+      const real l0 = (x0[static_cast<size_t>(v[1])] - x0[static_cast<size_t>(v[0])]).norm();
+      if (!(l0 > real(0)))
+        continue;
+      auto row = hb::edge_strain::create(std::vector<index_t>{v[0], v[1]}, x, w, hb::select_blocks<0>(ctx));
+      row->set_goal_length(l0);
+      ctx.constraints.push_back(row);
+    }
   }
 
   /// The contact net on positions and frames, the metric memory and the
@@ -738,13 +797,35 @@ private:
       growth_angle.assign(x.size(), winding_angle(g.winding, g.angle));
     }
     twist_angle.assign(x.size(), winding_angle(s.twist_winding, s.twist_angle));
+    const bool chiral = s.w_chiral > 0 && s.chiral.k0 != 0 && _e3->vertex_frames.size() == x.size();
+    if (chiral)
+      fc.w_target = s.w_chiral;
     const bool any = fc.w_memory > 0 || fc.w_tension > 0 || fc.w_minimizer > 0 || fc.w_dupin > 0 ||
-                     fc.w_growth > 0 || fc.w_det > 0 || fc.w_gradtl > 0 || fc.w_twist > 0;
+                     fc.w_growth > 0 || fc.w_det > 0 || fc.w_gradtl > 0 || fc.w_twist > 0 || fc.w_target > 0;
     if (!any)
       return;
-    ctx.constraints.push_back(hb::frame_rows::create(&_e3->table, x, _e3->frame, fc,
-                                                     std::vector<hepworth::sim_block::ptr>{ctx.blocks[0], _e3->frame_dof()},
-                                                     growth_angle, twist_angle));
+    auto rows = hb::frame_rows::create(&_e3->table, x, _e3->frame, fc,
+                                       std::vector<hepworth::sim_block::ptr>{ctx.blocks[0], _e3->frame_dof()},
+                                       growth_angle, twist_angle);
+    if (chiral) {
+      hb::chiral_target ct = s.chiral;
+      ct.angle = winding_angle(ct.winding, ct.angle);
+      const std::vector<vec3> *href = nullptr;
+      if (ct.mode == hb::chiral_mode::held && _chiral_h_slot >= 0) {
+        std::vector<vec3> &h0 = asawa::get_vec_data(*__M, _chiral_h_slot);
+        if (h0.size() == x.size()) {
+          for (size_t i = 0; i < x.size(); ++i)
+            if (!h0[i].allFinite() && _e3->vertex_frames[i].ok)
+              h0[i] = _e3->vertex_frames[i].h;
+          href = &h0;
+        }
+      }
+      std::vector<real> kt, taut;
+      hb::chiral_spoke_targets(kusama::contact_net::build_topology(_e3->table), x, _e3->vertex_frames, href, ct,
+                               kt, taut);
+      rows->set_spoke_targets(std::move(kt), std::move(taut));
+    }
+    ctx.constraints.push_back(rows);
   }
 
   real enclosed_volume(const std::vector<vec3> &x) const {
@@ -987,6 +1068,10 @@ private:
   real _volume_ref = std::numeric_limits<real>::quiet_NaN();
   /// Vertex datum holding the torus row's persistent one-ring medial depth.
   index_t _torus_depth_slot = -1;
+  /// Vertex datums: the chiral drive's held reference tensor (chart frame)
+  /// and rest positions.
+  index_t _chiral_h_slot = -1;
+  index_t _chiral_x_slot = -1;
   /// Range of the last frame's Moebius log-scale `u` (0 when off).
   real _mobius_u_range = 0;
   bool _torus_fit = false;

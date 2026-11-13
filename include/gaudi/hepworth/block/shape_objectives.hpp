@@ -173,6 +173,30 @@ struct shear_target {
   real axis_q = 0;
 };
 
+/// `rate`: the reference is the frame-start tensor, so chirality is added
+/// every frame; `held`: the reference is the first frame's tensor, carried
+/// (with a frame-0 metric, Armon's incompatible rest state, no ratchet).
+enum class chiral_mode { rate, held };
+
+/// Chiral curvature drive (Armon et al. 2011, MATH.md 19.22): each vertex's
+/// target tensor is its reference plus a saddle,
+/// `b = h_ref + k0 w (e+ e+^T - e- e-^T)`, `e+-` at `+-opening` about the
+/// axis. The axis is `angle` radians from `axis` (as the shear's); `winding`
+/// sets `angle` at startup. `k0`'s sign is the handedness; `w` from `measure`
+/// and `power` (`power` 0: uniform). Narrow regions twist (helicoid), wide
+/// ones coil (helix), set by `width sqrt(k0 / thickness)`.
+struct chiral_target {
+  real k0 = 0;
+  real angle = 0;
+  real opening = real(0.25 * M_PI);
+  stretch_winding winding{};
+  growth_measure measure = growth_measure::off_umbilic;
+  real power = 0;
+  shear_axis axis = shear_axis::automatic;
+  real axis_q = 0.2;
+  chiral_mode mode = chiral_mode::rate;
+};
+
 /// The anisotropy of one point, from its two principal curvatures `k0`, `k1`
 /// (red and green in the demo; any order, any signs).
 ///

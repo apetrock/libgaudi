@@ -2925,3 +2925,39 @@ cusps). A drive with known outcomes is the Armon one: hold the metric and
 ask for a saddle curvature at an angle to the local axis; the surface
 chooses twist (helicoid) or writhe (helix) by scale. That is a curvature
 target, which the E3 frame rows can take directly (19.21's spoke targets).
+
+### 19.23 Chiral curvature drive (`e3_chiral.py`, `chiral_drive.hpp`)
+
+Armon's incompatible strip on the E3 net: each vertex's target tensor
+`b = h_ref + k0 w (e+ e+^T - e- e-^T)` (`e+-` at 45 degrees about an axis),
+pinned through the frames' spoke readings in chord form (the `frame_rows`
+target rows, no new row type), against a held metric (frame-0 edge
+lengths). Bending modulus the target weight, stretching `w_rest / h^2`, so
+`t_eff = h sqrt(w_chiral / w_rest)`.
+
+Python strip (length 4, `h` 0.1, `w_rest` 16, `t_eff` 0.025 nominal; 12
+frames): narrow strips are helicoids (twist `k0`, `|K| = k0^2`, `H ~ 0`,
+straight centerline, strain 0.1%); widening, the twist and `|K|` fall and
+`|H|` and the centerline bend rise (width 1.6 at `k0` 1: twist 0.53 `k0`,
+`|K|` 0.30 `k0^2`, `|H|` 0.29 `k0`, strain 0.6%). The two `k0` (0.5, 1)
+collapse on Armon's `w sqrt(k0 / t)`: at matched widths about 2.6, 3.7 and
+5.8, `|K| / k0^2` 0.95 / 0.95, 0.89 / 0.84, 0.63 / 0.61. The crossover is
+smoother than Armon's and sits at a larger nominal width (`t_eff` is a
+weight ratio, and the read-outs average the boundary layer). Out of the thin
+regime (`k0 t_eff` 0.3 to 0.6) the wide strips kink instead of coiling.
+`k0 = 0` is idle.
+
+C++ (`chiral_target` beside `shear_target`: `k0`, `angle`, `opening`,
+`winding`, `measure` / `power`, `axis` as the shear's, `mode` rate | held;
+`chiral_spoke_targets`; demo `shape_distortion::chiral`, `w_chiral`,
+`w_chiral_rest`, the held tensor and rest positions as vertex datums). The
+spoke targets fit back to the tensor to 9e-16. Strip test, 20 frames, `k0`
+2: narrow twist 0.82 `k0`, `|H|` 0.04 `k0`; wide (1.0) twist 0.60 `k0`,
+`|H|` 0.14 `k0`. Probe torus (shape drives and shear off): `rate` 0.5 adds
+chirality every frame and the ring shrinks (R 0.75 -> 0.68 in four frames);
+`held` with `w_chiral_rest` 1 holds the metric (area 6.75) and at `k0` 4 the
+ring breaks symmetry and lifts out of plane, the core's rms height 7e-7 ->
+8.4e-3 over 16 frames (Michell's twist-to-writhe direction), roughness 0.17
+-> 0.38; with a weak metric (0.1) it crumples instead. In `held` mode the
+target pins the whole frame-0 tensor plus the saddle, so it is also a shape
+memory.
