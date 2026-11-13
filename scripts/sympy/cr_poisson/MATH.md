@@ -2648,8 +2648,45 @@ Torus `R = 1, r = 0.35`, 24 x 12, 3 frames, coupling 10, length memory
 | twist + kite, 4 frames | 0.434 | 4.41 | 0.135 | lines start to turn at frame 3 (turn 0.18, anisotropy 0.53 -> 0.61) |
 
 Frames take 1 to 9 s in Python (finite-difference Jacobians, 8 LM
-iterates). Next: the C++ frames mode in `contact_net_gn` (analytic
-`dn/dY`), then these rows on `(x, Y)`, then the edge store dropped.
+iterates).
+
+**C++ (2026-11-13).** Stage A: `contact_net_gn` takes per-vertex
+quaternions as its second block (`shell_cr_block::frame_site`,
+`curvature_config::contact_frames`, probe `cnframes`), `n = M(Y) / |Y|^2`
+with analytic `dn/dY`, a unit row on `|Y|` and a gauge row. The gauge first
+held the turn of `T` carried by the shortest arc from the frame-start normal;
+that stalled cube -> sphere (shape error 1.0 after 355 iterates), the arc's
+holonomy fighting the frames under large turns of the normal. The twist of
+`conj(Y0) Y` about the body normal (its `z` component, linear in `Y`) at
+weight 1e-3 lands every closed suite case (round-off on the tori and the
+ellipsoid, 3e-10 on cube -> sphere in 126 iterates against 77); a strong
+gauge (1) still stalls cube -> sphere. On the probe the frames track the
+normals (tube 0.149 against 0.147 after three frames) at 2.3 times the frame
+time.
+
+Native rows (`frame_rows.hpp`): the rows of the prototype on `(x, Y)`, with
+the vertex tensors as unknowns of their own (`vertex_shape_dof`, seeded from
+the frame-start fit) tied to the frames by per-spoke fit rows. Chaining the
+rows through the fitted tensors instead (the prototype's form) gave the same
+iterates but 13 s a frame against 7: a row between two vertices then couples
+both one-rings and the factorization dominates (3700 of 5000 samples). Probe,
+three frames, `axis_ratio` off (idle: exact fixed point):
+
+| rows | tube | roughness | note |
+|---|---|---|---|
+| none | 0.248 | 0.163 | fixed point |
+| minimizer 0.5 | 0.251 | 0.162 | smooths slightly |
+| tension 0.5 frame_mean / volume | 0.258 / 0.256 | 0.172 | the controller slows the drift |
+| dupin 0.5 | 0.255 | 0.170 | the vertex fit's slow drift |
+| growth 0.3 (w 0.5) | 0.192 | 0.215 | tightens the tube |
+| + det 2 | 0.192 | 0.182 | `det` evens it |
+| + shape memory 1 | 0.231 | 0.190 | memory resists |
+| gradtl 0.1 | 0.254 | 0.170 | |
+| twist 0.5, `tau0` 0.05 | 0.249 | 0.167 | |
+| + stretch 0.5 | 0.318 | 0.176 | lines turn at frame 2 (anisotropy 0.70 -> 0.66) |
+
+Next: drop the edge store from frames mode (store-free tangency as in the
+prototype), the medial shear.
 
 **Advection.** Semi-Lagrangian on the vertex `(H, z)` field: RK2 back trace
 walking across faces (straightest path), barycentric sampling of the

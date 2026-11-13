@@ -367,6 +367,10 @@ public:
     // Per-vertex quaternion frames (`frame_site`): normal from the area
     // normals, tangent from the vertex charts (any tangent without one),
     // unit scale. Mass as the normals'.
+    vertex_shape.assign(x.size(), vec3::Zero());
+    vertex_shape_velocity.assign(x.size(), vec3::Zero());
+    vertex_shape_force.assign(x.size(), vec3::Zero());
+    vertex_shape_mass.assign(x.size(), vec3::Constant(real(1e-8)));
     frame.assign(x.size(), vec4(1, 0, 0, 0));
     frame_mass.resize(x.size());
     for (size_t i = 0; i < x.size(); ++i) {
@@ -419,7 +423,20 @@ public:
       _frame_dof = vec4_block::create(frame_mass, frame);
       out.push_back(_frame_dof);
     }
+    _vertex_shape_dof = nullptr;
+    if (vertex_shape_site) {
+      _vertex_shape_dof =
+          vec3_block::create(vertex_shape_mass, vertex_shape, vertex_shape_velocity, vertex_shape_force);
+      out.push_back(_vertex_shape_dof);
+    }
   }
+
+  /// Per-vertex curvature tensors `(s11, s12, s22)` in each vertex's frame,
+  /// the native frame rows' unknowns (`frame_rows` with a third block),
+  /// seeded by the rows from the frame-start fit.
+  std::vector<vec3> vertex_shape, vertex_shape_velocity, vertex_shape_force, vertex_shape_mass;
+  bool vertex_shape_site = false;
+  vec3_block::ptr vertex_shape_dof() const { return _vertex_shape_dof; }
 
   /// Per-vertex quaternion frames for the contact net's frames mode
   /// (`contact_net_gn` with a `vec4` second block): `n = Y e3 conj(Y) / |Y|^2`.
@@ -454,6 +471,7 @@ private:
   vec3_block::ptr _normal_dof;
   vec4_block::ptr _amap_dof;
   vec4_block::ptr _frame_dof;
+  vec3_block::ptr _vertex_shape_dof;
 };
 
 } // namespace block

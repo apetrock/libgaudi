@@ -21,7 +21,7 @@
 //                   [dcamt=A] [dcangle=DEG] [dcref=x,y,z] [wamap=W] [amapinv=A] [wconf=W] [wtension=W]
 //                   [dupin=W] [dupinreach=R] [dupindeg=D] [wgradtl=W] [wotorus=W] [sarap=W] [sarapfree]
 //                   [wkite=W] [kalpha=A] [kangle=DEG] [kmaxu=U] [ksrc=tangent|mean|aniso] [klevel=L] [kbalanced]
-//                   [wcmc=W] [cmch0=H] [wmin=W] [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W]
+//                   [wcmc=W] [cmch0=H] [cmcvol] [wtwist=W] [tau0=T] [twangle=A] [wmin=W] [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W]
 //                   [accel=anderson|chebyshev|anderson_chebyshev|none] [freshstop=0|1] [maxascent=K]
 //                   [dump=K] [res=ring:tube] [perturb=P] [wcenter=W] [recenter]
 //                   [wstretch=W] [wind=ring:tube[:hand]] [sdir=angle|material|stripes] [msmooth=L] [mfollow=F]
@@ -293,6 +293,14 @@ int principal_curvature_probe_main(int argc, char **argv) {
     } else if (flag.rfind("cmch0=", 0) == 0) {
       cfg.shape.tension.kind = hepworth::block::tension_target::mode::constant;
       cfg.shape.tension.h0 = std::atof(flag.c_str() + 6);
+    } else if (flag == "cmcvol") {
+      cfg.shape.tension.kind = hepworth::block::tension_target::mode::volume;
+    } else if (flag.rfind("wtwist=", 0) == 0) {
+      cfg.shape.w_twist = std::atof(flag.c_str() + 7);
+    } else if (flag.rfind("tau0=", 0) == 0) {
+      cfg.shape.tau0 = std::atof(flag.c_str() + 5);
+    } else if (flag.rfind("twangle=", 0) == 0) {
+      cfg.shape.twist_angle = std::atof(flag.c_str() + 8);
     } else if (flag.rfind("freshstop=", 0) == 0) {
       cfg.step.gn_stop_on_fresh_ascent = std::atoi(flag.c_str() + 10) != 0;
     } else if (flag.rfind("maxascent=", 0) == 0) {

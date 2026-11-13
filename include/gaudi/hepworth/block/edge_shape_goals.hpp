@@ -336,9 +336,13 @@ inline edge_goal_fn goal_principal_mean(sim_block::ptr store,
 ///               fairing: the curvature-space analogue of volume-preserving
 ///               mean-curvature flow).
 struct tension_target {
-  enum class mode { constant, mean };
+  /// `volume` (frames mode only; the edge rows read it as `mean`): the
+  /// frame mean flattened by `volume_gain` times the relative volume deficit
+  /// against the first frame's.
+  enum class mode { constant, mean, volume };
   mode kind = mode::mean;
   real h0 = 0;
+  real volume_gain = 1;
 };
 
 /// Each edge tensor keeps its trace-free part and moves its mean curvature

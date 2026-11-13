@@ -26,6 +26,7 @@
 #include "gaudi/hepworth/block/edge_shape_fair.hpp"
 #include "gaudi/hepworth/block/edge_shape_goals.hpp"
 #include "gaudi/hepworth/block/face_element.hpp"
+#include "gaudi/hepworth/block/frame_rows.hpp"
 #include "gaudi/hepworth/block/generic_constraints.hpp"
 #include "gaudi/hepworth/block/kite_growth.hpp"
 #include "gaudi/hepworth/block/osculating_torus_ring.hpp"
@@ -211,8 +212,10 @@ struct shape_distortion {
   /// Surface tension in curvature space (`goal_mean_tension`): each edge's
   /// mean curvature pulled to `tension.h0` (`constant`, Young-Laplace:
   /// pressure over twice the tension; outward normals make a sphere's `H`
-  /// negative) or to the store's mean (`mean`, constant-mean-curvature
-  /// fairing), trace-free part kept. 0 leaves it off.
+  /// negative), to the store's mean (`mean`, constant-mean-curvature
+  /// fairing), or, with `contact_frames`, to the frame mean corrected toward
+  /// the first frame's volume (`volume`, `.volume_gain`); trace-free part
+  /// kept. 0 leaves it off.
   real w_tension = 0.15;
   hepworth::block::tension_target tension{};
   /// Dupin rows: each principal curvature held constant along its own
@@ -252,6 +255,14 @@ struct shape_distortion {
   /// intrinsic, so this leaves bending free and resists only what would
   /// change the metric. 0 leaves it off.
   real w_det = 0.0;
+  /// Frames mode only (`curvature_config::contact_frames`): the geodesic
+  /// torsion along `twist_angle` (radians from the tight direction; winding
+  /// like growth) raised by `tau0` per frame, a uniform twist. Pair it with a
+  /// position growth (stretch, kite). 0 leaves it off.
+  real w_twist = 0.0;
+  real tau0 = 0.05;
+  real twist_angle = 0.6;
+  hepworth::block::stretch_winding twist_winding{};
 };
 
 /// Position-space distortion: stretch, area ratio, area, bend, smooth.
@@ -490,6 +501,8 @@ public:
     perturb_vertices_noise(*__M, x, _cfg.perturb);
 
     _center0 = area_centroid(x);
+    _volume_ref = std::numeric_limits<real>::quiet_NaN();
+    _volume_ref = std::numeric_limits<real>::quiet_NaN();
     set_stretch_angles(x);
 
     asawa::init_vert_datum<vec3>(*__M, vec3::Zero());
@@ -517,6 +530,12 @@ public:
     const bool net = _cfg.project.curvature.kind == curvature_solver::contact_net;
     _cr->normal_site = net && !_cfg.project.curvature.contact_frames;
     _cr->frame_site = net && _cfg.project.curvature.contact_frames;
+    {
+      const shape_distortion &s = _cfg.shape;
+      const bool rows = s.w_shape_arap > 0 || s.w_tension > 0 || s.w_minimizer > 0 || s.w_dupin > 0 ||
+                        s.w_growth > 0 || s.w_det > 0 || s.w_grad_traceless > 0 || s.w_twist > 0;
+      _cr->vertex_shape_site = _cr->frame_site && rows;
+    }
     _cr->normal_mass_scale = _cfg.project.curvature.contact_normal_mass;
     _cr->amap_site = _cfg.position.w_amap > 0.0;
     real C = 3.0;
@@ -703,7 +722,10 @@ public:
       if (_cfg.position.w_memory > 0.0)
         ctx.constraints.push_back(hb::dirichlet_memory_gn::create(
             &_cr->table, x, _cfg.position.w_memory, std::vector<hepworth::sim_block::ptr>{pos}));
-      push_edge_fairing(ctx);
+      if (c.contact_frames)
+        push_frame_rows(ctx);
+      else
+        push_edge_fairing(ctx);
       return;
     }
     // No live read-out row: the store reads its frame-start value at weight 1.
@@ -711,6 +733,63 @@ public:
         &_cr->table, x, hb::edge_fair_rows::pin, real(1),
         std::vector<hepworth::sim_block::ptr>{_cr->shape_dof()}, hb::goal_fixed(_cr->shape)));
     push_edge_fairing(ctx);
+  }
+
+  /// `shape_distortion` as native rows on positions and frames
+  /// (`frame_rows`); the edge store is then left to the contact net alone.
+  void push_frame_rows(hepworth::block::solver_context &ctx) {
+    namespace hb = hepworth::block;
+    const std::vector<vec3> &x = _shell->xs->get();
+    if (!_cr->frame_dof() || _cr->frame.size() != x.size())
+      return;
+    const shape_distortion &s = _cfg.shape;
+    hb::frame_rows_config fc;
+    fc.w_memory = s.w_shape_arap;
+    fc.memory_mean = s.shape_arap_mean;
+    fc.w_tension = s.w_tension;
+    fc.tension = s.tension.kind == hb::tension_target::mode::constant ? hb::frame_tension::constant
+                 : s.tension.kind == hb::tension_target::mode::volume ? hb::frame_tension::volume
+                                                                      : hb::frame_tension::frame_mean;
+    fc.h0 = s.tension.h0;
+    fc.volume_gain = s.tension.volume_gain;
+    if (!std::isfinite(_volume_ref))
+      _volume_ref = enclosed_volume(x);
+    fc.volume_ref = _volume_ref;
+    fc.w_minimizer = s.w_minimizer;
+    fc.w_dupin = s.w_dupin;
+    fc.w_det = s.w_det;
+    fc.w_gradtl = s.w_grad_traceless;
+    fc.w_twist = s.w_twist;
+    fc.tau0 = s.tau0;
+    std::vector<real> growth_angle, twist_angle;
+    if (!s.growth.empty()) {
+      const hb::curvature_growth_target &g = s.growth.front();
+      fc.w_growth = s.w_growth;
+      fc.growth_x = g.x;
+      fc.growth_y = g.y;
+      growth_angle.assign(x.size(), winding_angle(g.winding, g.angle));
+    }
+    twist_angle.assign(x.size(), winding_angle(s.twist_winding, s.twist_angle));
+    const bool any = fc.w_memory > 0 || fc.w_tension > 0 || fc.w_minimizer > 0 || fc.w_dupin > 0 ||
+                     fc.w_growth > 0 || fc.w_det > 0 || fc.w_gradtl > 0 || fc.w_twist > 0;
+    if (!any)
+      return;
+    std::vector<hepworth::sim_block::ptr> blocks{ctx.blocks[0], _cr->frame_dof()};
+    const bool aux = _cr->vertex_shape_dof() && _cr->vertex_shape.size() == x.size();
+    if (aux)
+      blocks.push_back(_cr->vertex_shape_dof());
+    auto rows = hb::frame_rows::create(&_cr->table, x, _cr->frame, fc, blocks, growth_angle, twist_angle);
+    if (aux)
+      _cr->vertex_shape = rows->start_tensors();
+    ctx.constraints.push_back(rows);
+  }
+
+  real enclosed_volume(const std::vector<vec3> &x) const {
+    real v = 0;
+    for (const auto &id : _cr->table.ids)
+      v += x[static_cast<size_t>(id[0])].dot(x[static_cast<size_t>(id[1])].cross(x[static_cast<size_t>(id[2])])) /
+           real(6);
+    return v;
   }
 
   /// `shape_distortion` as `edge_shape_fair` rows on the edge store.
@@ -1557,6 +1636,8 @@ private:
   }
 
   monge_fairing_demo_config _cfg;
+  /// First frame's enclosed volume (the `volume` tension's reference).
+  real _volume_ref = std::numeric_limits<real>::quiet_NaN();
   /// Vertex datum holding the torus row's persistent one-ring medial depth.
   index_t _torus_depth_slot = -1;
   /// Vertex datum per stretch target with `material` (-1 without), its
