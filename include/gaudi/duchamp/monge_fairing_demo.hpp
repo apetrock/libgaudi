@@ -172,7 +172,7 @@ struct shape_distortion {
   /// The frame minimizer: each principal curvature differenced across its
   /// own lines between neighbours (across-line Dirichlet, frame-start
   /// principal frames). 0 leaves it off.
-  real w_minimizer = 0.000000000000001;
+  real w_minimizer = 0.02;
   /// Surface tension in curvature space: each vertex's mean curvature pulled
   /// to `tension.h0` (`constant`, Young-Laplace: pressure over twice the
   /// tension; outward normals make a sphere's `H` negative), to the
@@ -185,7 +185,7 @@ struct shape_distortion {
   /// direction, so curvature lines become circles and the surface is locally
   /// a Dupin cyclide (torus, cylinder, cone and their Moebius images); per
   /// spoke, along the frame-start principal frames. 0 leaves it off.
-  real w_dupin = 0.1;
+  real w_dupin = 0.001;
   /// The Dupin rows' stencil: 0 differences each principal curvature across
   /// one spoke; above 0 traces each curvature line `dupin_reach` mean edge
   /// lengths both ways from every vertex (one mean edge length per step,
@@ -193,7 +193,7 @@ struct shape_distortion {
   /// fit of its normal curvature along the line (0: constant, the line a
   /// circle; 1: linear change allowed). Traced at the frame start and frozen
   /// for the frame.
-  real dupin_reach = 3.0;
+  real dupin_reach = 0.0;
   int dupin_degree = 0;
   /// Directional curvature growth, the shape-space match of position
   /// `stretch`: each frame the normal curvature along `.angle` (radians from
@@ -209,7 +209,7 @@ struct shape_distortion {
                                                .winding = {.ring = 1, .tube = 5, .handedness = 1},
                                                .power = 0.5},
   };
-  real w_growth = 0.05;
+  real w_growth = 0.0;
   /// Holds each vertex ring's Gauss-image area (the solid angle of its
   /// faces' normals) at its frame-start value, the shape-space match of
   /// `area`. It does not resist a uniform tube shrink (the normals do not
@@ -298,7 +298,7 @@ struct position_distortion {
   hepworth::block::flat_growth_target flat_growth{
       .g = 0.05,                                              // length added per frame at full weight
       .measure = hepworth::block::growth_measure::mean_curvature,   // flatness, mean_curvature, anisotropy, k_lo
-      .power = -4.0,                                           // 0: uniform; high: only the extremes grow
+      .power = -8.0,                                           // 0: uniform; high: only the extremes grow
       .angle = 0.0,                                           // 0 loose direction, pi / 2 tight direction
       .winding = {.ring = 0, .tube = 0, .handedness = 1},     // {ring, tube} replaces angle on the torus
       .iso = 0.0,                                             // 0 directional, 1 direction-free
@@ -374,11 +374,6 @@ public:
     _shell = std::make_shared<hepworth::block::shell_position_block>(__M, xs, vs);
     _e3 = std::make_shared<hepworth::block::shell_e3_block>(__M);
     _e3->frame_mass_scale = _cfg.project.curvature.contact_normal_mass;
-    {
-      const shape_distortion &s = _cfg.shape;
-      _e3->vertex_shape_site = s.w_shape_arap > 0 || s.w_tension > 0 || s.w_minimizer > 0 || s.w_dupin > 0 ||
-                               s.w_growth > 0 || s.w_det > 0 || s.w_grad_traceless > 0 || s.w_twist > 0;
-    }
     real C = 3.0;
     const real l0 = asawa::shell::avg_length(*__M, xs->get());
     __surf = asawa::shell::dynamic::create(__M, C * l0, real(1.5) * C * l0, C * real(1.0) * l0);
@@ -727,14 +722,9 @@ private:
                      fc.w_growth > 0 || fc.w_det > 0 || fc.w_gradtl > 0 || fc.w_twist > 0;
     if (!any)
       return;
-    std::vector<hepworth::sim_block::ptr> blocks{ctx.blocks[0], _e3->frame_dof()};
-    const bool aux = _e3->vertex_shape_dof() && _e3->vertex_shape.size() == x.size();
-    if (aux)
-      blocks.push_back(_e3->vertex_shape_dof());
-    auto rows = hb::frame_rows::create(&_e3->table, x, _e3->frame, fc, blocks, growth_angle, twist_angle);
-    if (aux)
-      _e3->vertex_shape = rows->start_tensors();
-    ctx.constraints.push_back(rows);
+    ctx.constraints.push_back(hb::frame_rows::create(&_e3->table, x, _e3->frame, fc,
+                                                     std::vector<hepworth::sim_block::ptr>{ctx.blocks[0], _e3->frame_dof()},
+                                                     growth_angle, twist_angle));
   }
 
   real enclosed_volume(const std::vector<vec3> &x) const {

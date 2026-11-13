@@ -2709,6 +2709,33 @@ three frames:
 Kite inflates as before (area 7.33 -> 7.56); `osculating_torus` reads the
 frame-start charts (no store) and holds at idle.
 
+**Edge-native against chained rows (2026-11-13, `e3_parity.py`).** In
+C++ any nonzero frame-row weight (`w_minimizer = 1e-10`) removed all
+buckling: the vertex tensors were their own block, tied to the frames by
+per-spoke fit rows (about 12 per vertex against 3 unknowns, fixed
+`w_fit = 1`) that cannot be satisfied and so penalized every ring curvature
+a vertex tensor cannot represent, the ripple of a buckle. Without fit rows
+(the Python E3 rows chain through the fit) a 1e-10 minimizer leaves a
+kite + twist drive unchanged to 1e-5. Two ways to read curvature with no
+new unknowns, compared:
+
+| torus, 3 frames | tube 0.350 | noisy roughness | pattern nnz |
+|---|---|---|---|
+| chained Dupin | 0.394 | 0.56 -> 0.09 | 41k |
+| edge Dupin (line readings) | 0.350 | 0.63 -> 0.59 | 9k |
+| chained minimizer | 0.309 | 0.55 -> 0.09 | 41k |
+| edge minimizer | roughens the clean torus to 0.40 | 0.59 -> 0.55 | 10k |
+
+Line readings (two spokes per principal direction) leave most of a ring's
+curvature unconstrained, so they barely smooth. Suite targets (5 frames,
+shape error): spoke readings `(k, tau)` pinned to the target mesh's against
+fitted tensors pinned to the target's fitted tensors: torus tube 1.2e-4 /
+5.0e-4, torus R 2.9e-3 / 4.2e-2, cube -> sphere 3.0e-2 / 3.7e-2,
+cube -> ellipsoid 1.5e-2 / 3.0e-2, closed band 2.2e-2 / 1.1e-1, saddle
+3.8e-2 / 5.7e-2, three to four times faster: the 12 spoke readings carry
+shape the 3-number fit loses. Decision: targets on spoke readings
+(edge-native); smoothing rows chained through the fit; no tensor block.
+
 **CR field out of the demo (2026-11-13).** The demo now runs on
 `shell_e3_block`: frames reseeded each frame from the area normals with the
 tangent from a carried gauge datum (the solved frames' `T`, kept through

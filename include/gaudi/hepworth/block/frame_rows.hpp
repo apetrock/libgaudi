@@ -43,13 +43,20 @@
 ///   plus `tau0`.
 /// Jacobians by central differences over each row's local unknowns.
 ///
-/// With a third block (`shell_cr_block::vertex_shape_dof`) the vertex tensors
-/// are unknowns of their own: fit rows (`w_fit`, per spoke `k - t^T S t` and
-/// `tau - t^T S (N x t)`) tie them to the frames over the one-ring, and the
-/// rows above read only them, so a row between two vertices couples just
-/// those two. Chaining the rows through the fitted tensors instead couples
-/// both one-rings and fills the factor (13 s against 4 s a frame on the
-/// probe with the minimizer on). Seed the block with `start_tensors()`.
+/// Every row reads the vertex tensors as functions of the ring's positions
+/// and frames (the fit), with the Jacobian chained through it (`dS` per
+/// vertex, cached once per linearization): the rows act on the frames
+/// directly and the contact net resolves frames against positions. (A tensor
+/// block tied to the frames by per-spoke fit rows was tried and removed: the
+/// fit rows, about 12 per vertex against 3 unknowns, could not be satisfied
+/// and damped every ring ripple, so any frame row removed all buckling;
+/// MATH.md 19.21.)
+///
+/// - target: each directed spoke's Rodrigues normal curvature and twist from
+///   the frames pinned to given values (`set_spoke_targets`, the target
+///   mesh's readings), in the chord form (times the live tangential length,
+///   over the frame-start one); edge-native, so a row touches the spoke's
+///   two ends.
 
 #include "gaudi/hepworth/block/block_constraint.hpp"
 #include "gaudi/hepworth/block/quat_util.hpp"
@@ -96,8 +103,8 @@ struct frame_rows_config {
   real w_gradtl = 0;
   real w_twist = 0;
   real tau0 = 0;
-  /// Weight of the fit rows in the vertex-tensor mode.
-  real w_fit = 1;
+  /// Spoke targets (`set_spoke_targets`).
+  real w_target = 0;
 };
 
 namespace frame_detail {
@@ -188,7 +195,6 @@ public:
       : block_constraint({}, real(1), std::move(blocks)), _t(table), _cfg(cfg) {
     namespace fd = frame_detail;
     _tp = kusama::contact_net::build_topology(*_t);
-    _aux = _blocks.size() > 2 && _blocks[2] != nullptr;
     const int n = _tp.n;
     const size_t nv = static_cast<size_t>(n);
     _faces_of.assign(nv, {});
@@ -288,8 +294,14 @@ public:
     _Om0.assign(nv, 0);
     for (int v = 0; v < n; ++v)
       _Om0[static_cast<size_t>(v)] = gauss_area(v, N0);
-    if (_cfg.w_dupin > 0 && _cfg.dupin_reach > 0 && _aux)
+    if (_cfg.w_dupin > 0 && _cfg.dupin_reach > 0)
       build_dupin_lines(x0);
+    _spoke_l0.assign(_tp.spokes.size(), real(0));
+    for (size_t sp = 0; sp < _tp.spokes.size(); ++sp) {
+      const size_t i = static_cast<size_t>(_tp.spokes[sp][0]), j = static_cast<size_t>(_tp.spokes[sp][1]);
+      const vec3 dx = x0[j] - x0[i], nb = (_F0[i].N + _F0[j].N).normalized();
+      _spoke_l0[sp] = (dx - nb * dx.dot(nb)).norm();
+    }
     _rest_initialized = true;
   }
 
@@ -318,6 +330,35 @@ public:
 
   /// The frame-start vertex tensor in the frame-start frame.
   const std::vector<vec3> &start_tensors() const { return _S0; }
+  /// Per directed spoke (`kusama::contact_net::build_topology` order) the
+  /// target normal curvature and twist for the `w_target` rows.
+  void set_spoke_targets(std::vector<real> k, std::vector<real> tau) {
+    _kt = std::move(k);
+    _taut = std::move(tau);
+  }
+  /// Directed spoke `(k, tau)` readings of positions and frames, in the
+  /// topology's spoke order (`n` the frames' normals).
+  static void spoke_readings(const kusama::contact_net::topology &tp, const std::vector<vec3> &x,
+                             const std::vector<vec3> &n, std::vector<real> &k, std::vector<real> &tau) {
+    k.assign(tp.spokes.size(), real(0));
+    tau.assign(tp.spokes.size(), real(0));
+    for (size_t s = 0; s < tp.spokes.size(); ++s) {
+      const size_t i = static_cast<size_t>(tp.spokes[s][0]), j = static_cast<size_t>(tp.spokes[s][1]);
+      read_spoke(x[i], x[j], n[i], n[j], k[s], tau[s]);
+    }
+  }
+  static void read_spoke(const vec3 &xi, const vec3 &xj, const vec3 &ni, const vec3 &nj, real &k, real &tau) {
+    const vec3 dx = xj - xi, dn = nj - ni;
+    const vec3 nb = (ni + nj).normalized();
+    const vec3 dxt = dx - nb * dx.dot(nb);
+    const real L = dxt.norm();
+    k = tau = 0;
+    if (!(L > real(0)))
+      return;
+    const vec3 t = dxt / L, b = nb.cross(t);
+    k = -dn.dot(t) / L;
+    tau = -dn.dot(b) / L;
+  }
   /// The tension target in use this frame.
   real tension_target() const { return _Ht; }
 
@@ -505,11 +546,8 @@ private:
     // Vertex tensors and, with a Jacobian, their derivatives in the ring's
     // positions and frames (`dS[v]` is 3 x 7 |ring|, columns in `ring_of` order).
     std::vector<vec3> Sc(nv, vec3::Zero());
-    std::vector<Eigen::Matrix<real, 3, Eigen::Dynamic>> dS(jt && need_s && !_aux ? nv : 0);
-    if (_aux)
-      for (int v = 0; v < n; ++v)
-        Sc[static_cast<size_t>(v)] = _blocks[2]->get_vec3(v, q);
-    if (need_s && !_aux)
+    std::vector<Eigen::Matrix<real, 3, Eigen::Dynamic>> dS(jt && need_s ? nv : 0);
+    if (need_s)
       for (int v = 0; v < n; ++v) {
         const size_t vi = static_cast<size_t>(v);
         Sc[vi] = fit(v, X, F);
@@ -613,7 +651,7 @@ private:
                          }});
       }
     }
-    const bool lines = c.w_dupin > 0 && c.dupin_reach > 0 && _aux;
+    const bool lines = c.w_dupin > 0 && c.dupin_reach > 0;
     if (lines)
       for (const dupin_line &dl : _lines) {
         const real wd = c.w_dupin;
@@ -653,15 +691,20 @@ private:
                          }});
       }
     }
-    if (_aux && need_s && c.w_fit > 0) {
+    if (c.w_target > 0 && _kt.size() == _tp.spokes.size() && _taut.size() == _tp.spokes.size()) {
       for (int v = 0; v < n; ++v) {
         const size_t vi = static_cast<size_t>(v);
         const int deg = _tp.spoke_begin[vi + 1] - _tp.spoke_begin[vi];
-        const real s = c.w_fit * k * _A[vi] / std::sqrt(std::max(real(deg), real(1)));
+        const real s = c.w_target * k * _A[vi] / std::sqrt(std::max(real(deg), real(1)));
         for (int sp = _tp.spoke_begin[vi]; sp < _tp.spoke_begin[vi + 1]; ++sp) {
-          const int j = _tp.spokes[static_cast<size_t>(sp)][1];
+          const size_t si = static_cast<size_t>(sp);
+          const int j = _tp.spokes[si][1];
           const size_t jj = static_cast<size_t>(j);
-          units.push_back({2, {v}, {v, j}, [&, vi, jj, s](real *o) {
+          // Chord form, as the net's Rodrigues rows: `(k - k_t) |dx_t|` over the
+          // frame-start `|dx_t|`, no division by the live length (a spoke
+          // turning toward the normal would blow up the reading).
+          const real L0 = _spoke_l0[si] > real(0) ? _spoke_l0[si] : real(1);
+          units.push_back({2, {}, {v, j}, [&, vi, jj, si, s, L0](real *o) {
                              const vec3 dx = X[jj] - X[vi], dn = F[jj].N - F[vi].N;
                              const vec3 nb = (F[vi].N + F[jj].N).normalized();
                              const vec3 dxt = dx - nb * dx.dot(nb);
@@ -670,15 +713,8 @@ private:
                              if (!(L > real(0)))
                                return;
                              const vec3 t = dxt / L, b = nb.cross(t);
-                             real a = t.dot(F[vi].T), cc = t.dot(F[vi].B);
-                             const real rr = std::sqrt(a * a + cc * cc);
-                             if (!(rr > real(0)))
-                               return;
-                             a /= rr;
-                             cc /= rr;
-                             const vec3 &S = Sc[vi];
-                             o[0] = s * (-dn.dot(t) / L - (a * a * S[0] + 2 * a * cc * S[1] + cc * cc * S[2]));
-                             o[1] = s * (-dn.dot(b) / L - (-a * cc * S[0] + (a * a - cc * cc) * S[1] + a * cc * S[2]));
+                             o[0] = s * (-dn.dot(t) - _kt[si] * L) / L0;
+                             o[1] = s * (-dn.dot(b) - _taut[si] * L) / L0;
                            }});
         }
       }
@@ -730,19 +766,6 @@ private:
         // Through the cached tensors.
         for (int v : u.sv) {
           const size_t vi = static_cast<size_t>(v);
-          if (_aux) {
-            for (int cc = 0; cc < 3; ++cc) {
-              const real keep = Sc[vi][cc], h = real(1e-7) * std::max(real(1), std::abs(keep));
-              Sc[vi][cc] = keep + h;
-              u.f(bp);
-              Sc[vi][cc] = keep - h;
-              u.f(bm);
-              Sc[vi][cc] = keep;
-              for (int a = 0; a < u.m; ++a)
-                add(a, _blocks[2]->get_offset_idx(v) + cc, (bp[a] - bm[a]) / (real(2) * h));
-            }
-            continue;
-          }
           std::vector<int> ring;
           ring_of(v, ring);
           for (int cc = 0; cc < 3; ++cc) {
@@ -803,7 +826,7 @@ private:
   std::vector<real> _tw0, _H0, _Om0;
   std::vector<std::complex<real>> _z0, _zring0;
   real _Ht = 0;
-  bool _aux = false;
+  std::vector<real> _kt, _taut, _spoke_l0;
   std::vector<dupin_line> _lines;
 };
 

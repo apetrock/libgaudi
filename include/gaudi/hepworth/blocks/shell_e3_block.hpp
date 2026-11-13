@@ -3,8 +3,7 @@
 
 /// The contact net's vertex quaternion frames (scripts/sympy/cr_poisson/
 /// MATH.md 19.21, E3) as a solver block wrapper: one quaternion `Y` per
-/// vertex (`n = Y e3 conj(Y) / |Y|^2`), optionally one curvature tensor `S`
-/// per vertex in its own frame (`frame_rows`' unknowns), and the frame-start
+/// vertex (`n = Y e3 conj(Y) / |Y|^2`), and the frame-start
 /// charts the position rows read (`T, B, N` from `Y`, `h` the vertex tensor
 /// fitted from the frames). Reseeded every frame from the live mesh: normals
 /// from the area normals, tangents from a carried vertex datum (the frames'
@@ -49,15 +48,10 @@ public:
   std::vector<vec4> frame_mass;
   /// Frame mass per unit vertex dual area (0: the floor only).
   real frame_mass_scale = 0;
-  /// Per-vertex curvature tensors in each vertex's frame (`frame_rows` with a
-  /// third block), seeded by the rows; emitted when `vertex_shape_site`.
-  std::vector<vec3> vertex_shape, vertex_shape_velocity, vertex_shape_force, vertex_shape_mass;
-  bool vertex_shape_site = false;
   /// Frame-start charts: `T, B, N` from the frames, `h` the fitted tensor.
   std::vector<vertex_chart> vertex_frames;
 
   vec4_block::ptr frame_dof() const { return _frame_dof; }
-  vec3_block::ptr vertex_shape_dof() const { return _vertex_shape_dof; }
 
   void prepare(solver_context &ctx) override {
     (void)ctx;
@@ -103,10 +97,6 @@ public:
       frame[i] = quat_ops::quat_from_matrix(R);
       frame_mass[i] = vec4::Constant(std::max(frame_mass_scale * area[i], real(1e-8)));
     }
-    vertex_shape.assign(n, vec3::Zero());
-    vertex_shape_velocity.assign(n, vec3::Zero());
-    vertex_shape_force.assign(n, vec3::Zero());
-    vertex_shape_mass.assign(n, vec3::Constant(real(1e-8)));
     update_charts(x);
   }
 
@@ -151,18 +141,11 @@ public:
   void emit_dof_blocks(std::vector<sim_block::ptr> &out) override {
     _frame_dof = vec4_block::create(frame_mass, frame);
     out.push_back(_frame_dof);
-    _vertex_shape_dof = nullptr;
-    if (vertex_shape_site) {
-      _vertex_shape_dof =
-          vec3_block::create(vertex_shape_mass, vertex_shape, vertex_shape_velocity, vertex_shape_force);
-      out.push_back(_vertex_shape_dof);
-    }
   }
 
 private:
   index_t _gauge_slot = -1;
   vec4_block::ptr _frame_dof;
-  vec3_block::ptr _vertex_shape_dof;
 };
 
 } // namespace block

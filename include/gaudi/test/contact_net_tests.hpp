@@ -625,7 +625,7 @@ GAUDI_TEST(contact_net_gn_frames_match_normals) {
 
 /// Store-free frames mode: positions and quaternion frames only. The frame
 /// start is an exact fixed point, and a growth drive through `frame_rows`
-/// (vertex tensors as their own block) beside the metric memory tightens the
+/// (chained through the vertex fit) beside the metric memory tightens the
 /// tube.
 GAUDI_TEST(contact_net_gn_store_free_frames) {
   using namespace contact_net_detail;
@@ -672,17 +672,12 @@ GAUDI_TEST(contact_net_gn_store_free_frames) {
     const std::vector<vec3> N = cnet::vertex_normals(tp, x);
     std::vector<vec4> Y = frames_of(N), ym(static_cast<size_t>(n), vec4::Constant(real(1e-8)));
     auto fb = hepworth::vec4_block::create(ym, Y);
-    std::vector<vec3> S(static_cast<size_t>(n), vec3::Zero()), sv = S, sf = S,
-        sm(static_cast<size_t>(n), vec3::Constant(real(1e-8)));
-    auto sb = hepworth::vec3_block::create(sm, S, sv, sf);
-    std::vector<hepworth::sim_block::ptr> blocks{pos, fb, sb};
-    auto net = hb::contact_net_gn::create(&t, x, N, std::vector<vec3>{}, real(1),
-                                          std::vector<hepworth::sim_block::ptr>{pos, fb});
+    std::vector<hepworth::sim_block::ptr> blocks{pos, fb};
+    auto net = hb::contact_net_gn::create(&t, x, N, std::vector<vec3>{}, real(1), blocks);
     hb::frame_rows_config fc;
     fc.w_growth = 0.5;
     fc.growth_x = 0.2;
     auto rows = hb::frame_rows::create(&t, x, Y, fc, blocks);
-    S = rows->start_tensors();
     vecX q;
     for (auto &b : blocks)
       b->map_to_x(q);
@@ -739,16 +734,11 @@ GAUDI_TEST(frame_rows_dupin_lines_hold_a_torus) {
     std::vector<vec3> v(n, vec3::Zero()), f = v, m(n, vec3::Constant(real(1e-6)));
     auto pos = hepworth::vec3_block::create(m, x, v, f);
     auto fb = hepworth::vec4_block::create(ym, Y);
-    std::vector<vec3> S(static_cast<size_t>(n), vec3::Zero()), sv = S, sf = S,
-        sm(static_cast<size_t>(n), vec3::Constant(real(1e-8)));
-    auto sb = hepworth::vec3_block::create(sm, S, sv, sf);
-    std::vector<hepworth::sim_block::ptr> blocks{pos, fb, sb};
+    std::vector<hepworth::sim_block::ptr> blocks{pos, fb};
     hb::frame_rows_config fc;
     fc.w_dupin = 1;
     fc.dupin_reach = 3;
-    fc.w_fit = 0;
     auto rows = hb::frame_rows::create(&t, x, Y, fc, blocks);
-    S = rows->start_tensors();
     vecX q;
     for (auto &b : blocks)
       b->map_to_x(q);
@@ -757,6 +747,95 @@ GAUDI_TEST(frame_rows_dupin_lines_hold_a_torus) {
   const real clean = residual(0), noisy = residual(0.01);
   std::printf("  traced Dupin lines: |r|^2 clean torus %.3e, noisy %.3e\n", clean, noisy);
   GAUDI_EXPECT(clean < real(0.25) * noisy);
+}
+
+/// Acceptance: the store-free E3 net reaches shape targets. Spoke targets
+/// (each directed spoke's Rodrigues `(k, tau)` read from the target mesh with
+/// its vertex normals) through `frame_rows`, ramped over the first half of the
+/// frames, beside the metric memory, on the closed suite cases.
+GAUDI_TEST(e3_net_reaches_shape_targets) {
+  using namespace contact_net_detail;
+  namespace hb = hepworth::block;
+  const char *ef = std::getenv("CNET_FRAMES");
+  const int frames = ef ? std::atoi(ef) : 12;
+  for (const auto &c : suite()) {
+    const bool closed = c.name.rfind("torus", 0) == 0 || c.name.rfind("cube", 0) == 0;
+    if (!closed)
+      continue;
+    std::vector<vec3> x = c.x0;
+    const int n = static_cast<int>(x.size());
+    const kusama::stencil_table t = table_of(n, c.tris);
+    const cnet::topology tp = cnet::build_topology(t);
+    std::vector<real> kt, taut;
+    hb::frame_rows::spoke_readings(tp, c.xt, cnet::vertex_normals(tp, c.xt), kt, taut);
+    // The cubes' metric change needs inertia to stay stable (MATH.md 19.21).
+    const bool torus = c.name.rfind("torus", 0) == 0;
+    const char *ems = std::getenv("CNET_MASS");
+    const real mass = ems ? real(std::atof(ems)) : (torus ? real(1e-6) : real(1e-2));
+    std::vector<vec3> v(n, vec3::Zero()), f = v, m(n, vec3::Constant(mass));
+    auto pos = hepworth::vec3_block::create(m, x, v, f);
+    hb::projection_solver solver;
+    solver.gn_refresh_every = 5;
+    solver.gn_backtracks = 8;
+    int its = 0;
+    const auto t0 = std::chrono::steady_clock::now();
+    for (int k = 0; k < frames; ++k) {
+      const std::vector<vec3> N = cnet::vertex_normals(tp, x);
+      std::vector<vec4> Y(static_cast<size_t>(n)), ym(static_cast<size_t>(n), vec4::Constant(real(1e-8)));
+      for (int i = 0; i < n; ++i) {
+        const vec3 nn = N[static_cast<size_t>(i)];
+        vec3 tt = std::abs(nn[0]) < real(0.9) ? vec3::UnitX() : vec3::UnitY();
+        tt = (tt - nn * nn.dot(tt)).normalized();
+        mat3 R;
+        R.col(0) = tt;
+        R.col(1) = nn.cross(tt);
+        R.col(2) = nn;
+        Y[static_cast<size_t>(i)] = hb::quat_ops::quat_from_matrix(R);
+      }
+      auto fb = hepworth::vec4_block::create(ym, Y);
+      std::vector<hepworth::sim_block::ptr> blocks{pos, fb};
+      auto net = hb::contact_net_gn::create(&t, x, N, std::vector<vec3>{}, real(1), blocks);
+      hb::frame_rows_config fc;
+      fc.w_target = 1;
+      auto rows = hb::frame_rows::create(&t, x, Y, fc, blocks);
+      // The edit spread over the frames (this frame takes 1 / frames-left of
+      // the remaining change), as the demo's drives arrive.
+      std::vector<real> kc, tauc;
+      hb::frame_rows::spoke_readings(tp, x, N, kc, tauc);
+      const real ramp = real(1) / real(std::max(frames / 2 - k, 1));
+      std::vector<real> kk(kt.size()), tk(kt.size());
+      for (size_t si = 0; si < kt.size(); ++si) {
+        kk[si] = kc[si] + ramp * (kt[si] - kc[si]);
+        tk[si] = tauc[si] + ramp * (taut[si] - tauc[si]);
+      }
+      rows->set_spoke_targets(kk, tk);
+      // The demo's metric memory: shape targets alone leave slides free.
+      const char *em = std::getenv("CNET_MEMORY");
+      const real w_mem = em ? real(std::atof(em)) : real(0.05);
+      std::vector<hepworth::projection_constraint::ptr> cs{net, rows};
+      if (w_mem > 0)
+        cs.push_back(hb::dirichlet_memory_gn::create(&t, x, w_mem, std::vector<hepworth::sim_block::ptr>{pos}));
+      solver.set_constraints(cs);
+      for (vec3 &vv : v)
+        vv.setZero();
+      solver.step(blocks, real(0.1), real(1), 30);
+      its += solver.last_step.its;
+      if (std::getenv("CNET_DEBUG"))
+        std::printf("    %s frame %d its %d E %.3e -> %.3e shape %.2e\n", c.name.c_str(), k, solver.last_step.its,
+                    solver.last_step.E_first, solver.last_step.E_last, shape_error(x, c.xt));
+    }
+    const real secs = std::chrono::duration<real>(std::chrono::steady_clock::now() - t0).count();
+    const real e0 = shape_error(c.x0, c.xt), e1 = shape_error(x, c.xt);
+    std::printf("  E3 shape targets %-22s %d frames: shape %.1e -> %.1e  its %d  %.2fs\n", c.name.c_str(), frames,
+                e0, e1, its, secs);
+    // The tori reach their targets; the cubes improve but stall (the
+    // frame-start tangency offsets hold the corners' non-circular pattern and
+    // the memory resists the metric change; open).
+    if (torus)
+      GAUDI_EXPECT(e1 < real(1e-4) * e0);
+    else
+      GAUDI_EXPECT(e1 < e0);
+  }
 }
 
 } // namespace test
