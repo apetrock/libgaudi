@@ -20,13 +20,16 @@ namespace hepworth {
 namespace block {
 
 /// Per vertex the target tensor `(s11, s12, s22)` in its chart's `(T, B)`:
-/// `h_ref` (the chart's own `h` when null or non-finite) plus the saddle.
+/// `h_ref` (the chart's own `h` when null or non-finite) plus the saddle,
+/// the axis read off the reference. `h_first` (the first frame's tensor) is
+/// what `k_max` caps the traceless change against in `rate` mode.
 inline std::vector<vec3> chiral_tensors(const std::vector<vertex_chart> &charts, const std::vector<vec3> *h_ref,
-                                        const chiral_target &spec) {
+                                        const chiral_target &spec, const std::vector<vec3> *h_first = nullptr) {
   const size_t n = charts.size();
   std::vector<vec3> out(n, vec3::Zero());
   std::vector<real> w;
   measure_weight(charts, spec.measure, spec.power, w);
+  auto traceless = [](const vec3 &s) { return vec2(real(0.5) * (s[0] - s[2]), s[1]); };
   for (size_t v = 0; v < n; ++v) {
     const vertex_chart &c = charts[v];
     if (!c.ok || !c.h.allFinite()) {
@@ -34,7 +37,7 @@ inline std::vector<vec3> chiral_tensors(const std::vector<vertex_chart> &charts,
       continue;
     }
     const vec3 ref = h_ref && v < h_ref->size() && (*h_ref)[v].allFinite() ? (*h_ref)[v] : c.h;
-    const growth_detail::principals p = growth_detail::principals_of(c.h);
+    const growth_detail::principals p = growth_detail::principals_of(ref);
     const real q = std::abs(p.H) + p.z > real(0) ? p.z / (std::abs(p.H) + p.z) : real(0);
     const bool principal =
         spec.axis == shear_axis::principal || (spec.axis == shear_axis::automatic && q >= spec.axis_q);
@@ -45,7 +48,19 @@ inline std::vector<vec3> chiral_tensors(const std::vector<vertex_chart> &charts,
       const real cs = std::cos(a), sn = std::sin(a);
       S += real(sgn) * vec3(cs * cs, cs * sn, sn * sn);
     }
-    out[v] = ref + spec.k0 * w[v] * S;
+    const real H = real(0.5) * (ref[0] + ref[2]);
+    const vec2 z0 = traceless(ref);
+    vec2 z = z0 + spec.k0 * w[v] * traceless(S);
+    if (spec.keep_eigenvalues && z0.norm() > real(1e-3) * (std::abs(H) + z0.norm()) && z.norm() > real(0))
+      z *= z0.norm() / z.norm();
+    if (spec.mode == chiral_mode::rate && std::isfinite(spec.k_max) && h_first && v < h_first->size() &&
+        (*h_first)[v].allFinite()) {
+      const vec2 zf = traceless((*h_first)[v]);
+      const vec2 d = z - zf;
+      if (d.norm() > spec.k_max)
+        z = zf + d * (spec.k_max / d.norm());
+    }
+    out[v] = vec3(H + z[0], z[1], H - z[0]);
   }
   return out;
 }
@@ -55,12 +70,13 @@ inline std::vector<vec3> chiral_tensors(const std::vector<vertex_chart> &charts,
 /// keep their live reading (no drive).
 inline void chiral_spoke_targets(const kusama::contact_net::topology &tp, const std::vector<vec3> &x,
                                  const std::vector<vertex_chart> &charts, const std::vector<vec3> *h_ref,
-                                 const chiral_target &spec, std::vector<real> &k, std::vector<real> &tau) {
+                                 const chiral_target &spec, std::vector<real> &k, std::vector<real> &tau,
+                                 const std::vector<vec3> *h_first = nullptr) {
   std::vector<vec3> N(charts.size());
   for (size_t v = 0; v < charts.size(); ++v)
     N[v] = charts[v].N;
   frame_rows::spoke_readings(tp, x, N, k, tau);
-  const std::vector<vec3> b = chiral_tensors(charts, h_ref, spec);
+  const std::vector<vec3> b = chiral_tensors(charts, h_ref, spec, h_first);
   for (size_t s = 0; s < tp.spokes.size(); ++s) {
     const size_t i = static_cast<size_t>(tp.spokes[s][0]), j = static_cast<size_t>(tp.spokes[s][1]);
     const vertex_chart &c = charts[i];

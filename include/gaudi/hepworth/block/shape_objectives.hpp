@@ -195,6 +195,14 @@ struct chiral_target {
   shear_axis axis = shear_axis::automatic;
   real axis_q = 0.2;
   chiral_mode mode = chiral_mode::rate;
+  /// Keep the reference's principal curvatures: on an anisotropic reference
+  /// the saddle only turns its principal axes (the traceless part rescaled
+  /// to the reference's), so chirality asks for no tighter tube; flat and
+  /// umbilic references take the plain saddle.
+  bool keep_eigenvalues = false;
+  /// `rate` only: cap on the traceless change against the first frame's
+  /// tensor (infinity: none), so the accumulated saddle cannot run away.
+  real k_max = std::numeric_limits<real>::infinity();
 };
 
 /// The anisotropy of one point, from its two principal curvatures `k0`, `k1`

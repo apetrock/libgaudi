@@ -2961,3 +2961,25 @@ ring breaks symmetry and lifts out of plane, the core's rms height 7e-7 ->
 -> 0.38; with a weak metric (0.1) it crumples instead. In `held` mode the
 target pins the whole frame-0 tensor plus the saddle, so it is also a shape
 memory.
+
+**Shrink diagnosis (same day).** Ablation on the working config (6 frames):
+the shrinker is `axis_ratio` (ratio 0.5): a metric target that thins the
+tube until the ring's spoke ratio is reached; the uniform shear happened to
+balance it (tube 0.249 -> 0.267), the curvature-weighted shear shears less
+and lets it win (0.246 -> 0.220), shear off 0.243 -> 0.180; tension off
+changes nothing. The chiral drive is separate: the saddle raises the tight
+curvature everywhere (eigenvalues `H +- sqrt(z^2 + (k0 w)^2)`), so without a
+held metric it is delivered by shrinking (held `k0` 2: area 7.4 -> 1.8 in 6
+frames), and the chord-form target rows add a second outlet (an unmet target
+is partly met by shortening spokes; R 0.72 -> 0.41 chord against 0.75 held
+with `spoke_target_form::curvature`, the live length clamped at half the
+frame-start one). Options: `chiral_target::keep_eigenvalues` (the saddle
+only turns an anisotropic reference's principal axes; tube held at 0.251
+where the plain saddle thins it to 0.156), `k_max` (rate-mode cap against
+the first frame), the axis read off the reference (no ratchet in `held`).
+Surface against tube: with `w_chiral` 1 the drive coils the tube as a rod
+(core height rises, roughness flat); a stiffer rest metric alone freezes
+it; a strong drive against a stiff metric (`w_chiral` 10, `k0` 8,
+`w_chiral_rest` 40, `perturb` 0.05) holds tube and area and roughens the
+wall (0.16 -> 0.89) with the core down (4e-3): surface-scale deformation,
+the regime for oblique folds.

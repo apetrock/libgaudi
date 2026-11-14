@@ -80,6 +80,13 @@ constexpr real k_frame_rows = real(14.2);
 
 enum class frame_tension { constant, frame_mean, volume };
 
+/// How a spoke target row measures its miss: `chord`, `(k - k_t) |dx_t|`
+/// over the frame-start `|dx_t|` (no division by the live length, but an
+/// unmet target is partly met by shortening the spoke); `curvature`,
+/// `k - k_t` with the live length clamped at half the frame-start one
+/// (scale-free, so shortening meets nothing).
+enum class spoke_target_form { chord, curvature };
+
 struct frame_rows_config {
   real w_memory = 0;
   bool memory_mean = true;
@@ -105,6 +112,7 @@ struct frame_rows_config {
   real tau0 = 0;
   /// Spoke targets (`set_spoke_targets`).
   real w_target = 0;
+  spoke_target_form target_form = spoke_target_form::chord;
 };
 
 namespace frame_detail {
@@ -704,7 +712,8 @@ private:
           // frame-start `|dx_t|`, no division by the live length (a spoke
           // turning toward the normal would blow up the reading).
           const real L0 = _spoke_l0[si] > real(0) ? _spoke_l0[si] : real(1);
-          units.push_back({2, {}, {v, j}, [&, vi, jj, si, s, L0](real *o) {
+          const bool curv = c.target_form == spoke_target_form::curvature;
+          units.push_back({2, {}, {v, j}, [&, vi, jj, si, s, L0, curv](real *o) {
                              const vec3 dx = X[jj] - X[vi], dn = F[jj].N - F[vi].N;
                              const vec3 nb = (F[vi].N + F[jj].N).normalized();
                              const vec3 dxt = dx - nb * dx.dot(nb);
@@ -713,8 +722,14 @@ private:
                              if (!(L > real(0)))
                                return;
                              const vec3 t = dxt / L, b = nb.cross(t);
-                             o[0] = s * (-dn.dot(t) - _kt[si] * L) / L0;
-                             o[1] = s * (-dn.dot(b) - _taut[si] * L) / L0;
+                             if (curv) {
+                               const real Lc = std::max(L, real(0.5) * L0);
+                               o[0] = s * (-dn.dot(t) / Lc - _kt[si]);
+                               o[1] = s * (-dn.dot(b) / Lc - _taut[si]);
+                             } else {
+                               o[0] = s * (-dn.dot(t) - _kt[si] * L) / L0;
+                               o[1] = s * (-dn.dot(b) - _taut[si] * L) / L0;
+                             }
                            }});
         }
       }

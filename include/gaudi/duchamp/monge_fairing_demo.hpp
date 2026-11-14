@@ -91,7 +91,15 @@ struct fairing_step {
   /// step below it), `lambda_neg` (negative curvature at or below it),
   /// `tau` (negative-mode step: lowers the model by `tau` times the energy),
   /// `fd_eps`, `max_iterations`.
-  hepworth::block::modal_config modal{};
+  hepworth::block::modal_config modal{
+      .modes = 4,             // smallest generalized eigenvalues corrected per step
+      .ncv = 0,               // Lanczos subspace (0: max(2 modes + 1, 20))
+      .lambda_max = 0.9,      // Newton step below this
+      .lambda_neg = 1e-3,     // negative / vanishing curvature at or below this
+      .tau = 0.05,            // negative-mode trust radius (relative P-norm)
+      .fd_eps = 1e-6,         // central-difference step for H v
+      .max_iterations = 200,  // Lanczos restarts
+  };
 };
 
 /// The frame-start charts the position rows read (`shell_e3_block`), drawn
@@ -143,12 +151,36 @@ struct shape_project {
   /// `corotational` keeps each one-ring fan prism's rest volume (to its
   /// tube-axis points) while landing; `off` lands only.
   hepworth::block::osculating_torus_ring_config osculating_torus{
-      .two_ring = true,
-      .volume = {.mode = hepworth::block::ring_volume_mode::corotational,
-                 .corotational = {.w_proj = 1.0, .w_rest = 0, .w_stay = 0, .w_volume = 5.0e-1}},
+      .two_ring = 1.0,          // 2-ring row scale against the 1-ring
+      .iterations = 4,          // pose Gauss-Newton iterations per projection
+      .prior = 1e-3,            // pull of the pose toward the chart pose
+      .relative = false,        // target the frame-start fit plus the change since
+      .store_gain = 1.0,        // scale on that change under `relative`
+      .closest_point = false,   // land on the closest torus point (10x cost)
+      .volume =
+          {
+              .mode = hepworth::block::ring_volume_mode::corotational,   // off, corotational
+              .apex_cap = 10.0,                                          // farthest tube-axis point, in ring reaches
+              .foot_weight = 1.0,                                        // the foot's absolute row
+              .corotational =
+                  {
+                      .w_proj = 1.0,            // each point onto its landing
+                      .w_rest = 0.0,            // to its corotated rest position
+                      .w_stay = 0.0,            // to where it is now
+                      .w_volume = 5.0e-1,       // each fan prism to its rest volume
+                      .w_spine = 1.0,           // tube-axis points in the Procrustes fit
+                      .iterations = 3,          // volume Gauss-Newton steps
+                      .foot_stiffness = -1.0,   // negative: the ring's size
+                      .persistent = false,      // rest volumes from the persistent depth
+                  },
+          },
   };
   /// Frames ↔ positions.
-  curvature_config curvature{};
+  curvature_config curvature{
+      .kind = curvature_solver::contact_net,   // off, contact_net
+      .w_coupling = 0.5,                        // positions <-> frames
+      .contact_normal_mass = 0.0,               // frames' mass per unit dual area
+  };
 };
 
 /// Curvature edits as native rows on the contact net's frames (`frame_rows`):
@@ -181,12 +213,16 @@ struct shape_distortion {
   /// mean corrected toward the first frame's volume (`volume`,
   /// `.volume_gain`); trace-free part kept. 0 leaves it off.
   real w_tension = 0.0;
-  hepworth::block::tension_target tension{};
+  hepworth::block::tension_target tension{
+      .kind = hepworth::block::tension_target::mode::mean,   // constant, mean, volume
+      .h0 = 0.0,                                             // `constant` target
+      .volume_gain = 1.0,                                    // `volume`: flattening per relative deficit
+  };
   /// Dupin rows: each principal curvature held constant along its own
   /// direction, so curvature lines become circles and the surface is locally
   /// a Dupin cyclide (torus, cylinder, cone and their Moebius images); per
   /// spoke, along the frame-start principal frames. 0 leaves it off.
-  real w_dupin = 0.001;
+  real w_dupin = 0.0;
   /// The Dupin rows' stencil: 0 differences each principal curvature across
   /// one spoke; above 0 traces each curvature line `dupin_reach` mean edge
   /// lengths both ways from every vertex (one mean edge length per step,
@@ -204,11 +240,13 @@ struct shape_distortion {
   /// stretch. Only the first entry is used (`.power` is not yet read).
   /// `w_growth` scales it; 0 leaves the row off.
   std::vector<hepworth::block::curvature_growth_target> growth{
-      hepworth::block::curvature_growth_target{.angle = 1.0,
-                                               .x = 1.0,
-                                               .y = 0.0,
-                                               .winding = {.ring = 1, .tube = 5, .handedness = 1},
-                                               .power = 0.5},
+      hepworth::block::curvature_growth_target{
+          .angle = 1.0,                                                // radians from the tight direction
+          .x = 1.0,                                                    // along: normal curvature times 1 + x
+          .y = 0.0,                                                    // across: times 1 + y
+          .power = 0.5,                                                // not yet read
+          .winding = {.ring = 1, .tube = 5, .handedness = 1},    // {ring, tube} replaces angle on the torus
+      },
   };
   real w_growth = 0.0;
   /// Holds each vertex ring's Gauss-image area (the solid angle of its
@@ -222,7 +260,7 @@ struct shape_distortion {
   real w_twist = 0.0;
   real tau0 = 0.05;
   real twist_angle = 0.6;
-  hepworth::block::stretch_winding twist_winding{};
+  hepworth::block::stretch_winding twist_winding{.ring = 0, .tube = 0, .handedness = 1};
   /// Chiral curvature drive (Armon's chiral seed pods, MATH.md 19.22): each
   /// vertex's target tensor is its reference plus a saddle `k0 w` at
   /// `+-.opening` (45 degrees) about an axis, pinned through the frames' spoke
@@ -240,16 +278,30 @@ struct shape_distortion {
   /// `.k0`, `.angle`, `.opening`, `.winding`, `.measure`, `.power`, `.axis`,
   /// `.axis_q`, `.mode`.
   hepworth::block::chiral_target chiral{
-      .k0 = 0.5,                                             // saddle per unit length; sign: handedness
-      .winding = {.ring = 0, .tube = 0, .handedness = 1},    // {ring, tube} replaces angle on the torus
-      .axis = hepworth::block::shear_axis::automatic,        // principal, frame, automatic
+      .k0 = 4.0,                                             // saddle per unit length; sign: handedness
+      .angle = 0.0,                                          // radians from the axis
+      .opening = 0.25 * M_PI,                                // saddle half-angle about the axis
+      .winding = {.ring = 1, .tube = 5, .handedness = 1},    // {ring, tube} replaces angle on the torus
+      .measure = hepworth::block::growth_measure::off_umbilic,   // where it acts
+      .power = 0.0,                                          // 0: uniform
+      .axis = hepworth::block::shear_axis::principal,        // principal, frame, automatic
+      .axis_q = 0.2,                                         // automatic: below this q the frame tangent
       .mode = hepworth::block::chiral_mode::held,            // rate, held
+      .keep_eigenvalues = false,                             // only turn the principal axes (no tighter tube)
+      .k_max = std::numeric_limits<real>::infinity(),        // rate: cap on the change from the first frame
   };
   real w_chiral = 0.0;
+  /// How the chiral spoke rows measure a miss: `curvature` (scale-free) or
+  /// `chord` (an unmet target is partly met by shortening spokes, so the
+  /// drive also shrinks the mesh).
+  hepworth::block::spoke_target_form chiral_form = hepworth::block::spoke_target_form::curvature;
   /// The metric the chiral drive pushes against: every edge held at its
   /// length on the first frame (rest positions carried through remeshing).
-  /// 0 leaves it off.
-  real w_chiral_rest = 0.0;
+  /// Without it the saddle (which asks for a tighter tube everywhere) is
+  /// delivered by shrinking: the torus thins until it vanishes. Only active
+  /// with the chiral drive on (it would freeze every metric drive, the shear
+  /// included). 0 leaves it off.
+  real w_chiral_rest = 1.0;
 };
 
 /// Position-space rows: the classic bend and area, the ring axis ratio and
@@ -262,9 +314,12 @@ struct position_distortion {
   /// Comment a line to drop it. `w_axis_ratio` scales every entry; 0 leaves
   /// the row off.
   std::vector<hepworth::block::axis_ratio_target> axis_ratio{
-      hepworth::block::axis_ratio_target{.ratio = 0.5},
+      hepworth::block::axis_ratio_target{
+          .ratio = 0.5,                       // tight over loose spoke rms (1 round)
+          .area = {.lo = 1.0, .hi = 1.0},       // ring area band against the frame start
+      },
   };
-  real w_axis_ratio = 0.0;
+  real w_axis_ratio = 0.45;
   /// Shears each one ring every frame: stretch by `1 + shear` along `.angle`
   /// (radians from the axis; NaN is the 45-degree bisector) and `1 - shear`
   /// across, against the frame-start ring. Only that ratio is held; area,
@@ -292,14 +347,16 @@ struct position_distortion {
   std::vector<hepworth::block::shear_target> shear{
       hepworth::block::shear_target{
           .shear = 0.125,                                        // (1 + s) / (1 - s) per frame along the axis
-          .winding = {.ring = 1, .tube = 10, .handedness = 1},   // sets the angle at startup on the torus
-          .measure = hepworth::block::growth_measure::off_umbilic,   // where the shear acts (table above)
-          .power = 2.0,                                          // 0: uniform; higher: sharper
-          .axis = hepworth::block::shear_axis::automatic,       // principal, frame, automatic
+          .angle = std::numeric_limits<real>::quiet_NaN(),       // radians from the axis; NaN the bisector
+          .winding = {.ring = 1, .tube = 5, .handedness = 1},   // sets the angle at startup on the torus
+          .area = {.lo = 1.0, .hi = 1.0},                        // ring area band against the frame start
+          .measure = hepworth::block::growth_measure::flatness,   // where the shear acts (table above)
+          .power = 0.0,                                          // 0: uniform; higher: sharper
+          .axis = hepworth::block::shear_axis::principal,       // principal, frame, automatic
           .axis_q = 0.2,                                         // automatic: below this q the frame tangent
       },
   };
-  real w_shear = 0.0;
+  real w_shear = 1.0;
   /// Cotangent one-ring. Holds the mean-curvature vector baked on first use,
   /// so it resists curvature edits. 0 leaves it off.
   real w_bend = 1.0e-1;
@@ -307,7 +364,10 @@ struct position_distortion {
   /// range of its step-start area each face may take freely (`{1, 1}`
   /// conserves it; `{0.5, 1.5}` lets it drift 50% per step before pushing
   /// back).
-  hepworth::block::area_config area{.w = 1.0e-1, .band = {0.9, 1.1}};
+  hepworth::block::area_config area{
+      .w = 1.0e-1,                                // 0 leaves it off
+      .band = {.lo = 0.9, .hi = 1.1},          // free range against the step start
+  };
   /// Moebius growth (`mobius_growth.hpp`): a vertex log-scale `u` per frame,
   /// then per edge a length row at `e^{(u_i + u_j) / 2}` times its
   /// frame-start length. `.source` (the frame charts' tensors):
@@ -346,12 +406,12 @@ struct position_distortion {
   hepworth::block::flat_growth_target flat_growth{
       .g = 0.05,                                              // length added per frame at full weight
       .measure = hepworth::block::growth_measure::mean_curvature,   // flatness, mean_curvature, anisotropy, k_lo
-      .power = -8.0,                                           // 0: uniform; high: only the extremes grow
+      .power = 0.0,                                           // 0: uniform; high: only the extremes grow
       .angle = 0.0,                                           // 0 loose direction, pi / 2 tight direction
       .winding = {.ring = 0, .tube = 0, .handedness = 1},     // {ring, tube} replaces angle on the torus
       .iso = 0.0,                                             // 0 directional, 1 direction-free
   };
-  real w_flat_growth = 0.1;
+  real w_flat_growth = 0.0;
   /// Intrinsic vector Dirichlet memory of the metric (`dirichlet_memory_gn`,
   /// rest at the frame start; factor the mean edge length). Required by the contact net (tangency
   /// alone leaves slides and scale free).
@@ -382,7 +442,15 @@ struct monge_fairing_demo_config {
   /// `datum`, `q_warn` (repair triangles below this quality), `q_min` (hard
   /// failure), `val_lo` / `val_hi` (interior valence band), `rounds`,
   /// `enabled`. Example: `.qc = {.q_warn = 0.15, .val_hi = 7}`.
-  asawa::shell::qc_config qc{};
+  asawa::shell::qc_config qc{
+      .datum = 0,         // vertex vec3 datum the metric reads
+      .q_warn = 0.1,      // repair faces below this quality
+      .q_min = 1e-4,      // hard failures below this
+      .val_lo = 4,        // interior valence band
+      .val_hi = 8,
+      .rounds = 3,        // repair rounds per remesh step
+      .enabled = true,
+  };
   /// Write bad triangles to `dump/bad_triangles.log` and an OBJ of their
   /// neighborhood: after each solve those below the solver's degenerate
   /// quality (the worst few when the solve blew up or did not converge), and
@@ -718,7 +786,7 @@ private:
   void push_chiral_rest(hepworth::block::solver_context &ctx, const std::vector<vec3> &x) {
     namespace hb = hepworth::block;
     const real w = _cfg.shape.w_chiral_rest;
-    if (!(w > 0.0) || _chiral_x_slot < 0)
+    if (!(w > 0.0) || !(_cfg.shape.w_chiral > 0.0) || _cfg.shape.chiral.k0 == 0.0 || _chiral_x_slot < 0)
       return;
     std::vector<vec3> &x0 = asawa::get_vec_data(*__M, _chiral_x_slot);
     if (x0.size() != x.size())
@@ -798,8 +866,10 @@ private:
     }
     twist_angle.assign(x.size(), winding_angle(s.twist_winding, s.twist_angle));
     const bool chiral = s.w_chiral > 0 && s.chiral.k0 != 0 && _e3->vertex_frames.size() == x.size();
-    if (chiral)
+    if (chiral) {
       fc.w_target = s.w_chiral;
+      fc.target_form = s.chiral_form;
+    }
     const bool any = fc.w_memory > 0 || fc.w_tension > 0 || fc.w_minimizer > 0 || fc.w_dupin > 0 ||
                      fc.w_growth > 0 || fc.w_det > 0 || fc.w_gradtl > 0 || fc.w_twist > 0 || fc.w_target > 0;
     if (!any)
@@ -810,19 +880,20 @@ private:
     if (chiral) {
       hb::chiral_target ct = s.chiral;
       ct.angle = winding_angle(ct.winding, ct.angle);
-      const std::vector<vec3> *href = nullptr;
-      if (ct.mode == hb::chiral_mode::held && _chiral_h_slot >= 0) {
+      const std::vector<vec3> *h_first = nullptr;
+      if (_chiral_h_slot >= 0) {
         std::vector<vec3> &h0 = asawa::get_vec_data(*__M, _chiral_h_slot);
         if (h0.size() == x.size()) {
           for (size_t i = 0; i < x.size(); ++i)
             if (!h0[i].allFinite() && _e3->vertex_frames[i].ok)
               h0[i] = _e3->vertex_frames[i].h;
-          href = &h0;
+          h_first = &h0;
         }
       }
+      const std::vector<vec3> *href = ct.mode == hb::chiral_mode::held ? h_first : nullptr;
       std::vector<real> kt, taut;
       hb::chiral_spoke_targets(kusama::contact_net::build_topology(_e3->table), x, _e3->vertex_frames, href, ct,
-                               kt, taut);
+                               kt, taut, h_first);
       rows->set_spoke_targets(std::move(kt), std::move(taut));
     }
     ctx.constraints.push_back(rows);

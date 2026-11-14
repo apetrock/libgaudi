@@ -24,6 +24,7 @@
 //                   [growth=x[:y]] [gpower=P] [wgrowth=W] [wdet=W]
 //                   [wchiral=W] [ck0=K] [cangle=DEG] [copen=DEG] [cwind=ring:tube[:hand]] [cmode=rate|held]
 //                   [cwrest=W] [caxis=principal|frame|automatic] [cmeasure=offumb|flat|mean|aniso|klo] [cpow=P]
+//                   [ckeep] [ckmax=K] [cform=curvature|chord]
 //                   [aratio=W] [wshear=W] [samt=S] [swind=ring:tube[:hand]] [spow=P]
 //                   [smeasure=offumb|flat|mean|aniso|klo] [saxis=principal|frame|automatic] [saxisq=Q]
 //                   [wmobius=W] [malpha=A] [mmaxu=U] [msrc=mean|aniso|flat] [mlevel=L] [mbalanced]
@@ -265,6 +266,13 @@ int principal_curvature_probe_main(int argc, char **argv) {
       cfg.shape.tension.kind = hepworth::block::tension_target::mode::volume;
     } else if (flag.rfind("wchiral=", 0) == 0) {
       cfg.shape.w_chiral = std::atof(flag.c_str() + 8);
+    } else if (flag.rfind("ckmax=", 0) == 0) {
+      cfg.shape.chiral.k_max = std::atof(flag.c_str() + 6);
+    } else if (flag == "ckeep") {
+      cfg.shape.chiral.keep_eigenvalues = true;
+    } else if (flag.rfind("cform=", 0) == 0) {
+      cfg.shape.chiral_form = flag.substr(6) == "chord" ? hepworth::block::spoke_target_form::chord
+                                                        : hepworth::block::spoke_target_form::curvature;
     } else if (flag.rfind("cwrest=", 0) == 0) {
       cfg.shape.w_chiral_rest = std::atof(flag.c_str() + 7);
     } else if (flag.rfind("ck0=", 0) == 0) {
